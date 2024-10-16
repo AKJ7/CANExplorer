@@ -1,0 +1,63 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/docker-existing-dockerfile
+{
+	"name": "CanExplorer Container",
+	"build": {
+		// Sets the run context to one level up instead of the .devcontainer folder.
+		"context": "..",
+		// Update the 'dockerFile' property if you aren't using the standard 'Dockerfile' filename.
+		"dockerfile": "../Dockerfile",
+		"args": {
+			"network": "host",
+			"xhost": "+"
+		}
+	},
+	"runArgs": [
+			"--cap-add=SYS_PTRACE",
+			"--security-opt",
+			"seccomp=unconfined",
+			"--privileged",
+			"--network=host"
+	],
+	"appPort": [
+		"69:69"
+	],
+	"settings" : {
+		"git.path": "/usr/bin/git"	
+	},
+	"mounts": [
+		"type=bind,source=/dev/bus/usb,target=/dev/bus/usb", // Make Debugger available.
+		"source=${localEnv:HOME}/.ssh,target=/home/devuser/.ssh,type=bind,consistency=cached", // Make ssh key available
+		"source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind,consistency=cached" // Mount graphic inside container to run GUIs
+	],
+	"containerEnv": {
+		"DISPLAY": "${localEnv:DISPLAY}"
+	},
+
+	// Features to add to the dev container. More info: https://containers.dev/features.
+	// "features": {},
+
+	// Use 'forwardPorts' to make a list of ports inside the container available locally.
+	// "forwardPorts": [],
+
+	// Uncomment the next line to run commands after the container is created.
+	// "postCreateCommand": "cat /etc/os-release",
+
+	// Configure tool-specific properties.
+	// "customizations": {},
+
+	// Uncomment to connect as an existing user other than the container default. More info: https://aka.ms/dev-containers-non-root.
+	"remoteUser": "can_explorer",
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"ms-azuretools.vscode-docker",
+				"ms-python.python",
+				"ms-python.debugpy",
+				"donjayamanne.python-environment-manager",
+				"asciidoctor.asciidoctor-vscode",
+				"FedericoVarela.pipenv-scripts"
+			]
+		}
+	}
+}

@@ -1,0 +1,4 @@
+== References
+=== Useful links
+- Setup VCAN: https://python-can.readthedocs.io/en/stable/interfaces/socketcan.html
+- Setup FDCAN: https://munich.dissec.to/kb/chapters/can/canfd.html

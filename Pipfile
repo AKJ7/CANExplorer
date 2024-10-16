@@ -1,0 +1,31 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+pyqt6 = "*"
+pyinstaller = "*"
+python-can = "*"
+cantools = "*"
+python-decouple = "*"
+click = "*"
+aiofile = "*"
+aiohttp = "*"
+numpy = "*"
+matplotlib = "*"
+schema = "*"
+
+[dev-packages]
+black = "*"
+mypy = "*"
+pytest = "*"
+pylint = "*"
+pytest-schema = "*"
+pre-commit = "*"
+
+[requires]
+python_version = "3.12"
+
+[scripts]
+main = "python -m can_explorer"

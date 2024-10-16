@@ -1,0 +1,60 @@
+name: build
+
+on:
+  push:
+    branches:
+      - develop
+  pull_request:
+    branches:
+      - develop
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  prettier:
+    name: Format code using black
+    runs-on: ubuntu-20.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+      - name: Run black
+        uses: psf/back@stable
+        with:
+          options: "--check --verbose"
+  doctoc:
+    name: Build docs
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+  linter-py:
+    name: Lint code using PyLint
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+  build-gui-linux:
+    name: Build GUI for Linux (Ubuntu)
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+  build-gui-for-windows:
+    name: Build GUI for Windows
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+  build-gui-for-mac:
+    name: Build GUI for Mac
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4

@@ -1,0 +1,11 @@
+QTabWidget::tab-bar {
+}
+
+QTabBar::tab {
+}
+
+QTabBar::tab:selected {
+}
+
+QTabWidget::pane {
+}
