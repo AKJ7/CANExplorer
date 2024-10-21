@@ -10,15 +10,15 @@ logger = logging.getLogger(__name__)
 
 
 class IsoCanProtocol(asyncio.Protocol, QWidget):
-    # __slot__ = ('_transport', '_on_con_lost', '_data_received_queue', '_error_queue', 'on_data_received')
+    __slot__ = ('_transport', '_on_con_lost', '_data_received_queue', '_error_queue', 'on_data_received')
     on_data_received = pyqtSignal(can.Message)
 
     def __init__(self, on_con_lost) -> None:
+        super().__init__()
         self._transport = None
         self._on_con_lost = on_con_lost
         self._data_received_queue = asyncio.Queue()
         self._error_queue = asyncio.Queue()
-        super().__init__()
         self.on_data_received.emit(can.Message())
 
     def connection_made(self, transport: asyncio.BaseTransport) -> None:

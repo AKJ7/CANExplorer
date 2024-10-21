@@ -26,7 +26,7 @@ class NewConnectionDialog(QDialog):
 
     def _configure(self):
         self.connection_name_box.setText('Connection 1')
-        supported_bitrates = canutils.SupportedProtocols.IsoCAN.get_supported_baudrates()
+        supported_bitrates = canutils.SupportedProtocols.IsoCAN.supported_bitrates
         self.bitrate_box.addItems(list(map(str, supported_bitrates)))
         supported_interfaces = canutils.get_supported_interfaces()
         self.interface_box.addItems(sorted(list([description for name, description in supported_interfaces])))
@@ -48,7 +48,7 @@ class NewConnectionDialog(QDialog):
             interface=canutils.get_interface_name(self.interface_box.currentText()),
             channel=self.channel_box.currentText(),
             protocol=self.protocol_box.currentText(),
-            fd = self.flexible_data_checkbox.isChecked()
+            fd=self.flexible_data_checkbox.isChecked(),
         )
         self.on_connection_added.emit(can_configuration)
         super().accept()

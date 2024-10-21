@@ -1,5 +1,6 @@
 # CANExplorer
-A CANbus-Analyse Tool for all platform.
+A CANbus-Analyse Tool for all platform.  
+<span style="color:red">This is a WIP Project!</span>
 
 
 ## Roadmap
@@ -8,9 +9,11 @@ A CANbus-Analyse Tool for all platform.
     - [x] Set basic project structure 
     - [x] Set package manager and install packages
     - [x] Set docker and vscode devcontainer
-    - [x] Add basic working code  
-2. Transceive CAN messages
-    - [ ] Process IsoCan Frames
-    - [ ] Process ISoTp Frames
-    - [ ] Process J1939 Frames
-    - [ ] Process OpenCAN Frames
+    - [x] Add parsing and transmission of CAN frame as proof of concept
+    - [x] Release 0.1.0
+2. Transception of CAN frames.
+    - [ ] Implement IsoCan transport and protocol
+    - [ ] Implement J1939 transport and protocol
+    - [ ] Implement ISOTP transport and protocol
+    - [ ] Implement CanOpen transport and protocol
+    - [ ] Release 0.2.0

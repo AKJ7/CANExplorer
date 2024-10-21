@@ -1,6 +1,4 @@
 import asyncio
-from getpass import win_getpass
-
 from PyQt6.uic import loadUi
 from PyQt6.QtCore import QSize, Qt, pyqtSlot, QFile, QStringEncoder, QThreadPool
 from PyQt6.QtWidgets import QApplication, QMainWindow, QPushButton, QTabWidget

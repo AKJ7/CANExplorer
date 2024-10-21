@@ -24,15 +24,14 @@ class Worker(QRunnable):
 
     @pyqtSlot()
     def run(self):
-        # try:
+        try:
             logger.info(self._func)
             result = self._func(*self._args, **self._kwargs)
-        # except Exception as e:
-        #     traceback.print_exc()
-        #    logger.error(f'An error occurred while running task: {e}')
-        #     self._signals.error.emit(e)
-        # else:
-        #     self._signals.result.emit(result)
-        # finally:
-        #    self._signals.finished.emit()
-
+        except Exception as e:
+            traceback.print_exc()
+            logger.error(f'An error occurred while running task: {e}')
+            self._signals.error.emit(e)
+        else:
+            self._signals.result.emit(result)
+        finally:
+            self._signals.finished.emit()

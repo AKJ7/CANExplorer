@@ -4,8 +4,6 @@ import enum
 from typing import List, Tuple, Dict, Optional
 from dataclasses import dataclass
 
-from attr.setters import frozen
-
 logger = logging.getLogger(__name__)
 
 
@@ -16,27 +14,31 @@ class SupportedProtocols(enum.IntEnum):
     j1939 = enum.auto()
     canopen = enum.auto()
 
-    def get_supported_baudrates(self) -> List[int]:
+    @property
+    def supported_bitrates(self) -> List[int]:
         rates = None
         match self.value:
             case self.IsoCAN:
-                rates = [10000, 20000, 50000, 100000, 125000, 250000, 500000,
-                         800000, 1000000]
+                rates = [10_000, 20_000, 50_000, 100_000, 125_000, 250_000, 500_000, 800_000, 1_000_000]
         return rates
 
 
 def get_supported_interfaces() -> List[Tuple[str]]:
-    supported_interfaces = [(interface, can.interfaces.BACKENDS[interface][1]) for interface in list(can.interfaces.VALID_INTERFACES)]
+    supported_interfaces = [
+        (interface, can.interfaces.BACKENDS[interface][1]) for interface in list(can.interfaces.VALID_INTERFACES)
+    ]
     return supported_interfaces
 
+
 def get_available_channels(interfaces: List[str]) -> List[Dict]:
-    configs =  can.interface.detect_available_configs(interfaces)
+    configs = can.interface.detect_available_configs(interfaces)
     logger.info(f'{configs=}')
     return configs
 
 
 def load_config():
     return {}
+
 
 def get_interface_name(target_class_name: str) -> Optional[str]:
     for interface_name, (module_name, class_name) in can.interfaces.BACKENDS.items():
@@ -53,4 +55,3 @@ class CanConfiguration:
     channel: str
     protocol: str
     fd: bool
-

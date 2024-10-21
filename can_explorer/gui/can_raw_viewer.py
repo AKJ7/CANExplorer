@@ -1,9 +1,12 @@
 import logging
+
+import can
 from PyQt6 import QtCore, QtGui, QtWidgets
 from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot, QModelIndex, QThreadPool
 from can.message import Message
-from typing import Dict
+from typing import Dict, List
 from PyQt6.QtWidgets import QHeaderView
+import asyncio
 
 from can_explorer.gui.can_worker import CanWorker
 from can_explorer.util.canutils import CanConfiguration
@@ -12,15 +15,15 @@ logger = logging.getLogger(__name__)
 
 
 class RawCanViewerModel(QtCore.QAbstractTableModel):
-    HEADER_ROWS = ('Time', 'Tx/RX', 'Message Type', 'Arbitration ID', 'DLC', 'Data Bytes')
+    HEADER_ROWS = ('Time [s]', 'Tx/RX', 'Message Type', 'Arbitration ID [hex]', 'DLC [hex]', 'Data Bytes [hex]')
 
     def __init__(self):
         super(RawCanViewerModel, self).__init__()
+        self._data: List[can.Message] = []
         self.configure()
 
     def configure(self):
         pass
-        # self.setHeaderData(0, Qt.Orientation.Horizontal, ['timestamp', 'DLC'])
 
     def headerData(self, section, orientation, role, *args, **kwargs):
         if orientation == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
@@ -28,13 +31,57 @@ class RawCanViewerModel(QtCore.QAbstractTableModel):
         return super().headerData(section, orientation, role)
 
     def rowCount(self, parent) -> int:
+        return len(self._data)
+
+    def columnCount(self, parent) -> int:
         return len(self.HEADER_ROWS)
 
-    def columnCount(self, parent):
-        return len(self.HEADER_ROWS)
+    @staticmethod
+    def format_data(value):
+        match value:
+            case float():
+                return f'{value: 8.5f}'
+            case int():
+                return hex(value)
+            case bytearray():
+                return ' '.join([f"{x:02X}" for x in value])
+        return value
 
     def data(self, index: QModelIndex, role):
-        return range(len(self.HEADER_ROWS))
+        row = index.row()
+        col = index.column()
+        if role == QtCore.Qt.ItemDataRole.DisplayRole:
+            data = self._data[row]
+            row_data = (
+                data.timestamp,
+                'Rx' if data.is_rx else 'Tx',
+                'F' if data.is_fd else 'S',
+                data.arbitration_id,
+                data.dlc,
+                data.data,
+            )
+            return self.format_data(row_data[col])
+        elif role == QtCore.Qt.ItemDataRole.TextAlignmentRole:
+            aligment = QtCore.Qt.AlignmentFlag
+            row_pos = (
+                aligment.AlignRight,
+                aligment.AlignCenter,
+                aligment.AlignCenter,
+                aligment.AlignRight,
+                aligment.AlignRight,
+                aligment.AlignLeft,
+            )
+            return row_pos[col] | aligment.AlignVCenter
+
+    def flags(self, index: QModelIndex):
+        return QtCore.Qt.ItemFlag.ItemIsSelectable
+
+    def insert(self, data: can.Message):
+        logger.info(f'Added {data=} to container')
+        self._data.append(data)
+        # self.dataChanged.emit()
+        # self.modelReset.emit()
+        self.layoutChanged.emit()
 
 
 class RawCanViewerView(QtWidgets.QTableView):
@@ -43,8 +90,8 @@ class RawCanViewerView(QtWidgets.QTableView):
     def __init__(self, configuration: CanConfiguration):
         super().__init__()
         self._configuration = configuration
-        self._can_handler = CanWorker(self._configuration)
         self._model = self._configure()
+        self._can_handler = CanWorker(self._configuration, lambda x: self._model.insert(x))
         self._connect_signals()
 
     @property
@@ -53,6 +100,8 @@ class RawCanViewerView(QtWidgets.QTableView):
 
     def start_listening(self, threadpool: QThreadPool):
         threadpool.start(self._can_handler)
+        # self._can_handler.protocol.on_data_received.connect(lambda x: logger.info(f'Received CAN message: {x}'))
+        logger.info('Signal connected')
 
     def _configure(self):
         model = RawCanViewerModel()

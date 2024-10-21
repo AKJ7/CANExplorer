@@ -9,3 +9,7 @@ QTabBar::tab:selected {
 
 QTabWidget::pane {
 }
+
+QTableView::item {
+    text-align: right;
+}
