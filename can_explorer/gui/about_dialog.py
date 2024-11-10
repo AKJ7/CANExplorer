@@ -33,8 +33,8 @@ class AboutDialog(QDialog):
 
     def _copy_info_to_clipboard(self):
         info = AboutDialog._get_program_info()
-        build_info = '\n\n'.join([f'{key}: {value}'for key, value in info.items()])
-        logger.info(f'Copy to clipboard {build_info=}')
+        build_info = '\n\n'.join([f'{key}: {value}' for key, value in info.items()])
+        logger.info(f'Copied to clipboard: {build_info=}')
         clipboard = self._app.clipboard()
         clipboard.setText(build_info)
 
@@ -45,6 +45,5 @@ class AboutDialog(QDialog):
             'version': f'{PROJECT_NAME} ({__version__})',
             'build': f'{PROJECT_PLATFORM}-{__version__}, built on {PROJECT_BUILD_DATE}',
             'runtime': f'Python Runtime version: {sys.version}\nQt Version {QT_VERSION}, PyQt Version: {PYQT_VERSION}',
-            'copyright': f'Copyright @2024-2024 {PROJECT_NAME}'
+            'copyright': f'Copyright @2024-2024 {PROJECT_NAME}',
         }
-

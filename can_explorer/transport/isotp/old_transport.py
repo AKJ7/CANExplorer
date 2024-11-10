@@ -7,6 +7,7 @@ import can
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass(slots=True)
 class Timer:
     start: Optional[int] = 0
@@ -16,13 +17,13 @@ class Timer:
     @staticmethod
     def now() -> int:
         return time.perf_counter_ns()
-    
+
     def run(self, start: Optional[int]):
         self.start = start or self.now()
 
     async def process(self):
         async with asyncio.Timeout(self.timeout / 1_000_000) as tm:
-            await asyncio.sleep(self.timeout / 1E6)
+            await asyncio.sleep(self.timeout / 1e6)
 
     def stop(self):
         self.start = None
@@ -31,21 +32,21 @@ class Timer:
 class IsoTpCanProtocol(asyncio.Protocol):
 
     __slot__ = ('_transport', '_on_con_lost', '_data_received_queue', '_error_queue')
-    
+
     def __init__(self, on_con_lost) -> None:
         self._transport = None
         self._on_con_lost = on_con_lost
         self._data_received_queue = asyncio.Queue()
         self._error_queue = asyncio.Queue()
         super().__init__()
-    
+
     def connection_made(self, transport: asyncio.BaseTransport) -> None:
         logger.info('Connection made')
         return super().connection_made(transport)
 
     def data_received(self, data: bytes) -> None:
         logger.info(f'Received: {data}')
-        return super().data_received(data)    
+        return super().data_received(data)
 
     def connection_lost(self, exc: Exception | None) -> None:
         self._on_con_lost.set_result(True)
@@ -54,14 +55,14 @@ class IsoTpCanProtocol(asyncio.Protocol):
 
 class IsoTpTransport(asyncio.Transport):
     __slot__ = ('_bus', '_protocol', '_loop', '_parsing_task')
-    
-    def __init__(self, bus: can.BusABC) -> None: 
+
+    def __init__(self, bus: can.BusABC) -> None:
         self._bus = bus
         self._protocol = IsoTpCanProtocol(lambda x: logger.info(x))
         self._loop = asyncio.get_running_loop()
         self._start_message_polling()
         super().__init__()
-        
+
     def is_reading(self) -> bool:
         return self._bus.state == can.BusState.ACTIVE
 
@@ -86,6 +87,6 @@ class IsoTpTransport(asyncio.Transport):
         while True:
             message = self._bus.recv()
             self._protocol.data_received(message)
-        
+
     def _start_message_polling(self):
         self._parsing_task = asyncio.create_task(self._parse_can_frames())

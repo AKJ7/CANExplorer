@@ -1,9 +1,8 @@
 import logging
 
 from PyQt6.QtCore import pyqtSignal
-from PyQt6.QtWidgets import QDialog, QComboBox, QLineEdit, QCheckBox
+from PyQt6.QtWidgets import QDialog, QComboBox
 from PyQt6.uic import loadUi
-from matplotlib.pyplot import connect
 
 from can_explorer.util.canutils import CanConfiguration
 from can_explorer.util.gui import get_res_path
@@ -41,7 +40,6 @@ class NewConnectionDialog(QDialog):
         pass
 
     def accept(self):
-        QComboBox().currentText()
         can_configuration = CanConfiguration(
             connection_name=self.connection_name_box.text(),
             bitrate=int(self.bitrate_box.currentText(), base=10),
