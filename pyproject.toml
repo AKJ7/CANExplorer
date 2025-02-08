@@ -1,0 +1,78 @@
+[tool.poetry]
+name = "can-explorer"
+version = "0.0.1"
+description = "CAN analysis tool for all platform"
+authors = ["AKJ7 <akj123429@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+keywords = ['canbus', 'can', 'gui', 'analyze']
+
+[tool.poetry.dependencies]
+python = ">=3.10"
+rust-just = "*"
+PyQt6 = "*"
+pyinstaller = "*"
+python-can = "*"
+cantools = "*"
+click = "*"
+# aiofile = "*"
+aiohttp = "*"
+matplotlib = "*"
+numpy = "*"
+schema = "*"
+# qasync = "*"
+python-decouple = "*"
+
+[tool.poetry.group.dev.dependencies]
+black = "*"
+mypy = "*"
+pre-commit = "*"
+# reportlab = "*"
+docutils = "*"
+ruff = "*"
+
+[tool.poetry.group.test.dependencies]
+pytest = "*"
+pytest-asyncio = "*"
+pytest-schema = "*"
+hypothesis = "*"
+
+[tool.poetry.scripts]
+# main = "can_explorer.__main__."
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+log_cli = "True"
+log_cli_level = "INFO"
+log_cli_format = "%(asctime)s [%(levelname)s] %(message)s"
+log_cli_date_format = "%Y-%m-%d %H:%M:%S"
+python_files = "test_*.py"
+python_functions = "test_*"
+testpaths = "tests"
+asyncio_mode = "auto"
+
+#[tool.poetry.plugins.dotenv]
+
+#[tool.pylint]
+#disable = C0111, C0114, C0115, C0116б, W1203, missing-module-docstring, missing-class-docstring, disable=missing-function-docstring
+#
+[tool.black]
+line-length = 120
+include = ".pyi?$"
+#exclude = \.git
+#          | \.hg
+#          | \.mypy_cache
+#          | \.tox
+#          | \.venv
+#          | _build
+#          | buck-out
+#          | build
+#          | dist
+skip-string-normalization = true
+
+#[options.entry_points]
+#console_scripts =
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

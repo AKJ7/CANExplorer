@@ -1,0 +1,20 @@
+services:
+    gui:
+        build: .
+        user: can_explorer
+        privileged: true
+        volumes:
+            - .:/home/can_explorer/can_explorer
+        working_dir: /home/can_explorer/can_explorer
+#        healthcheck:
+#            test: true
+#            interval: 30s
+#            timeout: 1m
+#            retries: 2
+#            start_period: 1m
+        entrypoint: bash -c "poetry install && poetry show -v"
+        command: >
+            bash -c "echo Hallo world"
+
+                
+
