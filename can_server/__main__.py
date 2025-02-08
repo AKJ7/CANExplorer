@@ -17,11 +17,11 @@ async def is_alive():
 
 
 async def main():
-    heart = Heart(pathlib.Path('test.txt'), is_active=is_alive)
+    heart = Heart(pathlib.Path("test.txt"), is_active=is_alive)
     await heart.beat()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     logging.basicConfig(format=LOG_FORMAT, level=logging.DEBUG)
     logger.info(f'Starting "{PROJECT_NAME}" App')
     # cli()

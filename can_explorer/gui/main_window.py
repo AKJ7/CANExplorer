@@ -18,20 +18,20 @@ logger = logging.getLogger(__name__)
 class MainWindow(QMainWindow):
     def __init__(self, app: QApplication):
         super().__init__()
-        loadUi(get_res_path('main_window.ui'), self)
+        loadUi(get_res_path("main_window.ui"), self)
         self._app = app
         self._pool = QThreadPool.globalInstance()
         self._configure()
         self._connect_signal_slots()
 
     def _configure(self):
-        sheet_path = get_res_path('stylesheet.qss')
-        with open(sheet_path, mode='r') as sheet_file:
+        sheet_path = get_res_path("stylesheet.qss")
+        with open(sheet_path, mode="r") as sheet_file:
             sheet_content = sheet_file.read()
-        assert sheet_content is not None, 'Sheet content empty!'
+        assert sheet_content is not None, "Sheet content empty!"
         self._app.setStyleSheet(str(sheet_content))
         max_thread_count = self._pool.maxThreadCount()
-        logger.info(f'Using global threadpool instance with max: {max_thread_count=}')
+        logger.info(f"Using global threadpool instance with max: {max_thread_count=}")
 
     def _connect_signal_slots(self):
         signal.signal(signal.SIGINT, signal.SIG_DFL)
@@ -52,23 +52,25 @@ class MainWindow(QMainWindow):
 
     @pyqtSlot(CanConfiguration)
     def _add_new_can_connection(self, data: CanConfiguration):
-        logger.info(f'Adding new connection: {data=}')
+        logger.info(f"Adding new connection: {data=}")
         can_raw_viewer = RawCanViewerView(data)
         self.tab_widget.addTab(can_raw_viewer, data.connection_name)
 
     def _connect_to_bus(self):
         try:
             widget = self.tab_widget.currentWidget()
-            logger.info(f'Connecting to selected bus: {widget}')
+            logger.info(f"Connecting to selected bus: {widget}")
             if isinstance(widget, RawCanViewerView):
                 channel = widget.configuration_data.channel
-                interface = canutils.get_interface_name(widget.configuration_data.interface)
+                interface = canutils.get_interface_name(
+                    widget.configuration_data.interface
+                )
                 is_fd = widget.configuration_data.fd
                 widget.start_listening(self._pool)
                 # protocol, transport = create_can_connection(asyncio.get_running_loop(), protocol_factory=None, url=None, channel=channel, interface=interface, fd=is_fd)
                 # protocol.on_data_received.connect(widget.add_can_raw_message)
                 # logger.info(f'Connection to protocol: {protocol} successful')
             else:
-                logger.warning(f'Connecting to an unexpected widget. Skipping ...')
+                logger.warning(f"Connecting to an unexpected widget. Skipping ...")
         except Exception as e:
-            logger.error(f'Could not connect to bus: {e}')
+            logger.error(f"Could not connect to bus: {e}")

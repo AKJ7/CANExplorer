@@ -13,7 +13,7 @@ class SemanticVersion:
     patch: int
 
     @classmethod
-    def from_str(cls, version: str) -> 'Version':
+    def from_str(cls, version: str) -> 'SemanticVersion':
         matches = re.match(r'([0-9]+)\.([0-9]+)\.?([0-9])*', version)
         if matches is not None:
             parts = matches.group(0).split('.', 3)

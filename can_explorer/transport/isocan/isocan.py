@@ -10,7 +10,13 @@ logger = logging.getLogger(__name__)
 
 
 class IsoCanProtocol(asyncio.Protocol, QWidget):
-    __slot__ = ('_transport', '_on_con_lost', '_data_received_queue', '_error_queue', 'on_data_received')
+    __slot__ = (
+        "_transport",
+        "_on_con_lost",
+        "_data_received_queue",
+        "_error_queue",
+        "on_data_received",
+    )
     on_data_received = pyqtSignal(can.Message)
 
     def __init__(self, on_con_lost) -> None:
@@ -22,11 +28,11 @@ class IsoCanProtocol(asyncio.Protocol, QWidget):
         self.on_data_received.emit(can.Message())
 
     def connection_made(self, transport: asyncio.BaseTransport) -> None:
-        logger.debug(f'Connection made')
+        logger.debug(f"Connection made")
         return super().connection_made(transport)
 
     def data_received(self, data: bytes) -> None:
-        logger.info(f'Received: {data}')
+        logger.info(f"Received: {data}")
         self._data_received_queue.put_nowait(data)
         self.on_data_received.emit(data)
 
@@ -36,7 +42,7 @@ class IsoCanProtocol(asyncio.Protocol, QWidget):
 
 
 class IsoCanTransport(asyncio.Transport):
-    __slot__ = ('_bus', '_protocol', '_loop', '_parsing_task')
+    __slot__ = ("_bus", "_protocol", "_loop", "_parsing_task")
 
     def __init__(self, bus: can.BusABC) -> None:
         self._bus: can = bus
@@ -54,7 +60,7 @@ class IsoCanTransport(asyncio.Transport):
             self._parsing_task.cancel()
             self._parsing_task = None
         else:
-            logger.warning(f'Parsing task not present!')
+            logger.warning(f"Parsing task not present!")
 
     def resume_reading(self) -> None:
         self._start_message_polling()
@@ -72,7 +78,7 @@ class IsoCanTransport(asyncio.Transport):
     def _parse_can_frames(self) -> None:
         try:
 
-            logger.info('Waiting for CAN messages')
+            logger.info("Waiting for CAN messages")
             while True:
                 message = self._bus.recv()
                 self._protocol.data_received(message)
@@ -80,7 +86,7 @@ class IsoCanTransport(asyncio.Transport):
             logger.error(e)
 
     def _start_message_polling(self):
-        logger.info('Starting message polling')
+        logger.info("Starting message polling")
 
         async def a_parse_can_frames():
             self._parse_can_frames()

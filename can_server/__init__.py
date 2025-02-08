@@ -1,1 +1,1 @@
-PROJECT_NAME = 'CAN server'
+PROJECT_NAME = "CAN server"
