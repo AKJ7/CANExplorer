@@ -4,6 +4,7 @@ import can
 import logging
 import enum
 from can_explorer.transport.j1939.addressing import AddressInfo
+from can_explorer.transport.j1939.pdu import PDU
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -140,3 +141,18 @@ class J1939Transport(asyncio.Transport):
     def get_protocol(self):
         """Return the current protocol."""
         return self._protocol
+
+    def _dispatch(self, pdu: PDU):
+        raise NotImplementedError()
+
+    def _parse_data(self, msg: can.Message):
+        pdu = PDU.from_can(msg)
+        if pdu.is_type2():
+            # Broadcase
+            self._dispatch(pdu)
+        else:
+            match pdu.destination_address:
+                case AddressInfo.GLOBAL:
+                    pass
+                case _:
+                    pass

@@ -3,3 +3,6 @@ create-vcan:
 
 explore:
     python -m can_explorer
+
+test:
+    pytest

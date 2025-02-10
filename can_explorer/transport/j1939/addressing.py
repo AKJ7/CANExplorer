@@ -1,6 +1,9 @@
 import logging
 import asyncio
 
+logger = logging.getLogger(__name__)
+
 
 class AddressInfo:
-    pass
+    NULL = 0xFE
+    GLOBAL = 0xFF
