@@ -16,12 +16,7 @@ def can_channel(request):
 
 
 @pytest.fixture(scope="session")
-def can_bus(can_channel):
-    bus = can.Bus(channel=can_channel, interface="socketcan")
+def can_bus():
+    bus = can.Bus(channel='test', interface='virtual', preserve_timestamp=True, receive_own_messages=True)
     yield bus
     bus.shutdown()
-
-
-@pytest.fixture(scope="session")
-def loop():
-    return asyncio.get_event_loop()

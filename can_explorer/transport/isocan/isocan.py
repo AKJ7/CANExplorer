@@ -5,6 +5,7 @@ import logging
 import asyncio
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import QWidget
+from can_explorer.util.worker import Worker
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,6 @@ class IsoCanProtocol(asyncio.Protocol, QWidget):
         self._on_con_lost = on_con_lost
         self._data_received_queue = asyncio.Queue()
         self._error_queue = asyncio.Queue()
-        self.on_data_received.emit(can.Message())
 
     def connection_made(self, transport: asyncio.BaseTransport) -> None:
         logger.debug(f"Connection made")
@@ -41,21 +41,22 @@ class IsoCanProtocol(asyncio.Protocol, QWidget):
         return super().connection_lost(exc)
 
 
-class IsoCanTransport(asyncio.Transport):
+class IsoCanTransport(Worker, asyncio.Transport):
     __slot__ = ("_bus", "_protocol", "_loop", "_parsing_task")
 
-    def __init__(self, bus: can.BusABC) -> None:
-        self._bus: can = bus
-        self._protocol = IsoCanProtocol(lambda x: logger.info(x))
-        # self._loop = asyncio.get_running_loop()
-        self._loop = None
-        # self._start_message_polling()
-        super().__init__()
+    def __init__(self, loop: asyncio.AbstractEventLoop, protocol: asyncio.Protocol, bus: can.BusABC) -> None:
+        self._bus = bus
+        self._protocol = protocol
+        self._loop = loop
+        self._reader = can.AsyncBufferedReader()
+        self._notifier = can.Notifier(self._bus, [self._reader])
+        super().__init__(self._loop)
 
     def is_reading(self) -> bool:
         return self._bus.state == can.BusState.ACTIVE
 
     def pause_reading(self) -> None:
+        # TODO: Fix to newer interface
         if self._parsing_task is not None:
             self._parsing_task.cancel()
             self._parsing_task = None
@@ -69,26 +70,14 @@ class IsoCanTransport(asyncio.Transport):
         return self._protocol
 
     def close(self) -> None:
-        self._bus.shutdown()
+        self.cancel()
+        self._reader.stop()
+        self._notifier.stop()
 
     def write(self, data: bytearray, arbitration_id: int) -> None:
         message = can.Message(data=data, arbitration_id=arbitration_id)
         self._bus.send(message)
 
-    def _parse_can_frames(self) -> None:
-        try:
-
-            logger.info("Waiting for CAN messages")
-            while True:
-                message = self._bus.recv()
-                self._protocol.data_received(message)
-        except Exception as e:
-            logger.error(e)
-
-    def _start_message_polling(self):
-        logger.info("Starting message polling")
-
-        async def a_parse_can_frames():
-            self._parse_can_frames()
-
-        self._parsing_task = asyncio.create_task(a_parse_can_frames())
+    async def _run(self) -> None:
+        async for message in self._reader:
+            self._protocol.data_received(message)

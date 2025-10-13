@@ -15,9 +15,7 @@
 		"--privileged",
 		"--network=host"
 	],
-	"appPort": [
-		"69:69"
-	],
+	"appPort": [],
 	"mounts": [
 		"type=bind,source=/dev/bus/usb,target=/dev/bus/usb", // Make USB devices available.
 		"source=${localEnv:HOME}/.ssh,target=/home/devuser/.ssh,type=bind,consistency=cached", // Make ssh key available

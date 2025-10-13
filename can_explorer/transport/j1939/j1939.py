@@ -3,9 +3,10 @@ from dataclasses import dataclass
 import can
 import logging
 import enum
-from can_explorer.transport.j1939.addressing import AddressInfo
+from can_explorer.transport.j1939.controller_application import ControllerApp
+from can_explorer.transport.j1939.addressing import AddressInfo, PGN
 from can_explorer.transport.j1939.pdu import PDU
-from typing import Optional
+from typing import Optional, List
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ class J1939Transport(asyncio.Transport):
         self._tx_queue = asyncio.Queue()
         self._rx_reader = can.AsyncBufferedReader()
         self._tx_reader = can.AsyncBufferedReader()
+        self._controller_apps: List[ControllerApp] = []
         super().__init__()
 
     def is_reading(self):
@@ -145,14 +147,37 @@ class J1939Transport(asyncio.Transport):
     def _dispatch(self, pdu: PDU):
         raise NotImplementedError()
 
-    def _parse_data(self, msg: can.Message):
-        pdu = PDU.from_can(msg)
-        if pdu.is_type2():
-            # Broadcase
-            self._dispatch(pdu)
+    @property
+    def id_list(self) -> List[int]:
+        raise NotImplementedError()
+
+    def _targetted_controller_apps(self, destination: int) -> List[ControllerApp]:
+        if destination == AddressInfo.GLOBAL:
+            return self._controller_apps
         else:
-            match pdu.destination_address:
-                case AddressInfo.GLOBAL:
-                    pass
-                case _:
-                    pass
+            ret = []
+            for controller_app in self._controller_apps:
+                if controller_app.accepts(destination):
+                    ret.append(controller_app)
+            return ret
+
+    def _parse_data(self, msg: can.Message) -> bool:
+        pdu = PDU.from_can(msg)
+        if not pdu.validate():
+            logger.warning(f'Ignoring invalid CAN Frame: {msg=}')
+            return False
+        if pdu.address_info.is_type2():
+            # Broadcast
+            self._dispatch(pdu)
+            return True
+        targets = self._targetted_controller_apps(pdu.address_info.destination_address)
+        if len(targets) == 0:
+            logger.warning(f'Ignoring unexpected CAN message: {pdu=}, {msg=}')
+            return
+        match pdu.address_info.pgn:
+            case PGN.REQUEST.value.group_number:
+                for target in targets:
+                    target.handle_request(pdu)
+            case _:
+                pass
+        return True

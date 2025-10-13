@@ -1,7 +1,7 @@
 import asyncio
 from can_explorer.gui.base_worker import Worker
 from can_explorer.transport.can_connection import create_can_connection
-from can_explorer.transport.isocan import IsoCanProtocol, IsoCanTransport
+from can_explorer.transport.isocan.isocan import IsoCanProtocol, IsoCanTransport
 from can_explorer.util.canutils import CanConfiguration
 from typing import Optional
 import logging

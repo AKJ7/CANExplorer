@@ -41,9 +41,7 @@ def connection_for_can(
     **kwargs,
 ):
     original_protocol = protocol_factory()
-    transport = can_type.transport()(
-        loop=loop, protocol=original_protocol, bus=can_bus, *args, **kwargs
-    )
+    transport = can_type.transport()(loop=loop, protocol=original_protocol, bus=can_bus, *args, **kwargs)
     protocol = transport.get_protocol()
     return protocol, transport
 
@@ -61,12 +59,8 @@ def create_can_connection(
     parsed_url = urllib.parse.urlparse(url=url)
     if parsed_url.scheme == "socket":
         transport, protocol = loop.run_until_complete(
-            loop.create_connection(
-                protocol_factory, parsed_url.hostname, parsed_url.port
-            )
+            loop.create_connection(protocol_factory, parsed_url.hostname, parsed_url.port)
         )
     else:
-        transport, protocol = connection_for_can(
-            loop, can_type, protocol_factory, can_bus, *args, **kwargs
-        )
+        transport, protocol = connection_for_can(loop, can_type, protocol_factory, can_bus, *args, **kwargs)
     return transport, protocol

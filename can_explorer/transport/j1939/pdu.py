@@ -20,26 +20,15 @@ class MessageType(enum.Enum):
     GROUP_FUNCTION = enum.auto()
 
 
-@enum.unique
-class PDUType(enum.Enum):
-    PDU1 = enum.auto()
-    PDU2 = enum.auto()
-
-
 @dataclass(frozen=True, slots=True)
 class PDU:
-    priority: int
-    extended_data_page: int
-    data_page: int
-    pdu_format: int
-    pdu_specific_field: int
-    source_address: int
+    address_info: AddressInfo
     data: bytearray
     arbitration_type: ArbitrationType
     length_type: LengthType
 
     @classmethod
-    def from_can(cls, msg: can.Message, addressing: AddressInfo) -> 'PDU':
+    def from_can(cls, msg: can.Message) -> 'PDU':
         """
         Generate a valid j1939 PDU from a CAN Frame
 
@@ -54,47 +43,21 @@ class PDU:
         Returns:
             PDU: Generated PDU. Returns None on Error
         """
-        priority = 0
-        source_address = 0
-        extended_data_page = 0
-        data_page = 0
-        page_format = 0
-        pdu_specific_field = 0
-        data = None
         arbitration_type = ArbitrationType.from_can(msg)
         length_type = LengthType.from_can(msg)
-        if msg.is_extended_id:
-            priority = (msg.arbitration_id >> 19) & 0b111
-            extended_data_page = (msg.arbitration_id >> 18) & 0b1
-            data_page = (msg.arbitration_id >> 17) & 0b1
-            page_format = (msg.arbitration_id >> 16) & 0xFF
-            pdu_specific_field = (msg.arbitration_id >> 8) & 0xFF
-            source_address = msg.arbitration_id & 0xFF
-        else:
-            priority = (msg.arbitration_id >> 8) & 0b111
-            source_address = msg.arbitration_id & 0xFF
+        address_info = AddressInfo.from_can_id(msg.arbitration_id, msg.is_extended_id)
+        data = msg.data
         return PDU(
-            priority=priority,
-            extended_data_page=extended_data_page,
-            pdu_format=page_format,
-            pdu_specific_field=pdu_specific_field,
-            data_page=data_page,
-            source_address=source_address,
+            address_info=address_info,
             arbitration_type=arbitration_type,
             length_type=length_type,
             data=data,
         )
 
-    @property
-    def pdu_type(self) -> PDUType:
-        return PDUType.PDU1 if 0 <= self.pdu_format <= 239 else PDUType.PDU2
-
-    def is_type2(self) -> bool:
-        return self.pdu_type == PDUType.PDU2
-
-    @property
-    def destination_address(self) -> Optional[int]:
-        return self.pdu_specific_field if self.is_type2() else None
-
-    def as_can(self, force_normal_addressing=False) -> can.Message:
+    def export(self, force_normal_addressing=False) -> can.Message:
         raise NotImplemented()
+
+    def validate(self) -> bool:
+        if not self.address_info.validate():
+            return False
+        return True

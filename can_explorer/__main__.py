@@ -8,6 +8,8 @@ from can_explorer.gui.main_window import MainWindow
 from can_explorer.transport.can_connection import create_can_connection
 from PyQt6.QtGui import QGuiApplication
 from PyQt6.QtQml import QQmlApplicationEngine
+from can_explorer.util.gui import get_res_path
+# from PyQt6.QtCore import QtAsyncio
 
 
 logger = logging.getLogger(__name__)
@@ -17,8 +19,12 @@ def run_gui() -> int:
     app = QGuiApplication(sys.argv)
     engine = QQmlApplicationEngine()
     engine.quit.connect(app.quit)
-    engine.load("can_explorer/gui/qt/main_window.qml")
+    main_window_qml = get_res_path('main_window.qml')
+    engine.load(str(main_window_qml))
     status = app.exec()
+    # QtAsyncio.run(handle_sigint=True)
+    # status = 1
+    # status = app.exec()
     return status
 
 
