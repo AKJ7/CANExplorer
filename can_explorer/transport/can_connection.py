@@ -1,11 +1,8 @@
 import enum
 import urllib
 import urllib.parse
-from functools import partial
-import can_explorer.transport as tp
 from can_explorer.transport.isocan.isocan import *
 from can_explorer.transport.isotp.old_transport import *
-from can_explorer.transport.base_protocol import BaseCanProtocol
 from can_explorer.transport.j1939.j1939 import J1939Transport
 from can_explorer.transport.canopen.canopen import CanOpenTransport
 

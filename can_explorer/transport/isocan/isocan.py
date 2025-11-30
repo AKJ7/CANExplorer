@@ -1,16 +1,15 @@
-from PyQt6.QtCore import pyqtSignal
-
 import can
 import logging
 import asyncio
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import QWidget
 from can_explorer.util.worker import Worker
+from typing import Tuple, Any
 
 logger = logging.getLogger(__name__)
 
 
-class IsoCanProtocol(asyncio.Protocol, QWidget):
+class IsoCanProtocol(asyncio.DatagramProtocol, QWidget):
     __slot__ = (
         "_transport",
         "_on_con_lost",
@@ -18,42 +17,56 @@ class IsoCanProtocol(asyncio.Protocol, QWidget):
         "_error_queue",
         "on_data_received",
     )
-    on_data_received = pyqtSignal(can.Message)
+    on_data_received = pyqtSignal(bytearray, int)
+    on_connection_lost = pyqtSignal(Exception)
+    on_connection_made = pyqtSignal(asyncio.BaseProtocol)
+    on_error_received = pyqtSignal(Exception)
 
-    def __init__(self, on_con_lost) -> None:
+    def __init__(self) -> None:
+        self._transport: asyncio.Transport | None = None
         super().__init__()
-        self._transport = None
-        self._on_con_lost = on_con_lost
-        self._data_received_queue = asyncio.Queue()
-        self._error_queue = asyncio.Queue()
 
-    def connection_made(self, transport: asyncio.BaseTransport) -> None:
-        logger.debug(f"Connection made")
+    def connection_made(self, transport: asyncio.DatagramTransport) -> None:
+        self._transport = transport
+        self.on_connection_made.emit(transport)
         return super().connection_made(transport)
 
-    def data_received(self, data: bytes) -> None:
-        logger.info(f"Received: {data}")
-        self._data_received_queue.put_nowait(data)
-        self.on_data_received.emit(data)
+    def datagram_received(self, data: bytes | bytearray, addr: Tuple[str | Any, int]) -> None:
+        logger.info(f"Received: {data=}, {addr=}")
+        _, arbitration_id = addr
+        self.on_data_received.emit(data, arbitration_id)
 
     def connection_lost(self, exc: Exception | None) -> None:
-        self._on_con_lost.set_result(True)
+        self.on_connection_lost.emit(exc)
         return super().connection_lost(exc)
 
+    def error_received(self, exc: Exception) -> None:
+        logger.debug(f'Error received: {exc=}')
+        self.on_error_received.emit(exc)
 
-class IsoCanTransport(Worker, asyncio.Transport):
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
+
+
+class IsoCanTransport(Worker, asyncio.DatagramTransport):
     __slot__ = ("_bus", "_protocol", "_loop", "_parsing_task")
 
-    def __init__(self, loop: asyncio.AbstractEventLoop, protocol: asyncio.Protocol, bus: can.BusABC) -> None:
+    def __init__(self, loop: asyncio.AbstractEventLoop, protocol: asyncio.DatagramProtocol, bus: can.BusABC) -> None:
         self._bus = bus
         self._protocol = protocol
         self._loop = loop
         self._reader = can.AsyncBufferedReader()
-        self._notifier = can.Notifier(self._bus, [self._reader])
+        self._notifier = can.Notifier([], [], loop=self._loop)
+        # self._bus.set_filters()
+        # filter = can.typechecking.CanFilter()
         super().__init__(self._loop)
 
     def is_reading(self) -> bool:
-        return self._bus.state == can.BusState.ACTIVE
+        return self._reader.buffer.empty()
 
     def pause_reading(self) -> None:
         # TODO: Fix to newer interface
@@ -63,21 +76,39 @@ class IsoCanTransport(Worker, asyncio.Transport):
         else:
             logger.warning(f"Parsing task not present!")
 
+    def connect(self, start_listening=True):
+        logger.debug(f'Connecting')
+        self._notifier.add_bus(self._bus)
+        if start_listening:
+            self._notifier.add_listener(self._reader)
+
+    def listen(self):
+        self._notifier.add_listener(self._reader)
+
+    def disconnect(self):
+        self._reader.stop()
+        self._notifier.stop()
+
     def resume_reading(self) -> None:
+        # TODO: Fix
         self._start_message_polling()
 
     def get_protocol(self) -> asyncio.BaseProtocol:
         return self._protocol
 
-    def close(self) -> None:
-        self.cancel()
-        self._reader.stop()
-        self._notifier.stop()
+    async def close(self) -> None:
+        await self.cancel()
+        self.disconnect()
 
-    def write(self, data: bytearray, arbitration_id: int) -> None:
-        message = can.Message(data=data, arbitration_id=arbitration_id)
+    def sendto(self, data: bytes | bytearray | memoryview, addr: int | None = None) -> None:
+        message = can.Message(data=data, arbitration_id=addr)
         self._bus.send(message)
+
+    def abort(self):
+        pass
 
     async def _run(self) -> None:
         async for message in self._reader:
-            self._protocol.data_received(message)
+            data = message.data
+            address = message.arbitration_id
+            self._protocol.datagram_received(data, ('',address))

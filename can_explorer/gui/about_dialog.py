@@ -2,7 +2,16 @@ from PyQt6.uic import loadUi
 from PyQt6.QtWidgets import QDialog, QLabel, QApplication, QPushButton
 import logging
 from can_explorer.util.gui import get_res_path
-from can_explorer import PROJECT_NAME, PROJECT_PLATFORM, PROJECT_BUILD_DATE
+
+# from decouple import config
+#
+# LOG_FORMAT = config("CANEXPLORER_LOG_FORMAT", cast=str)
+# LOG_LEVEL = config("CANEXPLORER_LOG_LEVEL", cast=str)
+# PROJECT_NAME2 = config("CANEXPLORER_PROJECT_NAME", cast=str)
+# PROJECT_BUILD_DATE = "12 October 2024"
+# PROJECT_PLATFORM = "Linux"
+
+from can_explorer import PROJECT_NAME2, PROJECT_PLATFORM, PROJECT_BUILD_DATE
 from PyQt6.QtCore import QT_VERSION, PYQT_VERSION
 from can_explorer.__version__ import __version__
 import sys

@@ -1,6 +1,15 @@
 # CANExplorer
-A CANbus-Analyse Tool for all platform.  
-<span style="color:red">This is a WIP Project!</span>
+A CANbus-Analyse Tool for all platforms.
+
+## Usage  
+- Install dependencies
+  ```bash
+  poetry lock && poetry install
+  ```
+- Run main application
+  ```bash
+  poetry run main <ARGS>
+  ```
 
 
 ## Roadmap
@@ -17,3 +26,5 @@ A CANbus-Analyse Tool for all platform.
     - [ ] Implement ISOTP transport and protocol
     - [ ] Implement CanOpen transport and protocol
     - [ ] Release 0.2.0
+3. Move UI to QML
+    - [ ] Add main UI

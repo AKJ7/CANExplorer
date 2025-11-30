@@ -3,15 +3,20 @@ from dataclasses import dataclass
 import can
 import logging
 import enum
+
+# from can_explorer.gui.base_worker import Worker
 from can_explorer.transport.j1939.controller_application import ControllerApp
 from can_explorer.transport.j1939.addressing import AddressInfo, PGN
 from can_explorer.transport.j1939.pdu import PDU
 from typing import Optional, List
+from can_explorer.transport.can_transport import CanTransport
+from can_explorer.util.worker import Worker
+from can_explorer.transport.can_protocol import CanProtocol
 
 logger = logging.getLogger(__name__)
 
 
-class J1939Transport(asyncio.Transport):
+class J1939Transport(CanTransport, Worker):
     def __init__(
         self,
         loop: asyncio.AbstractEventLoop,
@@ -22,8 +27,7 @@ class J1939Transport(asyncio.Transport):
         self._protocol = protocol
         self._loop = loop
         self._bus = bus
-        self._poll_task: Optional[asyncio.Task] = None
-        self._notifier = None
+        self._notifier = can.Notifier([], [], loop=self._loop)
         self._addressing = addressing
         self._rx_queue = asyncio.Queue()
         self._tx_queue = asyncio.Queue()
@@ -32,9 +36,12 @@ class J1939Transport(asyncio.Transport):
         self._controller_apps: List[ControllerApp] = []
         super().__init__()
 
-    def is_reading(self):
-        """Return True if the transport is receiving."""
-        raise NotImplementedError
+    def is_reading(self) -> bool:
+        listeners = self._notifier.listeners
+        return all(map(lambda listener: listener is not None, listeners)) and not self._notifier.stopped
+
+    def _run(self):
+        pass
 
     def pause_reading(self):
         """Pause the receiving end.

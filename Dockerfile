@@ -28,4 +28,4 @@ RUN useradd -ms /bin/bash $DOCKER_USER
 RUN usermod -aG sudo $DOCKER_USER && echo "${DOCKER_USER} ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/${DOCKER_USER}
 RUN chmod 0440 /etc/sudoers.d/${DOCKER_USER}
 USER $DOCKER_USER
-ENTRYPOINT bash -c "poetry install"
+ENTRYPOINT bash -c "poetry lock && poetry install"

@@ -319,7 +319,7 @@ def create_isotp_endpoint(
 
 
 if __name__ == '__main__':
-    from can_explorer.transport.base_protocol import BaseCanProtocol
+    from can_explorer.transport.can_transport import BaseCanProtocol
 
     logging.basicConfig(level=logging.INFO)
 

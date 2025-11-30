@@ -1,0 +1,8 @@
+module CanExplorer
+
+CustomComponent 1.0 CustomComponent.qml
+AboutDialog 1.0 AboutDialog.qml
+EditMenu 1.0 EditMenu.qml
+FileMenu 1.0 FileMenu.qml
+HelpMenu 1.0 HelpMenu.qml
+singleton Actions 1.0 Actions.qml

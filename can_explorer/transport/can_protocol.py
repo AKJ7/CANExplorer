@@ -1,46 +1,15 @@
-from abc import ABC
 import asyncio
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-class BaseCanProtocol(ABC, asyncio.Protocol):
-    pass
-
-
-class CanProtocol(BaseCanProtocol):
-    """Interface for stream protocol.
-
-    The user should implement this interface.  They can inherit from
-    this class but don't need to.  The implementations here do
-    nothing (they don't raise exceptions).
-
-    When the user wants to requests a transport, they pass a protocol
-    factory to a utility function (e.g., EventLoop.create_connection()).
-
-    When the connection is made successfully, connection_made() is
-    called with a suitable transport object.  Then data_received()
-    will be called 0 or more times with data (bytes) received from the
-    transport; finally, connection_lost() will be called exactly once
-    with either an exception object or None as an argument.
-
-    State machine of calls:
-
-      start -> CM [-> DR*] [-> ER?] -> CL -> end
-
-    * CM: connection_made()
-    * DR: data_received()
-    * ER: eof_received()
-    * CL: connection_lost()
-    """
-
+class CanProtocol(asyncio.Protocol):
     def data_received(self, data):
         """Called when some data is received.
 
         The argument is a bytes object.
         """
-        logger.info('Data received')
 
     def eof_received(self):
         """Called when the other end calls write_eof() or equivalent.
@@ -49,7 +18,6 @@ class CanProtocol(BaseCanProtocol):
         will close itself.  If it returns a true value, closing the
         transport is up to the protocol.
         """
-        logger.info('EOF received')
 
     def connection_made(self, transport):
         """Called when a connection is made.
@@ -58,7 +26,6 @@ class CanProtocol(BaseCanProtocol):
         To receive data, wait for data_received() calls.
         When the connection is closed, connection_lost() is called.
         """
-        logger.info('Connection made')
 
     def connection_lost(self, exc):
         """Called when the connection is lost or closed.
@@ -67,7 +34,6 @@ class CanProtocol(BaseCanProtocol):
         meaning a regular EOF is received or the connection was
         aborted or closed).
         """
-        logger.info('Connection lost')
 
     def pause_writing(self):
         """Called when the transport's buffer goes over the high-water mark.
@@ -90,11 +56,9 @@ class CanProtocol(BaseCanProtocol):
         effect when it's most needed (when the app keeps writing
         without yielding until pause_writing() is called).
         """
-        logger.info('Paused writing')
 
     def resume_writing(self):
         """Called when the transport's buffer drains below the low-water mark.
 
         See pause_writing() for details.
         """
-        logger.info('Resumed writing')
