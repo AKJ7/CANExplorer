@@ -88,12 +88,23 @@ async def test_closing_a_replay_stops_the_reader(tmp_path):
     with can.Logger(path) as logger:
         for i in range(100):
             logger.on_message_received(can.Message(arbitration_id=i, timestamp=float(i)))
-    session = BusSession(FileSource(path, realtime=True))
+    source = FileSource(path, realtime=True)
+    session = BusSession(source)
     session.start()
-    await asyncio.sleep(0.05)
+    # The first frame comes at once, the next only a second later: close in between. Waiting for the first frame
+    # instead of a fixed time keeps the test reliable on slow (CI) machines.
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + 5
+    while session.trace.total == 0:
+        assert loop.time() < deadline, 'The first frame was not replayed'
+        await asyncio.sleep(0.01)
     session.stop()
     assert session.state is SessionState.CLOSED
-    assert session.trace.total == 1
+    reader = source._thread
+    await asyncio.to_thread(reader.join, 2)
+    assert not reader.is_alive()  # The reader thread ended
+    await asyncio.sleep(0.2)
+    assert session.trace.total == 1  # No frames after closing
 
 
 @pytest.mark.parametrize('realtime', [True, False])
