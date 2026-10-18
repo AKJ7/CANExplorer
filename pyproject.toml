@@ -46,6 +46,11 @@ packaging = [
     "pyinstaller",
     "zstandard>=0.25.0",
 ]
+docs = [
+    "mkdocs>=1.6,<2",
+    "mkdocs-material>=9.7.7",
+    "mkdocstrings[python]>=1.0.6",
+]
 
 [tool.uv]
 default-groups = ["dev", "test", "packaging"]

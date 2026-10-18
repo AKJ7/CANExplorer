@@ -86,3 +86,32 @@ async def test_errors_are_reported(manager):
     manager.add_connection({'name': 'Broken', 'interface': 'NoSuchBus', 'channel': 'x'})
     manager.connections[0].open()
     assert errors and not manager.connections[0].connected
+
+
+async def test_dashboard_figures(manager, data_dir):
+    channel = f'gui-{uuid.uuid4().hex}'
+    manager.add_connection({'name': 'Bus', 'interface': 'VirtualBus', 'channel': channel, 'bitrate': '500000'})
+    connection = manager.connections[0]
+    connection.open()
+    connection.load_database(QUrl.fromLocalFile(str(data_dir / 'example.dbc')))
+    assert connection.rx_history == [] and connection.traffic_breakdown == [] and connection.top_identifiers == []
+
+    peer = can.Bus(interface='virtual', channel=channel)
+    for _ in range(3):
+        peer.send(can.Message(arbitration_id=0x100, is_extended_id=False, data=bytes(8)))
+    peer.send(can.Message(arbitration_id=0x18FEF100, is_extended_id=True, data=bytes(8)))
+    await wait_until(lambda: connection.session.trace.total == 4)
+    peer.shutdown()
+
+    connection._sample_bus_statistics()
+    connection._sample_bus_statistics()
+    assert len(connection.rx_history) == len(connection.tx_history) == len(connection.load_history) == 2
+    assert connection.identifier_count == 2
+    assert connection.traffic_breakdown == [{'label': 'Standard', 'value': 3}, {'label': 'Extended', 'value': 1}]
+    first, second = connection.top_identifiers
+    assert first['id'] == '100' and first['name'] == 'EngineData' and first['direction'] == 'Rx'
+    assert first['count'] == 3 and first['share'] == 1.0
+    assert second['id'] == '18FEF100' and second['share'] == pytest.approx(1 / 3)
+
+    connection.clear()
+    assert connection.rx_history == [] and connection.top_identifiers == []

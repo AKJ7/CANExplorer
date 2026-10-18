@@ -14,11 +14,22 @@ Dialog {
     onAboutToShow: {
         rowsBox.value = appState.max_trace_rows
         refreshBox.value = appState.refresh_interval_ms
+        themeBox.currentIndex = appState.themes.indexOf(appState.theme)
     }
-    onAccepted: appState.set_preferences(rowsBox.value, refreshBox.value)
+    onAccepted: {
+        appState.set_preferences(rowsBox.value, refreshBox.value)
+        appState.set_theme(themeBox.currentText)
+    }
 
     GridLayout {
         columns: 2
+
+        Label { text: qsTr("Theme") }
+        ComboBox {
+            id: themeBox
+            model: dialog.appState.themes
+            Layout.preferredWidth: 180
+        }
 
         Label { text: qsTr("Trace buffer (frames)") }
         SpinBox {

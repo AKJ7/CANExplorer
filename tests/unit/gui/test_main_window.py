@@ -47,6 +47,32 @@ def test_connection_views_render_without_warnings(window, qtbot):
     assert warnings == []
 
 
+def test_dashboard_pages_and_themes_render_without_warnings(window, qtbot):
+    from PyQt6 import sip
+    from PyQt6.QtQuick import QQuickWindow
+
+    engine, manager, warnings = window
+    manager.add_connection({'name': 'Bus', 'interface': 'VirtualBus', 'channel': f'qml-{uuid.uuid4().hex}'})
+    qtbot.wait(50)
+    stack = [sip.cast(engine.rootObjects()[0], QQuickWindow).contentItem()]
+    while not stack[-1].metaObject().className().startswith('ConnectionView'):
+        item = stack.pop()
+        stack.extend(item.childItems())
+    view = stack[-1]
+    pages = [page['key'] for page in view.property('pages').toVariant()]
+    assert pages == ['dashboard', 'trace', 'overview', 'signals', 'diagnostics', 'simulation']
+    for page in pages:
+        view.setProperty('page', page)
+        qtbot.wait(30)
+    for theme in manager.app_state.themes:
+        manager.app_state.set_theme(theme)
+        qtbot.wait(30)
+    manager.app_state.set_theme('Dark')
+    manager.error_occurred.emit('Something failed')
+    qtbot.wait(50)
+    assert warnings == []
+
+
 def test_lin_connection_views_render_without_warnings(window, qtbot, data_dir):
     from PyQt6.QtCore import QUrl
 

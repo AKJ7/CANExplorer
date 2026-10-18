@@ -12,7 +12,16 @@ SignalsView 1.0 SignalsView.qml
 DiagnosticsView 1.0 DiagnosticsView.qml
 LinScheduleView 1.0 LinScheduleView.qml
 SimulationView 1.0 SimulationView.qml
-EditMenu 1.0 EditMenu.qml
-FileMenu 1.0 FileMenu.qml
-HelpMenu 1.0 HelpMenu.qml
 singleton Actions 1.0 Actions.qml
+Card 1.0 Card.qml
+Pill 1.0 Pill.qml
+Sparkline 1.0 Sparkline.qml
+AreaChart 1.0 AreaChart.qml
+DonutChart 1.0 DonutChart.qml
+StatCard 1.0 StatCard.qml
+Sidebar 1.0 Sidebar.qml
+TopBar 1.0 TopBar.qml
+AppMenu 1.0 AppMenu.qml
+DashboardView 1.0 DashboardView.qml
+WelcomeView 1.0 WelcomeView.qml
+singleton Theme 1.0 Theme.qml

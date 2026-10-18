@@ -1,8 +1,12 @@
 # CANExplorer
 A CANbus-Analyse Tool for all platforms.
 
+**Documentation:** [akj7.github.com/canexplorer](https://akj7.github.com/canexplorer/) (sources in [docs/](docs/);
+preview locally with `uv run --group docs mkdocs serve`).
+
 ## Features
 - Live monitoring of any [python-can](https://python-can.readthedocs.io/) interface (SocketCAN, PCAN, Vector, Kvaser, slcan, gs_usb, virtual, …), including CAN FD with a separate data bitrate, and channel detection
+- **Dashboard** with frame rates, bus load, error frames, a bus activity chart, traffic breakdown and the busiest identifiers; six colour themes
 - **Trace** view (chronological, buffer size configurable) and **Overview** per identifier (count, cycle time, changed bytes in bold)
 - Row selection, copy to clipboard (tab separated) and export of the trace to a log file
 - Display filters, e.g. `100-1FF !123 ext rx fd`: hex IDs and ranges, `!` excludes, keywords restrict frame type and direction
@@ -12,15 +16,15 @@ A CANbus-Analyse Tool for all platforms.
   PCAN SYM and LIN LDF databases, and live **signal plots**. For databases describing several buses (ARXML clusters,
   KCD buses) the bus of the connection is selected from its bitrate or chosen in the toolbar.
 - ECU diagnostic descriptions (Vector CANdelaStudio **CDD**): named data identifiers and decoded ReadDataByIdentifier
-  responses in the Diagnostics tab and the trace
-- Conversion between signal database formats, including **DBC ↔ DBF** (File → Convert Signal Database, or `can-db-convert`)
+  responses in the Diagnostics view and the trace
+- Conversion between signal database formats, including **DBC ↔ DBF** (⋮ → Convert Signal Database, or `can-db-convert`)
 - Transmission of single or periodic frames, timed by the application or by the interface
 - **LIN** (through a SocketCAN LIN driver such as [sllin](https://github.com/lin-bus/linux-lin), or the virtual interface): headers and responses in the trace, LDF signal decoding and plots, LIN master schedule tables with editable master signals, header-only transmission
 - **UDS diagnostics** over ISO-TP (CAN) and the LIN transport layer: sessions, ECU reset, tester present, read/write data identifiers, security access with a user supplied seed/key algorithm (a Python file defining `compute_key(level, seed)`), DTCs, routines and raw requests
 - Passive protocol decoding: ISO-TP (reassembly), UDS, J1939 (PGNs, BAM and RTS/CTS transport), CANopen (NMT, SDO, PDO, EMCY, heartbeat), LIN (including diagnostic transport frames)
 - **Node simulation and scripting**: simulated bus nodes written in Python (handlers for messages, signals,
   timers and shared variables, sending by database name) and QML panels to control and watch them, in the
-  Simulation tab. See [docs/scripting.md](docs/scripting.md) and [examples/simulation](examples/simulation).
+  Simulation view. See the [simulation guide](docs/user-guide/simulation.md) and [examples/simulation](examples/simulation).
 - Simulated ECUs and LIN slaves (`can_explorer.core.simulation`) for trying things out without hardware
 - Recent connections and log files, preferences and window geometry are remembered
 

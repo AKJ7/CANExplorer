@@ -1,6 +1,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import CanExplorer 1.0
 
 
 ColumnLayout {
@@ -34,12 +35,12 @@ ColumnLayout {
         Label {
             visible: root.connection.schedule_running
             text: qsTr("running %1").arg(root.connection.schedule_table)
-            color: "#5cc46a"
+            color: Theme.success
         }
         Item { Layout.fillWidth: true }
         Label {
             id: errorLabel
-            color: "tomato"
+            color: Theme.danger
             visible: text.length > 0
         }
     }

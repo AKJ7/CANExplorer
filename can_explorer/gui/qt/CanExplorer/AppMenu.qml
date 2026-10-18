@@ -2,16 +2,13 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import CanExplorer 1.0
 
+// All application actions; the window has no menu bar.
 Menu {
-    title: qsTr("&File")
-    MenuItem {
-        action: Actions.newConnection
-    }
+    MenuItem { action: Actions.newConnection }
     Menu {
         id: recentConnectionsMenu
         title: qsTr("Recent &Connections")
         enabled: connectionManager.app_state.recent_connections.length > 0
-
         Instantiator {
             model: connectionManager.app_state.recent_connections
             delegate: MenuItem {
@@ -24,15 +21,11 @@ Menu {
             onObjectRemoved: (index, object) => recentConnectionsMenu.removeItem(object)
         }
     }
-    MenuSeparator {}
-    MenuItem {
-        action: Actions.openLogFile
-    }
+    MenuItem { action: Actions.openLogFile }
     Menu {
         id: recentLogFilesMenu
         title: qsTr("Recent &Log Files")
         enabled: connectionManager.app_state.recent_log_files.length > 0
-
         Instantiator {
             model: connectionManager.app_state.recent_log_files
             delegate: MenuItem {
@@ -45,16 +38,14 @@ Menu {
             onObjectRemoved: (index, object) => recentLogFilesMenu.removeItem(object)
         }
     }
+    MenuItem { action: Actions.closeConnection }
     MenuSeparator {}
-    MenuItem {
-        action: Actions.convertDatabase
-    }
+    MenuItem { action: Actions.copy }
+    MenuItem { action: Actions.selectAll }
     MenuSeparator {}
-    MenuItem {
-        action: Actions.closeConnection
-    }
+    MenuItem { action: Actions.convertDatabase }
+    MenuItem { action: Actions.preferences }
     MenuSeparator {}
-    MenuItem {
-        action: Actions.exit
-    }
+    MenuItem { action: Actions.about }
+    MenuItem { action: Actions.exit }
 }

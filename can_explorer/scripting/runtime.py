@@ -27,6 +27,7 @@ class Variables:
         self._on_change = on_change
 
     def get(self, name: str, default: Any = None) -> Any:
+        """Value of a variable, or `default` when it was never set."""
         return self._values.get(name, default)
 
     def __getitem__(self, name: str) -> Any:
@@ -39,6 +40,7 @@ class Variables:
         return name in self._values
 
     def set(self, name: str, value: Any) -> None:
+        """Set a variable; `@on_variable` handlers and panels are notified when the value changes."""
         changed = name not in self._values or self._values[name] != value
         self._values[name] = value
         if changed:

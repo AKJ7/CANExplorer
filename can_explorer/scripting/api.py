@@ -265,14 +265,23 @@ class Node:
 
     @property
     def variables(self):
+        """Shared variables (`Variables`) of the simulation, also visible to the other nodes and to panels."""
         return self._runtime.variables
 
     @property
     def time(self) -> float:
+        """Seconds since the simulation started."""
         return self._require_runtime().elapsed
 
     def message(self, name: str) -> MessageBuffer:
-        """A buffer with the signals of a database message, to fill and send."""
+        """Create a buffer with the signals of a database message, to fill and send.
+
+        Args:
+            name: Message (or LIN frame) name in the loaded signal database.
+
+        Raises:
+            ScriptError: No database is loaded, or it has no such message.
+        """
         return self._require_runtime().message(name)
 
     def send(
@@ -283,13 +292,29 @@ class Node:
         extended: Optional[bool] = None,
         fd: bool = False,
         remote: bool = False,
-        **signals,
+        **signals: Any,
     ) -> None:
         """Send a frame.
 
-        - send(buffer) sends a MessageBuffer.
-        - send('EngineData', EngineSpeed=1000) encodes a database message; other signals use their initial value.
-        - send(0x123, b'\\x01\\x02') or send(0x123, [1, 2]) sends raw data; `extended` defaults to ids > 0x7FF.
+        Examples:
+            ```python
+            self.send(buffer)                          # A MessageBuffer from message()
+            self.send('EngineData', EngineSpeed=1000)  # Other signals use their initial value
+            self.send(0x123, b'\\x01\\x02')              # Raw data
+            self.send(0x10, remote=True)               # Remote frame (a header on LIN)
+            ```
+
+        Args:
+            message: A MessageBuffer, a database message name or a frame identifier.
+            data: Raw data bytes when `message` is an identifier.
+            extended: Extended identifier; defaults to identifiers above 0x7FF.
+            fd: Send a CAN FD frame (with bitrate switch).
+            remote: Send a remote frame.
+            **signals: Signal values when `message` is a database message name.
+
+        Raises:
+            ScriptError: The simulation is not running, the message is unknown or cannot be encoded, or the
+                frame cannot be sent.
         """
         runtime = self._require_runtime()
         if isinstance(message, str):
@@ -317,22 +342,34 @@ class Node:
             )
         runtime.send(self, msg)
 
-    def every(self, period: float, callback: Handler, *args) -> Timer:
-        """Call callback(*args) every `period` seconds until stopped or cancelled."""
+    def every(self, period: float, callback: Handler, *args: Any) -> Timer:
+        """Call `callback(*args)` periodically until the simulation stops or the timer is cancelled.
+
+        Args:
+            period: Period in seconds. The schedule does not drift.
+            callback: Function or method to call.
+            *args: Arguments passed to the callback.
+        """
         self._require_runtime()
         timer = Timer(self, period, callback, args, repeat=True)
         self._timers.append(timer)
         return timer
 
-    def after(self, delay: float, callback: Handler, *args) -> Timer:
-        """Call callback(*args) once after `delay` seconds."""
+    def after(self, delay: float, callback: Handler, *args: Any) -> Timer:
+        """Call `callback(*args)` once.
+
+        Args:
+            delay: Delay in seconds.
+            callback: Function or method to call.
+            *args: Arguments passed to the callback.
+        """
         self._require_runtime()
         timer = Timer(self, delay, callback, args, repeat=False)
         self._timers.append(timer)
         return timer
 
     def log(self, *values) -> None:
-        """Write to the simulation console."""
+        """Write the values, separated by spaces, to the simulation console."""
         if self._runtime is not None:
             self._runtime.log(self.name, ' '.join(str(value) for value in values))
 

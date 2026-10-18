@@ -1,6 +1,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import CanExplorer 1.0
 import QtQml.Models 2.15
 
 
@@ -27,6 +28,28 @@ ColumnLayout {
         syncView: tableView
         clip: true
         Layout.fillWidth: true
+        delegate: Rectangle {
+            required property string display
+            implicitHeight: 36
+            implicitWidth: headerLabel.implicitWidth + 16
+            color: Theme.cardAlt
+            Label {
+                id: headerLabel
+                anchors.fill: parent
+                leftPadding: 8
+                text: parent.display
+                color: Theme.muted
+                font.bold: true
+                elide: Text.ElideRight
+                verticalAlignment: Text.AlignVCenter
+            }
+            Rectangle {
+                anchors.bottom: parent.bottom
+                width: parent.width
+                height: 1
+                color: Theme.border
+            }
+        }
     }
 
     TableView {
@@ -56,18 +79,20 @@ ColumnLayout {
             required property int textAlignment
             required property bool richText
             required property bool selected
-            implicitHeight: label.implicitHeight
-            color: selected ? palette.highlight : "transparent"
+            required property int row
+            implicitHeight: label.implicitHeight + 4
+            color: selected ? Theme.alpha(Theme.accent, 0.35) : row % 2 ? Theme.alpha(Theme.cardAlt, 0.6) : "transparent"
 
             Label {
                 id: label
                 anchors.fill: parent
                 text: parent.display
                 textFormat: parent.richText ? Text.StyledText : Text.PlainText
-                color: parent.selected ? palette.highlightedText : palette.text
+                color: Theme.text
                 font.family: "monospace"
                 elide: Text.ElideRight
                 padding: 3
+                leftPadding: 8
                 horizontalAlignment: parent.textAlignment & Qt.AlignHorizontal_Mask
                 verticalAlignment: Text.AlignVCenter
             }

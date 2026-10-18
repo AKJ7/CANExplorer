@@ -2,16 +2,30 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Dialogs 6.2
 import QtQuick.Layouts 1.15
+import CanExplorer 1.0
 
 
 ColumnLayout {
     id: root
     required property var connection
-    spacing: 4
+    spacing: Theme.spacing
 
-    // Table shown in the current tab, used by Edit > Copy / Select All
-    readonly property var currentTable: viewTabs.currentIndex === 0 ? traceTable
-        : viewTabs.currentIndex === 1 ? overviewTable : null
+    // Views shown in the sidebar; `page` is the key of the current one
+    readonly property var pages: [
+        { key: "dashboard", title: qsTr("Dashboard"), icon: "▦" },
+        { key: "trace", title: qsTr("Trace"), icon: "☰" },
+        { key: "overview", title: qsTr("Overview"), icon: "▤" },
+        { key: "signals", title: qsTr("Signals"), icon: "∿" },
+    ].concat(connection.can_transmit ? [{ key: "diagnostics", title: qsTr("Diagnostics"), icon: "✚" }] : [])
+     .concat(connection.is_lin ? [{ key: "lin", title: qsTr("LIN Schedule"), icon: "⏱" }] : [])
+     .concat(connection.can_transmit ? [{ key: "simulation", title: qsTr("Simulation"), icon: "▶" }] : [])
+    readonly property var pageKeys: ["dashboard", "trace", "overview", "signals", "diagnostics", "lin", "simulation"]
+    property string page: "dashboard"
+    readonly property string pageTitle: (pages.find(item => item.key === page) || pages[0]).title
+    readonly property bool tablePage: page === "trace" || page === "overview"
+
+    // Table shown on the current page, used by Copy / Select All
+    readonly property var currentTable: page === "trace" ? traceTable : page === "overview" ? overviewTable : null
 
     function copySelection() {
         return currentTable ? currentTable.copySelection() : 0
@@ -22,39 +36,52 @@ ColumnLayout {
             currentTable.selectAll()
     }
 
-    RowLayout {
-        Layout.fillWidth: true
-        Layout.leftMargin: 4
-        Layout.rightMargin: 4
-
-        Button {
-            text: root.connection.connected
-                ? (root.connection.is_replay ? qsTr("Stop") : qsTr("Disconnect"))
-                : (root.connection.is_replay ? qsTr("Replay") : qsTr("Connect"))
-            highlighted: !root.connection.connected
-            onClicked: root.connection.connected ? root.connection.close() : root.connection.open()
+    component ToolbarButton: Button {
+        id: control
+        property bool accent: false
+        implicitHeight: 34
+        contentItem: Label {
+            text: control.text
+            color: control.accent || control.checked ? "white" : Theme.text
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
         }
-        Button {
+        background: Rectangle {
+            implicitWidth: 90
+            radius: height / 2
+            color: control.accent || control.checked ? (control.hovered ? Qt.lighter(Theme.accent, 1.15) : Theme.accent)
+                : control.hovered ? Theme.alpha(Theme.text, 0.1) : Theme.card
+            border.color: Theme.alpha(Theme.border, 0.8)
+        }
+    }
+
+    RowLayout {
+        visible: root.tablePage || root.page === "signals"
+        spacing: 8
+        Layout.fillWidth: true
+
+        ToolbarButton {
             text: qsTr("Pause view")
             checkable: true
             checked: root.connection.paused
             onToggled: root.connection.set_paused(checked)
         }
-        Button {
+        ToolbarButton {
             text: qsTr("Clear")
             onClicked: root.connection.clear()
         }
-        Button {
-            text: root.connection.recording ? qsTr("Stop recording") : qsTr("Record…")
+        ToolbarButton {
+            text: root.connection.recording ? qsTr("● Stop recording") : qsTr("Record…")
+            accent: root.connection.recording
             onClicked: root.connection.recording ? root.connection.stop_recording() : recordDialog.open()
         }
-        Button {
+        ToolbarButton {
             text: qsTr("Export…")
             ToolTip.visible: hovered
             ToolTip.text: qsTr("Save the selected trace rows, or all displayed rows, to a log file")
             onClicked: exportDialog.open()
         }
-        Button {
+        ToolbarButton {
             text: root.connection.database_file ? qsTr("Unload database") : qsTr("Load database…")
             onClicked: root.connection.database_file ? root.connection.unload_database() : databaseDialog.open()
         }
@@ -69,96 +96,102 @@ ColumnLayout {
         }
         CheckBox {
             id: autoScrollBox
+            visible: root.page === "trace"
             text: qsTr("Auto-scroll")
             checked: true
         }
 
         Item { Layout.fillWidth: true }
 
-        TextField {
-            id: filterField
-            placeholderText: qsTr("Filter: 100-1FF !123 ext rx fd")
-            Layout.preferredWidth: 260
-            onTextChanged: root.connection.set_filter(text)
-            color: root.connection.filter_error ? "tomato" : palette.text
-            ToolTip.visible: hovered && root.connection.filter_error.length > 0
-            ToolTip.text: root.connection.filter_error
+        Pill {
+            visible: root.connection.database_file.length > 0
+            text: root.connection.database_file.split(/[\\/]/).pop()
+            tint: Theme.chart[4]
         }
-    }
-
-    TabBar {
-        id: viewTabs
-        Layout.fillWidth: true
-        TabButton { text: qsTr("Trace"); width: implicitWidth }
-        TabButton { text: qsTr("Overview"); width: implicitWidth }
-        TabButton { text: qsTr("Signals"); width: implicitWidth }
-        TabButton {
-            text: qsTr("Diagnostics")
-            width: root.connection.can_transmit ? implicitWidth : 0
-            visible: root.connection.can_transmit
+        Pill {
+            visible: root.connection.protocol !== "Raw"
+            text: root.connection.protocol
+            tint: Theme.chart[5]
         }
-        TabButton {
-            text: qsTr("LIN Schedule")
-            width: root.connection.is_lin ? implicitWidth : 0
-            visible: root.connection.is_lin
-        }
-        TabButton {
-            text: qsTr("Simulation")
-            width: root.connection.can_transmit ? implicitWidth : 0
-            visible: root.connection.can_transmit
+        Pill {
+            text: qsTr("%1 frames").arg(root.connection.frame_count.toLocaleString(Qt.locale(), "f", 0))
+            tint: Theme.accent
         }
     }
 
     StackLayout {
-        currentIndex: viewTabs.currentIndex
+        currentIndex: root.pageKeys.indexOf(root.page)
         Layout.fillWidth: true
         Layout.fillHeight: true
 
-        FrameTable {
-            id: traceTable
-            model: root.connection.trace
-            columnWidths: [110, 40, 70, 90, 40, 200, 0]
-            autoScroll: autoScrollBox.checked
-        }
-        FrameTable {
-            id: overviewTable
-            model: root.connection.overview
-            columnWidths: [90, 40, 70, 80, 90, 40, 200, 0]
-        }
-        SignalsView {
+        DashboardView {
             connection: root.connection
         }
-        Loader {
-            active: root.connection.can_transmit
-            sourceComponent: DiagnosticsView {
+        Card {
+            padding: 1
+            FrameTable {
+                id: traceTable
+                anchors.fill: parent
+                model: root.connection.trace
+                columnWidths: [110, 40, 70, 90, 40, 200, 0]
+                autoScroll: autoScrollBox.checked
+            }
+        }
+        Card {
+            padding: 1
+            FrameTable {
+                id: overviewTable
+                anchors.fill: parent
+                model: root.connection.overview
+                columnWidths: [90, 40, 70, 80, 90, 40, 200, 0]
+            }
+        }
+        Card {
+            SignalsView {
+                anchors.fill: parent
                 connection: root.connection
             }
         }
-        Loader {
-            active: root.connection.is_lin
-            sourceComponent: LinScheduleView {
-                connection: root.connection
+        Card {
+            Loader {
+                anchors.fill: parent
+                active: root.connection.can_transmit
+                sourceComponent: DiagnosticsView {
+                    connection: root.connection
+                }
             }
         }
-        Loader {
-            active: root.connection.can_transmit
-            sourceComponent: SimulationView {
-                connection: root.connection
+        Card {
+            Loader {
+                anchors.fill: parent
+                active: root.connection.is_lin
+                sourceComponent: LinScheduleView {
+                    connection: root.connection
+                }
+            }
+        }
+        Card {
+            Loader {
+                anchors.fill: parent
+                active: root.connection.can_transmit
+                sourceComponent: SimulationView {
+                    connection: root.connection
+                }
             }
         }
     }
 
     TransmitPanel {
         connection: root.connection
-        visible: root.connection.can_transmit && viewTabs.currentIndex < 2
+        visible: root.connection.can_transmit && root.tablePage
         Layout.fillWidth: true
+        Layout.preferredHeight: implicitHeight
     }
 
     Label {
         id: statusLabel
         visible: text.length > 0
-        padding: 2
-        Layout.leftMargin: 4
+        color: Theme.muted
         Timer {
             id: statusTimer
             interval: 4000

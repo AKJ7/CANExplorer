@@ -49,3 +49,11 @@ def test_corrupt_settings_are_ignored(state, tmp_path):
     settings.setValue('recent/connections', '{not json')
     settings.setValue('preferences/max_trace_rows', 'many')
     assert state.recent_connections == [] and state.max_trace_rows == DEFAULT_MAX_TRACE_ROWS
+
+
+def test_theme(state, tmp_path):
+    assert state.theme == 'Dark' and 'Light' in state.themes
+    state.set_theme('Nord')
+    state.set_theme('Unknown')
+    reloaded = AppState(QSettings(str(tmp_path / 'settings.ini'), QSettings.Format.IniFormat))
+    assert reloaded.theme == 'Nord'

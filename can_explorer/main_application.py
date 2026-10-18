@@ -1,4 +1,5 @@
 import logging
+import os
 
 from PyQt6.QtQml import (
     QQmlApplicationEngine,
@@ -27,6 +28,8 @@ def create_qml_engine(
     context: Dict[str, QObject], on_warnings: Callable[[List[QQmlError]], None]
 ) -> QQmlApplicationEngine:
     """Load the main window with the given context properties (e.g. {'metadata': ...})."""
+    # Fusion follows the theme palette on every platform (the native Windows and macOS styles cannot be recoloured)
+    os.environ.setdefault('QT_QUICK_CONTROLS_STYLE', 'Fusion')
     register_qml_types()
     engine = QQmlApplicationEngine()
     engine.setOutputWarningsToStandardError(False)

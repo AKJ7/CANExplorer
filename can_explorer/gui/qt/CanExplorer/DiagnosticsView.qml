@@ -2,6 +2,7 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Dialogs 6.2
 import QtQuick.Layouts 1.15
+import CanExplorer 1.0
 
 
 ColumnLayout {
@@ -82,7 +83,7 @@ ColumnLayout {
         Item { Layout.fillWidth: true }
         Label {
             id: errorLabel
-            color: "tomato"
+            color: Theme.danger
             visible: text.length > 0
         }
     }
@@ -294,7 +295,7 @@ ColumnLayout {
                         Label {
                             text: (modelData.response ? `← ${modelData.response}   ` : "") + modelData.description
                             font.family: "monospace"
-                            color: modelData.positive ? "#5cc46a" : "tomato"
+                            color: modelData.positive ? Theme.success : Theme.danger
                             wrapMode: Text.WrapAnywhere
                             Layout.fillWidth: true
                         }

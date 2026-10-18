@@ -140,3 +140,6 @@ nuitka-crash-report.xml
 *.onefile-build/
 .nuitka-cache/
 can_explorer/_build_version.py
+
+# MkDocs
+site/

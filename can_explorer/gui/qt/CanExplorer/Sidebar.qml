@@ -1,0 +1,212 @@
+import QtQuick 2.15
+import QtQuick.Controls 2.15
+import QtQuick.Layouts 1.15
+import CanExplorer 1.0
+
+// Navigation: connections, the views of the selected connection, settings and application information.
+Rectangle {
+    id: root
+    property var connections: []
+    property int currentConnection: -1
+    property var pages: []
+    property string currentPage: ""
+
+    signal connectionSelected(int index)
+    signal pageSelected(string page)
+
+    color: Theme.surface
+    implicitWidth: Theme.sidebarWidth
+
+    Rectangle {
+        anchors.right: parent.right
+        width: 1
+        height: parent.height
+        color: Theme.alpha(Theme.border, 0.6)
+    }
+
+    component SectionLabel: Label {
+        color: Theme.muted
+        font.pixelSize: 11
+        font.bold: true
+        font.letterSpacing: 1.2
+        leftPadding: 22
+        topPadding: 14
+        bottomPadding: 4
+    }
+
+    component NavItem: ItemDelegate {
+        id: item
+        property string glyph: ""
+        property bool active: false
+        property color dotColor: "transparent"
+        Layout.fillWidth: true
+        implicitHeight: 42
+        hoverEnabled: true
+
+        background: Rectangle {
+            color: item.active ? Theme.alpha(Theme.accent, 0.14)
+                : item.hovered ? Theme.alpha(Theme.text, 0.05) : "transparent"
+            Rectangle {
+                visible: item.active
+                width: 3
+                height: parent.height
+                color: Theme.accent
+            }
+        }
+        contentItem: RowLayout {
+            spacing: 12
+            Label {
+                text: item.glyph
+                color: item.active ? Theme.accent : Theme.muted
+                font.pixelSize: 15
+                horizontalAlignment: Text.AlignHCenter
+                Layout.preferredWidth: 20
+                Layout.leftMargin: 8
+            }
+            Label {
+                text: item.text
+                color: item.active ? Theme.accent : Theme.text
+                font.bold: item.active
+                elide: Text.ElideRight
+                Layout.fillWidth: true
+            }
+            Rectangle {
+                visible: item.dotColor !== Qt.color("transparent")
+                width: 8
+                height: 8
+                radius: 4
+                color: item.dotColor
+                Layout.rightMargin: 8
+            }
+        }
+    }
+
+    ColumnLayout {
+        anchors.fill: parent
+        spacing: 2
+
+        // Logo
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.leftMargin: 24
+            Layout.topMargin: 24
+            Layout.bottomMargin: 12
+            spacing: 14
+            Rectangle {
+                width: 22
+                height: 22
+                rotation: 45
+                radius: 4
+                gradient: Gradient {
+                    GradientStop { position: 0.0; color: Qt.lighter(Theme.accent, 1.3) }
+                    GradientStop { position: 1.0; color: Theme.accent }
+                }
+            }
+            Label {
+                text: metadata.name
+                color: Theme.text
+                font.pixelSize: 19
+                font.bold: true
+                elide: Text.ElideRight
+                Layout.fillWidth: true
+            }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.rightMargin: 12
+            SectionLabel { text: qsTr("CONNECTIONS"); Layout.fillWidth: true }
+            ToolButton {
+                text: "+"
+                font.pixelSize: 18
+                Layout.topMargin: 10
+                ToolTip.visible: hovered
+                ToolTip.text: Actions.newConnection.text.replace("&", "")
+                onClicked: Actions.newConnection.trigger()
+            }
+        }
+
+        Repeater {
+            model: root.connections
+            NavItem {
+                required property var modelData
+                required property int index
+                text: modelData.name
+                glyph: modelData.is_lin ? "⇄" : modelData.is_replay ? "⟲" : "⌁"
+                active: index === root.currentConnection
+                dotColor: modelData.state === "open" ? Theme.success
+                    : modelData.state === "error" ? Theme.danger : Theme.alpha(Theme.muted, 0.6)
+                onClicked: root.connectionSelected(index)
+                ToolTip.visible: hovered
+                ToolTip.text: modelData.description
+            }
+        }
+
+        NavItem {
+            visible: root.connections.length === 0
+            text: qsTr("Replay a log file…")
+            glyph: "⟲"
+            onClicked: Actions.openLogFile.trigger()
+        }
+
+        SectionLabel {
+            visible: root.pages.length > 0
+            text: qsTr("VIEWS")
+        }
+
+        Repeater {
+            model: root.pages
+            NavItem {
+                required property var modelData
+                text: modelData.title
+                glyph: modelData.icon
+                active: modelData.key === root.currentPage
+                onClicked: root.pageSelected(modelData.key)
+            }
+        }
+
+        Item { Layout.fillHeight: true }
+
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.leftMargin: 16
+            Layout.rightMargin: 16
+            height: 1
+            color: Theme.alpha(Theme.border, 0.8)
+        }
+
+        NavItem {
+            text: qsTr("Settings")
+            glyph: "⚙"
+            onClicked: Actions.preferences.trigger()
+        }
+
+        ItemDelegate {
+            Layout.fillWidth: true
+            Layout.bottomMargin: 10
+            onClicked: Actions.about.trigger()
+            background: Item {}
+            contentItem: RowLayout {
+                spacing: 12
+                Rectangle {
+                    width: 38
+                    height: 38
+                    radius: 19
+                    color: Theme.accent
+                    Layout.leftMargin: 8
+                    Label {
+                        anchors.centerIn: parent
+                        text: "CE"
+                        color: "white"
+                        font.bold: true
+                    }
+                }
+                ColumnLayout {
+                    spacing: 0
+                    Label { text: metadata.name; color: Theme.text; font.bold: true }
+                    Label { text: qsTr("Version %1").arg(metadata.version); color: Theme.muted; font.pixelSize: 12 }
+                }
+            }
+        }
+    }
+}

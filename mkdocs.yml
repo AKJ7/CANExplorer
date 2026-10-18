@@ -1,0 +1,129 @@
+site_name: CANExplorer
+site_description: Cross-platform CAN and LIN bus monitoring, diagnostics and simulation
+site_url: https://akj7.github.com/canexplorer/
+repo_url: https://github.com/AKJ7/CANExplorer
+repo_name: AKJ7/CANExplorer
+edit_uri: edit/develop/docs/
+copyright: Copyright &copy; 2024–2026 AKJ7
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - navigation.indexes
+    - search.highlight
+    - search.suggest
+    - content.code.copy
+    - content.tabs.link
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  icon:
+    repo: fontawesome/brands/github
+
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
+  anchors: warn
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - getting-started/index.md
+      - Installation: getting-started/installation.md
+      - Quick start: getting-started/quick-start.md
+  - User guide:
+      - user-guide/index.md
+      - Connections: user-guide/connections.md
+      - Trace and overview: user-guide/trace-and-overview.md
+      - Filters: user-guide/filters.md
+      - Recording, replay and export: user-guide/recording-and-replay.md
+      - Signal databases: user-guide/signal-databases.md
+      - Signal plots: user-guide/signal-plots.md
+      - Transmitting: user-guide/transmitting.md
+      - Protocol decoding: user-guide/protocols.md
+      - Diagnostics (UDS): user-guide/diagnostics.md
+      - LIN: user-guide/lin.md
+      - Simulation and scripting: user-guide/simulation.md
+      - Preferences and settings: user-guide/preferences.md
+  - Reference:
+      - reference/index.md
+      - Scripting API: reference/scripting-api.md
+      - QML panel API: reference/panel-api.md
+      - Command line: reference/command-line.md
+      - File formats: reference/file-formats.md
+      - Keyboard shortcuts: reference/keyboard-shortcuts.md
+      - Links: reference/links.md
+  - Development:
+      - development/index.md
+      - Architecture: development/architecture.md
+      - Building and testing: development/building.md
+      - Packaging: development/packaging.md
+      - Contributing: development/contributing.md
+  - Changelog: changelog.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.snippets:
+      check_paths: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [.]
+          options:
+            docstring_style: google
+            show_source: false
+            show_root_heading: true
+            show_root_full_path: false
+            show_symbol_type_heading: true
+            members_order: source
+            heading_level: 3
+            filters: ["!^_"]
+            merge_init_into_class: true
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/AKJ7/CANExplorer

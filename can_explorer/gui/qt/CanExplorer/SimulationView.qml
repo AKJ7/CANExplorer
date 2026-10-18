@@ -2,6 +2,7 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Dialogs 6.2
 import QtQuick.Layouts 1.15
+import CanExplorer 1.0
 
 
 SplitView {
@@ -56,7 +57,7 @@ SplitView {
                             Label { text: modelData.name; font.bold: true }
                             Label {
                                 text: modelData.error || qsTr("Nodes: %1").arg(modelData.nodes)
-                                color: modelData.error ? "tomato" : palette.text
+                                color: modelData.error ? Theme.danger : palette.text
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
                             }
@@ -208,7 +209,7 @@ SplitView {
                 required property var modelData
                 width: consoleList.width
                 text: `${modelData.time} [${modelData.source}] ${modelData.text}`
-                color: modelData.level === "error" ? "tomato" : palette.text
+                color: modelData.level === "error" ? Theme.danger : palette.text
                 font.family: "monospace"
                 wrapMode: Text.WrapAnywhere
                 leftPadding: 4

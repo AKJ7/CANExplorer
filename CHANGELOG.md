@@ -8,6 +8,19 @@ Only `0.0.1` has been tagged so far. Later development stages are listed by date
 ## [Unreleased]
 
 ### Added
+- **Dashboard user interface** modelled on the learnqt.guide dashboards: a sidebar with the connections and the
+  views of the selected connection, a top bar with breadcrumb, filter field, connect button, notifications and
+  the application menu, rounded cards throughout and a welcome page with quick actions and recent connections.
+  The new **Dashboard** view shows Rx/Tx frame rates, bus load and error frames as cards with one-minute
+  sparklines and trends, a bus activity area chart, a traffic breakdown donut chart and the busiest identifiers.
+  Six colour themes (Dark, Purple, Nord, Ocean, Forest, Light) are selectable in the preferences. The menu bar
+  and the connection tabs are replaced by the sidebar and the **⋮** menu, and errors appear as notifications
+  instead of modal dialogs.
+- **Documentation site** built with MkDocs and Material for MkDocs (`docs/`, `mkdocs.yml`): installation, quick start,
+  a user guide for every part of the application, reference pages (scripting API generated from the docstrings, QML
+  panel API, command line, file formats, keyboard shortcuts) and development guides, with screenshots generated
+  from the running application (`tools/docs_screenshots.py`). The `docs` workflow builds it strictly and publishes
+  it to GitHub Pages.
 - **Node simulation and scripting** (Simulation tab): Python scripts define simulated nodes (`Node` subclasses)
   with handlers for start/stop, received messages (by identifier or database name), signal changes and shared
   variables, timers, sending raw frames or database messages by signal name, and a console. Script errors are
@@ -69,6 +82,8 @@ Only `0.0.1` has been tagged so far. Later development stages are listed by date
 - Builds without package metadata (Nuitka) carry the application version in a generated module.
 
 ### Removed
+- The AsciiDoc documentation template (`docs/full_doc.adoc`) and the outdated `docs/todo.md`; the references moved
+  to the documentation site.
 - The unused `can_explorer/transport` package (IsoCAN, ISO-TP, J1939 and CANopen transports), superseded by
   the decoders and clients in `can_explorer/core`, together with its helpers (`util/worker.py`,
   `util/validator.py`) and tests.

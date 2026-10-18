@@ -7,7 +7,7 @@ import CanExplorer.Plots 1.0
 SplitView {
     id: root
     required property var connection
-    readonly property var colors: ["#4e9af1", "#f1a14e", "#5cc46a", "#e05d5d", "#a56ee0", "#4ec9c9"]
+    readonly property var colors: Theme.chart
 
     ColumnLayout {
         SplitView.preferredWidth: 280
@@ -89,8 +89,8 @@ SplitView {
                         signal_key: modelData
                         window: windowBox.currentValue
                         line_color: root.colors[index % root.colors.length]
-                        text_color: palette.text
-                        grid_color: palette.mid
+                        text_color: Theme.text
+                        grid_color: Theme.border
                     }
                 }
             }

@@ -8,6 +8,9 @@ from can_explorer.sys.log_handler import get_logger
 logger = get_logger(__name__)
 
 MAX_RECENT = 10
+# Must match the palettes of Theme.qml
+THEMES = ('Dark', 'Purple', 'Nord', 'Ocean', 'Forest', 'Light')
+DEFAULT_THEME = 'Dark'
 DEFAULT_MAX_TRACE_ROWS = 100_000
 DEFAULT_REFRESH_INTERVAL_MS = 33
 TRACE_ROWS_RANGE = (1_000, 2_000_000)
@@ -107,6 +110,24 @@ class AppState(QObject):
         self._settings.setValue('preferences/refresh_interval_ms', interval)
         self._settings.sync()
         self.preferences_changed.emit()
+
+    # Appearance
+
+    @pyqtProperty(str, notify=preferences_changed)
+    def theme(self) -> str:
+        value = self._settings.value('appearance/theme', DEFAULT_THEME)
+        return value if value in THEMES else DEFAULT_THEME
+
+    @pyqtProperty('QStringList', constant=True)
+    def themes(self) -> List[str]:
+        return list(THEMES)
+
+    @pyqtSlot(str)
+    def set_theme(self, theme: str) -> None:
+        if theme in THEMES and theme != self.theme:
+            self._settings.setValue('appearance/theme', theme)
+            self._settings.sync()
+            self.preferences_changed.emit()
 
     # Window geometry
 

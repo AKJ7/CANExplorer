@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from collections import deque
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -28,6 +29,8 @@ from can_explorer.util import canutils
 logger = get_logger(__name__)
 
 STATISTICS_INTERVAL_MS = 1_000
+HISTORY_SECONDS = 60
+TOP_IDENTIFIERS = 8
 DATABASE_FORMAT_NAMES = {
     '.dbc': 'Vector DBC',
     '.dbf': 'BUSMASTER DBF',
@@ -83,6 +86,7 @@ class CanConnection(QObject):
         self._paused = False
         self._frame_count = 0
         self._scheduler: Optional[LinScheduler] = None
+        self._history: deque = deque(maxlen=HISTORY_SECONDS)
         self._diagnostics = DiagnosticsController(self, parent=self)
         self._simulation = SimulationController(self, parent=self)
         self._timer = QTimer(self)
@@ -201,8 +205,74 @@ class CanConnection(QObject):
         return self.session.bus_state or ''
 
     def _sample_bus_statistics(self):
-        self.session.sample_bus_statistics()
+        snapshot = self.session.sample_bus_statistics()
+        self._history.append(
+            (snapshot.rx_rate, snapshot.tx_rate, -1.0 if snapshot.load is None else snapshot.load * 100)
+        )
         self.bus_statistics_changed.emit()
+
+    # Dashboard
+
+    @pyqtProperty('QVariantList', notify=bus_statistics_changed)
+    def rx_history(self) -> List[float]:
+        """Received frames per second over the last minute, one value per second."""
+        return [rx for rx, _, _ in self._history]
+
+    @pyqtProperty('QVariantList', notify=bus_statistics_changed)
+    def tx_history(self) -> List[float]:
+        return [tx for _, tx, _ in self._history]
+
+    @pyqtProperty('QVariantList', notify=bus_statistics_changed)
+    def load_history(self) -> List[float]:
+        """Bus load in percent over the last minute (empty when the bitrate is unknown)."""
+        return [load for _, _, load in self._history if load >= 0]
+
+    @pyqtProperty(int, notify=bus_statistics_changed)
+    def identifier_count(self) -> int:
+        return len(self.session.statistics.entries)
+
+    @pyqtProperty('QVariantList', notify=bus_statistics_changed)
+    def traffic_breakdown(self) -> List[Dict[str, Any]]:
+        """Frames by kind, for the dashboard's donut chart."""
+        counts: Dict[str, int] = {}
+        for entry in self.session.statistics.entries.values():
+            msg = entry.last.message
+            if self.is_lin:
+                kind = 'Headers' if msg.is_remote_frame else 'Responses'
+            elif msg.is_remote_frame:
+                kind = 'Remote'
+            elif msg.is_fd:
+                kind = 'CAN FD'
+            else:
+                kind = 'Extended' if msg.is_extended_id else 'Standard'
+            counts[kind] = counts.get(kind, 0) + entry.count
+        if self.session.bus_statistics.error_frames:
+            counts['Error'] = self.session.bus_statistics.error_frames
+        return [{'label': label, 'value': value} for label, value in sorted(counts.items(), key=lambda item: -item[1])]
+
+    @pyqtProperty('QVariantList', notify=bus_statistics_changed)
+    def top_identifiers(self) -> List[Dict[str, Any]]:
+        """The most frequent identifiers with their share, cycle time and database name."""
+        entries = sorted(self.session.statistics.entries.values(), key=lambda entry: -entry.count)[:TOP_IDENTIFIERS]
+        if not entries:
+            return []
+        maximum = entries[0].count
+        database = self.session.decoder.database
+        result = []
+        for entry in entries:
+            msg = entry.last.message
+            definition = database.message_definition(msg) if database is not None else None
+            result.append(
+                {
+                    'id': f'{msg.arbitration_id:08X}' if msg.is_extended_id else f'{msg.arbitration_id:03X}',
+                    'name': definition.name if definition is not None else '',
+                    'direction': 'Rx' if msg.is_rx else 'Tx',
+                    'count': entry.count,
+                    'share': entry.count / maximum,
+                    'cycle': '' if entry.cycle_time is None else f'{entry.cycle_time * 1000:.1f} ms',
+                }
+            )
+        return result
 
     # Session control
 
@@ -257,6 +327,7 @@ class CanConnection(QObject):
 
     @pyqtSlot()
     def clear(self):
+        self._history.clear()
         self.session.clear()
         self._trace.rebuild([])
         self._overview.rebuild()

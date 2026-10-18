@@ -1,12 +1,14 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import CanExplorer 1.0
 
 
-GroupBox {
+Card {
     id: root
     required property var connection
     title: qsTr("Transmit")
+    implicitHeight: 2 * padding + 82
 
     function send() {
         errorLabel.text = root.connection.send(
@@ -81,7 +83,7 @@ GroupBox {
         }
         Label {
             id: errorLabel
-            color: "tomato"
+            color: Theme.danger
             visible: text.length > 0
         }
     }
