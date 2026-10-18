@@ -33,8 +33,12 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  # Tags and pull requests use PyInstaller; Nuitka can be chosen when starting the workflow manually
-  BACKEND: ${{ inputs.backend || 'pyinstaller' }}
+  # The builds of master published to GitHub Packages are compiled with Nuitka (faster start, no Python sources in the
+  # bundle); tags and pull requests use PyInstaller; manual runs use the backend chosen when starting the workflow
+  BACKEND: >-
+    ${{ inputs.backend
+        || (github.event_name == 'push' && github.ref == 'refs/heads/master' && 'nuitka')
+        || 'pyinstaller' }}
   NUITKA_CACHE_DIR: ${{ github.workspace }}/.nuitka-cache
 
 jobs:
@@ -63,8 +67,8 @@ jobs:
     name: Installers for ${{ matrix.platform }}
     needs: version
     runs-on: ${{ matrix.os }}
-    # Nuitka compiles everything to C, which takes considerably longer than PyInstaller
-    timeout-minutes: 90
+    # Nuitka compiles everything to C, which takes considerably longer than PyInstaller (cached between runs)
+    timeout-minutes: 150
     strategy:
       fail-fast: false
       matrix:

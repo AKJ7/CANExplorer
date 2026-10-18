@@ -208,7 +208,8 @@ From 1.0.0 on, CANExplorer follows semantic versioning; the public interfaces ar
   package and a macOS disk image from the bundle. The new `release` workflow (replacing `installer`) builds them
   on the three platforms, installs each to check it starts, stores them as artifacts and publishes them with
   checksums as a GitHub release for `v*` tags, after checking the tag matches the project version.
-  Builds of `master` are published to GitHub Packages (`ghcr.io/akj7/canexplorer-installers`, via ORAS).
+  Builds of `master` are compiled with Nuitka and published to GitHub Packages
+  (`ghcr.io/akj7/canexplorer-installers`, via ORAS).
 - Nuitka as an alternative packaging backend (`packaging/build.py --backend nuitka [--onefile]`), selectable
   in the installer workflow.
 - **Documentation site** built with MkDocs and Material for MkDocs (`docs/`, `mkdocs.yml`): installation, quick start,
