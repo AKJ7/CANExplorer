@@ -1,11 +1,15 @@
 name: release
 
 # Builds the installers for Windows (setup.exe), Linux (AppImage, .deb) and macOS (.dmg) plus portable zip archives.
+# - Pushes and merges to master: the installers are published to GitHub Packages, as the OCI artifact
+#   ghcr.io/<owner>/canexplorer-installers (tags: the version, sha-<commit> and latest; `oras pull` downloads them).
 # - Tags v*: the installers are attached to a GitHub release of the tag (a pre-release for tags such as v1.0.0-rc1).
 # - Manual runs and pull requests changing the packaging: the installers are stored as workflow artifacts only.
 
 on:
   push:
+    branches:
+      - master
     tags:
       - "v*"
   pull_request:
@@ -144,6 +148,56 @@ jobs:
           if-no-files-found: error
           retention-days: 90
           compression-level: 0  # The installers are compressed already
+
+  package:
+    name: Publish to GitHub Packages
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs: [version, installers]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        working-directory: dist
+        run: |
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+      - uses: oras-project/setup-oras@v1
+      - name: Push the installers to ghcr.io
+        working-directory: dist
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"  # Package names are lower case
+          package="ghcr.io/$owner/canexplorer-installers"
+          echo "${{ secrets.GITHUB_TOKEN }}" | oras login ghcr.io --username "${{ github.actor }}" --password-stdin
+          files=()
+          for file in *; do files+=("$file:application/octet-stream"); done
+          oras push "$package:$VERSION,sha-${GITHUB_SHA::7},latest" "${files[@]}" \
+            --artifact-type application/vnd.canexplorer.installers.v1 \
+            --annotation "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --annotation "org.opencontainers.image.description=CANExplorer installers for Windows, Linux and macOS" \
+            --annotation "org.opencontainers.image.version=$VERSION" \
+            --annotation "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --annotation "org.opencontainers.image.licenses=MIT"
+          {
+            echo "## Installers published to GitHub Packages"
+            echo
+            echo "\`$package\` with the tags \`$VERSION\`, \`sha-${GITHUB_SHA::7}\` and \`latest\`:"
+            echo
+            echo '```bash'
+            echo "oras pull $package:sha-${GITHUB_SHA::7}"
+            echo '```'
+            echo
+            echo '| File | Size |'
+            echo '|---|---|'
+            for file in *; do echo "| $file | $(du -h "$file" | cut -f1) |"; done
+          } >> "$GITHUB_STEP_SUMMARY"
 
   release:
     name: Publish the release
