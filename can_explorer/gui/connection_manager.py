@@ -1,25 +1,32 @@
+import asyncio
+import logging
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 import can
 from PyQt6.QtCore import QObject, QTimer, QUrl, pyqtProperty, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QGuiApplication
 
-from can_explorer.core.decoding import DATABASE_SUFFIXES, DbcDecoder, FrameDecoder
+from can_explorer.core.database_io import WRITE_SUFFIXES, convert_database
+from can_explorer.core.decoding import DATABASE_SUFFIXES, FrameDecoder, open_signal_database
 from can_explorer.core.filters import MessageFilter
 from can_explorer.core.frames import parse_can_id, parse_hex_bytes
+from can_explorer.core.ldf import LdfDecoder
+from can_explorer.core.lin import DEFAULT_BAUDRATE, LIN_BAUDRATES, MAX_FRAME_ID
+from can_explorer.core.lin_schedule import LinScheduler
 from can_explorer.core.protocols import PROTOCOL_DECODERS, create_protocol_decoder
 from can_explorer.core.session import BusSession, SessionError, SessionState
 from can_explorer.core.sources import LOG_FILE_SUFFIXES, BusConfig, FileSource, LiveSource, MessageSource
+from can_explorer.gui.app_state import AppState
+from can_explorer.gui.diagnostics import DiagnosticsController
 from can_explorer.gui.models import OverviewModel, TraceModel
 from can_explorer.sys.log_handler import get_logger
 from can_explorer.util import canutils
 
 logger = get_logger(__name__)
 
-# How often received frames are pushed to the views. Batching keeps the GUI responsive on busy buses.
-REFRESH_INTERVAL_MS = 33
-MAX_TRACE_ROWS = 100_000
+STATISTICS_INTERVAL_MS = 1_000
+FD_DATA_BITRATES = (1_000_000, 2_000_000, 4_000_000, 5_000_000, 8_000_000)
 
 
 def _local_path(url: QUrl | str) -> Path:
@@ -33,27 +40,45 @@ class CanConnection(QObject):
 
     state_changed = pyqtSignal()
     statistics_changed = pyqtSignal()
+    bus_statistics_changed = pyqtSignal()
     recording_changed = pyqtSignal()
     database_changed = pyqtSignal()
     filter_changed = pyqtSignal()
     paused_changed = pyqtSignal()
     periodic_changed = pyqtSignal()
+    tracked_signals_changed = pyqtSignal()
+    signals_updated = pyqtSignal()
+    schedule_changed = pyqtSignal()
     error_occurred = pyqtSignal(str)
 
-    def __init__(self, name: str, session: BusSession, protocol: str, parent: Optional[QObject] = None):
+    def __init__(
+        self,
+        name: str,
+        session: BusSession,
+        protocol: str,
+        max_rows: int,
+        refresh_interval_ms: int,
+        parent: Optional[QObject] = None,
+    ):
         super().__init__(parent)
         self._name = name
         self._protocol = protocol
         self.session = session
-        self._trace = TraceModel(lambda: self.session.start_time, MAX_TRACE_ROWS, parent=self)
-        self._overview = OverviewModel(session.statistics, parent=self)
+        describe = session.decoder.full_description
+        self._trace = TraceModel(lambda: self.session.start_time, max_rows, describe, parent=self)
+        self._overview = OverviewModel(session.statistics, describe, parent=self)
         self._filter = MessageFilter()
         self._filter_error = ''
         self._paused = False
         self._frame_count = 0
+        self._scheduler: Optional[LinScheduler] = None
+        self._diagnostics = DiagnosticsController(self, parent=self)
         self._timer = QTimer(self)
-        self._timer.setInterval(REFRESH_INTERVAL_MS)
+        self._timer.setInterval(refresh_interval_ms)
         self._timer.timeout.connect(self._refresh)
+        self._statistics_timer = QTimer(self)
+        self._statistics_timer.setInterval(STATISTICS_INTERVAL_MS)
+        self._statistics_timer.timeout.connect(self._sample_bus_statistics)
         session.add_state_listener(self._on_session_state)
         session.add_periodic_listener(lambda _: self.periodic_changed.emit())
         session.add_error_listener(self._on_session_error)
@@ -79,6 +104,16 @@ class CanConnection(QObject):
     @pyqtProperty(bool, constant=True)
     def is_replay(self) -> bool:
         return isinstance(self.session.source, FileSource)
+
+    @pyqtProperty(bool, constant=True)
+    def fd(self) -> bool:
+        source = self.session.source
+        return isinstance(source, LiveSource) and source.config.fd
+
+    @pyqtProperty(bool, constant=True)
+    def is_lin(self) -> bool:
+        source = self.session.source
+        return isinstance(source, LiveSource) and source.config.is_lin
 
     @pyqtProperty(str, notify=state_changed)
     def state(self) -> str:
@@ -129,6 +164,34 @@ class CanConnection(QObject):
     def periodic_count(self) -> int:
         return len(self.session.periodic)
 
+    # Bus statistics
+
+    @pyqtProperty(float, notify=bus_statistics_changed)
+    def rx_rate(self) -> float:
+        return self.session.bus_statistics.last.rx_rate
+
+    @pyqtProperty(float, notify=bus_statistics_changed)
+    def tx_rate(self) -> float:
+        return self.session.bus_statistics.last.tx_rate
+
+    @pyqtProperty(float, notify=bus_statistics_changed)
+    def bus_load(self) -> float:
+        """Estimated bus load in percent, or -1 when the bitrate is unknown."""
+        load = self.session.bus_statistics.last.load
+        return -1.0 if load is None else load * 100
+
+    @pyqtProperty(int, notify=bus_statistics_changed)
+    def error_frames(self) -> int:
+        return self.session.bus_statistics.error_frames
+
+    @pyqtProperty(str, notify=bus_statistics_changed)
+    def bus_state(self) -> str:
+        return self.session.bus_state or ''
+
+    def _sample_bus_statistics(self):
+        self.session.sample_bus_statistics()
+        self.bus_statistics_changed.emit()
+
     # Session control
 
     @pyqtSlot()
@@ -140,14 +203,24 @@ class CanConnection(QObject):
 
     @pyqtSlot()
     def close(self):
+        self.stop_schedule()
+        self._diagnostics.shutdown()
         self.session.stop()
+
+    def set_refresh_interval(self, interval_ms: int):
+        self._timer.setInterval(interval_ms)
 
     def _on_session_state(self, session: BusSession):
         if session.is_open:
             self._timer.start()
+            self._statistics_timer.start()
+            self.session.sample_bus_statistics()
         else:
             self._timer.stop()
+            self._statistics_timer.stop()
             self._refresh()
+            self.bus_statistics_changed.emit()
+            self.schedule_changed.emit()
         if session.state is SessionState.ERROR and session.error:
             self.error_occurred.emit(session.error)
         self.state_changed.emit()
@@ -163,6 +236,8 @@ class CanConnection(QObject):
         if not self._paused:
             self._trace.append_frames(frames)
             self._overview.refresh(added, changed)
+            if self.session.signals.drain_changed():
+                self.signals_updated.emit()
         if self._frame_count != self.session.trace.total:
             self._frame_count = self.session.trace.total
             self.statistics_changed.emit()
@@ -174,6 +249,8 @@ class CanConnection(QObject):
         self._overview.rebuild()
         self._frame_count = 0
         self.statistics_changed.emit()
+        self.bus_statistics_changed.emit()
+        self.signals_updated.emit()
 
     @pyqtSlot(bool)
     def set_paused(self, paused: bool):
@@ -184,6 +261,7 @@ class CanConnection(QObject):
             # Catch up with everything received while the view was frozen
             self._trace.rebuild(self.session.trace)
             self._overview.rebuild()
+            self.signals_updated.emit()
         self.paused_changed.emit()
 
     @pyqtSlot(str)
@@ -198,7 +276,7 @@ class CanConnection(QObject):
             self._overview.set_filter(message_filter)
         self.filter_changed.emit()
 
-    # Recording and databases
+    # Recording, export and databases
 
     @pyqtSlot(QUrl)
     def start_recording(self, url: QUrl):
@@ -213,40 +291,107 @@ class CanConnection(QObject):
         self.session.stop_recording()
         self.recording_changed.emit()
 
+    @pyqtSlot(QUrl, QObject, result=str)
+    def export_trace(self, url: QUrl, selection_model: Optional[QObject]) -> str:
+        """Write the selected trace rows (all displayed rows without a selection) to a log file."""
+        frames = self._trace.selected_frames(selection_model)
+        path = _local_path(url)
+        try:
+            count = BusSession.export(frames, path)
+        except SessionError as e:
+            self.error_occurred.emit(str(e))
+            return ''
+        return f'Exported {count} frames to {path.name}'
+
     @pyqtSlot(QUrl)
     def load_database(self, url: QUrl):
         path = _local_path(url)
         try:
-            self.session.decoder.database = DbcDecoder(path)
+            database = open_signal_database(path)
         except Exception as e:
             self.error_occurred.emit(f'Could not load {path.name}: {e}')
             return
+        self.stop_schedule()
+        self._scheduler = None
+        self.session.decoder.database = database
         logger.info(f'Loaded signal database {path}')
-        self.database_changed.emit()
+        self._database_changed()
 
     @pyqtSlot()
     def unload_database(self):
+        self.stop_schedule()
+        self._scheduler = None
         self.session.decoder.database = None
+        self.session.signals.untrack_all()
+        self._database_changed()
+
+    def _database_changed(self):
+        self._trace.refresh_descriptions()
+        self._overview.refresh_descriptions()
         self.database_changed.emit()
+        self.tracked_signals_changed.emit()
+        self.schedule_changed.emit()
+
+    # Signals
+
+    @pyqtProperty('QVariantList', notify=database_changed)
+    def database_signals(self) -> List[Dict[str, str]]:
+        database = self.session.decoder.database
+        if database is None:
+            return []
+        return [
+            {'key': info.key, 'message': info.message, 'signal': info.signal, 'unit': info.unit}
+            for info in database.signals()
+        ]
+
+    @pyqtProperty('QStringList', notify=tracked_signals_changed)
+    def tracked_signals(self) -> List[str]:
+        return self.session.signals.tracked
+
+    @pyqtSlot(str, str, str)
+    def track_signal(self, message: str, signal: str, unit: str):
+        self.session.signals.track(message, signal, unit)
+        self.tracked_signals_changed.emit()
+
+    @pyqtSlot(str, str)
+    def untrack_signal(self, message: str, signal: str):
+        self.session.signals.untrack(message, signal)
+        self.tracked_signals_changed.emit()
 
     # Transmission
 
-    @pyqtSlot(str, str, bool, bool, int, result=str)
-    def send(self, can_id: str, data: str, extended: bool, fd: bool, period_ms: int) -> str:
-        """Send once (period_ms == 0) or periodically. Returns an error message, or '' on success."""
+    @pyqtSlot(str, str, bool, bool, int, bool, bool, result=str)
+    def send(
+        self, can_id: str, data: str, extended: bool, fd: bool, period_ms: int, hardware: bool, remote: bool
+    ) -> str:
+        """Send once (period_ms == 0) or periodically. Returns an error message, or '' on success.
+
+        remote: send an RTR frame; on LIN connections this is a header only, answered by a slave.
+        """
         try:
-            payload = parse_hex_bytes(data)
+            payload = b'' if remote else parse_hex_bytes(data)
             max_length = 64 if fd else 8
             if len(payload) > max_length:
                 raise ValueError(f'At most {max_length} data bytes allowed')
+            frame_id = parse_can_id(can_id, extended)
+            if self.is_lin:
+                if extended or fd:
+                    raise ValueError('LIN frames have a 6-bit identifier and at most 8 data bytes')
+                if frame_id > MAX_FRAME_ID:
+                    raise ValueError(f'LIN frame identifiers are 00-3F, got {frame_id:02X}')
+                if not remote and not payload:
+                    raise ValueError('A LIN response needs 1-8 data bytes')
             msg = can.Message(
-                arbitration_id=parse_can_id(can_id, extended),
+                arbitration_id=frame_id,
                 is_extended_id=extended,
                 is_fd=fd,
+                bitrate_switch=fd,
+                is_remote_frame=remote,
+                dlc=8 if remote else None,
                 data=payload,
             )
             if period_ms > 0:
-                self.session.start_periodic(msg, period_ms / 1000)
+                self.session.start_periodic(msg, period_ms / 1000, hardware=hardware)
             else:
                 self.session.send(msg)
         except (ValueError, SessionError) as e:
@@ -257,15 +402,109 @@ class CanConnection(QObject):
     def stop_periodic(self):
         self.session.stop_periodic()
 
+    # Diagnostics
+
+    @pyqtProperty(QObject, constant=True)
+    def diagnostics(self) -> DiagnosticsController:
+        return self._diagnostics
+
+    # LIN master schedule
+
+    def _ldf(self) -> Optional[LdfDecoder]:
+        database = self.session.decoder.database
+        return database if isinstance(database, LdfDecoder) else None
+
+    @pyqtProperty('QStringList', notify=database_changed)
+    def schedule_tables(self) -> List[str]:
+        ldf = self._ldf()
+        return LinScheduler.tables(ldf) if ldf is not None else []
+
+    @pyqtProperty(bool, notify=schedule_changed)
+    def schedule_running(self) -> bool:
+        return self._scheduler is not None and self._scheduler.running
+
+    @pyqtProperty(str, notify=schedule_changed)
+    def schedule_table(self) -> str:
+        return self._scheduler.table.name if self._scheduler is not None else ''
+
+    @pyqtProperty('QVariantList', notify=schedule_changed)
+    def master_signals(self) -> List[Dict[str, Any]]:
+        ldf = self._ldf()
+        if ldf is None:
+            return []
+        values = self._scheduler.values if self._scheduler is not None else {}
+        return [{**entry, 'value': str(values.get(entry['signal'], entry['value']))} for entry in ldf.master_signals()]
+
+    @pyqtSlot(str, result=str)
+    def start_schedule(self, table: str) -> str:
+        """Run an LDF schedule table as LIN master. Returns an error or ''."""
+        ldf = self._ldf()
+        if ldf is None:
+            return 'Load an LDF file first'
+        if not self.session.is_open:
+            return 'Connect first'
+        previous = self._scheduler.values if self._scheduler is not None else {}
+        self.stop_schedule()
+        try:
+            self._scheduler = LinScheduler(self.session, ldf, table)
+        except ValueError as e:
+            return str(e)
+        self._scheduler.values.update({k: v for k, v in previous.items() if k in self._scheduler.values})
+        self._scheduler.start()
+        self.schedule_changed.emit()
+        return ''
+
+    @pyqtSlot()
+    def stop_schedule(self):
+        if self._scheduler is not None:
+            self._scheduler.stop()
+        self.schedule_changed.emit()
+
+    @pyqtSlot(str, str, result=str)
+    def set_master_signal(self, signal: str, text: str) -> str:
+        """Set a master signal from text: a number (decimal or 0x hex) or a logical value name."""
+        ldf = self._ldf()
+        if ldf is None:
+            return 'Load an LDF file first'
+        if self._scheduler is None:
+            tables = LinScheduler.tables(ldf)
+            if not tables:
+                return 'The LDF has no schedule table'
+            self._scheduler = LinScheduler(self.session, ldf, tables[0])
+        text = text.strip()
+        try:
+            value = int(text, 0)
+        except ValueError:
+            try:
+                value = float(text)
+            except ValueError:
+                value = text
+        try:
+            self._scheduler.set_signal(signal, value)
+        except Exception as e:
+            return f'Invalid value for {signal}: {e}'
+        self.schedule_changed.emit()
+        return ''
+
 
 class ConnectionManager(QObject):
     connections_changed = pyqtSignal()
+    detected_channels_changed = pyqtSignal()
     error_occurred = pyqtSignal(str)
 
-    def __init__(self, parent: Optional[QObject] = None):
+    def __init__(self, app_state: Optional[AppState] = None, parent: Optional[QObject] = None):
         super().__init__(parent)
         self._connections: List[CanConnection] = []
+        self._app_state = app_state if app_state is not None else AppState(parent=self)
+        self._app_state.preferences_changed.connect(self._apply_preferences)
+        self._detected_channels: Dict[str, List[str]] = {}
+        self._detecting = False
+        self._detection: Optional[asyncio.Future] = None
         QGuiApplication.instance().aboutToQuit.connect(self.close_all)
+
+    @pyqtProperty(QObject, constant=True)
+    def app_state(self) -> AppState:
+        return self._app_state
 
     @pyqtProperty('QVariantList', notify=connections_changed)
     def connections(self) -> List[CanConnection]:
@@ -277,7 +516,15 @@ class ConnectionManager(QObject):
 
     @pyqtProperty('QStringList', constant=True)
     def bitrates(self) -> List[str]:
-        return [str(bitrate) for bitrate in canutils.SupportedProtocols.IsoCAN.supported_bitrates]
+        return [str(bitrate) for bitrate in canutils.CLASSIC_CAN_BITRATES]
+
+    @pyqtProperty('QStringList', constant=True)
+    def data_bitrates(self) -> List[str]:
+        return [str(bitrate) for bitrate in FD_DATA_BITRATES]
+
+    @pyqtProperty('QStringList', constant=True)
+    def lin_baudrates(self) -> List[str]:
+        return [str(baudrate) for baudrate in LIN_BAUDRATES]
 
     @pyqtProperty('QStringList', constant=True)
     def protocols(self) -> List[str]:
@@ -292,45 +539,153 @@ class ConnectionManager(QObject):
     def database_file_filters(self) -> List[str]:
         return [f'Signal databases ({" ".join(f"*{suffix}" for suffix in DATABASE_SUFFIXES)})', 'All files (*)']
 
-    @pyqtSlot(result='QStringList')
-    def available_channels(self) -> List[str]:
-        # TODO: Extend of proper interfaces
-        return [config['channel'] for config in canutils.get_available_channels(['socketcan'])]
+    @pyqtProperty('QStringList', constant=True)
+    def database_output_filters(self) -> List[str]:
+        names = {'.dbc': 'Vector DBC', '.dbf': 'BUSMASTER DBF', '.kcd': 'Kayak KCD', '.sym': 'PCAN Symbol'}
+        return [f'{names[suffix]} (*{suffix})' for suffix in WRITE_SUFFIXES]
+
+    @pyqtSlot(QUrl, QUrl, result=str)
+    def convert_database(self, source: QUrl, destination: QUrl) -> str:
+        """Convert a signal database, e.g. DBC <-> DBF. Returns a summary, or '' after reporting an error."""
+        try:
+            report = convert_database(_local_path(source), _local_path(destination))
+        except Exception as e:
+            self.error_occurred.emit(f'Could not convert {_local_path(source).name}: {e}')
+            return ''
+        logger.info(report.summary())
+        return report.summary()
+
+    # Channel detection
+
+    @pyqtProperty('QVariantMap', notify=detected_channels_changed)
+    def detected_channels(self) -> Dict[str, List[str]]:
+        """Detected channels per interface description."""
+        return dict(self._detected_channels)
+
+    @pyqtProperty(bool, notify=detected_channels_changed)
+    def detecting(self) -> bool:
+        return self._detecting
+
+    @pyqtSlot()
+    def detect_channels(self):
+        """Probe all interfaces for channels in a worker thread (some backends take seconds)."""
+        if self._detecting:
+            return
+        self._detecting = True
+        self.detected_channels_changed.emit()
+        self._detection = asyncio.ensure_future(self._detect_channels())
+
+    @staticmethod
+    def _probe_interfaces() -> List[Dict[str, Any]]:
+        # Probing every backend logs a warning for each missing driver; that is expected here
+        can_logger = logging.getLogger('can')
+        level = can_logger.level
+        can_logger.setLevel(logging.ERROR)
+        try:
+            return can.detect_available_configs()
+        finally:
+            can_logger.setLevel(level)
+
+    async def _detect_channels(self):
+        try:
+            configs = await asyncio.to_thread(self._probe_interfaces)
+        except Exception as e:
+            logger.warning(f'Channel detection failed: {e}')
+            configs = []
+        descriptions = dict(canutils.get_supported_interfaces())
+        detected: Dict[str, List[str]] = {}
+        for config in configs:
+            interface = config.get('interface')
+            channel = config.get('channel')
+            if interface is None or channel is None:
+                continue
+            channels = detected.setdefault(descriptions.get(interface, interface), [])
+            if str(channel) not in channels:
+                channels.append(str(channel))
+        logger.info(f'Detected channels: {detected}')
+        self._detected_channels = detected
+        self._detecting = False
+        self.detected_channels_changed.emit()
+
+    # Connections
 
     def _add(self, name: str, source: MessageSource, protocol: str) -> CanConnection:
         decoder = FrameDecoder(protocol=create_protocol_decoder(protocol))
-        connection = CanConnection(name, BusSession(source, decoder), protocol, parent=self)
+        state = self._app_state
+        session = BusSession(source, decoder, buffer_size=state.max_trace_rows)
+        connection = CanConnection(
+            name, session, protocol, state.max_trace_rows, state.refresh_interval_ms, parent=self
+        )
         connection.error_occurred.connect(self.error_occurred)
         self._connections.append(connection)
         self.connections_changed.emit()
         return connection
 
-    @pyqtSlot(str, str, str, str, str, bool, bool)
-    def add_connection(
-        self,
-        name: str,
-        interface_description: str,
-        channel: str,
-        bitrate: str,
-        protocol: str,
-        fd: bool,
-        receive_own_messages: bool,
-    ):
-        config = BusConfig(
-            interface=canutils.get_interface_name(interface_description) or interface_description,
-            channel=channel,
-            bitrate=int(bitrate, base=10),
-            fd=fd,
-            receive_own_messages=receive_own_messages,
-        )
+    @pyqtSlot('QVariantMap')
+    def add_connection(self, options: Dict[str, Any]):
+        """Options: name, interface (description), channel, bus ('CAN' or 'LIN'), protocol, receive_own_messages;
+        for CAN bitrate, fd, data_bitrate; for LIN lin_baudrate."""
+        try:
+            bus_type = str(options.get('bus', 'CAN')).upper()
+            if bus_type not in ('CAN', 'LIN'):
+                raise ValueError(f'Unknown bus type {bus_type!r}')
+            lin = bus_type == 'LIN'
+            fd = bool(options.get('fd', False)) and not lin
+            data_bitrate = str(options.get('data_bitrate') or '')
+            config = BusConfig(
+                interface=canutils.get_interface_name(options['interface']) or options['interface'],
+                channel=str(options['channel']),
+                bitrate=int(options.get('bitrate', 500_000)),
+                fd=fd,
+                data_bitrate=int(data_bitrate) if fd and data_bitrate else None,
+                receive_own_messages=bool(options.get('receive_own_messages', False)),
+                bus_type=bus_type,
+                lin_baudrate=int(options.get('lin_baudrate') or DEFAULT_BAUDRATE),
+            )
+            protocol = options.get('protocol') or ('LIN' if lin else 'Raw')
+            create_protocol_decoder(protocol)
+        except (KeyError, ValueError) as e:
+            self.error_occurred.emit(f'Invalid connection settings: {e}')
+            return
+        name = options.get('name') or f'Connection {len(self._connections) + 1}'
         logger.info(f'Adding new connection {name!r}: {config=}')
         self._add(name, LiveSource(config), protocol)
+        self._app_state.add_recent_connection(
+            {
+                'name': name,
+                'interface': options['interface'],
+                'channel': config.channel,
+                'bus': bus_type,
+                'bitrate': config.bitrate,
+                'data_bitrate': config.data_bitrate or '',
+                'lin_baudrate': config.lin_baudrate,
+                'protocol': protocol,
+                'fd': config.fd,
+                'receive_own_messages': config.receive_own_messages,
+            }
+        )
+
+    @pyqtSlot(int)
+    def open_recent_connection(self, index: int):
+        recent = self._app_state.recent_connections
+        if 0 <= index < len(recent):
+            self.add_connection(recent[index])
 
     @pyqtSlot(QUrl, str, bool)
     def open_log_file(self, url: QUrl, protocol: str, realtime: bool):
         path = _local_path(url)
         connection = self._add(path.name, FileSource(path, realtime=realtime), protocol)
+        self._app_state.add_recent_log_file(str(path), protocol, realtime)
         connection.open()
+
+    @pyqtSlot(int)
+    def open_recent_log_file(self, index: int):
+        recent = self._app_state.recent_log_files
+        if 0 <= index < len(recent):
+            entry = recent[index]
+            self.open_log_file(
+                QUrl.fromLocalFile(entry['path']), entry.get('protocol', 'Raw'), entry.get('realtime', True)
+            )
 
     @pyqtSlot(int)
     def remove_connection(self, index: int):
@@ -343,5 +698,11 @@ class ConnectionManager(QObject):
 
     @pyqtSlot()
     def close_all(self):
+        if self._detection is not None and not self._detection.done():
+            self._detection.cancel()
         for connection in self._connections:
             connection.close()
+
+    def _apply_preferences(self):
+        for connection in self._connections:
+            connection.set_refresh_interval(self._app_state.refresh_interval_ms)

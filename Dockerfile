@@ -15,14 +15,10 @@ ENV LC_ALL C.UTF-8
 ENV TZ="Europe/Berlin"
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-RUN apt -y update
-RUN apt -y install sudo git vim curl python3 python3-pip iproute2 can-utils
-
-RUN apt -y update
-RUN apt -y install libglib2.0-0 libglu1-mesa-dev libxkbcommon-x11-0 build-essential libgl1-mesa-dev libdbus-1-dev libxcb-*
-
-# CAN stuffs
-RUN apt -y install can-utils
+RUN apt -y update && apt -y install \
+    sudo git vim curl python3 python3-pip iproute2 can-utils \
+    libglib2.0-0 libglu1-mesa-dev libxkbcommon-x11-0 build-essential libgl1-mesa-dev libdbus-1-dev libxcb-* \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY --from=ghcr.io/astral-sh/uv:0.11.26 /uv /uvx /usr/local/bin/
 

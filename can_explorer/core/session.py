@@ -2,12 +2,14 @@ import asyncio
 import enum
 import time
 from pathlib import Path
-from typing import Callable, List, Optional
+from typing import Callable, Iterable, List, Optional
 
 import can
 
+from can_explorer.core.busstats import BusSnapshot, BusStatistics
 from can_explorer.core.decoding import FrameDecoder
 from can_explorer.core.frames import Frame, clone_message
+from can_explorer.core.signals import SignalTracker
 from can_explorer.core.sources import LOG_FILE_SUFFIXES, MessageSource, SourceError
 from can_explorer.core.store import IdStatistics, TraceBuffer
 from can_explorer.sys.log_handler import get_logger
@@ -28,7 +30,7 @@ class SessionState(enum.Enum):
 
 
 class PeriodicTransmit:
-    """Sends a message every `period` seconds, scheduled against the loop clock so it does not drift."""
+    """Base of the periodic transmissions of a session."""
 
     def __init__(self, session: 'BusSession', msg: can.Message, period: float):
         if period <= 0:
@@ -36,6 +38,23 @@ class PeriodicTransmit:
         self.message = msg
         self.period = period
         self._session = session
+
+    @property
+    def hardware(self) -> bool:
+        return False
+
+    def stop(self) -> None:
+        raise NotImplementedError
+
+
+class SoftwarePeriodicTransmit(PeriodicTransmit):
+    """Sends from the event loop, scheduled against the loop clock so it does not drift.
+
+    The frames go through the session, so they appear in the trace and recordings.
+    """
+
+    def __init__(self, session: 'BusSession', msg: can.Message, period: float):
+        super().__init__(session, msg, period)
         self._task = asyncio.get_running_loop().create_task(self._run(), name=f'Periodic {msg.arbitration_id:#x}')
 
     async def _run(self) -> None:
@@ -51,16 +70,37 @@ class PeriodicTransmit:
         finally:
             self._session._periodic_finished(self)
 
-    @property
-    def running(self) -> bool:
-        return not self._task.done()
-
     def stop(self) -> None:
         self._task.cancel()
 
 
+class HardwarePeriodicTransmit(PeriodicTransmit):
+    """Sends with python-can's cyclic task: timed by the interface hardware or driver where supported.
+
+    The frames bypass the session, so they only appear in the trace when the bus echoes own messages.
+    """
+
+    def __init__(self, session: 'BusSession', msg: can.Message, period: float):
+        super().__init__(session, msg, period)
+        try:
+            self._task = session.source.send_periodic(msg, period)
+        except (AttributeError, SourceError) as e:
+            raise SessionError(f'Hardware periodic transmission not available: {e}') from e
+
+    @property
+    def hardware(self) -> bool:
+        return True
+
+    def stop(self) -> None:
+        try:
+            self._task.stop()
+        finally:
+            self._session._periodic_finished(self)
+
+
 class BusSession:
-    """Pumps messages from a source into the trace buffer, the per-ID statistics and an optional recorder."""
+    """Pumps messages from a source into the trace buffer, the statistics, the signal tracker,
+    the message listeners and an optional recorder."""
 
     def __init__(
         self,
@@ -72,6 +112,8 @@ class BusSession:
         self.decoder = decoder or FrameDecoder()
         self.trace = TraceBuffer(buffer_size)
         self.statistics = IdStatistics()
+        self.signals = SignalTracker()
+        self.bus_statistics = BusStatistics(source.bitrates, getattr(source, 'lin_baudrate', None))
         self.state = SessionState.CLOSED
         self.error: Optional[str] = None
         self.start_time: Optional[float] = None
@@ -79,6 +121,7 @@ class BusSession:
         self._recorder: Optional[can.Listener] = None
         self.recording_path: Optional[Path] = None
         self._periodic: List[PeriodicTransmit] = []
+        self._message_listeners: List[Callable[[can.Message], None]] = []
         self._state_listeners: List[Callable[['BusSession'], None]] = []
         self._error_listeners: List[Callable[[str], None]] = []
         self._periodic_listeners: List[Callable[['BusSession'], None]] = []
@@ -93,6 +136,14 @@ class BusSession:
         """Errors that do not end the session, e.g. a failing recording."""
         self._error_listeners.append(callback)
 
+    def add_message_listener(self, callback: Callable[[can.Message], None]) -> None:
+        """Called for every received and transmitted message, in order, on the event loop."""
+        self._message_listeners.append(callback)
+
+    def remove_message_listener(self, callback: Callable[[can.Message], None]) -> None:
+        if callback in self._message_listeners:
+            self._message_listeners.remove(callback)
+
     def _report_error(self, message: str) -> None:
         logger.error(message)
         for callback in self._error_listeners:
@@ -106,6 +157,11 @@ class BusSession:
     @property
     def is_open(self) -> bool:
         return self.state is SessionState.OPEN
+
+    @property
+    def bus_state(self) -> Optional[str]:
+        state = getattr(self.source, 'bus_state', None)
+        return state if self.is_open else None
 
     def start(self) -> None:
         """Open the source and start receiving. Must be called with a running event loop."""
@@ -123,8 +179,12 @@ class BusSession:
 
     async def _pump(self) -> None:
         try:
-            async for msg in self.source.messages():
-                self._dispatch(msg)
+            async for batch in self.source.batches():
+                for msg in batch:
+                    self._dispatch(msg)
+                # With continuous traffic a new batch is always ready, so getting it never suspends.
+                # Yield explicitly so the GUI and other tasks keep running.
+                await asyncio.sleep(0)
         except asyncio.CancelledError:
             raise
         except Exception as e:
@@ -142,8 +202,14 @@ class BusSession:
         frame = Frame(msg, self.decoder.describe(msg))
         self.trace.append(frame)
         self.statistics.update(frame)
+        self.bus_statistics.update(msg)
+        database = self.decoder.database
+        if database is not None:
+            self.signals.update(msg, database)
         if self._recorder is not None:
             self._record(msg)
+        for callback in self._message_listeners:
+            callback(msg)
 
     def _record(self, msg: can.Message) -> None:
         try:
@@ -176,15 +242,19 @@ class BusSession:
             self._set_state(SessionState.CLOSED)
 
     def _shutdown(self) -> None:
-        for periodic in list(self._periodic):
-            periodic.stop()
+        self.stop_periodic()
         self.stop_recording()
         self.source.close()
 
     def clear(self) -> None:
         self.trace.clear()
         self.statistics.clear()
+        self.signals.clear()
+        self.bus_statistics.reset()
         self.start_time = None
+
+    def sample_bus_statistics(self) -> BusSnapshot:
+        return self.bus_statistics.sample(time.monotonic())
 
     # Transmission
 
@@ -202,10 +272,12 @@ class BusSession:
         if not self.source.echoes_tx:
             self._dispatch(msg)
 
-    def start_periodic(self, msg: can.Message, period: float) -> PeriodicTransmit:
+    def start_periodic(self, msg: can.Message, period: float, hardware: bool = False) -> PeriodicTransmit:
+        if not self.source.can_send:
+            raise SessionError('This source cannot transmit')
         if not self.is_open:
             raise SessionError('Session is not open')
-        periodic = PeriodicTransmit(self, msg, period)
+        periodic = (HardwarePeriodicTransmit if hardware else SoftwarePeriodicTransmit)(self, msg, period)
         self._periodic.append(periodic)
         self._notify_periodic()
         return periodic
@@ -227,16 +299,20 @@ class BusSession:
         for callback in self._periodic_listeners:
             callback(self)
 
-    # Recording
+    # Recording and export
 
     @property
     def recording(self) -> bool:
         return self._recorder is not None
 
-    def start_recording(self, path: str | Path) -> None:
-        path = Path(path)
+    @staticmethod
+    def _check_log_format(path: Path) -> None:
         if path.suffix.lower() not in LOG_FILE_SUFFIXES:
             raise SessionError(f'Unsupported log format {path.suffix!r}, use one of {", ".join(LOG_FILE_SUFFIXES)}')
+
+    def start_recording(self, path: str | Path) -> None:
+        path = Path(path)
+        self._check_log_format(path)
         self.stop_recording()
         try:
             self._recorder = can.Logger(path)
@@ -250,3 +326,24 @@ class BusSession:
             self._recorder.stop()
             logger.info(f'Stopped recording to {self.recording_path}')
             self._recorder = None
+
+    @classmethod
+    def export(cls, frames: Iterable[Frame], path: str | Path) -> int:
+        """Write frames to a log file. Returns the number of frames written."""
+        path = Path(path)
+        cls._check_log_format(path)
+        count = 0
+        try:
+            with can.Logger(path) as writer:
+                for frame in frames:
+                    try:
+                        writer.on_message_received(frame.message)
+                    except Exception:
+                        anonymous = clone_message(frame.message)  # See _record()
+                        anonymous.channel = None
+                        anonymous.timestamp, anonymous.is_rx = frame.message.timestamp, frame.message.is_rx
+                        writer.on_message_received(anonymous)
+                    count += 1
+        except Exception as e:
+            raise SessionError(f'Could not export to {path}: {e}') from e
+        return count

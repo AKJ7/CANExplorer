@@ -45,9 +45,17 @@ class TraceBuffer:
 @dataclass(slots=True)
 class IdEntry:
     last: Frame
+    previous_data: Optional[bytearray] = None
     count: int = 1
     cycle_time: Optional[float] = None
-    changed: Tuple[bool, ...] = ()
+
+    @property
+    def changed(self) -> Tuple[bool, ...]:
+        """Which bytes differ from the previous frame. Computed on demand, only for displayed rows."""
+        data, previous = self.last.message.data, self.previous_data
+        if previous is None:
+            return (True,) * len(data)
+        return tuple(i >= len(previous) or previous[i] != byte for i, byte in enumerate(data))
 
 
 class IdStatistics:
@@ -64,16 +72,16 @@ class IdStatistics:
         return msg.arbitration_id, msg.is_extended_id, msg.is_rx
 
     def update(self, frame: Frame) -> None:
-        key = self.key(frame)
+        msg = frame.message
+        key = (msg.arbitration_id, msg.is_extended_id, msg.is_rx)
         entry = self.entries.get(key)
-        data = frame.message.data
         if entry is None:
-            self.entries[key] = IdEntry(last=frame, changed=tuple(True for _ in data))
+            self.entries[key] = IdEntry(last=frame)
             self._added = True
         else:
             previous = entry.last.message
-            entry.cycle_time = frame.message.timestamp - previous.timestamp
-            entry.changed = tuple(i >= len(previous.data) or previous.data[i] != byte for i, byte in enumerate(data))
+            entry.cycle_time = msg.timestamp - previous.timestamp
+            entry.previous_data = previous.data
             entry.count += 1
             entry.last = frame
         self._changed.add(key)

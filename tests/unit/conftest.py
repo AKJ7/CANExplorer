@@ -1,41 +1,15 @@
 import os
+import signal
 from pathlib import Path
 
 import pytest
-import logging
-import can
-from qasync import QEventLoop
+from PyQt6.QtCore import QSettings
 from pytestqt.qt_compat import qt_api
-import asyncio
-import signal
-
-# from tests.QTestApplication import QTestApplication
-
-# qt_api.set_qt_api(None)
-
 
 # Qt must not need a display in tests or CI
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 
-logger = logging.getLogger(__name__)
-
 DATA_DIR = Path(__file__).resolve().parent.parent / 'data'
-
-
-def pytest_addoption(parser):
-    parser.addoption("--can-channel", default="vcan0")
-
-
-@pytest.fixture(scope="session")
-def can_channel(request):
-    return request.config.getoption("--can-channel")
-
-
-@pytest.fixture(scope="session")
-def can_bus():
-    bus = can.Bus(channel='test', interface='virtual', preserve_timestamp=True, receive_own_messages=True)
-    yield bus
-    bus.shutdown()
 
 
 @pytest.fixture(scope='session')
@@ -52,17 +26,14 @@ def qapp_cls():
 
 
 @pytest.fixture(scope='session')
-def qloop(qapp):
-    loop = QEventLoop(qapp)
-    with loop:
-        asyncio.set_event_loop(loop)
-        logger.info(f'Running: {loop=}')
-        current_loop = asyncio.get_running_loop()
-        logger.info(f'Actual: {current_loop=}')
-        yield loop
-        # loop.close()
-
-
-@pytest.fixture(scope='session')
 def data_dir() -> Path:
     return DATA_DIR
+
+
+@pytest.fixture(scope='session', autouse=True)
+def isolated_settings(tmp_path_factory):
+    """Keep tests from reading or writing the user's real application settings."""
+    path = str(tmp_path_factory.mktemp('settings'))
+    for settings_format in (QSettings.Format.NativeFormat, QSettings.Format.IniFormat):
+        QSettings.setPath(settings_format, QSettings.Scope.UserScope, path)
+    return path

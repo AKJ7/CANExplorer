@@ -11,7 +11,7 @@ GroupBox {
     function send() {
         errorLabel.text = root.connection.send(
             idField.text, dataField.text, extendedBox.checked, fdBox.checked,
-            periodicBox.checked ? periodBox.value : 0)
+            periodicBox.checked ? periodBox.value : 0, hardwareBox.checked, headerBox.checked)
     }
 
     RowLayout {
@@ -20,18 +20,31 @@ GroupBox {
         Label { text: qsTr("ID") }
         TextField {
             id: idField
-            text: "123"
+            text: root.connection.is_lin ? "10" : "123"
             placeholderText: qsTr("hex")
             Layout.preferredWidth: 100
             onAccepted: root.send()
         }
-        CheckBox { id: extendedBox; text: qsTr("Ext") }
-        CheckBox { id: fdBox; text: qsTr("FD") }
+        CheckBox { id: extendedBox; text: qsTr("Ext"); visible: !root.connection.is_lin }
+        CheckBox {
+            id: headerBox
+            text: root.connection.is_lin ? qsTr("Header only") : qsTr("RTR")
+            ToolTip.visible: hovered
+            ToolTip.text: root.connection.is_lin
+                ? qsTr("Send only the LIN header; the slave publishing the frame answers")
+                : qsTr("Send a remote frame")
+        }
+        CheckBox {
+            id: fdBox
+            text: qsTr("FD")
+            visible: root.connection.fd
+        }
 
         Label { text: qsTr("Data") }
         TextField {
             id: dataField
             text: "01 02 03 04"
+            enabled: !headerBox.checked
             placeholderText: qsTr("hex bytes, e.g. 01 02 FF")
             Layout.fillWidth: true
             Layout.minimumWidth: 160
@@ -48,6 +61,13 @@ GroupBox {
             editable: true
         }
         Label { text: qsTr("ms") }
+        CheckBox {
+            id: hardwareBox
+            text: qsTr("HW timed")
+            enabled: periodicBox.checked
+            ToolTip.visible: hovered
+            ToolTip.text: qsTr("Let the interface schedule the frames. More precise, but they only appear in the trace when the bus echoes own messages.")
+        }
 
         Button {
             text: periodicBox.checked ? qsTr("Start") : qsTr("Send")

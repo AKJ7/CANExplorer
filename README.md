@@ -2,13 +2,20 @@
 A CANbus-Analyse Tool for all platforms.
 
 ## Features
-- Live monitoring of any [python-can](https://python-can.readthedocs.io/) interface (SocketCAN, PCAN, Vector, Kvaser, slcan, gs_usb, virtual, …)
-- **Trace** view (chronological, bounded to 100 000 rows) and **Overview** per identifier (count, cycle time, changed bytes in bold)
+- Live monitoring of any [python-can](https://python-can.readthedocs.io/) interface (SocketCAN, PCAN, Vector, Kvaser, slcan, gs_usb, virtual, …), including CAN FD with a separate data bitrate, and channel detection
+- **Trace** view (chronological, buffer size configurable) and **Overview** per identifier (count, cycle time, changed bytes in bold)
+- Row selection, copy to clipboard (tab separated) and export of the trace to a log file
 - Display filters, e.g. `100-1FF !123 ext rx fd`: hex IDs and ranges, `!` excludes, keywords restrict frame type and direction
+- Bus statistics: Rx/Tx rates, estimated bus load, error frames and bus state
 - Recording to `.asc`, `.blf`, `.csv`, `.log`, `.trc` and `.db`, and replay of those files with or without the original timing
-- Signal decoding with DBC/KCD/SYM/ARXML databases
-- Transmission of single or periodic frames
-- Passive protocol decoding: ISO-TP (reassembly), J1939 (PGNs, BAM and RTS/CTS transport), CANopen (NMT, SDO, PDO, EMCY, heartbeat)
+- Signal decoding with DBC, BUSMASTER DBF, KCD, SYM, ARXML and LIN LDF databases and live **signal plots**
+- Conversion between signal database formats, including **DBC ↔ DBF** (File → Convert Signal Database, or `can-db-convert`)
+- Transmission of single or periodic frames, timed by the application or by the interface
+- **LIN** (through a SocketCAN LIN driver such as [sllin](https://github.com/lin-bus/linux-lin), or the virtual interface): headers and responses in the trace, LDF signal decoding and plots, LIN master schedule tables with editable master signals, header-only transmission
+- **UDS diagnostics** over ISO-TP (CAN) and the LIN transport layer: sessions, ECU reset, tester present, read/write data identifiers, security access with a user supplied seed/key algorithm (a Python file defining `compute_key(level, seed)`), DTCs, routines and raw requests
+- Passive protocol decoding: ISO-TP (reassembly), UDS, J1939 (PGNs, BAM and RTS/CTS transport), CANopen (NMT, SDO, PDO, EMCY, heartbeat), LIN (including diagnostic transport frames)
+- Simulated ECUs and LIN slaves (`can_explorer.core.simulation`) for trying things out without hardware
+- Recent connections and log files, preferences and window geometry are remembered
 
 ## Usage
 - Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then install dependencies
@@ -20,12 +27,18 @@ A CANbus-Analyse Tool for all platforms.
   uv run --env-file .env main <ARGS>
   ```
   Settings can be overridden on the command line (e.g. `--log_level DEBUG`) or with `CANEXPLORER_*` environment variables.
+- Convert a signal database (format from the file extension: `.dbc`, `.dbf`, `.kcd`, `.sym`; `.arxml` as input)
+  ```bash
+  uv run can-db-convert vehicle.dbc vehicle.dbf
+  uv run can-db-convert vehicle.dbf vehicle.dbc
+  ```
 
 ## Development
 ```bash
 uv run pytest            # tests (Qt runs headless, buses are python-can virtual buses)
 uv run ruff check .      # lint
 uv run black .           # format
+QT_QPA_PLATFORM=offscreen uv run python tools/benchmark.py   # pipeline and model throughput
 ```
 
 ### Architecture
@@ -40,10 +53,17 @@ Qt and asyncio share one event loop through [qasync](https://github.com/CabbageD
 
 ### Packaging
 ```bash
-uv run python packaging/build.py --archive
+uv run python packaging/build.py --archive                              # PyInstaller (default)
+uv run python packaging/build.py --backend nuitka --archive             # compiled with Nuitka
+uv run python packaging/build.py --backend nuitka --onefile             # single executable (Linux, Windows)
 ```
-builds a standalone bundle for the current platform in `dist/`. The `installer` workflow builds Linux,
-Windows and macOS bundles, and attaches them to a GitHub release when a `v*` tag is pushed.
+builds a standalone bundle for the current platform in `dist/`. Nuitka compiles the code to C and takes
+considerably longer; it needs a C compiler (gcc or clang on Linux, the Xcode command line tools on macOS,
+MSVC or a MinGW that Nuitka downloads on Windows). The `installer` workflow builds Linux, Windows and macOS
+bundles (Nuitka can be selected when starting it manually), and attaches them to a GitHub release when a
+`v*` tag is pushed.
+
+See [CHANGELOG.md](CHANGELOG.md) for the history of changes.
 
 
 ## Roadmap

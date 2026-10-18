@@ -1,5 +1,6 @@
 import can
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QItemSelectionModel, Qt
+from PyQt6.QtGui import QGuiApplication
 
 from can_explorer.core.filters import MessageFilter
 from can_explorer.core.frames import Frame
@@ -48,3 +49,40 @@ def test_overview_model_highlights_changes(qapp):
     assert cell(model, 1, 6) == '01 <b>03</b>'
     assert cell(model, 1, 6, RICH_TEXT_ROLE) is True
     assert cell(model, 1, 7, RICH_TEXT_ROLE) is False
+
+
+def test_copy_and_select_all(qapp):
+    model = TraceModel(lambda: 10.0, max_rows=100, describe=lambda frame: f'info {frame.message.arbitration_id:X}')
+    model.append_frames([frame(i, bytes([i])) for i in range(3)])
+    selection = QItemSelectionModel(model)
+    assert model.copy_selection(selection) == 0
+    model.select_all(selection)
+    assert model.selected_rows(selection) == [0, 1, 2]
+    assert model.copy_selection(selection) == 3
+    lines = QGuiApplication.clipboard().text().splitlines()
+    assert lines[0].startswith('Time [s]\tDir')
+    assert lines[2].split('\t')[3:] == ['001', '1', '01', 'info 1']
+    selection.clearSelection()
+    selection.select(
+        model.index(1, 0), QItemSelectionModel.SelectionFlag.Select | QItemSelectionModel.SelectionFlag.Rows
+    )
+    assert [f.message.arbitration_id for f in model.selected_frames(selection)] == [1]
+    assert len(model.selected_frames(None)) == 3
+
+
+def test_overview_refreshes_only_changed_rows(qapp):
+    statistics = IdStatistics()
+    model = OverviewModel(statistics)
+    for can_id in range(10):
+        statistics.update(frame(can_id, b'\x00'))
+    model.refresh(*statistics.drain_changes())
+    changes = []
+    model.dataChanged.connect(lambda top, bottom: changes.append((top.row(), bottom.row())))
+    for can_id in (2, 3, 4, 7):
+        statistics.update(frame(can_id, b'\x01'))
+    model.refresh(*statistics.drain_changes())
+    assert changes == [(2, 4), (7, 7)]
+    selection = QItemSelectionModel(model)
+    model.select_all(selection)
+    model.copy_selection(selection)
+    assert '<b>' not in QGuiApplication.clipboard().text()

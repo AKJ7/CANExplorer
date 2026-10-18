@@ -1,0 +1,43 @@
+VERSION ""
+
+
+NS_ :
+
+BS_:
+
+BU_: Engine Gateway Dashboard
+
+
+BO_ 256 EngineData: 8 Engine
+ SG_ EngineSpeed : 0|16@1+ (0.25,0) [0|16383.75] "rpm" Gateway,Dashboard
+ SG_ Torque : 16|12@1- (0.5,-100) [-1124|923.5] "Nm" Gateway
+ SG_ Temperature : 39|10@0+ (0.1,-40) [-40|62.3] "degC" Dashboard
+ SG_ Flags : 45|3@0+ (1,0) [0|7] "" Dashboard
+ SG_ Status : 52|9@0+ (1,0) [0|511] "" Dashboard
+
+BO_ 2566844926 VehicleSpeed: 8 Gateway
+ SG_ WheelSpeed : 8|16@1+ (0.00390625,0) [0|250.99609375] "km/h" Dashboard
+ SG_ Direction : 7|2@0+ (1,0) [0|3] "" Dashboard
+
+BO_ 512 Multiplexed: 8 Gateway
+ SG_ Mux M : 0|8@1+ (1,0) [0|255] "" Dashboard
+ SG_ ValueA m0 : 8|16@1+ (1,0) [0|65535] "" Dashboard
+ SG_ ValueB m1 : 8|32@1- (2,0) [-4294967296|4294967294] "" Dashboard
+
+BO_ 768 FloatData: 8 Engine
+ SG_ Pressure : 0|32@1- (1,0) [-1000|1000] "bar" Gateway
+ SG_ Ratio : 32|16@1+ (0.001,0) [0|65.535] "" Gateway
+
+BO_ 1024 FdFrame: 64 Gateway
+ SG_ Energy : 0|64@1- (1,0) [-1000000|1000000] "J" Dashboard
+ SG_ Last : 504|8@1+ (1,0) [0|255] "" Dashboard
+
+
+CM_ BU_ Engine "Engine control unit";
+CM_ BO_ 256 "Engine status, sent every 10 ms";
+CM_ SG_ 256 EngineSpeed "Crankshaft speed";
+CM_ SG_ 2566844926 WheelSpeed "Average of the front wheels";
+VAL_ 256 Flags 0 "None" 1 "Overheat" 4 "Low oil" ;
+VAL_ 2566844926 Direction 0 "Stop" 1 "Forward" 2 "Reverse" ;
+SIG_VALTYPE_ 768 Pressure : 1;
+SIG_VALTYPE_ 1024 Energy : 2;

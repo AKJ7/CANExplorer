@@ -132,3 +132,11 @@ Pipfile.lock
 
 # Jetbrains
 .idea/
+
+# Nuitka
+nuitka-crash-report.xml
+*.build/
+*.dist/
+*.onefile-build/
+.nuitka-cache/
+can_explorer/_build_version.py

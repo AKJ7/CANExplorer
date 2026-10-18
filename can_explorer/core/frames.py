@@ -1,15 +1,20 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Tuple
 
 import can
 
 
 @dataclass(slots=True)
 class Frame:
-    """A received or transmitted CAN message together with its decoded description."""
+    """A received or transmitted CAN message.
+
+    `info` is the protocol description, computed on arrival because protocol decoders are stateful.
+    `details` caches the signal database description, which is only computed when the frame is shown.
+    """
 
     message: can.Message
     info: str = ''
+    details: Optional[Tuple[int, str]] = None
 
 
 def format_hex(data: bytes | bytearray, limit: Optional[int] = None) -> str:

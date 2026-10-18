@@ -10,21 +10,28 @@ Dialog {
     anchors.centerIn: parent
     standardButtons: Dialog.Ok | Dialog.Cancel
 
+    readonly property var detected: connectionManager.detected_channels[interfaceBox.currentText] || []
+    readonly property bool lin: busBox.currentText === "LIN"
+
     onAboutToShow: {
         nameField.text = qsTr("Connection %1").arg(connectionManager.connections.length + 1)
-        channelBox.model = connectionManager.available_channels()
+        if (Object.keys(connectionManager.detected_channels).length === 0)
+            connectionManager.detect_channels()
     }
 
     onAccepted: {
-        connectionManager.add_connection(
-            nameField.text,
-            interfaceBox.currentText,
-            channelBox.editText,
-            bitrateBox.currentText,
-            protocolBox.currentText,
-            fdCheckBox.checked,
-            selfReceptionCheckBox.checked,
-        )
+        connectionManager.add_connection({
+            name: nameField.text,
+            bus: busBox.currentText,
+            lin_baudrate: linBaudrateBox.currentText,
+            interface: interfaceBox.currentText,
+            channel: channelBox.editText,
+            bitrate: bitrateBox.currentText,
+            data_bitrate: fdCheckBox.checked ? dataBitrateBox.currentText : "",
+            protocol: dialog.lin ? "LIN" : protocolBox.currentText,
+            fd: fdCheckBox.checked,
+            receive_own_messages: selfReceptionCheckBox.checked,
+        })
     }
 
     ColumnLayout {
@@ -45,15 +52,32 @@ Dialog {
             Layout.fillWidth: true
 
             GridLayout {
-                columns: 2
+                columns: 3
                 anchors.fill: parent
+
+                Label { text: qsTr("Bus") }
+                ComboBox {
+                    id: busBox
+                    model: ["CAN", "LIN"]
+                    Layout.fillWidth: true
+                    Layout.columnSpan: 2
+                    ToolTip.visible: hovered && dialog.lin
+                    ToolTip.text: qsTr("LIN through a SocketCAN LIN driver such as sllin (e.g. channel sllin0), or the virtual interface")
+                }
 
                 Label { text: qsTr("Interface") }
                 ComboBox {
                     id: interfaceBox
                     Layout.fillWidth: true
                     Layout.preferredWidth: 240
+                    Layout.columnSpan: 2
                     model: connectionManager.interfaces
+                    Component.onCompleted: {
+                        // Prefer an interface with detected channels
+                        const index = find("SocketcanBus")
+                        if (index >= 0)
+                            currentIndex = index
+                    }
                 }
 
                 Label { text: qsTr("Channel") }
@@ -62,34 +86,69 @@ Dialog {
                     Layout.fillWidth: true
                     Layout.preferredWidth: 240
                     editable: true
+                    model: dialog.detected
+                }
+                ToolButton {
+                    text: connectionManager.detecting ? qsTr("Detecting…") : qsTr("Detect")
+                    enabled: !connectionManager.detecting
+                    onClicked: connectionManager.detect_channels()
                 }
 
-                Label { text: qsTr("Protocol") }
+                Label { text: qsTr("Protocol"); visible: !dialog.lin }
                 ComboBox {
                     id: protocolBox
+                    visible: !dialog.lin
                     Layout.fillWidth: true
-                    Layout.preferredWidth: 240
+                    Layout.columnSpan: 2
                     model: connectionManager.protocols
                 }
 
-                Label { text: qsTr("Bitrate") }
+                Label { text: qsTr("Baud rate"); visible: dialog.lin }
+                ComboBox {
+                    id: linBaudrateBox
+                    visible: dialog.lin
+                    Layout.fillWidth: true
+                    Layout.columnSpan: 2
+                    model: connectionManager.lin_baudrates
+                    Component.onCompleted: currentIndex = Math.max(0, find("19200"))
+                }
+
+                Label { text: qsTr("Bitrate"); visible: !dialog.lin }
                 ComboBox {
                     id: bitrateBox
+                    visible: !dialog.lin
                     Layout.fillWidth: true
-                    Layout.preferredWidth: 240
+                    Layout.columnSpan: 2
                     model: connectionManager.bitrates
+                    Component.onCompleted: currentIndex = Math.max(0, find("500000"))
                 }
 
                 CheckBox {
                     id: fdCheckBox
-                    text: qsTr("Flexible Data (fd-can)")
+                    visible: !dialog.lin
+                    text: qsTr("Flexible Data (CAN FD)")
+                    Layout.columnSpan: 3
+                }
+
+                Label {
+                    text: qsTr("Data bitrate")
+                    enabled: fdCheckBox.checked
+                    visible: !dialog.lin
+                }
+                ComboBox {
+                    id: dataBitrateBox
+                    visible: !dialog.lin
+                    enabled: fdCheckBox.checked
+                    Layout.fillWidth: true
                     Layout.columnSpan: 2
+                    model: connectionManager.data_bitrates
+                    Component.onCompleted: currentIndex = Math.max(0, find("2000000"))
                 }
 
                 CheckBox {
                     id: selfReceptionCheckBox
                     text: qsTr("Self-Reception")
-                    Layout.columnSpan: 2
+                    Layout.columnSpan: 3
                 }
             }
         }

@@ -11,6 +11,10 @@ Item {
     property alias newConnection: newConnectionAction
     property alias closeConnection: closeConnectionAction
     property alias openLogFile: openLogFileAction
+    property alias copy: copyAction
+    property alias selectAll: selectAllAction
+    property alias preferences: preferencesAction
+    property alias convertDatabase: convertDatabaseAction
 
     Action {
         id: exitAction
@@ -45,5 +49,34 @@ Item {
         icon.name: "window-close"
         shortcut: StandardKey.Close
         enabled: connectionManager.connections.length > 0
+    }
+
+    Action {
+        id: copyAction
+        text: qsTr("&Copy Selected Rows")
+        icon.name: "edit-copy"
+        shortcut: StandardKey.Copy
+        enabled: connectionManager.connections.length > 0
+    }
+
+    Action {
+        id: selectAllAction
+        text: qsTr("Select &All")
+        icon.name: "edit-select-all"
+        shortcut: StandardKey.SelectAll
+        enabled: connectionManager.connections.length > 0
+    }
+
+    Action {
+        id: convertDatabaseAction
+        text: qsTr("Con&vert Signal Database...")
+        icon.name: "document-save-as"
+    }
+
+    Action {
+        id: preferencesAction
+        text: qsTr("&Preferences...")
+        icon.name: "preferences-system"
+        shortcut: StandardKey.Preferences
     }
 }

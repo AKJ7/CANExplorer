@@ -27,7 +27,7 @@ async def test_live_connection(manager, data_dir, tmp_path):
     channel = f'gui-{uuid.uuid4().hex}'
     errors = []
     manager.error_occurred.connect(errors.append)
-    manager.add_connection('Bus', 'VirtualBus', channel, '500000', 'Raw', False, False)
+    manager.add_connection({'name': 'Bus', 'interface': 'VirtualBus', 'channel': channel, 'bitrate': '500000'})
     connection = manager.connections[0]
     connection.open()
     assert connection.connected and connection.can_transmit and not connection.is_replay
@@ -38,9 +38,9 @@ async def test_live_connection(manager, data_dir, tmp_path):
 
     peer = can.Bus(interface='virtual', channel=channel)
     peer.send(can.Message(arbitration_id=0x100, is_extended_id=False, data=bytes([0, 0x10, 90, 1, 0, 0, 0, 0])))
-    assert connection.send('7DF', '02 01 0D', False, False, 0) == ''
-    assert 'Invalid hex' in connection.send('xyz', '', False, False, 0)
-    assert 'At most 8' in connection.send('100', ' '.join(['00'] * 9), False, False, 0)
+    assert connection.send('7DF', '02 01 0D', False, False, 0, False, False) == ''
+    assert 'Invalid hex' in connection.send('xyz', '', False, False, 0, False, False)
+    assert 'At most 8' in connection.send('100', ' '.join(['00'] * 9), False, False, 0, False, False)
     await wait_until(lambda: connection.session.trace.total == 2)
     peer.shutdown()
 
@@ -83,6 +83,6 @@ async def test_replay_connection(manager, tmp_path):
 async def test_errors_are_reported(manager):
     errors = []
     manager.error_occurred.connect(errors.append)
-    manager.add_connection('Broken', 'NoSuchBus', 'x', '500000', 'Raw', False, False)
+    manager.add_connection({'name': 'Broken', 'interface': 'NoSuchBus', 'channel': 'x'})
     manager.connections[0].open()
     assert errors and not manager.connections[0].connected

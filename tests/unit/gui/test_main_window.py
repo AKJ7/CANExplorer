@@ -32,8 +32,26 @@ def test_main_window_loads_without_warnings(window, qtbot):
 
 def test_connection_views_render_without_warnings(window, qtbot):
     engine, manager, warnings = window
-    manager.add_connection('Bus', 'VirtualBus', f'qml-{uuid.uuid4().hex}', '500000', 'J1939', False, False)
+    manager.add_connection(
+        {'name': 'Bus', 'interface': 'VirtualBus', 'channel': f'qml-{uuid.uuid4().hex}', 'protocol': 'J1939'}
+    )
     qtbot.wait(100)
     manager.remove_connection(0)
     qtbot.wait(100)
+    assert warnings == []
+
+
+def test_lin_connection_views_render_without_warnings(window, qtbot, data_dir):
+    from PyQt6.QtCore import QUrl
+
+    engine, manager, warnings = window
+    manager.add_connection(
+        {'name': 'LIN', 'interface': 'VirtualBus', 'channel': f'qml-{uuid.uuid4().hex}', 'bus': 'LIN'}
+    )
+    connection = manager.connections[-1]
+    connection.load_database(QUrl.fromLocalFile(str(data_dir / 'example.ldf')))
+    qtbot.wait(150)
+    assert warnings == []
+    manager.remove_connection(0)
+    qtbot.wait(50)
     assert warnings == []

@@ -15,6 +15,21 @@ ApplicationWindow {
     readonly property var currentConnection: tabBar.currentIndex >= 0
         ? connectionManager.connections[tabBar.currentIndex] : null
 
+    function currentView() {
+        return tabBar.currentIndex >= 0 ? connectionViews.itemAt(tabBar.currentIndex) : null
+    }
+
+    Component.onCompleted: {
+        const geometry = connectionManager.app_state.window_geometry()
+        if (geometry.length === 4) {
+            x = geometry[0]
+            y = geometry[1]
+            width = geometry[2]
+            height = geometry[3]
+        }
+    }
+    onClosing: connectionManager.app_state.save_window_geometry(x, y, width, height)
+
     menuBar: MenuBar {
         id: applicationMenu
         FileMenu {}
@@ -47,6 +62,7 @@ ApplicationWindow {
             Layout.fillHeight: true
 
             Repeater {
+                id: connectionViews
                 model: connectionManager.connections
                 ConnectionView {
                     required property var modelData
@@ -84,6 +100,15 @@ ApplicationWindow {
             if (!connection)
                 return ""
             let parts = [connection.description, connection.state, qsTr("%1 frames").arg(connection.frame_count)]
+            if (connection.connected) {
+                parts.push(qsTr("Rx %1/s  Tx %2/s").arg(connection.rx_rate.toFixed(0)).arg(connection.tx_rate.toFixed(0)))
+                if (connection.bus_load >= 0)
+                    parts.push(qsTr("load %1%").arg(connection.bus_load.toFixed(1)))
+                if (connection.bus_state)
+                    parts.push(qsTr("bus %1").arg(connection.bus_state))
+            }
+            if (connection.error_frames > 0)
+                parts.push(qsTr("%1 error frames").arg(connection.error_frames))
             if (connection.protocol !== "Raw")
                 parts.push(connection.protocol)
             if (connection.database_file)
@@ -104,6 +129,14 @@ ApplicationWindow {
 
     ReplayDialog {
         id: replayDialog
+    }
+
+    PreferencesDialog {
+        id: preferencesDialog
+    }
+
+    ConvertDatabaseDialog {
+        id: convertDatabaseDialog
     }
 
     MessageDialog {
@@ -148,6 +181,38 @@ ApplicationWindow {
         target: Actions.closeConnection
         function onTriggered() {
             connectionManager.remove_connection(tabBar.currentIndex)
+        }
+    }
+
+    Connections {
+        target: Actions.copy
+        function onTriggered() {
+            const view = mainWindow.currentView()
+            if (view)
+                view.copySelection()
+        }
+    }
+
+    Connections {
+        target: Actions.selectAll
+        function onTriggered() {
+            const view = mainWindow.currentView()
+            if (view)
+                view.selectAll()
+        }
+    }
+
+    Connections {
+        target: Actions.convertDatabase
+        function onTriggered() {
+            convertDatabaseDialog.open()
+        }
+    }
+
+    Connections {
+        target: Actions.preferences
+        function onTriggered() {
+            preferencesDialog.open()
         }
     }
 

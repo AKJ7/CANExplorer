@@ -1,0 +1,123 @@
+LIN_description_file;
+LIN_protocol_version = "2.1";
+LIN_language_version = "2.1";
+LIN_speed = 19.2 kbps;
+
+Nodes {
+  Master: BCM, 5 ms, 0.1 ms;
+  Slaves: SeatECU, LightECU;
+}
+
+Signals {
+  SeatPosition: 8, 0, SeatECU, BCM;
+  SeatTemperature: 16, 0, SeatECU, BCM;
+  SeatHeating: 2, 0, BCM, SeatECU;
+  LightLevel: 7, 0, LightECU, BCM;
+  LightOn: 1, 0, BCM, LightECU;
+}
+
+Diagnostic_signals {
+  MasterReqB0: 8, 0;
+  MasterReqB1: 8, 0;
+  MasterReqB2: 8, 0;
+  MasterReqB3: 8, 0;
+  MasterReqB4: 8, 0;
+  MasterReqB5: 8, 0;
+  MasterReqB6: 8, 0;
+  MasterReqB7: 8, 0;
+  SlaveRespB0: 8, 0;
+  SlaveRespB1: 8, 0;
+  SlaveRespB2: 8, 0;
+  SlaveRespB3: 8, 0;
+  SlaveRespB4: 8, 0;
+  SlaveRespB5: 8, 0;
+  SlaveRespB6: 8, 0;
+  SlaveRespB7: 8, 0;
+}
+
+Frames {
+  SeatStatus: 0x10, SeatECU, 3 {
+    SeatPosition, 0;
+    SeatTemperature, 8;
+  }
+  SeatControl: 0x11, BCM, 1 {
+    SeatHeating, 0;
+  }
+  LightStatus: 0x20, LightECU, 1 {
+    LightLevel, 0;
+  }
+  LightControl: 0x21, BCM, 1 {
+    LightOn, 0;
+  }
+}
+
+Diagnostic_frames {
+  MasterReq: 0x3c {
+    MasterReqB0, 0; MasterReqB1, 8; MasterReqB2, 16; MasterReqB3, 24;
+    MasterReqB4, 32; MasterReqB5, 40; MasterReqB6, 48; MasterReqB7, 56;
+  }
+  SlaveResp: 0x3d {
+    SlaveRespB0, 0; SlaveRespB1, 8; SlaveRespB2, 16; SlaveRespB3, 24;
+    SlaveRespB4, 32; SlaveRespB5, 40; SlaveRespB6, 48; SlaveRespB7, 56;
+  }
+}
+
+Node_attributes {
+  SeatECU {
+    LIN_protocol = "2.1";
+    configured_NAD = 0x01;
+    initial_NAD = 0x01;
+    product_id = 0x1234, 0x5678, 0;
+    P2_min = 50 ms;
+    ST_min = 0 ms;
+    configurable_frames {
+      SeatStatus;
+      SeatControl;
+    }
+  }
+  LightECU {
+    LIN_protocol = "2.1";
+    configured_NAD = 0x02;
+    initial_NAD = 0x02;
+    product_id = 0x1234, 0x9ABC, 0;
+    P2_min = 50 ms;
+    ST_min = 0 ms;
+    configurable_frames {
+      LightStatus;
+      LightControl;
+    }
+  }
+}
+
+Schedule_tables {
+  NormalTable {
+    SeatStatus delay 10 ms;
+    SeatControl delay 10 ms;
+    LightStatus delay 10 ms;
+    LightControl delay 10 ms;
+  }
+  DiagnosticTable {
+    MasterReq delay 10 ms;
+    SlaveResp delay 10 ms;
+  }
+}
+
+Signal_encoding_types {
+  PositionEncoding {
+    physical_value, 0, 200, 0.5, 0, "mm";
+  }
+  TemperatureEncoding {
+    physical_value, 0, 65534, 0.1, -40, "degC";
+  }
+  HeatingEncoding {
+    logical_value, 0, "Off";
+    logical_value, 1, "Low";
+    logical_value, 2, "High";
+  }
+}
+
+Signal_representation {
+  PositionEncoding: SeatPosition;
+  TemperatureEncoding: SeatTemperature;
+  HeatingEncoding: SeatHeating;
+}

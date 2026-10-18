@@ -5,12 +5,25 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      backend:
+        description: Packaging backend
+        type: choice
+        options: [pyinstaller, nuitka]
+        default: pyinstaller
+
+env:
+  # Tag builds use PyInstaller; Nuitka can be chosen when starting the workflow manually
+  BACKEND: ${{ inputs.backend || 'pyinstaller' }}
+  # Same cache location on every runner, so it can be restored between runs
+  NUITKA_CACHE_DIR: ${{ github.workspace }}/.nuitka-cache
 
 jobs:
   bundle:
     name: Bundle for ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    # Nuitka compiles everything to C, which takes considerably longer than PyInstaller
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -19,12 +32,19 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
       - name: Install dependencies
-        run: uv sync --locked --no-default-groups
+        run: uv sync --locked --no-default-groups --group packaging
+      - name: Cache Nuitka compilation
+        if: env.BACKEND == 'nuitka'
+        uses: actions/cache@v4
+        with:
+          path: .nuitka-cache
+          key: nuitka-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+          restore-keys: nuitka-${{ runner.os }}-
       - name: Build bundle
-        run: uv run python packaging/build.py --archive
+        run: uv run python packaging/build.py --backend ${{ env.BACKEND }} --archive
       - uses: actions/upload-artifact@v4
         with:
-          name: CANExplorer-${{ runner.os }}
+          name: CANExplorer-${{ runner.os }}-${{ env.BACKEND }}
           path: dist/CANExplorer-*.zip
           if-no-files-found: error
 

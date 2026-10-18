@@ -2,6 +2,7 @@ import can
 import pytest
 
 from can_explorer.core.decoding import DbcDecoder, FrameDecoder
+from can_explorer.core.frames import Frame
 from can_explorer.core.protocols import PROTOCOL_DECODERS, create_protocol_decoder
 
 
@@ -27,10 +28,29 @@ def test_unknown_or_mismatched_frames(dbc):
 
 
 def test_frame_decoder_combines_protocol_and_database(dbc):
-    decoder = FrameDecoder(create_protocol_decoder('J1939'), dbc)
+    decoder = FrameDecoder(create_protocol_decoder('J1939'))
     msg = can.Message(arbitration_id=0x18FEF1FE, data=bytes([0, 0x00, 0x30, 0, 0, 0, 0, 0]))
-    assert decoder.describe(msg) == 'PGN 0x0FEF1 CCVS1 SA=0xFE DA=0xFF P6 | VehicleSpeed: WheelSpeed=48 km/h'
+    frame = Frame(msg, decoder.describe(msg))
+    assert frame.info == 'PGN 0x0FEF1 CCVS1 SA=0xFE DA=0xFF P6'
+    assert decoder.full_description(frame) == frame.info
+    decoder.database = dbc
+    expected = 'PGN 0x0FEF1 CCVS1 SA=0xFE DA=0xFF P6 | VehicleSpeed: WheelSpeed=48 km/h'
+    assert decoder.full_description(frame) == expected
+    assert frame.details[1] == expected
+    decoder.database = None  # Invalidates the cached description
+    assert decoder.full_description(frame) == frame.info
     assert decoder.describe(can.Message(is_error_frame=True)) == ''
+
+
+def test_database_signal_listing(dbc):
+    keys = [signal.key for signal in dbc.signals()]
+    assert keys == [
+        'EngineData.EngineSpeed',
+        'EngineData.CoolantTemp',
+        'EngineData.GearPosition',
+        'VehicleSpeed.WheelSpeed',
+    ]
+    assert dbc.signals()[0].unit == 'rpm'
 
 
 def test_protocol_registry():

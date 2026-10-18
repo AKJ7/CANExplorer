@@ -8,46 +8,47 @@ readme = "README.md"
 keywords = ['canbus', 'can', 'gui', 'analyze']
 requires-python = ">=3.10"
 dependencies = [
-    "rust-just",
     "PyQt6~=6.9.0",
-    "pyinstaller",
     "python-can",
     "cantools",
-    "click",
-    # "aiofile",
-    "aiohttp",
-    "matplotlib",
-    "numpy",
-    "schema",
     "qasync",
-    "qtrio",
     "pydantic",
     "pydantic-settings",
+    # can_server
+    "aiohttp",
+    "click",
+    "ldfparser==0.26.0",  # Pinned: pre-1.0, minor versions may break the API
 ]
 
 [project.scripts]
 main = "can_explorer.__main__:main"
+can-db-convert = "can_explorer.db_convert:main"
 
 [dependency-groups]
 dev = [
+    "rust-just",
     "black",
     "mypy",
     "pre-commit",
-    # "reportlab",
     "docutils",
     "ruff",
 ]
 test = [
     "pytest",
     "pytest-asyncio",
-    "pytest-schema",
     "pytest-qt",
     "pytest-mock",
     "hypothesis",
 ]
+packaging = [
+    "nuitka>=4.3.1",
+    "patchelf>=0.19.1.0 ; sys_platform == 'linux'",
+    "pyinstaller",
+    "zstandard>=0.25.0",
+]
 
 [tool.uv]
-default-groups = ["dev", "test"]
+default-groups = ["dev", "test", "packaging"]
 
 [tool.pytest.ini_options]
 minversion = "6.0"
@@ -60,25 +61,10 @@ python_functions = "test_*"
 testpaths = "tests"
 asyncio_mode = "auto"
 
-#[tool.pylint]
-#disable = C0111, C0114, C0115, C0116б, W1203, missing-module-docstring, missing-class-docstring, disable=missing-function-docstring
-#
 [tool.black]
 line-length = 120
 include = ".pyi?$"
-#exclude = .git
-#          | \.hg
-#          | \.mypy_cache
-#          | \.tox
-#          | \.venv
-#          | _build
-#          | buck-out
-#          | build
-#          | dist
 skip-string-normalization = true
-
-#[options.entry_points]
-#console_scripts =
 
 [build-system]
 requires = ["hatchling"]

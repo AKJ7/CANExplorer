@@ -1,0 +1,125 @@
+import json
+from typing import Any, Dict, List, Optional
+
+from PyQt6.QtCore import QObject, QSettings, pyqtProperty, pyqtSignal, pyqtSlot
+
+from can_explorer.sys.log_handler import get_logger
+
+logger = get_logger(__name__)
+
+MAX_RECENT = 10
+DEFAULT_MAX_TRACE_ROWS = 100_000
+DEFAULT_REFRESH_INTERVAL_MS = 33
+TRACE_ROWS_RANGE = (1_000, 2_000_000)
+REFRESH_INTERVAL_RANGE = (16, 1_000)
+
+
+class AppState(QObject):
+    """Persistent user state: recent connections and log files, preferences and window geometry."""
+
+    recent_connections_changed = pyqtSignal()
+    recent_log_files_changed = pyqtSignal()
+    preferences_changed = pyqtSignal()
+
+    def __init__(self, settings: Optional[QSettings] = None, parent: Optional[QObject] = None):
+        super().__init__(parent)
+        self._settings = settings if settings is not None else QSettings('AKJ7', 'CANExplorer')
+
+    def _load_list(self, key: str) -> List[Dict[str, Any]]:
+        raw = self._settings.value(key, '[]')
+        try:
+            value = json.loads(raw)
+        except (TypeError, ValueError):
+            logger.warning(f'Ignoring invalid {key!r} in settings')
+            return []
+        return [entry for entry in value if isinstance(entry, dict)] if isinstance(value, list) else []
+
+    def _store_list(self, key: str, entries: List[Dict[str, Any]]) -> None:
+        self._settings.setValue(key, json.dumps(entries))
+        self._settings.sync()
+
+    @staticmethod
+    def _push(entries: List[Dict[str, Any]], entry: Dict[str, Any], identity: str) -> List[Dict[str, Any]]:
+        entries = [existing for existing in entries if existing.get(identity) != entry[identity]]
+        return [entry, *entries][:MAX_RECENT]
+
+    # Recent connections
+
+    @pyqtProperty('QVariantList', notify=recent_connections_changed)
+    def recent_connections(self) -> List[Dict[str, Any]]:
+        return self._load_list('recent/connections')
+
+    def add_recent_connection(self, connection: Dict[str, Any]) -> None:
+        entry = dict(connection)
+        entry['label'] = f'{entry["name"]} ({entry["interface"]}:{entry["channel"]})'
+        entry['identity'] = f'{entry["name"]}|{entry["interface"]}|{entry["channel"]}'
+        self._store_list('recent/connections', self._push(self.recent_connections, entry, 'identity'))
+        self.recent_connections_changed.emit()
+
+    # Recent log files
+
+    @pyqtProperty('QVariantList', notify=recent_log_files_changed)
+    def recent_log_files(self) -> List[Dict[str, Any]]:
+        return self._load_list('recent/log_files')
+
+    def add_recent_log_file(self, path: str, protocol: str, realtime: bool) -> None:
+        entry = {'path': path, 'protocol': protocol, 'realtime': realtime}
+        self._store_list('recent/log_files', self._push(self.recent_log_files, entry, 'path'))
+        self.recent_log_files_changed.emit()
+
+    @pyqtSlot()
+    def clear_recent(self) -> None:
+        self._store_list('recent/connections', [])
+        self._store_list('recent/log_files', [])
+        self.recent_connections_changed.emit()
+        self.recent_log_files_changed.emit()
+
+    # Preferences
+
+    def _int(self, key: str, default: int, bounds: tuple[int, int]) -> int:
+        try:
+            value = int(self._settings.value(key, default))
+        except (TypeError, ValueError):
+            return default
+        return min(max(value, bounds[0]), bounds[1])
+
+    @pyqtProperty(int, notify=preferences_changed)
+    def max_trace_rows(self) -> int:
+        return self._int('preferences/max_trace_rows', DEFAULT_MAX_TRACE_ROWS, TRACE_ROWS_RANGE)
+
+    @pyqtProperty(int, notify=preferences_changed)
+    def refresh_interval_ms(self) -> int:
+        return self._int('preferences/refresh_interval_ms', DEFAULT_REFRESH_INTERVAL_MS, REFRESH_INTERVAL_RANGE)
+
+    @pyqtProperty(int, constant=True)
+    def min_trace_rows(self) -> int:
+        return TRACE_ROWS_RANGE[0]
+
+    @pyqtProperty(int, constant=True)
+    def max_trace_rows_limit(self) -> int:
+        return TRACE_ROWS_RANGE[1]
+
+    @pyqtSlot(int, int)
+    def set_preferences(self, max_trace_rows: int, refresh_interval_ms: int) -> None:
+        rows = min(max(max_trace_rows, TRACE_ROWS_RANGE[0]), TRACE_ROWS_RANGE[1])
+        interval = min(max(refresh_interval_ms, REFRESH_INTERVAL_RANGE[0]), REFRESH_INTERVAL_RANGE[1])
+        self._settings.setValue('preferences/max_trace_rows', rows)
+        self._settings.setValue('preferences/refresh_interval_ms', interval)
+        self._settings.sync()
+        self.preferences_changed.emit()
+
+    # Window geometry
+
+    @pyqtSlot(result='QVariantList')
+    def window_geometry(self) -> List[int]:
+        geometry = self._settings.value('window/geometry')
+        try:
+            values = [int(value) for value in json.loads(geometry)]
+        except (TypeError, ValueError):
+            return []
+        return values if len(values) == 4 and values[2] > 100 and values[3] > 100 else []
+
+    @pyqtSlot(int, int, int, int)
+    def save_window_geometry(self, x: int, y: int, width: int, height: int) -> None:
+        self._settings.setValue('window/geometry', json.dumps([x, y, width, height]))
+        self._settings.sync()
