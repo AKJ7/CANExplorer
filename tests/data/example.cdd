@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Small CANdelaStudio style diagnostic description for the CANExplorer tests -->
+<CANDELA dtdvers="7.0.0">
+  <ECUDOC id="ecudoc">
+    <DATATYPES>
+      <IDENT id="dt_ascii17">
+        <NAME><TUV xml:lang="en-US">ASCII 17</TUV></NAME>
+        <CVALUETYPE bl="136" bo="21" enc="asc" sig="0" df="text" qty="atom" sz="no"/>
+        <PVALUETYPE bl="136" bo="21" enc="asc" sig="0" df="text" qty="atom" sz="no"/>
+      </IDENT>
+      <LINCOMP id="dt_speed">
+        <NAME><TUV xml:lang="en-US">Engine speed</TUV></NAME>
+        <CVALUETYPE bl="16" bo="21" enc="uns" sig="0" df="dec" qty="atom" sz="no"/>
+        <PVALUETYPE bl="32" bo="21" enc="flt" sig="0" df="flt" qty="atom" sz="no"><UNIT>rpm</UNIT></PVALUETYPE>
+        <COMP f="0.25" o="0" s="0" e="65535"/>
+      </LINCOMP>
+      <LINCOMP id="dt_temperature">
+        <NAME><TUV xml:lang="en-US">Temperature</TUV></NAME>
+        <CVALUETYPE bl="8" bo="21" enc="uns" sig="0" df="dec" qty="atom" sz="no"/>
+        <PVALUETYPE bl="32" bo="21" enc="flt" sig="0" df="flt" qty="atom" sz="no"><UNIT>degC</UNIT></PVALUETYPE>
+        <COMP f="1" o="-40" s="0" e="255"/>
+      </LINCOMP>
+      <TEXTTBL id="dt_mode">
+        <NAME><TUV xml:lang="en-US">Driving mode</TUV></NAME>
+        <CVALUETYPE bl="8" bo="21" enc="uns" sig="0" df="dec" qty="atom" sz="no"/>
+        <PVALUETYPE bl="8" bo="21" enc="asc" sig="0" df="text" qty="atom" sz="no"/>
+        <TEXTMAP s="(0)" e="(0)"><TEXT><TUV xml:lang="en-US">Off</TUV></TEXT></TEXTMAP>
+        <TEXTMAP s="(1)" e="(1)"><TEXT><TUV xml:lang="en-US">Eco</TUV></TEXT></TEXTMAP>
+        <TEXTMAP s="(2)" e="(2)"><TEXT><TUV xml:lang="en-US">Sport</TUV></TEXT></TEXTMAP>
+      </TEXTTBL>
+      <IDENT id="dt_u32">
+        <NAME><TUV xml:lang="en-US">uint32</TUV></NAME>
+        <CVALUETYPE bl="32" bo="21" enc="uns" sig="0" df="hex" qty="atom" sz="no"/>
+        <PVALUETYPE bl="32" bo="21" enc="uns" sig="0" df="hex" qty="atom" sz="no"/>
+      </IDENT>
+    </DATATYPES>
+    <ECU id="ecu">
+      <NAME><TUV xml:lang="en-US">Engine control unit</TUV></NAME>
+      <VAR id="var">
+        <DIAGCLASS id="dc_identification">
+          <DIAGINST id="di_vin">
+            <QUAL>VIN</QUAL>
+            <STATICVALUE v="61840"/>
+            <SIMPLECOMPCONT>
+              <DATAOBJ id="do_vin" dtref="dt_ascii17"><QUAL>VehicleIdentificationNumber</QUAL></DATAOBJ>
+            </SIMPLECOMPCONT>
+          </DIAGINST>
+        </DIAGCLASS>
+        <DIAGCLASS id="dc_measurements">
+          <DIAGINST id="di_engine">
+            <QUAL>EngineStatus</QUAL>
+            <STATICVALUE v="61696"/>
+            <SIMPLECOMPCONT>
+              <DATAOBJ id="do_speed" dtref="dt_speed"><QUAL>EngineSpeed</QUAL></DATAOBJ>
+              <DATAOBJ id="do_temperature" dtref="dt_temperature"><QUAL>CoolantTemperature</QUAL></DATAOBJ>
+              <DATAOBJ id="do_mode" dtref="dt_mode"><QUAL>DrivingMode</QUAL></DATAOBJ>
+            </SIMPLECOMPCONT>
+          </DIAGINST>
+          <DIAGINST id="di_hours">
+            <QUAL>OperatingHours</QUAL>
+            <STATICVALUE v="291"/>
+            <SIMPLECOMPCONT>
+              <DATAOBJ id="do_hours" dtref="dt_u32"><QUAL>Hours</QUAL></DATAOBJ>
+            </SIMPLECOMPCONT>
+          </DIAGINST>
+        </DIAGCLASS>
+      </VAR>
+    </ECU>
+  </ECUDOC>
+</CANDELA>

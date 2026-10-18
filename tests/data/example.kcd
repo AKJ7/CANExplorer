@@ -1,0 +1,60 @@
+<NetworkDefinition xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://kayak.2codeornot2code.org/1.0" xsi:noNamespaceSchemaLocation="Definition.xsd">
+  <Document name="CANExplorer test network" version="1.0" author="CANExplorer" company="" date="">
+    Two buses reusing identifier 0x100, scaling, label sets, big endian, signed and multiplexed signals.
+  </Document>
+  <Node id="1" name="Engine"/>
+  <Node id="2" name="Gateway"/>
+
+  <Bus name="Powertrain" baudrate="500000">
+    <Message id="0x100" name="EngineData" length="8" interval="10">
+      <Notes>Engine status</Notes>
+      <Producer>
+        <NodeRef id="1"/>
+      </Producer>
+      <Signal name="EngineSpeed" offset="0" length="16">
+        <Value slope="0.25" unit="rpm"/>
+      </Signal>
+      <Signal name="GearPosition" offset="16" length="4">
+        <LabelSet>
+          <Label name="Neutral" value="0"/>
+          <Label name="First" value="1"/>
+          <Label name="Second" value="2"/>
+        </LabelSet>
+      </Signal>
+      <Signal name="OilPressure" offset="32" length="12" endianess="big">
+        <Value slope="0.5" intercept="-100" unit="kPa"/>
+      </Signal>
+      <Signal name="Torque" offset="48" length="16">
+        <Value type="signed" slope="0.1" unit="Nm"/>
+      </Signal>
+    </Message>
+    <Message id="0x200" name="Diagnosis" length="8">
+      <Producer>
+        <NodeRef id="2"/>
+      </Producer>
+      <Multiplex name="Page" offset="0" length="8">
+        <MuxGroup count="0">
+          <Signal name="BatteryVoltage" offset="8" length="16">
+            <Value slope="0.001" unit="V"/>
+          </Signal>
+        </MuxGroup>
+        <MuxGroup count="1">
+          <Signal name="OperatingHours" offset="8" length="32">
+            <Value unit="h"/>
+          </Signal>
+        </MuxGroup>
+      </Multiplex>
+    </Message>
+  </Bus>
+
+  <Bus name="Chassis" baudrate="250000">
+    <Message id="0x100" name="WheelSpeeds" length="8">
+      <Producer>
+        <NodeRef id="2"/>
+      </Producer>
+      <Signal name="WheelSpeedFrontLeft" offset="0" length="16">
+        <Value slope="0.01" unit="km/h"/>
+      </Signal>
+    </Message>
+  </Bus>
+</NetworkDefinition>

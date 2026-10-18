@@ -11,6 +11,7 @@ TransmitPanel 1.0 TransmitPanel.qml
 SignalsView 1.0 SignalsView.qml
 DiagnosticsView 1.0 DiagnosticsView.qml
 LinScheduleView 1.0 LinScheduleView.qml
+SimulationView 1.0 SimulationView.qml
 EditMenu 1.0 EditMenu.qml
 FileMenu 1.0 FileMenu.qml
 HelpMenu 1.0 HelpMenu.qml

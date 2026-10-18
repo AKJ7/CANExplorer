@@ -1,6 +1,6 @@
 """Command line converter between signal database formats.
 
-Usage: can-db-convert INPUT OUTPUT [--protocol CAN|J1939]
+Usage: can-db-convert INPUT OUTPUT [--protocol CAN|J1939] [--bus NAME]
 
 The formats follow the file extensions: .dbc, .dbf (BUSMASTER), .kcd, .sym and, as input only, .arxml.
 """
@@ -25,9 +25,10 @@ def main(argv=None) -> int:
         choices=['CAN', 'J1939'],
         help='protocol of a DBF output (default: J1939 if the DBC declares ProtocolType "J1939", else CAN)',
     )
+    parser.add_argument('--bus', help='convert only this bus of a database describing several (ARXML cluster, KCD bus)')
     args = parser.parse_args(argv)
     try:
-        report = convert_database(args.input, args.output, args.protocol)
+        report = convert_database(args.input, args.output, args.protocol, args.bus)
     except (OSError, DatabaseFormatError, DbfError) as e:
         print(f'error: {e}', file=sys.stderr)
         return 1

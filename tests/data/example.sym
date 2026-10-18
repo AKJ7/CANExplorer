@@ -1,0 +1,39 @@
+FormatVersion=6.0 // Do not edit this line!
+Title="CANExplorer test symbols"
+
+{ENUMS}
+Enum=Gear(0="Neutral", 1="First", 2="Second")
+
+{SIGNALS}
+Sig=EngineSpeed unsigned 16 /u:rpm /f:0.25
+Sig=GearPosition unsigned 4 /e:Gear
+Sig=OilPressure unsigned 12 -m /u:kPa /f:0.5 /o:-100
+Sig=Torque signed 16 /u:Nm /f:0.1
+
+{SENDRECEIVE}
+
+[EngineData]
+ID=100h	// Engine status
+Len=8
+CycleTime=10
+Sig=EngineSpeed 0
+Sig=GearPosition 16
+Sig=OilPressure 39
+Sig=Torque 48
+
+[Diagnosis]
+ID=200h
+Len=8
+Mux=Page0 0,8 0
+Var=BatteryVoltage unsigned 8,16 /u:V /f:0.001
+
+[Diagnosis]
+Len=8
+Mux=Page1 0,8 1
+Var=OperatingHours unsigned 8,32 /u:h
+
+[VehicleSpeed]
+ID=18FEF1FEh
+Type=Extended
+Len=8
+Var=WheelSpeed unsigned 8,16 /u:km/h /f:0.00390625

@@ -84,18 +84,25 @@ class SignalTracker:
         definition = database.message_definition(msg)
         if definition is None:
             return
-        signals = self._by_message.get(definition.name)
-        if not signals:
+        # Container frames carry several PDUs, each tracked under its own name
+        names = [part.name for part in getattr(definition, 'contained_messages', None) or [definition]]
+        if not any(name in self._by_message for name in names):
             return
         try:
-            values = definition.decode(bytes(msg.data), decode_choices=False, allow_truncated=True)
+            if len(names) > 1 or getattr(definition, 'is_container', False):
+                parts = database.decode_message(definition, msg.data, decode_choices=False)
+            else:
+                parts = [
+                    (definition.name, definition.decode(bytes(msg.data), decode_choices=False, allow_truncated=True))
+                ]
         except Exception:
             return
-        for signal in signals:
-            value = values.get(signal)
-            if isinstance(value, (int, float)):
-                self.series[self.key(definition.name, signal)].append(msg.timestamp, float(value))
-                self._changed = True
+        for name, values in parts:
+            for signal in self._by_message.get(name, ()):
+                value = values.get(signal)
+                if isinstance(value, (int, float)):
+                    self.series[self.key(name, signal)].append(msg.timestamp, float(value))
+                    self._changed = True
 
     def drain_changed(self) -> bool:
         changed, self._changed = self._changed, False

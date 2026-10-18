@@ -471,7 +471,7 @@ def dump_dbf(database: Database, protocol: Optional[str] = None) -> Tuple[str, L
     ]
     message_comments, signal_comments = [], []
     for message in database.messages:
-        if message.contained_messages:
+        if message.is_container:
             warnings.append(f'Container message {message.name!r} written without its contained messages')
         if message.cycle_time is not None:
             warnings.append(f'Cycle time of {message.name!r} is not stored in DBF')

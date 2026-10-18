@@ -9,6 +9,7 @@ from PyQt6.QtGui import QGuiApplication
 
 from can_explorer.core.database_io import WRITE_SUFFIXES, convert_database
 from can_explorer.core.decoding import DATABASE_SUFFIXES, FrameDecoder, open_signal_database
+from can_explorer.core.diagnostic_description import DESCRIPTION_SUFFIXES
 from can_explorer.core.filters import MessageFilter
 from can_explorer.core.frames import parse_can_id, parse_hex_bytes
 from can_explorer.core.ldf import LdfDecoder
@@ -19,6 +20,7 @@ from can_explorer.core.session import BusSession, SessionError, SessionState
 from can_explorer.core.sources import LOG_FILE_SUFFIXES, BusConfig, FileSource, LiveSource, MessageSource
 from can_explorer.gui.app_state import AppState
 from can_explorer.gui.diagnostics import DiagnosticsController
+from can_explorer.gui.simulation import SimulationController
 from can_explorer.gui.models import OverviewModel, TraceModel
 from can_explorer.sys.log_handler import get_logger
 from can_explorer.util import canutils
@@ -26,6 +28,15 @@ from can_explorer.util import canutils
 logger = get_logger(__name__)
 
 STATISTICS_INTERVAL_MS = 1_000
+DATABASE_FORMAT_NAMES = {
+    '.dbc': 'Vector DBC',
+    '.dbf': 'BUSMASTER DBF',
+    '.arxml': 'AUTOSAR ARXML',
+    '.kcd': 'Kayak KCD',
+    '.sym': 'PCAN Symbol',
+    '.ldf': 'LIN description LDF',
+    '.cdd': 'CANdelaStudio CDD',
+}
 FD_DATA_BITRATES = (1_000_000, 2_000_000, 4_000_000, 5_000_000, 8_000_000)
 
 
@@ -73,6 +84,7 @@ class CanConnection(QObject):
         self._frame_count = 0
         self._scheduler: Optional[LinScheduler] = None
         self._diagnostics = DiagnosticsController(self, parent=self)
+        self._simulation = SimulationController(self, parent=self)
         self._timer = QTimer(self)
         self._timer.setInterval(refresh_interval_ms)
         self._timer.timeout.connect(self._refresh)
@@ -205,6 +217,7 @@ class CanConnection(QObject):
     def close(self):
         self.stop_schedule()
         self._diagnostics.shutdown()
+        self._simulation.shutdown()
         self.session.stop()
 
     def set_refresh_interval(self, interval_ms: int):
@@ -306,6 +319,12 @@ class CanConnection(QObject):
     @pyqtSlot(QUrl)
     def load_database(self, url: QUrl):
         path = _local_path(url)
+        if path.suffix.lower() in DESCRIPTION_SUFFIXES:
+            # Diagnostic descriptions describe the ECU's data identifiers, not bus signals
+            error = self._diagnostics.load_description(url)
+            if error:
+                self.error_occurred.emit(error)
+            return
         try:
             database = open_signal_database(path)
         except Exception as e:
@@ -313,8 +332,43 @@ class CanConnection(QObject):
             return
         self.stop_schedule()
         self._scheduler = None
+        self._select_bus(database)
         self.session.decoder.database = database
         logger.info(f'Loaded signal database {path}')
+        self._database_changed()
+
+    def _select_bus(self, database) -> None:
+        """For databases describing several buses, pick the one whose bitrate matches the connection."""
+        buses = getattr(database, 'database', None) and database.database.buses
+        source = self.session.source
+        if not buses or len(buses) < 2 or not isinstance(source, LiveSource):
+            return
+        matching = [bus.name for bus in buses if bus.baudrate == source.config.bitrate]
+        if len(matching) == 1:
+            database.set_bus(matching[0])
+            logger.info(f'Decoding with bus {matching[0]!r} of {database.path.name} (matching bitrate)')
+
+    @pyqtProperty('QStringList', notify=database_changed)
+    def database_buses(self) -> List[str]:
+        database = self.session.decoder.database
+        return list(getattr(database, 'buses', []) or [])
+
+    @pyqtProperty(str, notify=database_changed)
+    def database_bus(self) -> str:
+        return getattr(self.session.decoder.database, 'bus', None) or ''
+
+    @pyqtSlot(str)
+    def set_database_bus(self, bus: str):
+        """Decode with the messages of one bus of the database ('' for all buses)."""
+        database = self.session.decoder.database
+        if database is None or not hasattr(database, 'set_bus'):
+            return
+        try:
+            database.set_bus(bus or None)
+        except ValueError as e:
+            self.error_occurred.emit(str(e))
+            return
+        self.session.decoder.database = database  # Invalidates cached descriptions
         self._database_changed()
 
     @pyqtSlot()
@@ -402,11 +456,15 @@ class CanConnection(QObject):
     def stop_periodic(self):
         self.session.stop_periodic()
 
-    # Diagnostics
+    # Diagnostics and simulation
 
     @pyqtProperty(QObject, constant=True)
     def diagnostics(self) -> DiagnosticsController:
         return self._diagnostics
+
+    @pyqtProperty(QObject, constant=True)
+    def simulation(self) -> SimulationController:
+        return self._simulation
 
     # LIN master schedule
 
@@ -537,12 +595,16 @@ class ConnectionManager(QObject):
 
     @pyqtProperty('QStringList', constant=True)
     def database_file_filters(self) -> List[str]:
-        return [f'Signal databases ({" ".join(f"*{suffix}" for suffix in DATABASE_SUFFIXES)})', 'All files (*)']
+        suffixes = DATABASE_SUFFIXES + DESCRIPTION_SUFFIXES
+        return [
+            f'Signal databases and diagnostic descriptions ({" ".join(f"*{suffix}" for suffix in suffixes)})',
+            *(f'{name} (*{suffix})' for suffix, name in DATABASE_FORMAT_NAMES.items()),
+            'All files (*)',
+        ]
 
     @pyqtProperty('QStringList', constant=True)
     def database_output_filters(self) -> List[str]:
-        names = {'.dbc': 'Vector DBC', '.dbf': 'BUSMASTER DBF', '.kcd': 'Kayak KCD', '.sym': 'PCAN Symbol'}
-        return [f'{names[suffix]} (*{suffix})' for suffix in WRITE_SUFFIXES]
+        return [f'{DATABASE_FORMAT_NAMES[suffix]} (*{suffix})' for suffix in WRITE_SUFFIXES]
 
     @pyqtSlot(QUrl, QUrl, result=str)
     def convert_database(self, source: QUrl, destination: QUrl) -> str:

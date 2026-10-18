@@ -250,3 +250,57 @@ async def test_dbf_database_and_conversion(manager, channel, data_dir, tmp_path)
         == ''
     )
     assert errors and 'Cannot write .txt' in errors[0]
+
+
+async def test_diagnostic_description_and_database_buses(manager, channel, data_dir):
+    # 500 kbit/s matches the Powertrain cluster of example.arxml, which is selected automatically
+    connection = open_connection(manager, channel, bitrate='500000', protocol='UDS')
+    connection.load_database(QUrl.fromLocalFile(str(data_dir / 'example.arxml')))
+    assert connection.database_buses == ['Powertrain', 'Chassis']
+    assert connection.database_bus == 'Powertrain'
+    keys = [info['key'] for info in connection.database_signals]
+    assert 'EngineData.OilPressure' in keys and 'WheelSpeeds.WheelSpeedFrontLeft' not in keys
+    connection.set_database_bus('Chassis')
+    assert connection.database_bus == 'Chassis'
+    assert [info['key'] for info in connection.database_signals] == ['WheelSpeeds.WheelSpeedFrontLeft']
+    connection.set_database_bus('')
+    assert connection.database_bus == ''
+
+    # A CDD loaded as database goes to the diagnostics
+    ecu_session = BusSession(LiveSource(BusConfig('virtual', channel)))
+    ecu_session.start()
+    server = UdsServer(dids={0xF100: bytes([0x0F, 0xA0, 90, 2]), 0xF190: b'WDB1234567890ABCD'})
+    simulator = UdsEcuSimulator(ecu_session, server=server)
+    simulator.start()
+    diagnostics = connection.diagnostics
+    connection.load_database(QUrl.fromLocalFile(str(data_dir / 'example.cdd')))
+    assert diagnostics.description_file.endswith('example.cdd')
+    assert connection.database_file.endswith('example.arxml')  # The signal database is unchanged
+    assert diagnostics.known_dids[:3] == [
+        {'did': '0123', 'name': 'OperatingHours'},
+        {'did': 'F100', 'name': 'EngineStatus'},
+        {'did': 'F190', 'name': 'VIN'},
+    ]
+    assert diagnostics.read_did('F100') == ''
+    await wait_until(lambda: not diagnostics.busy)
+    entry = diagnostics.history[-1]
+    assert entry['description'] == 'EngineStatus: EngineSpeed=1000 rpm, CoolantTemperature=50 degC, DrivingMode=Sport'
+    assert entry['request_description'] == 'ReadDataByIdentifier F1 00 (EngineStatus)'
+    # The trace decoder uses the description as well
+    connection._refresh()
+    infos = [connection.trace.display(row, 6) for row in range(connection.trace.rowCount())]
+    assert any('UDS Positive response to ReadDataByIdentifier: EngineStatus: EngineSpeed=1000 rpm' in i for i in infos)
+    diagnostics.unload_description()
+    assert diagnostics.description_file == ''
+    assert {'did': 'F100', 'name': 'EngineStatus'} not in diagnostics.known_dids
+    assert 'Could not load' in diagnostics.load_description(QUrl.fromLocalFile(str(data_dir / 'example.dbc')))
+    simulator.stop()
+    ecu_session.stop()
+
+
+def test_database_file_filters(manager):
+    first = manager.database_file_filters[0]
+    for suffix in ('*.dbc', '*.dbf', '*.arxml', '*.kcd', '*.sym', '*.ldf', '*.cdd'):
+        assert suffix in first
+    assert 'AUTOSAR ARXML (*.arxml)' in manager.database_file_filters
+    assert 'CANdelaStudio CDD (*.cdd)' in manager.database_file_filters

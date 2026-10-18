@@ -1,8 +1,10 @@
 import asyncio
+from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from PyQt6.QtCore import QObject, QUrl, pyqtProperty, pyqtSignal, pyqtSlot
 
+from can_explorer.core.diagnostic_description import DiagnosticDescription
 from can_explorer.core.frames import format_hex, parse_can_id, parse_hex_bytes
 from can_explorer.core.isotp_client import IsoTpClient
 from can_explorer.core.lin_tp import LinTpClient
@@ -15,6 +17,7 @@ from can_explorer.core.uds import (
     UdsClient,
     UdsError,
     describe_request,
+    describe_response,
     did_name,
     format_did_value,
     load_key_function,
@@ -49,6 +52,7 @@ class DiagnosticsController(QObject):
         self._history: List[Dict[str, Any]] = []
         self._dtcs: List[Dict[str, str]] = []
         self._key_file = ''
+        self._description: Optional[DiagnosticDescription] = None
         self._keep_alive: Optional[SessionKeepAlive] = None
         self._keep_alive_transport = None
 
@@ -86,9 +90,49 @@ class DiagnosticsController(QObject):
     def transport_name(self) -> str:
         return 'LIN transport layer' if self.is_lin else 'ISO-TP'
 
-    @pyqtProperty('QVariantList', constant=True)
+    @pyqtProperty('QVariantList', notify=changed)
     def known_dids(self) -> List[Dict[str, str]]:
-        return [{'did': f'{did:04X}', 'name': name} for did, name in DATA_IDENTIFIERS.items()]
+        """The ECU's identifiers from the loaded description first, then the standardised ones."""
+        dids = dict(self._description.identifiers()) if self._description is not None else {}
+        for did, name in DATA_IDENTIFIERS.items():
+            dids.setdefault(did, name)
+        return [{'did': f'{did:04X}', 'name': name} for did, name in dids.items()]
+
+    @pyqtProperty(str, notify=changed)
+    def description_file(self) -> str:
+        return str(self._description.path) if self._description is not None else ''
+
+    def _did_name(self, did: int) -> str:
+        name = self._description.name(did) if self._description is not None else None
+        return name or did_name(did)
+
+    def _describe_did(self, did: int, data: bytes) -> str:
+        decoded = self._description.describe(did, data) if self._description is not None else None
+        return decoded or f'{did_name(did)} = {format_did_value(did, data)}'
+
+    @pyqtSlot(QUrl, result=str)
+    def load_description(self, url: QUrl) -> str:
+        """Load an ECU diagnostic description (CANdelaStudio .cdd). Returns an error or ''."""
+        path = url.toLocalFile() if url.isLocalFile() else url.toString()
+        try:
+            description = DiagnosticDescription(path)
+        except Exception as e:
+            return f'Could not load {Path(path).name}: {e}'
+        self._set_description(description)
+        logger.info(f'Loaded diagnostic description {path} with {len(description.identifiers())} DIDs')
+        return ''
+
+    @pyqtSlot()
+    def unload_description(self):
+        self._set_description(None)
+
+    def _set_description(self, description: Optional[DiagnosticDescription]):
+        self._description = description
+        # Let the trace decoders (UDS, LIN) name identifiers and decode their data too
+        protocol = self.session.decoder.protocol
+        if protocol is not None and hasattr(protocol, 'description'):
+            protocol.description = description
+        self.changed.emit()
 
     @pyqtProperty('QVariantList', constant=True)
     def sessions(self) -> List[Dict[str, Any]]:
@@ -133,7 +177,7 @@ class DiagnosticsController(QObject):
         self._history.append(
             {
                 'request': format_hex(request),
-                'request_description': describe_request(request),
+                'request_description': describe_request(request, self._description),
                 'response': format_hex(response) if response else '',
                 'description': description,
                 'positive': positive,
@@ -189,7 +233,8 @@ class DiagnosticsController(QObject):
             result = await client.request(request)
             if result.error:
                 raise UdsError(result.error)
-            return result.response, result.description, result.positive or result.response is None
+            description = describe_response(result.response, self._description) if result.response else None
+            return result.response, description or result.description, result.positive or result.response is None
 
         return self._start(request, operation)
 
@@ -209,7 +254,7 @@ class DiagnosticsController(QObject):
             return str(e)
         return self._service(
             bytes([0x22, value >> 8, value & 0xFF]),
-            lambda response: f'{did_name(value)} = {format_did_value(value, bytes(response[3:]))}',
+            lambda response: self._describe_did(value, bytes(response[3:])),
         )
 
     @pyqtSlot(str, str, result=str)
@@ -221,7 +266,9 @@ class DiagnosticsController(QObject):
             return str(e)
         if not payload:
             return 'Enter the data to write'
-        return self._service(bytes([0x2E, value >> 8, value & 0xFF]) + payload, lambda _: f'{did_name(value)} written')
+        return self._service(
+            bytes([0x2E, value >> 8, value & 0xFF]) + payload, lambda _: f'{self._did_name(value)} written'
+        )
 
     @pyqtSlot(QUrl)
     def set_key_file(self, url: QUrl):

@@ -127,7 +127,7 @@ class LinTpReassembler:
         return f'NAD 0x{nad:02X} unknown PCI 0x{pci:02X}', None
 
 
-def describe_diagnostic_payload(payload: bytes, request: bool) -> str:
+def describe_diagnostic_payload(payload: bytes, request: bool, description=None) -> str:
     """Describe a LIN diagnostic payload: node configuration services or UDS."""
     from can_explorer.core.uds import describe_request, describe_response
 
@@ -139,7 +139,7 @@ def describe_diagnostic_payload(payload: bytes, request: bool) -> str:
     if sid in NODE_CONFIGURATION_SERVICES and (request or payload[0] != 0x7F):
         name = NODE_CONFIGURATION_SERVICES[sid]
         return f'{name}{" response" if not request else ""}: {format_hex(payload[1:])}'.rstrip(': ')
-    return describe_request(payload) if request else describe_response(payload)
+    return describe_request(payload, description) if request else describe_response(payload, description)
 
 
 class LinDecoder:
@@ -150,6 +150,8 @@ class LinDecoder:
 
     def __init__(self):
         self._transport = LinTpReassembler()
+        # Optional DiagnosticDescription (CDD) naming data identifiers and decoding their data
+        self.description = None
 
     def reset(self) -> None:
         self._transport.reset()
@@ -167,7 +169,7 @@ class LinDecoder:
             pdu, payload = self._transport.feed(frame_id, data)
             text = f'LIN {"master request" if request else "slave response"} {pdu}'
             if payload is not None:
-                text += f': {describe_diagnostic_payload(payload, request)}'
+                text += f': {describe_diagnostic_payload(payload, request, self.description)}'
             return text
         # The checksum is checked by the LIN driver and not passed on, so it is not shown
         return f'LIN response ID 0x{frame_id:02X} (PID 0x{pid:02X})'

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Protocol
+from typing import Dict, List, Optional, Protocol, Tuple
 
 import can
 import cantools
@@ -34,36 +34,69 @@ class SignalInfo:
 
 
 class DbcDecoder:
-    """Decodes frames into signal values using a signal database (DBC, BUSMASTER DBF, KCD, SYM or ARXML)."""
+    """Decodes frames into signal values using a signal database (DBC, BUSMASTER DBF, KCD, SYM or ARXML).
 
-    def __init__(self, path: str | Path):
+    Databases describing several buses (ARXML clusters, KCD buses) may reuse identifiers on different buses.
+    Select the bus of the connection with `bus`; without it, the first definition of an identifier is used.
+    Container frames (ARXML container I-PDUs) are decoded into their contained PDUs.
+    """
+
+    def __init__(self, path: str | Path, bus: Optional[str] = None):
         self.path = Path(path)
         self.database, self.warnings = load_database(self.path)
         for warning in self.warnings:
             logger.warning(f'{self.path.name}: {warning}')
-        self._lookup: Dict[tuple, Optional[cantools.database.Message]] = {}
+        self.buses: List[str] = [bus.name for bus in self.database.buses]
+        self._bus: Optional[str] = None
+        self._index: Dict[Tuple[int, bool], 'cantools.database.Message'] = {}
+        self.set_bus(bus)
+
+    @property
+    def bus(self) -> Optional[str]:
+        return self._bus
+
+    def set_bus(self, bus: Optional[str]) -> None:
+        """Restrict decoding to the messages of one bus (None: all buses)."""
+        if bus is not None and bus not in self.buses:
+            raise ValueError(f'Unknown bus {bus!r}; the database defines {", ".join(self.buses) or "no buses"}')
+        self._bus = bus
+        self._index = {}
+        conflicts = set()
+        for message in self.messages():
+            key = (message.frame_id, message.is_extended_frame)
+            if key in self._index:
+                conflicts.add(key)
+                continue
+            self._index[key] = message
+        if conflicts:
+            identifiers = ', '.join(f'0x{frame_id:X}' for frame_id, _ in sorted(conflicts))
+            logger.warning(
+                f'{self.path.name}: identifiers {identifiers} are defined on several buses '
+                f'({", ".join(self.buses)}); select the bus of the connection to decode them correctly'
+            )
+
+    @property
+    def conflicting_identifiers(self) -> bool:
+        seen = set()
+        for message in self.messages():
+            key = (message.frame_id, message.is_extended_frame)
+            if key in seen:
+                return True
+            seen.add(key)
+        return False
+
+    def messages(self) -> List['cantools.database.Message']:
+        return [message for message in self.database.messages if self._bus is None or message.bus_name == self._bus]
 
     def message_definition(self, msg: can.Message) -> Optional['cantools.database.Message']:
-        key = (msg.arbitration_id, msg.is_extended_id)
-        try:
-            return self._lookup[key]
-        except KeyError:
-            pass
-        try:
-            definition = self.database.get_message_by_frame_id(msg.arbitration_id)
-        except KeyError:
-            definition = None
-        if definition is not None and definition.is_extended_frame != msg.is_extended_id:
-            definition = None
-        self._lookup[key] = definition
-        return definition
+        return self._index.get((msg.arbitration_id, msg.is_extended_id))
 
     def signals(self) -> List[SignalInfo]:
-        return [
-            SignalInfo(message.name, signal.name, signal.unit or '')
-            for message in sorted(self.database.messages, key=lambda message: message.name)
-            for signal in message.signals
-        ]
+        result = []
+        for message in sorted(self.messages(), key=lambda message: message.name):
+            for part in message.contained_messages or [message]:
+                result += [SignalInfo(part.name, signal.name, signal.unit or '') for signal in part.signals]
+        return result
 
     @staticmethod
     def _format_value(value) -> str:
@@ -71,25 +104,57 @@ class DbcDecoder:
             return f'{value:g}'
         return str(value)
 
+    @staticmethod
+    def decode_message(definition, data: bytes, decode_choices: bool = True) -> List[Tuple[str, Dict[str, object]]]:
+        """Decode a frame into [(message or contained PDU name, signal values)]."""
+        data = bytes(data)
+        if definition.is_container:
+            parts = definition.decode(data, decode_choices=decode_choices, decode_containers=True, allow_truncated=True)
+            result = []
+            for contained, values in parts:
+                if isinstance(contained, int):  # PDU with an unknown header identifier
+                    if contained == 0 and not any(values):
+                        continue  # Zero padding after the last contained PDU
+                    result.append((f'PDU 0x{contained:06X}', {}))
+                else:
+                    result.append((contained.name, values))
+            return result
+        return [(definition.name, definition.decode(data, decode_choices=decode_choices, allow_truncated=True))]
+
     def decode(self, msg: can.Message, decode_choices: bool = True) -> Optional[Dict[str, object]]:
         definition = self.message_definition(msg)
         if definition is None:
             return None
-        return definition.decode(bytes(msg.data), decode_choices=decode_choices, allow_truncated=True)
+        values: Dict[str, object] = {}
+        for _, part_values in self.decode_message(definition, msg.data, decode_choices):
+            values.update(part_values)
+        return values
+
+    def _units(self, definition) -> Dict[str, str]:
+        units = {}
+        for part in definition.contained_messages or [definition]:
+            units.update({signal.name: signal.unit for signal in part.signals if signal.unit})
+        return units
 
     def describe(self, msg: can.Message) -> Optional[str]:
         definition = self.message_definition(msg)
         if definition is None:
             return None
         try:
-            values = definition.decode(bytes(msg.data), decode_choices=True, allow_truncated=True)
+            parts = self.decode_message(definition, msg.data)
         except Exception as e:
             return f'{definition.name}: <cannot decode: {e}>'
-        parts = []
-        for name, value in values.items():
-            unit = definition.get_signal_by_name(name).unit
-            parts.append(f'{name}={self._format_value(value)}{" " + unit if unit else ""}')
-        return f'{definition.name}: {", ".join(parts)}'
+        units = self._units(definition)
+        texts = []
+        for name, values in parts:
+            signals = ', '.join(
+                f'{signal}={self._format_value(value)}{" " + units[signal] if signal in units else ""}'
+                for signal, value in values.items()
+            )
+            texts.append(f'{name}: {signals}' if signals else name)
+        if definition.is_container:
+            return f'{definition.name} [{"; ".join(texts)}]'
+        return texts[0]
 
 
 class FrameDecoder:

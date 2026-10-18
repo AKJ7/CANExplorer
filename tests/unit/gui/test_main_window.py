@@ -1,6 +1,7 @@
 import uuid
 
 import pytest
+from PyQt6.QtCore import QCoreApplication, QEvent
 
 from can_explorer.gui.application_metadata import ApplicationMetadata
 from can_explorer.gui.connection_manager import ConnectionManager
@@ -17,10 +18,15 @@ def window(qapp, qtbot):
         lambda errors: warnings.extend(error.toString() for error in errors),
     )
     yield engine, manager, warnings
-    manager.close_all()
+    # Tear down while the application exists: views of open connections destroyed after the
+    # QApplication (at interpreter exit) crash Qt
+    while manager.connections:
+        manager.remove_connection(0)
     for root in engine.rootObjects():
         root.deleteLater()
     engine.deleteLater()
+    manager.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete.value)
 
 
 def test_main_window_loads_without_warnings(window, qtbot):
@@ -55,3 +61,37 @@ def test_lin_connection_views_render_without_warnings(window, qtbot, data_dir):
     manager.remove_connection(0)
     qtbot.wait(50)
     assert warnings == []
+
+
+def test_database_bus_selector_and_description_render_without_warnings(window, qtbot, data_dir):
+    from PyQt6.QtCore import QUrl
+
+    engine, manager, warnings = window
+    manager.add_connection({'name': 'CAN', 'interface': 'VirtualBus', 'channel': f'qml-{uuid.uuid4().hex}'})
+    connection = manager.connections[-1]
+    connection.load_database(QUrl.fromLocalFile(str(data_dir / 'example.arxml')))
+    connection.load_database(QUrl.fromLocalFile(str(data_dir / 'example.cdd')))
+    qtbot.wait(150)
+    connection.set_database_bus('Chassis')
+    qtbot.wait(50)
+    assert warnings == []
+
+
+def test_simulation_panels_render(window, qtbot, data_dir, tmp_path):
+    from pathlib import Path
+
+    from PyQt6.QtCore import QUrl
+
+    examples = Path(__file__).resolve().parents[3] / 'examples' / 'simulation'
+    engine, manager, warnings = window
+    manager.add_connection({'name': 'Sim', 'interface': 'VirtualBus', 'channel': f'qml-{uuid.uuid4().hex}'})
+    simulation = manager.connections[-1].simulation
+    manager.connections[-1].load_database(QUrl.fromLocalFile(str(examples / 'vehicle.dbc')))
+    assert simulation.add_panel(QUrl.fromLocalFile(str(examples / 'engine_panel.qml'))) == ''
+    broken = tmp_path / 'broken.qml'
+    broken.write_text('import QtQuick 2.15\nItem { property var panel; width: undefined_name }\nsyntax error')
+    assert simulation.add_panel(QUrl.fromLocalFile(str(broken))) == ''
+    qtbot.wait(200)
+    assert warnings == []
+    errors = [line for line in simulation.console if line['level'] == 'error']
+    assert len(errors) == 1 and errors[0]['source'] == 'panel broken' and 'broken.qml' in errors[0]['text']

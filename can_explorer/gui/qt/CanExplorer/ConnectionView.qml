@@ -58,6 +58,15 @@ ColumnLayout {
             text: root.connection.database_file ? qsTr("Unload database") : qsTr("Load database…")
             onClicked: root.connection.database_file ? root.connection.unload_database() : databaseDialog.open()
         }
+        ComboBox {
+            id: busBox
+            visible: root.connection.database_buses.length > 1
+            model: [qsTr("All buses")].concat(root.connection.database_buses)
+            currentIndex: Math.max(0, root.connection.database_buses.indexOf(root.connection.database_bus) + 1)
+            onActivated: index => root.connection.set_database_bus(index === 0 ? "" : currentText)
+            ToolTip.visible: hovered
+            ToolTip.text: qsTr("The database describes several buses; decode with the messages of this one")
+        }
         CheckBox {
             id: autoScrollBox
             text: qsTr("Auto-scroll")
@@ -93,6 +102,11 @@ ColumnLayout {
             width: root.connection.is_lin ? implicitWidth : 0
             visible: root.connection.is_lin
         }
+        TabButton {
+            text: qsTr("Simulation")
+            width: root.connection.can_transmit ? implicitWidth : 0
+            visible: root.connection.can_transmit
+        }
     }
 
     StackLayout {
@@ -123,6 +137,12 @@ ColumnLayout {
         Loader {
             active: root.connection.is_lin
             sourceComponent: LinScheduleView {
+                connection: root.connection
+            }
+        }
+        Loader {
+            active: root.connection.can_transmit
+            sourceComponent: SimulationView {
                 connection: root.connection
             }
         }

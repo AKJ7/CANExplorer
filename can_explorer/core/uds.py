@@ -133,31 +133,41 @@ def nrc_name(code: int) -> str:
     return NEGATIVE_RESPONSE_CODES.get(code, f'0x{code:02X}')
 
 
-def describe_request(payload: bytes) -> str:
+def describe_request(payload: bytes, description=None) -> str:
     if not payload:
         return ''
-    return service_name(payload[0]) + (f' {format_hex(payload[1:])}' if len(payload) > 1 else '')
+    text = service_name(payload[0]) + (f' {format_hex(payload[1:])}' if len(payload) > 1 else '')
+    if payload[0] in (0x22, 0x2E) and len(payload) >= 3 and description is not None:
+        name = description.name(int.from_bytes(payload[1:3], 'big'))
+        if name:
+            text += f' ({name})'
+    return text
 
 
-def describe_response(payload: bytes) -> str:
+def describe_response(payload: bytes, description=None) -> str:
+    """Describe a response; with a DiagnosticDescription, ReadDataByIdentifier data is decoded into fields."""
     if not payload:
         return 'empty response'
     if payload[0] == NEGATIVE_RESPONSE and len(payload) >= 3:
         return f'Negative response to {service_name(payload[1])}: {nrc_name(payload[2])}'
+    if payload[0] == 0x62 and len(payload) >= 3 and description is not None:
+        decoded = description.describe(int.from_bytes(payload[1:3], 'big'), payload[3:])
+        if decoded is not None:
+            return f'Positive response to ReadDataByIdentifier: {decoded}'
     if payload[0] >= 0x40:
         rest = payload[1:]
         return f'Positive response to {service_name(payload[0] - 0x40)}' + (f': {format_hex(rest)}' if rest else '')
     return f'Unexpected response: {format_hex(payload)}'
 
 
-def describe_payload(payload: bytes) -> str:
+def describe_payload(payload: bytes, description=None) -> str:
     """Describe a UDS payload of unknown direction (passive decoding)."""
     if not payload:
         return ''
     if payload[0] == NEGATIVE_RESPONSE or (payload[0] - 0x40) in SERVICES:
-        return describe_response(payload)
+        return describe_response(payload, description)
     if payload[0] in SERVICES:
-        return describe_request(payload)
+        return describe_request(payload, description)
     return ''
 
 
@@ -364,6 +374,8 @@ class UdsDecoder:
         from can_explorer.core.protocols.isotp import IsoTpDecoder
 
         self._isotp = IsoTpDecoder()
+        # Optional DiagnosticDescription (CDD) naming data identifiers and decoding their data
+        self.description = None
 
     def reset(self) -> None:
         self._isotp.reset()
@@ -372,5 +384,5 @@ class UdsDecoder:
         description, payload = self._isotp.feed(msg)
         if payload is None:
             return description
-        uds = describe_payload(payload)
+        uds = describe_payload(payload, self.description)
         return f'{description} | UDS {uds}' if uds else description

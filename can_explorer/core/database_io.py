@@ -32,15 +32,53 @@ def load_database(path: str | Path) -> Tuple[Database, List[str]]:
     return cantools.database.load_file(str(path), strict=False), []
 
 
+def select_bus(database: Database, bus: str) -> None:
+    """Keep only the messages of one bus (ARXML cluster, KCD bus), in place."""
+    names = [candidate.name for candidate in database.buses]
+    if bus not in names:
+        raise DatabaseFormatError(f'Unknown bus {bus!r}; the database defines {", ".join(names) or "no buses"}')
+    kept = [message for message in database.messages if message.bus_name == bus]
+    database.messages.clear()
+    database.messages.extend(kept)
+    database.buses[:] = [candidate for candidate in database.buses if candidate.name == bus]
+    database.refresh()
+
+
+def _content_warnings(database: Database, suffix: str) -> List[str]:
+    """Content that the output formats cannot represent."""
+    warnings = []
+    if len(database.buses) > 1:
+        seen, clashes = {}, set()
+        for message in database.messages:
+            key = (message.frame_id, message.is_extended_frame)
+            if key in seen and seen[key] != message.bus_name:
+                clashes.add(message.frame_id)
+            seen.setdefault(key, message.bus_name)
+        text = f'{len(database.buses)} buses ({", ".join(bus.name for bus in database.buses)}) merged into one'
+        if clashes:
+            text += f'; identifiers {", ".join(f"0x{frame_id:X}" for frame_id in sorted(clashes))} clash'
+        warnings.append(text + ' (convert one bus at a time to avoid this)')
+    if suffix != '.dbf':  # The DBF writer reports this itself
+        for message in database.messages:
+            if message.is_container:
+                warnings.append(f'Container message {message.name!r} written without its contained messages')
+    return warnings
+
+
 def save_database(database: Database, path: str | Path, protocol: Optional[str] = None) -> List[str]:
     """Save to the format given by the extension. Returns warnings about content the format cannot hold."""
     path = Path(path)
     suffix = _suffix(path, WRITE_SUFFIXES, 'write')
+    warnings = _content_warnings(database, suffix)
     if suffix == '.dbf':
-        return dbf.save_dbf(database, path, protocol)
+        return warnings + dbf.save_dbf(database, path, protocol)
     text = {'.dbc': database.as_dbc_string, '.kcd': database.as_kcd_string, '.sym': database.as_sym_string}[suffix]()
     path.write_text(text, encoding='cp1252' if suffix == '.dbc' else 'utf-8', errors='replace')
-    return []
+    return warnings
+
+
+def count_signals(database: Database) -> int:
+    return sum(len(part.signals) for message in database.messages for part in (message.contained_messages or [message]))
 
 
 @dataclass
@@ -61,12 +99,16 @@ class ConversionReport:
         return text
 
 
-def convert_database(source: str | Path, destination: str | Path, protocol: Optional[str] = None) -> ConversionReport:
+def convert_database(
+    source: str | Path, destination: str | Path, protocol: Optional[str] = None, bus: Optional[str] = None
+) -> ConversionReport:
+    """Convert between formats. `bus` keeps only the messages of one bus of a multi-bus database."""
     source, destination = Path(source), Path(destination)
     _suffix(destination, WRITE_SUFFIXES, 'write')
     if source.resolve() == destination.resolve():
         raise DatabaseFormatError('Source and destination are the same file')
     database, warnings = load_database(source)
+    if bus:
+        select_bus(database, bus)
     warnings += save_database(database, destination, protocol)
-    signals = sum(len(message.signals) for message in database.messages)
-    return ConversionReport(source, destination, len(database.messages), signals, warnings)
+    return ConversionReport(source, destination, len(database.messages), count_signals(database), warnings)

@@ -55,6 +55,18 @@ ColumnLayout {
             Layout.preferredWidth: 60
             onEditingFinished: root.applyAddressing()
         }
+        Button {
+            text: root.diagnostics.description_file
+                ? root.diagnostics.description_file.split(/[\\/]/).pop()
+                : qsTr("Description…")
+            ToolTip.visible: hovered
+            ToolTip.text: root.diagnostics.description_file
+                ? qsTr("ECU description loaded; click to unload")
+                : qsTr("Load the ECU's diagnostic description (CANdelaStudio .cdd) to name and decode its DIDs")
+            onClicked: root.diagnostics.description_file
+                ? root.diagnostics.unload_description()
+                : descriptionDialog.open()
+        }
         Switch {
             text: qsTr("Tester present")
             checked: root.diagnostics.tester_present
@@ -274,7 +286,7 @@ ColumnLayout {
                     ColumnLayout {
                         width: parent.width
                         Label {
-                            text: `→ ${modelData.request}   (${modelData.request_description})`
+                            text: `→ ${modelData.request}   ${modelData.request_description}`
                             font.family: "monospace"
                             wrapMode: Text.WrapAnywhere
                             Layout.fillWidth: true
@@ -290,6 +302,14 @@ ColumnLayout {
                 }
             }
         }
+    }
+
+    FileDialog {
+        id: descriptionDialog
+        title: qsTr("ECU diagnostic description")
+        fileMode: FileDialog.OpenFile
+        nameFilters: [qsTr("CANdelaStudio descriptions (*.cdd)"), qsTr("All files (*)")]
+        onAccepted: root.report(root.diagnostics.load_description(selectedFile))
     }
 
     FileDialog {

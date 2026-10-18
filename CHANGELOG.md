@@ -8,6 +8,21 @@ Only `0.0.1` has been tagged so far. Later development stages are listed by date
 ## [Unreleased]
 
 ### Added
+- **Node simulation and scripting** (Simulation tab): Python scripts define simulated nodes (`Node` subclasses)
+  with handlers for start/stop, received messages (by identifier or database name), signal changes and shared
+  variables, timers, sending raw frames or database messages by signal name, and a console. Script errors are
+  contained and reported. QML panels get a `panel` object with live signal and variable values, sending and
+  logging, and drive the nodes through shared variables. Documentation in `docs/scripting.md`, example in
+  `examples/simulation`.
+- **CDD** (Vector CANdelaStudio) diagnostic descriptions, loaded in the Diagnostics tab or with "Load database…": the
+  ECU's data identifiers are listed by name and ReadDataByIdentifier responses are decoded into fields (scaling,
+  units, text tables, text and float encodings, structures and unions) in the Diagnostics tab and in the UDS and LIN
+  trace decoders. Uses an own reader, as cantools' CDD support is deprecated.
+- **ARXML** container frames (container I-PDUs) are decoded into their contained PDUs, whose signals can be plotted.
+- Databases describing several buses (ARXML clusters, KCD buses): the bus of a connection is selected from its
+  bitrate, or chosen in the toolbar, so identifiers reused on other buses are decoded correctly.
+- `can-db-convert --bus` converts one bus of a multi-bus database.
+- Test fixtures and tests for ARXML, KCD, SYM and CDD files.
 - **LIN** support through SocketCAN LIN drivers following the sllin convention (header = RTR frame,
   response = data frame), selectable as bus type in the connection dialog:
   - Passive LIN decoder: headers and responses with protected identifiers, diagnostic transport frames
@@ -62,6 +77,9 @@ Only `0.0.1` has been tagged so far. Later development stages are listed by date
 - Empty `publish`, `release` and `security` workflows.
 
 ### Fixed
+- Converting a multi-bus database or one with container frames lost information silently; it is now reported,
+  and the signal count includes the signals of contained PDUs.
+- The QML window test fixture could crash the test process at exit.
 - The GUI could be starved under sustained traffic because the session never yielded to the event loop.
 - Default bitrate and data bitrate in the connection dialog were not preselected.
 - Channel detection printed a warning for every missing driver and was left pending when quitting.
