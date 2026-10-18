@@ -39,7 +39,7 @@ def test_frame_decoder_combines_protocol_and_database(dbc):
     assert frame.details[1] == expected
     decoder.database = None  # Invalidates the cached description
     assert decoder.full_description(frame) == frame.info
-    assert decoder.describe(can.Message(is_error_frame=True)) == ''
+    assert decoder.describe(can.Message(is_error_frame=True)) == 'error frame'  # Decoded by the bus health module
 
 
 def test_database_signal_listing(dbc):

@@ -1,7 +1,8 @@
 """Command line test runner, e.g. for continuous integration.
 
 Usage: can-test SCRIPT [SCRIPT ...] [--interface virtual] [--channel test] [--database vehicle.dbc]
-                [--simulation nodes.py] [-k FILTER] [--report report.html] [--junit results.xml]
+                [--simulation nodes.py] [-k FILTER] [-r REQUIREMENT] [--report report.html] [--junit results.xml]
+                [--markdown summary.md]
 
 Exit code 0 when all selected test cases passed (or were skipped), 1 when any failed or had an error, 2 when the
 scripts or the bus could not be loaded.
@@ -18,7 +19,7 @@ from can_explorer.core.session import BusSession, SessionState
 from can_explorer.core.sources import BusConfig, LiveSource
 from can_explorer.scripting import ScriptRuntime
 from can_explorer.testing.api import Verdict
-from can_explorer.testing.report import write_report
+from can_explorer.testing.report import to_markdown, write_report
 from can_explorer.testing.runner import TestReport, TestRunner
 
 SYMBOLS = {Verdict.PASSED: 'PASS', Verdict.FAILED: 'FAIL', Verdict.ERROR: 'ERROR', Verdict.SKIPPED: 'SKIP'}
@@ -37,8 +38,19 @@ def _parser() -> argparse.ArgumentParser:
         '--simulation', type=Path, action='append', default=[], help='simulation script to run alongside (repeatable)'
     )
     parser.add_argument('-k', dest='filter', help='run only test cases whose "Module.case" contains this text')
+    parser.add_argument(
+        '-r',
+        '--requirement',
+        dest='requirements',
+        action='append',
+        default=[],
+        help='run only test cases verifying this requirement (repeatable)',
+    )
     parser.add_argument('--report', type=Path, help='write an HTML report')
     parser.add_argument('--junit', type=Path, help='write JUnit XML results')
+    parser.add_argument(
+        '--markdown', type=Path, help='append a Markdown summary to this file, e.g. $GITHUB_STEP_SUMMARY'
+    )
     parser.add_argument('--list', action='store_true', help='list the test cases and exit')
     parser.add_argument('--title', default='CANExplorer test run', help='title of the reports')
     return parser
@@ -101,11 +113,17 @@ async def run(args: argparse.Namespace) -> int:
             failed_loading = True
     if failed_loading:
         return 2
-    selection = {case.key for case in runner.cases if not args.filter or args.filter in case.key}
+    selection = {
+        case.key
+        for case in runner.cases
+        if (not args.filter or args.filter in case.key)
+        and (not args.requirements or set(args.requirements) & set(case.requirements))
+    }
     if args.list:
         for case in runner.cases:
             if case.key in selection:
-                print(f'{case.key}  {case.title}')
+                requirements = f'  [{", ".join(case.requirements)}]' if case.requirements else ''
+                print(f'{case.key}  {case.title}{requirements}')
         return 0
     if not selection:
         print('error: no test cases selected', file=sys.stderr)
@@ -128,6 +146,16 @@ async def run(args: argparse.Namespace) -> int:
         f'failed, {report.count(Verdict.ERROR)} errors, {report.count(Verdict.SKIPPED)} skipped '
         f'in {report.duration:.1f} s'
     )
+    requirements = report.requirements()
+    if requirements:
+        print(f'\n{len(requirements)} requirements:')
+        for requirement, verdict, results in requirements:
+            cases = f'{len(results)} test case{"s" if len(results) != 1 else ""}'
+            print(f'{SYMBOLS.get(verdict, verdict):5} {requirement} ({cases})')
+    if args.markdown:  # Appended, as GitHub Actions collects the job summary of all steps in one file
+        with args.markdown.open('a', encoding='utf-8') as summary:
+            summary.write(to_markdown(report))
+        print(f'Wrote {args.markdown}')
     for path in filter(None, (args.report, args.junit and args.junit.with_suffix('.xml'))):
         print(f'Wrote {write_report(report, path)}')
     return 0 if report.verdict in (Verdict.PASSED, Verdict.SKIPPED) else 1

@@ -45,8 +45,11 @@ nav:
       - Connections: user-guide/connections.md
       - Trace and overview: user-guide/trace-and-overview.md
       - Filters: user-guide/filters.md
+      - Bus health: user-guide/bus-health.md
       - Recording, replay and export: user-guide/recording-and-replay.md
       - Comparing recordings: user-guide/compare-recordings.md
+      - Several buses: user-guide/multi-bus.md
+      - Remote buses: user-guide/remote-buses.md
       - Signal databases: user-guide/signal-databases.md
       - Database editor: user-guide/database-editor.md
       - Signal plots: user-guide/signal-plots.md
@@ -75,6 +78,7 @@ nav:
       - Architecture: development/architecture.md
       - Building and testing: development/building.md
       - Packaging: development/packaging.md
+      - Translations: development/translations.md
       - Contributing: development/contributing.md
   - Changelog: changelog.md
 

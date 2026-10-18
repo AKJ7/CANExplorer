@@ -185,8 +185,9 @@ RowLayout {
                     leftPadding: isModule ? 4 : 28
                     onClicked: if (!isModule) root.tests.show_case(modelData.key)
                     onDoubleClicked: if (!root.tests.running && root.connection.connected) root.tests.run_case(modelData.key)
-                    ToolTip.visible: hovered && modelData.description.length > 0
-                    ToolTip.text: modelData.description
+                    ToolTip.visible: hovered && (modelData.description.length > 0 || (modelData.requirements || "").length > 0)
+                    ToolTip.text: [modelData.description, modelData.requirements ? qsTr("Requirements: %1").arg(modelData.requirements) : ""]
+                        .filter(text => text.length > 0).join("\n")
                     ToolTip.delay: 600
                     contentItem: RowLayout {
                         spacing: 8
@@ -260,6 +261,13 @@ RowLayout {
                 visible: (root.details.description || "") !== ""
                 text: root.details.description || ""
                 color: Theme.muted
+                wrapMode: Text.Wrap
+                Layout.fillWidth: true
+            }
+            Label {
+                visible: (root.details.requirements || "") !== ""
+                text: qsTr("Requirements: %1").arg(root.details.requirements || "")
+                color: Theme.accent
                 wrapMode: Text.Wrap
                 Layout.fillWidth: true
             }

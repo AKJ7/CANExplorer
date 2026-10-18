@@ -4,6 +4,7 @@ Shortcuts follow the conventions of the platform; on macOS use ++cmd++ instead o
 
 | Shortcut | Action |
 |---|---|
+| ++ctrl+k++, ++ctrl+shift+p++ | Command palette: run any command, open any view, tool or connection, switch the theme or the language |
 | ++ctrl+n++ | New connection |
 | ++ctrl+o++ | Replay a log file |
 | ++ctrl+w++ | Close the current connection |

@@ -235,3 +235,96 @@ async def test_start_requires_open_session(data_dir):
     runtime = ScriptRuntime(session, lambda: None)
     with pytest.raises(ScriptError, match='Connect'):
         runtime.start()
+
+
+GATEWAY_SCRIPT = '''
+from can_explorer.scripting import Gateway, Node, on_message, on_signal
+
+
+class PowertrainToBody(Gateway):
+    target = 'Body'
+    ids = ['EngineData', 0x300]
+    both_directions = True
+
+    def transform(self, msg, to_bus):
+        frame = super().transform(msg, to_bus)
+        if to_bus == 'Body' and msg.id == 0x300:
+            frame.arbitration_id = 0x301  # Renumbered on the body side
+        return frame
+
+
+class BodyWatcher(Node):
+    def __init__(self):
+        super().__init__()
+        self.speeds = []
+        self.requests = []
+
+    @on_signal('EngineData', 'EngineSpeed', bus='Body')
+    def speed(self, value, msg):
+        self.speeds.append((msg.bus, value))
+
+    @on_message(0x7DF, bus='Body')
+    def request(self, msg):
+        self.requests.append(msg.data)
+        self.send(0x7E8, [1, 2, 3], bus='Body')  # Answered on the body bus
+'''
+
+
+async def test_gateway_and_nodes_on_other_buses(data_dir, tmp_path):
+    channels = {name: f'{name}-{uuid.uuid4().hex}' for name in ('powertrain', 'body')}
+    sessions = {name: BusSession(LiveSource(BusConfig('virtual', channel))) for name, channel in channels.items()}
+    for session in sessions.values():
+        session.start()
+    database = DbcDecoder(data_dir / 'example.dbc')
+    logs = []
+    runtime = ScriptRuntime(
+        sessions['powertrain'],
+        lambda: database,
+        lambda level, source, text: logs.append((level, source, text)),
+        buses=lambda: {'Body': (sessions['body'], lambda: database)},
+    )
+    powertrain = can.Bus(interface='virtual', channel=channels['powertrain'])
+    body = can.Bus(interface='virtual', channel=channels['body'])
+    try:
+        script = runtime.load(write(tmp_path, 'gateway.py', GATEWAY_SCRIPT))
+        assert script.error == ''
+        gateway, watcher = script.nodes
+        runtime.start()
+        powertrain.send(can.Message(arbitration_id=0x100, is_extended_id=False, data=[0x40, 0x1F, 90, 1, 0, 0, 0, 0]))
+        forwarded = await receive(body)
+        assert forwarded.arbitration_id == 0x100 and bytes(forwarded.data[:2]) == b'\x40\x1f'
+        powertrain.send(can.Message(arbitration_id=0x300, is_extended_id=False, data=[7]))
+        assert (await receive(body)).arbitration_id == 0x301
+        powertrain.send(can.Message(arbitration_id=0x555, is_extended_id=False, data=[1]))  # Not forwarded
+        body.send(can.Message(arbitration_id=0x300, is_extended_id=False, data=[8]))  # Back to powertrain
+        back = await receive(powertrain)
+        assert back.arbitration_id == 0x300 and bytes(back.data) == b'\x08'
+        await asyncio.sleep(0.05)
+        assert body.recv(timeout=0) is None  # Neither 0x555 nor an echo of the frame sent back
+        assert gateway.forwarded == 3
+        # The watcher sees the forwarded frame as sent on the body bus: decoded, but transmitted, so no loop
+        await wait_until(lambda: watcher.speeds)
+        assert watcher.speeds[0] == ('Body', 2000)
+        body.send(can.Message(arbitration_id=0x7DF, is_extended_id=False, data=[2, 1, 0]))
+        answer = await receive(body, lambda msg: msg.arbitration_id == 0x7E8)
+        assert bytes(answer.data) == b'\x01\x02\x03' and watcher.requests == [b'\x02\x01\x00']
+        assert powertrain.recv(timeout=0) is None  # The answer stayed on the body bus
+        runtime.stop()
+
+        # Unknown buses are reported when the simulation starts
+        bad = write(
+            tmp_path,
+            'bad.py',
+            'from can_explorer.scripting import Gateway\n\nclass G(Gateway):\n    target = "Chassis"\n',
+        )
+        runtime.unload(script.path)
+        runtime.load(bad)
+        with pytest.raises(ScriptError, match="Unknown bus 'Chassis'; the other connections are: Body"):
+            runtime.start()
+        assert not runtime.running
+    finally:
+        runtime.stop()
+        powertrain.shutdown()
+        body.shutdown()
+        for session in sessions.values():
+            session.stop()

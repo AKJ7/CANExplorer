@@ -8,6 +8,9 @@ Canvas {
     property color color: Theme.accent
     property string unit: ""
     property string emptyText: qsTr("Waiting for data…")
+    // Points of a full chart (the newest on the right) and the label of the oldest one
+    property int capacity: 60
+    property string startLabel: qsTr("-60 s")
 
     readonly property int labelWidth: 44
 
@@ -15,6 +18,8 @@ Canvas {
     onColorChanged: requestPaint()
     onWidthChanged: requestPaint()
     onHeightChanged: requestPaint()
+    onCapacityChanged: requestPaint()
+    onStartLabelChanged: requestPaint()
     Connections {
         target: Theme
         function onNameChanged() { root.requestPaint() }
@@ -49,7 +54,7 @@ Canvas {
         }
         ctx.textAlign = "left"
         ctx.fillStyle = Theme.muted
-        ctx.fillText(qsTr("-60 s"), left, height - 8)
+        ctx.fillText(startLabel, left, height - 8)
         ctx.textAlign = "right"
         ctx.fillText(qsTr("now"), right, height - 8)
         if (!values || values.length < 2) {
@@ -57,8 +62,8 @@ Canvas {
             ctx.fillText(emptyText, (left + right) / 2, (top + bottom) / 2)
             return
         }
-        const step = (right - left) / 59  // One point per second, the newest on the right
-        const offset = 60 - values.length
+        const step = (right - left) / Math.max(1, capacity - 1)  // The newest point on the right
+        const offset = Math.max(0, capacity - values.length)
         const points = values.map((value, i) => [left + (offset + i) * step, bottom - value / maximum * (bottom - top)])
         ctx.beginPath()
         ctx.moveTo(points[0][0], points[0][1])

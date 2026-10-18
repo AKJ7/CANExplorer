@@ -36,23 +36,28 @@ def on_stop(function: Handler) -> Handler:
     return _mark(function, 'stop')
 
 
-def on_message(*selectors: MessageSelector) -> Callable[[Handler], Handler]:
+def on_message(*selectors: MessageSelector, bus: Optional[str] = None) -> Callable[[Handler], Handler]:
     """Called with a ReceivedMessage for frames with the given identifiers or database message names.
 
     Without selectors the handler receives every frame. A node does not receive the frames it sends itself.
+    `bus` is the name of another connection to receive its frames (decoded with its database); by default the
+    frames of the simulation's own connection.
     """
 
     def decorate(function: Handler) -> Handler:
-        return _mark(function, 'message', tuple(selectors))
+        return _mark(function, 'message', (tuple(selectors), bus))
 
     return decorate
 
 
-def on_signal(message: str, signal: str) -> Callable[[Handler], Handler]:
-    """Called with (value, message) when the decoded value of a signal changes (and when first received)."""
+def on_signal(message: str, signal: str, bus: Optional[str] = None) -> Callable[[Handler], Handler]:
+    """Called with (value, message) when the decoded value of a signal changes (and when first received).
+
+    `bus` is the name of another connection, as for on_message.
+    """
 
     def decorate(function: Handler) -> Handler:
-        return _mark(function, 'signal', (message, signal))
+        return _mark(function, 'signal', (message, signal, bus))
 
     return decorate
 
@@ -69,10 +74,11 @@ def on_variable(name: str) -> Callable[[Handler], Handler]:
 class ReceivedMessage:
     """A frame delivered to a node. `signals` decodes it with the signal database on first access."""
 
-    def __init__(self, msg: can.Message, runtime: 'ScriptRuntime'):
+    def __init__(self, msg: can.Message, runtime: 'ScriptRuntime', bus: Optional[str] = None):
         self.raw = msg
+        self.bus = bus  # Connection name, None for the simulation's own connection
         self._runtime = runtime
-        self._definition = runtime.definition_for(msg)
+        self._definition = runtime.definition_for(msg, bus)
         self._signals: Optional[Dict[str, Any]] = None
 
     @property
@@ -112,13 +118,13 @@ class ReceivedMessage:
     def signals(self) -> Dict[str, Any]:
         """Physical signal values (numbers; use `labels` for the text of value tables)."""
         if self._signals is None:
-            self._signals = self._runtime.decode(self.raw, numeric=True) or {}
+            self._signals = self._runtime.decode(self.raw, numeric=True, bus=self.bus) or {}
         return self._signals
 
     @property
     def labels(self) -> Dict[str, Any]:
         """Signal values with value table texts where defined."""
-        return self._runtime.decode(self.raw, numeric=False) or {}
+        return self._runtime.decode(self.raw, numeric=False, bus=self.bus) or {}
 
     def __repr__(self) -> str:
         return f'<ReceivedMessage {self.name or hex(self.id)} {self.data.hex(" ")}>'
@@ -273,16 +279,17 @@ class Node:
         """Seconds since the simulation started."""
         return self._require_runtime().elapsed
 
-    def message(self, name: str) -> MessageBuffer:
+    def message(self, name: str, bus: Optional[str] = None) -> MessageBuffer:
         """Create a buffer with the signals of a database message, to fill and send.
 
         Args:
             name: Message (or LIN frame) name in the loaded signal database.
+            bus: Name of another connection whose database defines the message.
 
         Raises:
             ScriptError: No database is loaded, or it has no such message.
         """
-        return self._require_runtime().message(name)
+        return self._require_runtime().message(name, bus)
 
     def send(
         self,
@@ -292,6 +299,7 @@ class Node:
         extended: Optional[bool] = None,
         fd: bool = False,
         remote: bool = False,
+        bus: Optional[str] = None,
         **signals: Any,
     ) -> None:
         """Send a frame.
@@ -310,6 +318,8 @@ class Node:
             extended: Extended identifier; defaults to identifiers above 0x7FF.
             fd: Send a CAN FD frame (with bitrate switch).
             remote: Send a remote frame.
+            bus: Name of another connection to send on (e.g. the other side of a gateway); by default the
+                simulation's own connection. Message names are looked up in that connection's database.
             **signals: Signal values when `message` is a database message name.
 
         Raises:
@@ -318,7 +328,7 @@ class Node:
         """
         runtime = self._require_runtime()
         if isinstance(message, str):
-            message = runtime.message(message).update(signals)
+            message = runtime.message(message, bus).update(signals)
         elif signals:
             raise ScriptError('Signal values can only be given with a database message name')
         if isinstance(message, MessageBuffer):
@@ -340,7 +350,7 @@ class Node:
                 dlc=8 if remote and not payload else None,
                 data=payload,
             )
-        runtime.send(self, msg)
+        runtime.send(self, msg, bus)
 
     def every(self, period: float, callback: Handler, *args: Any) -> Timer:
         """Call `callback(*args)` periodically until the simulation stops or the timer is cancelled.
@@ -375,3 +385,66 @@ class Node:
 
     def __repr__(self) -> str:
         return f'<Node {self.name}>'
+
+
+class Gateway(Node):
+    """Forwards frames received on one bus to another, like a gateway ECU between two networks.
+
+    Subclass it and set the class attributes:
+
+    ```python
+    class BodyGateway(Gateway):
+        source = 'Powertrain'        # Connection names; '' is the simulation's own connection
+        target = 'Body'
+        ids = [0x100, 'VehicleSpeed']  # Identifiers or database names of the source bus; None: all frames
+        both_directions = False      # Also forward frames of `ids` from the target to the source
+    ```
+
+    Only received frames are forwarded, so frames sent by the gateway itself (or any other node) never loop.
+    Override `transform(msg, to_bus)` to change frames on the way (e.g. another identifier) or to drop them
+    (return None).
+    """
+
+    source: str = ''
+    target: str = ''
+    ids: Optional[Iterable[MessageSelector]] = None
+    both_directions: bool = False
+
+    def __init__(self):
+        super().__init__()
+        self.forwarded = 0
+
+    @property
+    def buses(self) -> Tuple[str, str]:
+        return self.source, self.target
+
+    def _handlers(self, kind: str) -> List[Tuple[Handler, Any]]:
+        handlers = super()._handlers(kind)
+        if kind == 'message':
+            selectors = tuple(self.ids) if self.ids is not None else ()
+            handlers.append((lambda msg: self._forward(msg, self.target), (selectors, self.source or None)))
+            if self.both_directions:
+                handlers.append((lambda msg: self._forward(msg, self.source), (selectors, self.target or None)))
+        return handlers
+
+    def transform(self, msg: ReceivedMessage, to_bus: str) -> Optional[can.Message]:
+        """The frame to send on `to_bus`; by default an unchanged copy of the received frame."""
+        raw = msg.raw
+        return can.Message(
+            arbitration_id=raw.arbitration_id,
+            is_extended_id=raw.is_extended_id,
+            is_fd=raw.is_fd,
+            bitrate_switch=raw.bitrate_switch,
+            is_remote_frame=raw.is_remote_frame,
+            dlc=raw.dlc,
+            data=bytes(raw.data),
+        )
+
+    def _forward(self, msg: ReceivedMessage, to_bus: str) -> None:
+        if not msg.raw.is_rx:
+            return  # Sent from this side (possibly by the gateway): forwarding it back would loop
+        frame = self.transform(msg, to_bus)
+        if frame is None:
+            return
+        self._require_runtime().send(self, frame, to_bus or None)
+        self.forwarded += 1

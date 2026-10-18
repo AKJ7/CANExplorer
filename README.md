@@ -27,6 +27,8 @@
 - Trace and per-identifier overview (cycle times, changed bytes highlighted, sortable columns), display filters
   such as `100-1FF !123 ext rx fd`, search by text, data pattern or signal condition, and bookmarks
 - Millions of frames per session: older frames are paged to disk
+- Bus health: error state timeline, error frames, TEC/REC and bus load over up to an hour
+- Remote buses: `can-server` shares the interfaces of e.g. a Raspberry Pi in a vehicle over the network
 - Signal plots with zoom and pan over the whole buffer, two cursors with values and statistics, several signals per
   chart and CSV export
 
@@ -36,6 +38,7 @@
   `EngineData.EngineSpeed > 6000`, keeping the time before and after the event
 - Replay at 0.25× to 10× or as fast as possible, with pause and jumping to any position
 - Replay of a recording onto a real bus, filtered and repeated
+- Several buses on one timeline, and simulated gateways forwarding frames between them
 - Comparison of two recordings: identifiers only in one of them, changed cycle times and payloads, and signal
   values, aligned by time, by a trigger identifier or by frame sequence
 
@@ -58,20 +61,22 @@
 **Simulation and test automation**
 - Simulated ECUs written in Python, controlled from QML panels
 - ECU test scripts with checks, timing measurements and UDS requests; pass/fail verdicts in the Tests view or
-  headless with `can-test`, with HTML and JUnit reports for CI
+  headless with `can-test`, with HTML, JUnit and Markdown reports for CI; parametrised test cases and requirement
+  traceability
 
 **Workspace**
 - Connections, databases, filters, plots and scripts saved in one workspace file
-- Dashboard-style interface with six colour themes
+- Dashboard-style interface with six colour themes, a command palette (Ctrl+K) and English and German texts
 
 See the [documentation](https://akj7.github.com/canexplorer/) for a guide to every feature.
 
 ## Installation
 
-### Standalone bundles
+### Installers
 
-Download the archive for your platform from the [releases](https://github.com/AKJ7/CANExplorer/releases), unpack
-it and start `CANExplorer` (`CANExplorer.app` on macOS). No Python installation is needed.
+Download the installer for your platform from the [releases](https://github.com/AKJ7/CANExplorer/releases): a
+`setup.exe` for Windows, an AppImage or `.deb` for Linux and a `.dmg` for macOS (Apple silicon). Portable zip
+archives are attached as well. No Python installation is needed.
 
 ### From source
 
@@ -123,6 +128,7 @@ uv run pytest                                  # Tests (headless Qt, python-can 
 uv run ruff check . && uv run black --check .  # Lint and formatting
 uv run --group docs mkdocs serve               # Documentation preview on http://127.0.0.1:8000
 uv run python packaging/build.py --archive     # Standalone bundle in dist/ (--backend nuitka to compile)
+uv run python packaging/installer.py           # Installers of the platform in dist/installers
 ```
 
 The core (`can_explorer/core`) is Qt-independent asyncio code; `can_explorer/gui` adapts it to the QML interface

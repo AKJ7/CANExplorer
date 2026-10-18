@@ -49,3 +49,31 @@ jobs:
         run: uv sync --locked --python ${{ matrix.python }}
       - name: Run tests
         run: uv run pytest -o log_cli=false
+
+  ecu-tests:
+    name: Example ECU tests against the simulated vehicle
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Install dependencies
+        run: uv sync --locked
+      - name: Run the example test suite
+        # Headless on a virtual bus, with the example simulation as the vehicle; exit code 1 on failed tests
+        run: >
+          uv run can-test examples/testing/vehicle_tests.py
+          --database examples/simulation/vehicle.dbc
+          --simulation examples/simulation/engine_simulation.py
+          --title "Example ECU tests"
+          --report ecu-test-report.html
+          --junit ecu-test-results.xml
+          --markdown "$GITHUB_STEP_SUMMARY"
+      - name: Upload the test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecu-test-reports
+          path: |
+            ecu-test-report.html
+            ecu-test-results.xml

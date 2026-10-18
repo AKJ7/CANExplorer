@@ -36,6 +36,35 @@ ColumnLayout {
         root.model.select_all(selection)
     }
 
+    readonly property int minimumColumnWidth: 30
+
+    // Width of a column: as dragged by the user, else as configured; the filling column takes the rest
+    function columnWidth(column) {
+        const explicit = tableView.explicitColumnWidth(column)
+        if (explicit >= 0)
+            return explicit
+        const width = root.columnWidths[column]
+        if (width !== 0)
+            return width
+        let used = 0
+        for (let other = 0; other < root.columnWidths.length; ++other) {
+            if (other !== column) {
+                const dragged = tableView.explicitColumnWidth(other)
+                used += dragged >= 0 ? dragged : root.columnWidths[other]
+            }
+        }
+        return Math.max(250, tableView.width - used)
+    }
+
+    function setColumnWidth(column, width) {
+        tableView.setColumnWidth(column, Math.max(root.minimumColumnWidth, Math.round(width)))
+    }
+
+    // Back to the configured widths
+    function resetColumnWidths() {
+        tableView.clearColumnWidths()
+    }
+
     spacing: 0
 
     HorizontalHeaderView {
@@ -74,7 +103,50 @@ ColumnLayout {
             }
             TapHandler {
                 enabled: root.sortable
-                onTapped: root.model.sort_by(headerCell.column)
+                onTapped: point => {
+                    if (point.position.x < headerCell.width - resizeHandle.width)  // Not on the resize handle
+                        root.model.sort_by(headerCell.column)
+                }
+            }
+
+            // Drag the right edge to resize the column; a double click restores its width
+            Item {
+                id: resizeHandle
+                objectName: "columnResizeHandle"
+                anchors.right: parent.right
+                width: 8
+                height: parent.height
+                z: 1
+                property real startWidth: 0
+                Rectangle {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 1
+                    height: parent.height * 0.5
+                    color: resizeHover.hovered || resizeDrag.active ? Theme.accent : Theme.border
+                }
+                HoverHandler {
+                    id: resizeHover
+                    cursorShape: Qt.SplitHCursor
+                }
+                DragHandler {
+                    id: resizeDrag
+                    target: null
+                    xAxis.enabled: true
+                    yAxis.enabled: false
+                    cursorShape: Qt.SplitHCursor
+                    onActiveChanged: {
+                        if (active)
+                            resizeHandle.startWidth = root.columnWidth(headerCell.column)  // Also without rows
+                    }
+                    onTranslationChanged: {
+                        if (active)
+                            root.setColumnWidth(headerCell.column, resizeHandle.startWidth + translation.x)
+                    }
+                }
+                TapHandler {
+                    onDoubleTapped: tableView.setColumnWidth(headerCell.column, -1)
+                }
             }
         }
     }
@@ -91,14 +163,7 @@ ColumnLayout {
         Layout.fillHeight: true
         ScrollBar.vertical: ScrollBar {}
         ScrollBar.horizontal: ScrollBar {}
-        columnWidthProvider: function (column) {
-            const width = root.columnWidths[column]
-            if (width === 0) {
-                const used = root.columnWidths.reduce((sum, value) => sum + value, 0)
-                return Math.max(250, tableView.width - used)
-            }
-            return width
-        }
+        columnWidthProvider: column => root.columnWidth(column)
         onWidthChanged: forceLayout()
 
         delegate: Rectangle {

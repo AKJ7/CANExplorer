@@ -79,6 +79,36 @@ Waits see the frames that arrive after they start. Responses can arrive while th
 nodes answer immediately), so the first wait after `t.send` also sees the frames that arrived since the send.
 Frames the test sent itself are never seen.
 
+## Parameters and requirements
+
+`params` runs a test case once per parameter set; each run is a test case of its own, named after its parameters
+(or `ids`), with its own verdict:
+
+```python
+@testcase(params=[800, 2000, 4000])
+async def engine_reaches(self, t, speed): ...           # engine_reaches[800], engine_reaches[2000], ...
+
+@testcase(params=[{'target': 1500, 'gear': 'First'}, {'target': 3000, 'gear': 'Second'}], ids=['low', 'high'])
+async def gear_for_speed(self, t, target, gear): ...    # gear_for_speed[low], gear_for_speed[high]
+```
+
+A dict is passed as keyword arguments, a tuple as positional arguments, anything else as one argument after `t`.
+
+`requirements` names the requirements a test case verifies, for traceability; `requirements` of a `TestModule`
+applies to all its test cases:
+
+```python
+class EngineTests(TestModule):
+    requirements = 'REQ-ENG-001'
+
+    @testcase(requirements=['REQ-ENG-002', 'REQ-GBX-001'])
+    async def speed_follows_the_target(self, t): ...
+```
+
+The HTML report has a *Requirements* table with the verdict of every requirement (failed when any of its test cases
+failed or had an error), JUnit XML lists them as `requirement` properties of the test cases, the Tests view shows
+them with the test case, and `can-test -r REQ-ENG-002` runs only the test cases of a requirement.
+
 ## Running in the application
 
 The **Tests** view is available for connections that can transmit.
@@ -108,23 +138,43 @@ uv run can-test examples/testing/vehicle_tests.py \
 ```text
 PASS  EngineTests.engine_data_is_sent_every_100_ms (1.00 s)
 PASS  EngineTests.engine_is_off_without_ignition (0.10 s)
+PASS  EngineTests.engine_idles_after_ignition_on (2.10 s)
+PASS  EngineTests.speed_follows_the_target[1500 rpm] (1.40 s)
+PASS  EngineTests.speed_follows_the_target[3000 rpm] (1.40 s)
 ...
 SKIP  DiagnosticsTests.read_vin (1.00 s)
 
-7 test cases: 6 passed, 0 failed, 0 errors, 1 skipped in 6.4 s
+8 test cases: 7 passed, 0 failed, 0 errors, 1 skipped in 7.7 s
+
+7 requirements:
+PASS  REQ-ENG-001 (5 test cases)
+PASS  REQ-COM-010 (1 test case)
+...
+SKIP  REQ-DIAG-002 (1 test case)
 ```
 
 With `--simulation`, simulated nodes run on the same bus, so the tests run without hardware; for a real bus give
 the interface, e.g. `--interface socketcan --channel can0 --bitrate 500000`. All options are listed in the
 [command line reference](../reference/command-line.md#can-test).
 
-The JUnit XML file is understood by GitHub Actions, GitLab CI, Jenkins and most other build servers, e.g.:
+## Continuous integration
+
+The JUnit XML file is understood by GitHub Actions, GitLab CI, Jenkins and most other build servers, and
+`--markdown` appends a summary with the requirements and the failed checks to a file, such as the job summary of
+GitHub Actions:
 
 ```yaml
-- run: uv run can-test tests/ecu_tests.py --interface socketcan --channel can0 --junit results.xml
+- run: >
+    uv run can-test tests/ecu_tests.py --interface socketcan --channel can0
+    --junit results.xml --report report.html --markdown "$GITHUB_STEP_SUMMARY"
 - uses: actions/upload-artifact@v4
   if: always()
   with:
     name: test-results
-    path: results.xml
+    path: |
+      results.xml
+      report.html
 ```
+
+CANExplorer's own build workflow runs the example test suite against the example simulation this way on every
+push (the *Example ECU tests* job), so the reports of a run show what the example covers.

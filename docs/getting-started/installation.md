@@ -7,11 +7,27 @@
 - A CAN interface supported by [python-can](https://python-can.readthedocs.io/en/stable/interfaces.html) with
   its driver, or none at all: the `virtual` interface simulates a bus inside the application.
 
-## Standalone bundles
+## Installers
 
-The [installer workflow](../development/packaging.md#continuous-integration) builds bundles for Linux, Windows
-and macOS and attaches them to the GitHub releases. Download the archive for your platform, unpack it and start
-`CANExplorer` (`CANExplorer.app` on macOS). No Python installation is needed.
+Every [release](https://github.com/AKJ7/CANExplorer/releases) has installers; no Python installation is needed.
+
+| Platform | File | Installation |
+|---|---|---|
+| Windows 10/11 (x64) | `CANExplorer-<version>-windows-x86_64-setup.exe` | Run it. It installs for the current user without administrator rights (or for all users, when chosen), adds a start menu entry and can be removed under *Apps* |
+| Linux, any distribution (x86-64) | `CANExplorer-<version>-linux-x86_64.AppImage` | `chmod +x CANExplorer-*.AppImage` and start it; `./CANExplorer-*.AppImage --install-desktop-entry` adds a menu entry |
+| Debian, Ubuntu (x86-64) | `CANExplorer-<version>-linux-x86_64.deb` | `sudo apt install ./CANExplorer-*.deb`; starts from the menu or with `canexplorer` |
+| macOS (Apple silicon) | `CANExplorer-<version>-macos-arm64.dmg` | Open it and drag CANExplorer to *Applications* |
+
+The zip archives of the same release contain the application without installer: unpack and start `CANExplorer`
+(`CANExplorer.app` on macOS). `SHA256SUMS.txt` lists the checksums of all files.
+
+The Linux builds need glibc 2.35 or newer (Ubuntu 22.04, Debian 12, Fedora 36 and later). Intel Macs can use the
+installation from source.
+
+!!! note "Unsigned installers"
+    The installers are not code signed yet. Windows SmartScreen warns about an unknown publisher: choose *More info →
+    Run anyway*. macOS refuses to open apps from unidentified developers: open CANExplorer with a right click →
+    *Open* the first time (or allow it under *System Settings → Privacy & Security*).
 
 ## From source
 

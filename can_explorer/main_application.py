@@ -18,6 +18,7 @@ from typing import Callable, Dict, List
 import signal
 import sys
 from can_explorer.util.gui import get_res_path
+from can_explorer.gui.translations import TranslationManager
 from can_explorer.gui.application_metadata import ApplicationMetadata
 from can_explorer.gui.connection_manager import ConnectionManager
 from can_explorer.desktop import APP_ID
@@ -56,12 +57,22 @@ class MainApplication(QApplication):
         self.metadata = ApplicationMetadata(parent=self)
         self.connection_manager = ConnectionManager(parent=self)
         qInstallMessageHandler(self._message_handler)
+        # Installed before the window is loaded, so its texts are translated from the start
+        self.translations = TranslationManager(self)
+        app_state = self.connection_manager.app_state
+        self.translations.set_language(app_state.language)
+        app_state.language_changed.connect(self._language_changed)
         self._qml_engine = create_qml_engine(
             {'metadata': self.metadata, 'connectionManager': self.connection_manager},
             self._on_qml_warnings,
         )
         self._qml_engine.quit.connect(self.quit)
         signal.signal(signal.SIGINT, signal.SIG_DFL)
+
+    def _language_changed(self) -> None:
+        language = self.translations.set_language(self.connection_manager.app_state.language)
+        self._qml_engine.retranslate()  # Re-evaluates every qsTr binding: the window changes language at once
+        logger.info(f'Interface language: {language}')
 
     @staticmethod
     def _on_qml_warnings(warnings: List[QQmlError]) -> None:

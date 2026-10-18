@@ -19,7 +19,7 @@ ApplicationWindow {
     readonly property var currentConnection: currentIndex >= 0 ? connectionManager.connections[currentIndex] : null
     readonly property var currentConnectionView: currentIndex >= 0 ? connectionViews.itemAt(currentIndex) : null
     property var notifications: []
-    // A tool shown instead of the connections: "", "database-editor" or "compare"
+    // A tool shown instead of the connections: "", "database-editor", "multi-bus" or "compare"
     property string tool: ""
     property bool closeConfirmed: false
     // Dragged with the handle on the right edge of the sidebar
@@ -27,7 +27,46 @@ ApplicationWindow {
     readonly property int maximumSidebarWidth: Math.min(connectionManager.app_state.max_sidebar_width, width / 2)
 
     function currentView() {
-        return tool === "" ? currentConnectionView : null
+        return tool === "" ? currentConnectionView : tool === "multi-bus" ? multiBusView : null
+    }
+
+    // Everything the command palette offers, for the current state of the window
+    function paletteCommands() {
+        const commands = []
+        const add = (category, title, run, shortcut, enabled) =>
+            commands.push({ category: category, title: title, run: run, shortcut: shortcut || "", enabled: enabled !== false })
+        const label = action => action.text.replace("&", "").replace("...", "…")
+        const actions = [
+            [Actions.newConnection, "Ctrl+N"], [Actions.openLogFile, "Ctrl+O"], [Actions.closeConnection, "Ctrl+W"],
+            [Actions.openWorkspace, "Ctrl+Shift+O"], [Actions.saveWorkspace, "Ctrl+S"],
+            [Actions.saveWorkspaceAs, "Ctrl+Shift+S"], [Actions.editDatabase, ""], [Actions.convertDatabase, ""],
+            [Actions.copy, "Ctrl+C"], [Actions.selectAll, "Ctrl+A"], [Actions.preferences, ""],
+            [Actions.about, ""], [Actions.exit, "Ctrl+Q"],
+        ]
+        for (const [action, shortcut] of actions)
+            add(qsTr("Command"), label(action), () => action.trigger(), shortcut, action.enabled)
+        const connection = mainWindow.currentConnection
+        const view = mainWindow.currentConnectionView
+        if (connection && view) {
+            for (const page of view.pages)
+                add(qsTr("View"), page.title, () => { view.page = page.key; mainWindow.tool = "" })
+            add(qsTr("Connection"), connection.connected ? qsTr("Disconnect %1").arg(connection.name)
+                                                        : qsTr("Connect %1").arg(connection.name),
+                () => connection.connected ? connection.close() : connection.open())
+            add(qsTr("Connection"), connection.paused ? qsTr("Resume the trace") : qsTr("Pause the trace"),
+                () => connection.set_paused(!connection.paused))
+            add(qsTr("Connection"), qsTr("Clear the trace and statistics"), () => connection.clear())
+        }
+        connectionManager.connections.forEach((item, index) =>
+            add(qsTr("Go to"), qsTr("Connection %1").arg(item.name), () => { mainWindow.selectedIndex = index; mainWindow.tool = "" }))
+        for (const [key, title] of [["database-editor", qsTr("Database editor")], ["multi-bus", qsTr("Multi-bus trace")],
+                                    ["compare", qsTr("Compare recordings")]])
+            add(qsTr("Tool"), title, () => mainWindow.tool = key)
+        for (const theme of connectionManager.app_state.themes)
+            add(qsTr("Theme"), theme, () => connectionManager.app_state.set_theme(theme))
+        for (const language of connectionManager.app_state.languages)
+            add(qsTr("Language"), language.name, () => connectionManager.app_state.set_language(language.code))
+        return commands
     }
 
     function notify(text) {
@@ -82,6 +121,7 @@ ApplicationWindow {
     }
 
     // The actions have no menu bar to register their shortcuts
+    Shortcut { sequences: ["Ctrl+K", "Ctrl+Shift+P"]; onActivated: Actions.commandPalette.trigger() }
     Shortcut { sequences: [StandardKey.New]; onActivated: Actions.newConnection.trigger() }
     Shortcut { sequences: [StandardKey.Open]; onActivated: Actions.openLogFile.trigger() }
     Shortcut { sequences: [StandardKey.Close]; enabled: Actions.closeConnection.enabled; onActivated: Actions.closeConnection.trigger() }
@@ -221,9 +261,11 @@ ApplicationWindow {
             TopBar {
                 connection: mainWindow.tool === "" ? mainWindow.currentConnection : null
                 title: mainWindow.tool === "database-editor" ? qsTr("Database editor")
-                    : mainWindow.tool === "compare" ? qsTr("Compare recordings") : ""
+                    : mainWindow.tool === "compare" ? qsTr("Compare recordings")
+                    : mainWindow.tool === "multi-bus" ? qsTr("Multi-bus trace") : ""
                 pageTitle: mainWindow.tool === "database-editor" ? connectionManager.database_editor.file_name
                     : mainWindow.tool === "compare" ? compareView.pageTitle
+                    : mainWindow.tool === "multi-bus" ? multiBusView.pageTitle
                     : mainWindow.currentConnectionView ? mainWindow.currentConnectionView.pageTitle : ""
                 notifications: mainWindow.notifications
                 onClearNotifications: mainWindow.notifications = []
@@ -233,6 +275,14 @@ ApplicationWindow {
             DatabaseEditorView {
                 id: databaseEditorView
                 visible: mainWindow.tool === "database-editor"
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.margins: 24
+            }
+
+            MultiBusView {
+                id: multiBusView
+                visible: mainWindow.tool === "multi-bus"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.margins: 24
@@ -545,6 +595,19 @@ ApplicationWindow {
         target: Actions.preferences
         function onTriggered() {
             preferencesDialog.open()
+        }
+    }
+
+    CommandPalette {
+        id: commandPalette
+        parent: Overlay.overlay
+        provider: mainWindow.paletteCommands
+    }
+
+    Connections {
+        target: Actions.commandPalette
+        function onTriggered() {
+            commandPalette.open()
         }
     }
 

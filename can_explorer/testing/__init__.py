@@ -27,9 +27,10 @@ from can_explorer.testing.api import (
     TestModule,
     TestSkipped,
     Verdict,
+    parameter_id,
     testcase,
 )
-from can_explorer.testing.report import to_html, to_junit, write_report
+from can_explorer.testing.report import to_html, to_junit, to_markdown, write_report
 from can_explorer.testing.runner import (
     LoadedTestScript,
     TestCaseInfo,
@@ -55,8 +56,10 @@ __all__ = [
     'TestSkipped',
     'Verdict',
     'load_test_script',
+    'parameter_id',
     'testcase',
     'to_html',
     'to_junit',
+    'to_markdown',
     'write_report',
 ]

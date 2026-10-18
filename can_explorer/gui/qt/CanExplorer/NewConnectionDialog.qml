@@ -93,6 +93,16 @@ Dialog {
                     enabled: !connectionManager.detecting
                     onClicked: connectionManager.detect_channels()
                 }
+                Label {
+                    visible: interfaceBox.currentText === "RemoteBus"
+                    text: qsTr("A bus shared by can-server on another machine: HOST:PORT/BUS, e.g. raspberrypi:8765/vehicle, "
+                               + "with ?token=… when the server needs one")
+                    color: Theme.muted
+                    wrapMode: Text.Wrap
+                    Layout.columnSpan: 3
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: 300
+                }
 
                 Label { text: qsTr("Protocol"); visible: !dialog.lin }
                 ComboBox {

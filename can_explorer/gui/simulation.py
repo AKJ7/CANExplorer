@@ -189,7 +189,12 @@ class SimulationController(QObject):
         self.connection = connection
         self._console: List[Dict[str, str]] = []
         self._panels: List[str] = []
-        self.runtime = ScriptRuntime(connection.session, lambda: connection.session.decoder.database, self.log_line)
+        self.runtime = ScriptRuntime(
+            connection.session,
+            lambda: connection.session.decoder.database,
+            self.log_line,
+            buses=self._other_buses,
+        )
         self._panel = PanelBridge(self)
         self.runtime.add_variable_listener(self._on_variable)
         connection.session.add_message_listener(self._panel.on_message)
@@ -201,6 +206,15 @@ class SimulationController(QObject):
         self._console.append({'time': time.strftime('%H:%M:%S'), 'level': level, 'source': source, 'text': text})
         del self._console[:-MAX_CONSOLE_LINES]
         self.console_changed.emit()
+
+    def _other_buses(self):
+        """The other connections of the application by name, for nodes using several buses (gateways)."""
+        manager = self.connection.parent()
+        buses = {}
+        for connection in getattr(manager, 'connections', []):
+            if connection is not self.connection and connection.name not in buses:
+                buses[connection.name] = (connection.session, lambda c=connection: c.session.decoder.database)
+        return buses
 
     @pyqtProperty('QVariantList', notify=console_changed)
     def console(self) -> List[Dict[str, str]]:

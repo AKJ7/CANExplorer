@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import time
 from collections import deque
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -9,6 +10,7 @@ import can
 from PyQt6.QtCore import QObject, QTimer, QUrl, pyqtProperty, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QGuiApplication
 
+from can_explorer.core.bushealth import BusHealth
 from can_explorer.core.database_io import WRITE_SUFFIXES, convert_database
 from can_explorer.core.decoding import DATABASE_SUFFIXES, FrameDecoder, open_signal_database
 from can_explorer.core.diagnostic_description import DESCRIPTION_SUFFIXES
@@ -24,8 +26,10 @@ from can_explorer.core.log_formats import file_filters
 from can_explorer.core.sources import BusConfig, FileSource, LiveSource, MessageSource
 from can_explorer.gui.app_state import AppState
 from can_explorer.gui.compare import CompareController
+from can_explorer.gui.multibus import MultiBusController
 from can_explorer.gui.database_editor import DatabaseEditorController
 from can_explorer.gui.canopen import CanOpenController
+from can_explorer.gui.bushealth import BusHealthController
 from can_explorer.gui.diagnostics import DiagnosticsController
 from can_explorer.gui.flashing import FlashController
 from can_explorer.gui.j1939 import J1939Controller
@@ -106,10 +110,13 @@ class CanConnection(QObject):
         self.origin: Dict[str, Any] = {}  # How the connection was created, for workspaces
         self._scheduler: Optional[LinScheduler] = None
         self._history: deque = deque(maxlen=HISTORY_SECONDS)
+        self.health = BusHealth()  # Error frames, states and load over the last hour
+        session.add_message_listener(self.health.on_message)
         self._diagnostics = DiagnosticsController(self, parent=self)
         self._j1939 = J1939Controller(self, parent=self)
         self._canopen = CanOpenController(self, parent=self)
         self._flashing = FlashController(self, parent=self)
+        self._bus_health = BusHealthController(self, parent=self)
         self._simulation = SimulationController(self, parent=self)
         self._tests = TestController(self, parent=self)
         self._replay = ReplayPlayback(self, parent=self)
@@ -241,6 +248,7 @@ class CanConnection(QObject):
 
     def _sample_bus_statistics(self):
         snapshot = self.session.sample_bus_statistics()
+        self.health.sample(time.time(), snapshot.rx_rate, snapshot.tx_rate, snapshot.load, self.session.bus_state)
         self._history.append(
             (snapshot.rx_rate, snapshot.tx_rate, -1.0 if snapshot.load is None else snapshot.load * 100)
         )
@@ -619,6 +627,11 @@ class CanConnection(QObject):
         return self._j1939
 
     @pyqtProperty(QObject, constant=True)
+    def bus_health(self) -> BusHealthController:
+        """Error frames, error states and the load over time."""
+        return self._bus_health
+
+    @pyqtProperty(QObject, constant=True)
     def flashing(self) -> FlashController:
         """Programming ECUs over UDS."""
         return self._flashing
@@ -759,6 +772,7 @@ class ConnectionManager(QObject):
         self._workspace_file = ''
         self._database_editor = DatabaseEditorController(parent=self)
         self._compare = CompareController(parent=self)
+        self._multi_bus = MultiBusController(self, parent=self)
         self._database_editor.saved.connect(self._reload_database)
         QGuiApplication.instance().aboutToQuit.connect(self.close_all)
 
@@ -831,6 +845,11 @@ class ConnectionManager(QObject):
     @pyqtProperty(QObject, constant=True)
     def database_editor(self) -> DatabaseEditorController:
         return self._database_editor
+
+    @pyqtProperty(QObject, constant=True)
+    def multi_bus(self) -> MultiBusController:
+        """Several connections in one trace."""
+        return self._multi_bus
 
     @pyqtProperty(QObject, constant=True)
     def compare(self) -> CompareController:

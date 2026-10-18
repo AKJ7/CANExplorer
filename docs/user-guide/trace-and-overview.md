@@ -88,6 +88,12 @@ the trace, overview and signals views have these buttons:
 | Bus selector | Shown for databases describing several buses |
 | Auto-scroll | Keep the newest frame of the trace visible |
 
+## Column widths
+
+Drag the right edge of a column header to make the column wider or narrower; double-click the edge to restore its
+width. The last column (*Info*) takes the remaining width. This works in the trace, the overview and the multi-bus
+trace.
+
 ## Selecting and copying
 
 Click rows to select them; ++shift++ and ++ctrl++ extend the selection. **⋮ → Copy Selected Rows**

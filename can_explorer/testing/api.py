@@ -69,7 +69,15 @@ class CycleTimes:
         )
 
 
-def testcase(function: Optional[Callable] = None, *, title: Optional[str] = None, timeout: float = 30.0):
+def testcase(
+    function: Optional[Callable] = None,
+    *,
+    title: Optional[str] = None,
+    timeout: float = 30.0,
+    params: Optional[Iterable[Any]] = None,
+    ids: Optional[Iterable[str]] = None,
+    requirements: Union[str, Iterable[str]] = (),
+):
     """Mark a method of a TestModule as test case. Test cases run in the order they are defined.
 
     Examples:
@@ -77,20 +85,55 @@ def testcase(function: Optional[Callable] = None, *, title: Optional[str] = None
         @testcase
         async def engine_speed_is_sent(self, t): ...
 
-        @testcase(title='Brake lights follow the pedal', timeout=10)
+        @testcase(title='Brake lights follow the pedal', timeout=10, requirements='REQ-BODY-012')
         async def brake_lights(self, t): ...
+
+        @testcase(params=[800, 2000, 4000])                      # One test case per value
+        async def idle_and_cruise(self, t, speed): ...
+
+        @testcase(params=[{'gear': 1, 'limit': 50}, {'gear': 5, 'limit': 180}], ids=['first', 'fifth'])
+        async def speed_limit(self, t, gear, limit): ...
         ```
 
     Args:
         title: Title in the results; defaults to the method name with spaces.
         timeout: The test case ends with an error when it runs longer (seconds).
+        params: Run the test case once per item: a dict is passed as keyword arguments, a tuple as positional
+            arguments, anything else as one argument after `t`. Each run is a test case of its own, named
+            `method[id]`.
+        ids: Names of the parameter sets in the results; by default the values, e.g. `gear=1,limit=50`.
+        requirements: Requirement identifiers the test case verifies, e.g. 'REQ-ENG-001' or a list of them.
+            The reports list the verdict per requirement.
     """
+    params_list = list(params) if params is not None else None
+    ids_list = list(ids) if ids is not None else None
+    if params_list is not None and ids_list is not None and len(ids_list) != len(params_list):
+        raise ValueError('ids needs one name per parameter set')
+    requirement_list = (requirements,) if isinstance(requirements, str) else tuple(requirements)
 
     def mark(function: Callable) -> Callable:
-        function._testcase = {'order': next(_order), 'title': title, 'timeout': timeout}
+        function._testcase = {
+            'order': next(_order),
+            'title': title,
+            'timeout': timeout,
+            'params': params_list,
+            'ids': ids_list,
+            'requirements': requirement_list,
+        }
         return function
 
     return mark(function) if function is not None else mark
+
+
+def parameter_id(value: Any) -> str:
+    """The name of a parameter set in test case names, e.g. '800' or 'gear=1,limit=50'."""
+    if isinstance(value, dict):
+        return ','.join(f'{key}={parameter_id(item)}' for key, item in value.items())
+    if isinstance(value, tuple):
+        return ','.join(parameter_id(item) for item in value)
+    if isinstance(value, float):
+        return f'{value:g}'
+    return str(value)
 
 
 class TestModule:
@@ -100,12 +143,14 @@ class TestModule:
     `teardown` after the last one; a failing setup marks all test cases of the module as errors.
 
     Attributes:
+        requirements: Requirement identifiers all test cases of the module verify (besides their own).
         uds_request_id: CAN identifier of the UDS requests (`t.uds`), e.g. 0x7E0.
         uds_response_id: CAN identifier of the UDS responses, e.g. 0x7E8.
         uds_extended: Whether the UDS identifiers are extended (29 bit).
     """
 
     __test__ = False  # Not a pytest test class
+    requirements: Union[str, Iterable[str]] = ()
     uds_request_id: Optional[int] = None
     uds_response_id: Optional[int] = None
     uds_extended: bool = False

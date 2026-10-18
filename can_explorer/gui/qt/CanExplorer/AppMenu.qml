@@ -4,6 +4,8 @@ import CanExplorer 1.0
 
 // All application actions; the window has no menu bar.
 Menu {
+    MenuItem { action: Actions.commandPalette }
+    MenuSeparator {}
     MenuItem { action: Actions.newConnection }
     Menu {
         id: recentConnectionsMenu

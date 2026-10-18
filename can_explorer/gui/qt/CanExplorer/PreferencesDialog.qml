@@ -15,6 +15,7 @@ Dialog {
         rowsBox.value = appState.max_trace_rows
         refreshBox.value = appState.refresh_interval_ms
         themeBox.currentIndex = appState.themes.indexOf(appState.theme)
+        languageBox.currentIndex = Math.max(0, languageBox.model.findIndex(item => item.code === appState.language))
         historyBox.value = appState.trace_history
         directoryField.text = appState.trace_directory
     }
@@ -22,6 +23,7 @@ Dialog {
         appState.set_preferences(rowsBox.value, refreshBox.value)
         appState.set_trace_history(historyBox.value, directoryField.text)
         appState.set_theme(themeBox.currentText)
+        appState.set_language(languageBox.currentValue)
     }
 
     GridLayout {
@@ -32,6 +34,17 @@ Dialog {
             id: themeBox
             model: dialog.appState.themes
             Layout.preferredWidth: 180
+        }
+
+        Label { text: qsTr("Language") }
+        ComboBox {
+            id: languageBox
+            model: [{ code: "", name: qsTr("System language") }].concat(dialog.appState.languages)
+            textRole: "name"
+            valueRole: "code"
+            Layout.preferredWidth: 180
+            ToolTip.visible: hovered
+            ToolTip.text: qsTr("Applies at once to the whole interface; texts without a translation stay in English")
         }
 
         Label { text: qsTr("Trace in memory (frames)") }

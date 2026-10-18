@@ -24,6 +24,11 @@ dependencies = [
 main = "can_explorer.__main__:main"
 can-db-convert = "can_explorer.db_convert:main"
 can-test = "can_explorer.testing.cli:main"
+can-server = "can_server.__main__:main"
+
+[project.entry-points."can.interface"]
+# Remote buses shared with can-server, usable as python-can interface "canexplorer_remote" (class RemoteBus)
+canexplorer_remote = "can_explorer.core.remote:RemoteBus"
 
 [project.optional-dependencies]
 mf4 = [
@@ -83,7 +88,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["can_explorer"]
+packages = ["can_explorer", "can_server"]
 
 [tool.ruff]
 line-length = 120

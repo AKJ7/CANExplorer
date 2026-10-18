@@ -19,6 +19,7 @@ Item {
     property alias openWorkspace: openWorkspaceAction
     property alias saveWorkspace: saveWorkspaceAction
     property alias saveWorkspaceAs: saveWorkspaceAsAction
+    property alias commandPalette: commandPaletteAction
 
     // Open a database file in the editor (e.g. the one of a connection)
     signal editDatabaseFile(string path)
@@ -109,6 +110,13 @@ Item {
         id: editDatabaseAction
         text: qsTr("&Edit Signal Database...")
         icon.name: "document-edit"
+    }
+
+    Action {
+        id: commandPaletteAction
+        text: qsTr("Command &Palette...")
+        icon.name: "system-search"
+        shortcut: "Ctrl+K"
     }
 
     Action {

@@ -1,7 +1,7 @@
 import uuid
 
 import pytest
-from PyQt6.QtCore import QCoreApplication, QEvent
+from PyQt6.QtCore import QCoreApplication, QEvent, QObject
 
 from can_explorer.gui.application_metadata import ApplicationMetadata
 from can_explorer.gui.connection_manager import ConnectionManager
@@ -60,7 +60,17 @@ def test_dashboard_pages_and_themes_render_without_warnings(window, qtbot):
         stack.extend(item.childItems())
     view = stack[-1]
     pages = [page['key'] for page in view.property('pages').toVariant()]
-    assert pages == ['dashboard', 'trace', 'overview', 'signals', 'diagnostics', 'flash', 'simulation', 'tests']
+    assert pages == [
+        'dashboard',
+        'trace',
+        'overview',
+        'signals',
+        'health',
+        'diagnostics',
+        'flash',
+        'simulation',
+        'tests',
+    ]
     for page in pages:
         view.setProperty('page', page)
         qtbot.wait(30)
@@ -530,4 +540,185 @@ def test_compare_tool_renders_without_warnings(window, qtbot, data_dir):
     qtbot.wait(100)
     window_item.setProperty('tool', '')
     qtbot.wait(50)
+    assert warnings == []
+
+
+def test_multi_bus_tool_renders_without_warnings(window, qtbot):
+    from PyQt6 import sip
+    from PyQt6.QtQuick import QQuickWindow
+
+    engine, manager, warnings = window
+    for name in ('Powertrain', 'Body'):
+        manager.add_connection({'name': name, 'interface': 'VirtualBus', 'channel': f'qml-{uuid.uuid4().hex}'})
+    manager.multi_bus.set_selected('Body', True)
+    window_item = sip.cast(engine.rootObjects()[0], QQuickWindow)
+    window_item.setProperty('tool', 'multi-bus')
+    qtbot.wait(150)
+    window_item.setProperty('tool', '')
+    qtbot.wait(50)
+    assert warnings == []
+
+
+def test_bus_health_page_renders_without_warnings(window, qtbot):
+    import time
+
+    import can
+    from PyQt6 import sip
+    from PyQt6.QtQuick import QQuickWindow
+
+    from can_explorer.core.bushealth import ERR_BUSOFF, ERR_CNT, ERR_CRTL
+
+    engine, manager, warnings = window
+    manager.add_connection({'name': 'Bus', 'interface': 'VirtualBus', 'channel': f'qml-{uuid.uuid4().hex}'})
+    connection = manager.connections[-1]
+    now = time.time()
+    for second in range(120):
+        if second == 50:
+            connection.health.on_message(
+                can.Message(arbitration_id=ERR_CRTL | ERR_CNT, is_error_frame=True, data=[0, 0x20, 0, 0, 0, 0, 130, 2])
+            )
+        if second == 80:
+            connection.health.on_message(can.Message(arbitration_id=ERR_BUSOFF, is_error_frame=True, data=bytes(8)))
+        connection.health.sample(now - 120 + second, 100, 10, 0.2, None)
+    stack = [sip.cast(engine.rootObjects()[0], QQuickWindow).contentItem()]
+    while not stack[-1].metaObject().className().startswith('ConnectionView'):
+        item = stack.pop()
+        stack.extend(item.childItems())
+    view = stack[-1]
+    view.setProperty('page', 'health')
+    connection.bus_health.set_window(600)
+    qtbot.wait(150)
+    assert warnings == []
+
+
+def test_command_palette_and_language(window, qtbot):
+    from PyQt6 import sip
+    from PyQt6.QtQuick import QQuickWindow
+
+    from can_explorer.gui.translations import TranslationManager
+
+    engine, manager, warnings = window
+    manager.add_connection({'name': 'Vehicle', 'interface': 'VirtualBus', 'channel': f'qml-{uuid.uuid4().hex}'})
+    qtbot.wait(50)
+    root = sip.cast(engine.rootObjects()[0], QQuickWindow)
+    js_root = engine.newQObject(root)
+
+    def commands():
+        array = js_root.property('paletteCommands').callWithInstance(js_root)
+        return [
+            (array.property(i).property('category').toString(), array.property(i).property('title').toString())
+            for i in range(array.property('length').toInt())
+        ]
+
+    titles = set(commands())
+    assert {('View', 'Bus health'), ('Tool', 'Compare recordings'), ('Theme', 'Dark')} <= titles
+    assert {('Command', 'New Connection…'), ('Connection', 'Connect Vehicle'), ('Language', 'Deutsch')} <= titles
+
+    palette = next(
+        item for item in root.findChildren(QObject) if item.metaObject().className().startswith('CommandPalette')
+    )
+    js_palette = engine.newQObject(palette)
+    js_palette.property('open').callWithInstance(js_palette)
+    qtbot.wait(100)
+    field = [child for child in palette.findChildren(QObject) if 'TextField' in child.metaObject().className()][0]
+    field.setProperty('text', 'cmpr rec')
+    qtbot.wait(50)
+    matches = js_palette.property('matches')
+    assert matches.property(0).property('title').toString() == 'Compare recordings'
+    js_palette.property('run').callWithInstance(js_palette, [0])
+    qtbot.wait(50)
+    assert root.property('tool') == 'compare' and not palette.property('opened')
+
+    # Switching the language retranslates the window at once
+    translations = TranslationManager(QCoreApplication.instance())
+    translations.set_language('de')
+    engine.retranslate()
+    qtbot.wait(50)
+    assert ('Werkzeug', 'Aufzeichnungen vergleichen') in set(commands())
+    translations.set_language('en')
+    engine.retranslate()
+    qtbot.wait(50)
+    assert warnings == []
+
+
+def test_combo_box_lists_show_their_texts(window, qtbot):
+    """The styled ComboBox shows the texts of plain lists and of arrays of objects with a textRole."""
+    from PyQt6 import sip
+    from PyQt6.QtQuick import QQuickItem, QQuickWindow
+
+    engine, manager, warnings = window
+    root = sip.cast(engine.rootObjects()[0], QQuickWindow)
+    dialog = next(
+        item for item in root.findChildren(QObject) if item.metaObject().className().startswith('PreferencesDialog')
+    )
+    dialog.open()
+    qtbot.wait(100)
+    boxes = [item for item in dialog.findChildren(QObject) if 'ComboBox' in item.metaObject().className()]
+    texts = []
+    for box in boxes[:2]:  # Theme (a list of strings) and language (objects with textRole "name")
+        popup = engine.newQObject(box).property('popup')
+        popup.toQObject().setProperty('visible', True)
+        qtbot.wait(100)
+        stack = [sip.cast(popup.property('contentItem').toQObject(), QQuickItem)]
+        shown = []
+        while stack:
+            item = stack.pop()
+            if 'ItemDelegate' in item.metaObject().className():
+                shown.append(item.property('text'))
+            stack.extend(item.childItems())
+        texts.append(set(shown))
+        popup.toQObject().setProperty('visible', False)
+    assert {'Dark', 'Light'} <= texts[0]
+    assert texts[1] == {'System language', 'English', 'Deutsch'}
+    dialog.close()
+    assert warnings == []
+
+
+def test_table_columns_can_be_resized(window, qtbot):
+    from PyQt6 import sip
+    from PyQt6.QtCore import QPoint, QPointF, Qt
+    from PyQt6.QtQuick import QQuickWindow
+    from PyQt6.QtTest import QTest
+
+    engine, manager, warnings = window
+    manager.add_connection({'name': 'Bus', 'interface': 'VirtualBus', 'channel': f'qml-{uuid.uuid4().hex}'})
+    qtbot.wait(50)
+    root = sip.cast(engine.rootObjects()[0], QQuickWindow)
+
+    def items(start, class_prefix):
+        found, stack = [], [start]
+        while stack:
+            item = stack.pop()
+            if item.metaObject().className().startswith(class_prefix) and item.isVisible():
+                found.append(item)
+            stack.extend(item.childItems())
+        return found
+
+    view = items(root.contentItem(), 'ConnectionView')[0]
+    for page in ('trace', 'overview'):
+        view.setProperty('page', page)
+        qtbot.wait(150)
+        table = items(view, 'FrameTable')[0]
+        js_table = engine.newQObject(table)
+
+        def width(column, js_table=js_table):
+            return js_table.property('columnWidth').callWithInstance(js_table, [column]).toNumber()
+
+        handles = [item for item in items(table, 'QQuickItem') if item.objectName() == 'columnResizeHandle']
+        handle = min(handles, key=lambda item: item.mapToScene(QPointF(0, 0)).x())  # The first column's
+        before = width(0)
+        start = handle.mapToScene(QPointF(handle.width() / 2, handle.height() / 2)).toPoint()
+        QTest.mousePress(root, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, start)
+        for step in range(1, 13):
+            QTest.mouseMove(root, start + QPoint(step * 5, 0))
+            qtbot.wait(10)
+        QTest.mouseRelease(root, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, start + QPoint(60, 0))
+        qtbot.wait(50)
+        assert abs(width(0) - (before + 60)) <= 6, (page, before, width(0))
+        headers = [table.property('model').headerData(i, Qt.Orientation.Horizontal) for i in range(3)]
+        assert not any(text.endswith(('▲', '▼')) for text in headers)  # Resizing does not sort
+        start = handle.mapToScene(QPointF(handle.width() / 2, handle.height() / 2)).toPoint()
+        QTest.mouseDClick(root, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, start)
+        qtbot.wait(50)
+        assert width(0) == before  # A double click restores the configured width
     assert warnings == []

@@ -239,3 +239,102 @@ def test_command_line(tmp_path, capsys):
     assert can_test(args + ['-k', 'nothing matches']) == 2
     assert can_test([str(tmp_path / 'missing.py')]) == 2
     assert can_test(args[:1] + ['--report', str(tmp_path / 'report.txt')]) == 2
+
+
+PARAMETRISED = '''
+from can_explorer.testing import TestModule, testcase
+
+
+class Limits(TestModule):
+    requirements = 'REQ-SYS-001'
+
+    @testcase(params=[1, 2.5, 7], requirements='REQ-LIM-001')
+    async def below_five(self, t, value):
+        t.check(value < 5, f'{value} < 5')
+
+    @testcase(params=[{'gear': 1, 'limit': 50}, {'gear': 5, 'limit': 180}], ids=['first', 'fifth'])
+    async def keywords(self, t, gear, limit):
+        t.check_equal(limit, {1: 50, 5: 180}[gear], f'limit of gear {gear}')
+
+    @testcase(params=[(1, 2), (3, 4)], requirements=['REQ-LIM-001', 'REQ-LIM-002'])
+    def positional(self, t, low, high):
+        t.check(low < high, 'ordered')
+
+    @testcase
+    async def plain(self, t):
+        t.skip('not today')
+'''
+
+
+async def test_parameters_and_requirements(tmp_path):
+    path = tmp_path / 'limits.py'
+    path.write_text(PARAMETRISED)
+    loaded = load_test_script(path)
+    cases = loaded.modules[0].cases
+    assert [case.name for case in cases] == [
+        'below_five[1]',
+        'below_five[2.5]',
+        'below_five[7]',
+        'keywords[first]',
+        'keywords[fifth]',
+        'positional[1,2]',
+        'positional[3,4]',
+        'plain',
+    ]
+    assert cases[3].title == 'Keywords [first]' and cases[3].kwargs == {'gear': 1, 'limit': 50}
+    assert cases[0].requirements == ('REQ-SYS-001', 'REQ-LIM-001') and cases[-1].requirements == ('REQ-SYS-001',)
+
+    session = BusSession(LiveSource(BusConfig('virtual', f'tests-{uuid.uuid4().hex}')))
+    session.start()
+    runner = TestRunner(session, lambda: None)
+    runner.load(path)
+    report = await runner.run()
+    session.stop()
+    verdicts = {result.name: result.verdict for result in report.results}
+    assert verdicts['below_five[7]'] == Verdict.FAILED and verdicts['below_five[2.5]'] == Verdict.PASSED
+    assert verdicts['keywords[fifth]'] == Verdict.PASSED and verdicts['positional[3,4]'] == Verdict.PASSED
+    requirements = {requirement: (verdict, len(results)) for requirement, verdict, results in report.requirements()}
+    assert requirements == {
+        'REQ-SYS-001': (Verdict.FAILED, 8),
+        'REQ-LIM-001': (Verdict.FAILED, 5),
+        'REQ-LIM-002': (Verdict.PASSED, 2),
+    }
+    junit = ET.fromstring(to_junit(report).split('\n', 1)[1])
+    case = junit.find(".//testcase[@name='positional[1,2]']")
+    assert [prop.get('value') for prop in case.iter('property')] == ['REQ-SYS-001', 'REQ-LIM-001', 'REQ-LIM-002']
+    page = to_html(report)
+    assert '<h2>Requirements</h2>' in page and '<span class="req">REQ-LIM-002</span>' in page
+
+    with pytest.raises(ValueError, match='one name per parameter set'):
+        from can_explorer.testing import testcase
+
+        testcase(params=[1, 2], ids=['one'])
+
+
+def test_command_line_requirements(tmp_path, capsys):
+    path = tmp_path / 'limits.py'
+    path.write_text(PARAMETRISED)
+    channel = ['--channel', f'cli-{uuid.uuid4().hex}']
+    assert can_test([str(path), *channel, '--list', '-r', 'REQ-LIM-002']) == 0
+    assert capsys.readouterr().out.splitlines() == [
+        'Limits.positional[1,2]  Positional [1,2]  [REQ-SYS-001, REQ-LIM-001, REQ-LIM-002]',
+        'Limits.positional[3,4]  Positional [3,4]  [REQ-SYS-001, REQ-LIM-001, REQ-LIM-002]',
+    ]
+    assert can_test([str(path), *channel, '-r', 'REQ-LIM-002']) == 0
+    output = capsys.readouterr().out
+    assert '2 requirements' not in output and 'PASS  REQ-LIM-002 (2 test cases)' in output
+    assert can_test([str(path), *channel]) == 1
+    assert 'FAIL  REQ-LIM-001 (5 test cases)' in capsys.readouterr().out
+
+
+def test_markdown_summary(tmp_path, capsys):
+    path = tmp_path / 'limits.py'
+    path.write_text(PARAMETRISED)
+    summary = tmp_path / 'step_summary'  # Like $GITHUB_STEP_SUMMARY: no extension, appended to
+    summary.write_text('Earlier step\n')
+    assert can_test([str(path), '--channel', f'cli-{uuid.uuid4().hex}', '--markdown', str(summary)]) == 1
+    text = summary.read_text()
+    assert text.startswith('Earlier step\n## ❌ CANExplorer test run')
+    assert '| REQ-LIM-002 | ✅ passed | Limits.positional[1,2], Limits.positional[3,4] |' in text
+    assert '| Limits.below_five[7] | ❌ failed |' in text and '7 < 5' in text
+    assert '| Limits.plain | ⏭️ skipped |' in text and 'not today' in text

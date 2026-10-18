@@ -33,8 +33,8 @@ Runs [test scripts](../user-guide/test-automation.md) on a bus without the user 
 
 ```text
 can-test [-h] [--interface INTERFACE] [--channel CHANNEL] [--bitrate BITRATE] [--fd] [--data-bitrate DATA_BITRATE]
-         [--database DATABASE] [--simulation SIMULATION] [-k FILTER] [--report REPORT] [--junit JUNIT]
-         [--list] [--title TITLE] scripts [scripts ...]
+         [--database DATABASE] [--simulation SIMULATION] [-k FILTER] [-r REQUIREMENT] [--report REPORT]
+         [--junit JUNIT] [--markdown MARKDOWN] [--list] [--title TITLE] scripts [scripts ...]
 ```
 
 | Argument | Description |
@@ -46,13 +46,32 @@ can-test [-h] [--interface INTERFACE] [--channel CHANNEL] [--bitrate BITRATE] [-
 | `--database` | Signal database for messages and signals by name |
 | `--simulation` | Simulation script to run on the same bus (repeatable), e.g. to test without hardware |
 | `-k` | Run only the test cases whose `Module.case` contains this text |
+| `-r`, `--requirement` | Run only the test cases verifying this requirement (repeatable) |
 | `--report` | Write an HTML report |
 | `--junit` | Write JUnit XML results |
-| `--list` | List the test cases and exit |
+| `--markdown` | Append a Markdown summary to this file, e.g. `$GITHUB_STEP_SUMMARY` |
+| `--list` | List the test cases (with their requirements) and exit |
 | `--title` | Title of the reports |
 
 Exit code: 0 when all test cases passed (or were skipped), 1 when any failed or had an error, 2 when the scripts,
 the database or the bus could not be loaded.
+
+## can-server
+
+Shares CAN interfaces of this computer with CANExplorer on other computers, see [Remote buses](../user-guide/remote-buses.md).
+
+```text
+can-server --bus NAME=INTERFACE:CHANNEL[:BITRATE[:DATA_BITRATE]] [--bus ...] [--host HOST] [--port PORT]
+           [--token TOKEN] [-v]
+```
+
+| Argument | Description |
+|---|---|
+| `--bus` | A bus to share, e.g. `vehicle=socketcan:can0:500000` (repeatable); a data bitrate enables CAN FD |
+| `--host` | Address to listen on; default `0.0.0.0` |
+| `--port` | TCP port; default 8765 |
+| `--token` | Token clients must present; also from `CAN_SERVER_TOKEN` |
+| `-v`, `--verbose` | Log every client connection and bus event |
 
 ## can-db-convert
 

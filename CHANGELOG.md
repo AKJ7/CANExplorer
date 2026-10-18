@@ -8,6 +8,29 @@ Only `0.0.1` has been tagged so far. Later development stages are listed by date
 ## [Unreleased]
 
 ### Added
+- **Installers**: `packaging/installer.py` creates a Windows setup (Inno Setup), a Linux AppImage and `.deb`
+  package and a macOS disk image from the bundle. The new `release` workflow (replacing `installer`) builds them
+  on the three platforms, installs each to check it starts, stores them as artifacts and publishes them with
+  checksums as a GitHub release for `v*` tags, after checking the tag matches the project version.
+- **Several buses in one view**: the *Multi-bus trace* tool merges the traces of chosen connections on one
+  timeline with a Bus column, each frame decoded with its own connection's protocol and database. Simulation nodes
+  receive and send on other connections (`bus='Body'` in `@on_message`, `@on_signal`, `send` and `message`), and
+  the new `Gateway` node forwards frames between two buses, optionally changed by `transform`, without loops.
+- **Bus health** view: error state (active, warning, passive, bus off) with a timeline, error frames, TEC/REC
+  error counters and bus load over the last minute, ten minutes or hour, and the decoded error events. Error frames
+  (SocketCAN layout) are decoded in the trace as well.
+- **Remote buses**: `can-server` shares the CAN interfaces of a computer (e.g. a Raspberry Pi in a vehicle) over
+  WebSocket, with an optional token; CANExplorer connects with the new *RemoteBus* interface (python-can interface
+  `canexplorer_remote`, also usable by `can-test` and scripts).
+- **Test automation for CI**: parametrised test cases (`@testcase(params=…, ids=…)`), requirement identifiers per
+  test case or module with a requirements table in the HTML report, JUnit properties and `can-test -r REQ`,
+  Markdown summaries (`--markdown`, e.g. `$GITHUB_STEP_SUMMARY`), and the example test suite runs against the
+  example simulation in the build workflow.
+- **Command palette** (Ctrl+K, Ctrl+Shift+P): every command, view, tool, connection, theme and language by typing
+  a few letters.
+- **Translations**: the interface can be switched to German in the preferences or the command palette, at once
+  without restarting; translation files are Qt Linguist `.ts` files kept up to date by
+  `tools/update_translations.py`.
 - **Comparing recordings** (*Tools* → *Compare recordings*): two log files side by side — identifiers only in
   one of them, changed cycle times, lengths and payloads, paired by start time, by the first frame of an
   identifier or by frame sequence; with a signal database, value ranges, means and differences of every signal;

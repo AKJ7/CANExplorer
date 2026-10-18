@@ -82,6 +82,11 @@ self.send(0x10, remote=True)                 # Remote frame (a header on LIN)
 
 The complete Python API is in the [scripting API reference](../reference/scripting-api.md).
 
+## Several buses
+
+Nodes can receive and send on the other connections too (`bus='Body'`), and `Gateway` forwards frames between two
+buses; see [Several buses](multi-bus.md#gateways-and-nodes-on-several-buses).
+
 ## Writing panels
 
 A panel is a QML file whose root object declares `property var panel`. Through it, the panel shows live signal and

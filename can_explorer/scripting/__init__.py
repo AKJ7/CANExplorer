@@ -22,6 +22,7 @@ See docs/scripting.md for the complete API.
 """
 
 from can_explorer.scripting.api import (
+    Gateway,
     MessageBuffer,
     Node,
     ReceivedMessage,
@@ -36,6 +37,7 @@ from can_explorer.scripting.api import (
 from can_explorer.scripting.runtime import LoadedScript, ScriptRuntime, Variables
 
 __all__ = [
+    'Gateway',
     'LoadedScript',
     'MessageBuffer',
     'Node',

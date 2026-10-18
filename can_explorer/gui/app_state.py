@@ -32,6 +32,7 @@ class AppState(QObject):
     recent_log_files_changed = pyqtSignal()
     recent_workspaces_changed = pyqtSignal()
     preferences_changed = pyqtSignal()
+    language_changed = pyqtSignal()
 
     def __init__(self, settings: Optional[QSettings] = None, parent: Optional[QObject] = None):
         super().__init__(parent)
@@ -179,6 +180,26 @@ class AppState(QObject):
             self._settings.setValue('appearance/theme', theme)
             self._settings.sync()
             self.preferences_changed.emit()
+
+    # Language
+
+    @pyqtProperty(str, notify=language_changed)
+    def language(self) -> str:
+        """Language code of the interface; '' follows the system language."""
+        return str(self._settings.value('appearance/language', '') or '')
+
+    @pyqtProperty('QVariantList', constant=True)
+    def languages(self) -> List[Dict[str, str]]:
+        from can_explorer.gui.translations import available_languages
+
+        return [{'code': code, 'name': name} for code, name in available_languages()]
+
+    @pyqtSlot(str)
+    def set_language(self, code: str) -> None:
+        if code != self.language:
+            self._settings.setValue('appearance/language', code)
+            self._settings.sync()
+            self.language_changed.emit()
 
     # Layout
 

@@ -10,7 +10,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 import can
 
@@ -20,7 +20,15 @@ from can_explorer.core.uds import UdsClient
 from can_explorer.scripting.api import ReceivedMessage, ScriptError
 from can_explorer.scripting.runtime import ScriptRuntime, Variables
 from can_explorer.sys.log_handler import get_logger
-from can_explorer.testing.api import CheckFailed, Step, TestContext, TestModule, TestSkipped, Verdict
+from can_explorer.testing.api import (
+    CheckFailed,
+    Step,
+    TestContext,
+    TestModule,
+    TestSkipped,
+    Verdict,
+    parameter_id,
+)
 
 logger = get_logger(__name__)
 
@@ -35,6 +43,10 @@ class TestCaseInfo:
     title: str
     description: str
     timeout: float
+    method: str = ''  # Method to call; differs from `name` for parametrised test cases ('case[id]')
+    args: tuple = ()
+    kwargs: Dict[str, Any] = field(default_factory=dict)
+    requirements: Tuple[str, ...] = ()
 
     @property
     def key(self) -> str:
@@ -65,6 +77,7 @@ class TestCaseResult:
     name: str
     title: str
     description: str = ''
+    requirements: Tuple[str, ...] = ()
     verdict: str = Verdict.PENDING
     duration: float = 0.0
     steps: List[Step] = field(default_factory=list)
@@ -96,6 +109,18 @@ class TestReport:
     def count(self, verdict: str) -> int:
         return sum(1 for result in self.results if result.verdict == verdict)
 
+    def requirements(self) -> List[Tuple[str, str, List[TestCaseResult]]]:
+        """(requirement, verdict, test cases) for every requirement, in the order they appear.
+
+        A requirement fails when any of its test cases failed or had an error, and passed when all of them
+        that ran passed.
+        """
+        cases: Dict[str, List[TestCaseResult]] = {}
+        for result in self.results:
+            for requirement in result.requirements:
+                cases.setdefault(requirement, []).append(result)
+        return [(requirement, _combined_verdict(results), results) for requirement, results in cases.items()]
+
     @property
     def verdict(self) -> str:
         """Overall verdict: error, failed, passed (skipped tests do not fail a run), or pending."""
@@ -106,6 +131,18 @@ class TestReport:
         if self.stopped or verdicts & {Verdict.PENDING, Verdict.RUNNING}:
             return Verdict.PENDING
         return Verdict.PASSED if Verdict.PASSED in verdicts else Verdict.SKIPPED
+
+
+def _combined_verdict(results: List[TestCaseResult]) -> str:
+    verdicts = {result.verdict for result in results}
+    for verdict in (Verdict.ERROR, Verdict.FAILED, Verdict.RUNNING, Verdict.PENDING, Verdict.PASSED):
+        if verdict in verdicts:
+            return verdict
+    return Verdict.SKIPPED
+
+
+def _as_tuple(value) -> Tuple[str, ...]:
+    return (value,) if isinstance(value, str) else tuple(value or ())
 
 
 def _first_line(text: Optional[str]) -> str:
@@ -129,16 +166,40 @@ def load_test_script(path: str | Path) -> LoadedTestScript:
         if not (isinstance(value, type) and issubclass(value, TestModule) and value.__module__ == module_name):
             continue
         info = TestModuleInfo(value.__name__, _first_line(value.__doc__), path, value)
+        module_requirements = _as_tuple(getattr(value, 'requirements', ()))
         cases = []
         for name, member in inspect.getmembers(value, callable):
             marker = getattr(member, '_testcase', None)
             if marker is None:
                 continue
             title = marker['title'] or name.replace('_', ' ').capitalize()
-            cases.append(
-                (marker['order'], TestCaseInfo(info.name, name, title, _first_line(member.__doc__), marker['timeout']))
-            )
-        info.cases = [case for _, case in sorted(cases, key=lambda item: item[0])]
+            description = _first_line(member.__doc__)
+            requirements = tuple(dict.fromkeys(module_requirements + marker.get('requirements', ())))
+            params = marker.get('params')
+            if params is None:
+                case = TestCaseInfo(info.name, name, title, description, marker['timeout'], name, (), {}, requirements)
+                cases.append((marker['order'], 0, case))
+                continue
+            ids = marker.get('ids') or [parameter_id(param) for param in params]
+            for index, (param, param_id) in enumerate(zip(params, ids, strict=True)):
+                args, kwargs = (
+                    ((), dict(param))
+                    if isinstance(param, dict)
+                    else (tuple(param), {}) if isinstance(param, tuple) else ((param,), {})
+                )
+                case = TestCaseInfo(
+                    info.name,
+                    f'{name}[{param_id}]',
+                    f'{title} [{param_id}]',
+                    description,
+                    marker['timeout'],
+                    name,
+                    args,
+                    kwargs,
+                    requirements,
+                )
+                cases.append((marker['order'], index, case))
+        info.cases = [case for _, _, case in sorted(cases, key=lambda item: item[:2])]
         script.modules.append(info)
     if not script.modules:
         script.error = f'{path.name} defines no TestModule subclass'
@@ -235,7 +296,7 @@ class TestRunner:
         modules = [(module, cases) for module, cases in modules if cases]
         report = TestReport(title, datetime.now(), environment=self._environment())
         report.results = [
-            TestCaseResult(case.module, case.name, case.title, case.description)
+            TestCaseResult(case.module, case.name, case.title, case.description, case.requirements)
             for _, cases in modules
             for case in cases
         ]
@@ -322,7 +383,7 @@ class TestRunner:
         self._changed()
         started = time.monotonic()
         try:
-            outcome = getattr(instance, case.name)(t)
+            outcome = getattr(instance, case.method or case.name)(t, *case.args, **case.kwargs)
             if inspect.isawaitable(outcome):
                 await asyncio.wait_for(outcome, case.timeout)
         except CheckFailed:

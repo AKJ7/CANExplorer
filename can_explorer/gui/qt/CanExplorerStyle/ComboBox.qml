@@ -17,7 +17,7 @@ T.ComboBox {
 
     delegate: ItemDelegate {
         width: ListView.view.width
-        text: control.textRole ? (Array.isArray(control.model) ? modelData[control.textRole] : model[control.textRole]) : modelData
+        text: control.textAt(index)  // Honours textRole for every kind of model (lists, arrays of objects, models)
         font.weight: control.currentIndex === index ? Font.DemiBold : Font.Normal
         highlighted: control.highlightedIndex === index
         hoverEnabled: control.hoverEnabled

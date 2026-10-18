@@ -182,6 +182,13 @@ Rectangle {
         }
 
         NavItem {
+            text: qsTr("Multi-bus trace")
+            glyph: "≣"
+            active: root.currentTool === "multi-bus"
+            onClicked: root.toolSelected("multi-bus")
+        }
+
+        NavItem {
             text: qsTr("Compare recordings")
             glyph: "⇄"
             active: root.currentTool === "compare"

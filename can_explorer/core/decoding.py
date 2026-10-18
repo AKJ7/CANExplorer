@@ -183,7 +183,11 @@ class FrameDecoder:
 
         Remote frames are passed on: LIN carries headers as RTR frames, CANopen uses them for node guarding.
         """
-        if self.protocol is None or msg.is_error_frame:
+        if msg.is_error_frame:
+            from can_explorer.core.bushealth import decode_error_frame
+
+            return decode_error_frame(msg).describe()
+        if self.protocol is None:
             return ''
         try:
             return self.protocol.describe(msg) or ''

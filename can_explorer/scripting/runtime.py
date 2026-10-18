@@ -71,9 +71,13 @@ class ScriptRuntime:
         session: BusSession,
         database: Callable[[], Any],
         log: Optional[LogCallback] = None,
+        buses: Optional[Callable[[], Dict[str, Tuple[BusSession, Callable[[], Any]]]]] = None,
     ):
         self.session = session
         self._database = database
+        # Other connections by name, with their database, for nodes using several buses (e.g. gateways)
+        self._buses = buses or (lambda: {})
+        self._bus_listeners: Dict[str, Tuple[BusSession, Callable[[can.Message], None]]] = {}
         self._log = log or (lambda level, source, text: logger.info(f'[{source}] {text}'))
         self.scripts: List[LoadedScript] = []
         self.variables = Variables(self._variable_changed)
@@ -147,6 +151,7 @@ class ScriptRuntime:
             self.log(path.name, f'Loaded nodes {", ".join(node.name for node in script.nodes)}')
         self.scripts.insert(position, script)
         if self.running:
+            self._update_bus_listeners()
             for node in script.nodes:
                 self._start_node(node)
         return script
@@ -170,6 +175,12 @@ class ScriptRuntime:
         self._start_time = time.monotonic()
         self._signal_values.clear()
         self.session.add_message_listener(self._on_message)
+        try:
+            self._update_bus_listeners()
+        except ScriptError:
+            self.session.remove_message_listener(self._on_message)
+            self.running = False
+            raise
         self.log('simulation', 'Started')
         for node in self.nodes:
             self._start_node(node)
@@ -180,6 +191,9 @@ class ScriptRuntime:
         for node in self.nodes:
             self._stop_node(node)
         self.session.remove_message_listener(self._on_message)
+        for session, listener in self._bus_listeners.values():
+            session.remove_message_listener(listener)
+        self._bus_listeners.clear()
         self.running = False
         self.log('simulation', 'Stopped')
 
@@ -192,20 +206,57 @@ class ScriptRuntime:
         for handler, _ in node._handlers('stop'):
             self.call(node, handler)
 
+    # Buses
+
+    def _own(self, bus: Optional[str]) -> bool:
+        return not bus
+
+    def _bus(self, bus: Optional[str]) -> Tuple[BusSession, Callable[[], Any]]:
+        """Session and database of a bus: the own connection (None) or another connection by name."""
+        if self._own(bus):
+            return self.session, self._database
+        buses = self._buses()
+        if bus not in buses:
+            names = ', '.join(sorted(buses)) or 'none'
+            raise ScriptError(f'Unknown bus {bus!r}; the other connections are: {names}')
+        return buses[bus]
+
+    def _used_buses(self) -> set:
+        used = set()
+        for node in self.nodes:
+            used |= {value[1] for _, value in node._handlers('message')}
+            used |= {value[2] for _, value in node._handlers('signal')}
+        return {bus for bus in used if not self._own(bus)}
+
+    def _update_bus_listeners(self) -> None:
+        """Receive the frames of the other buses that handlers ask for; check the buses gateways send to."""
+        for node in self.nodes:
+            for bus in getattr(node, 'buses', ()):
+                if not self._own(bus):
+                    self._bus(bus)
+        for bus in self._used_buses() - set(self._bus_listeners):
+            session, _ = self._bus(bus)
+
+            def listener(msg: can.Message, bus=bus) -> None:
+                self._dispatch(msg, bus)
+
+            session.add_message_listener(listener)
+            self._bus_listeners[bus] = (session, listener)
+
     # Database access
 
     @property
     def database(self):
         return self._database()
 
-    def definition_for(self, msg: can.Message):
-        database = self.database
+    def definition_for(self, msg: can.Message, bus: Optional[str] = None):
+        database = self._bus(bus)[1]()
         if database is None or msg.is_remote_frame or msg.is_error_frame:
             return None
         return database.message_definition(msg)
 
-    def decode(self, msg: can.Message, numeric: bool = True) -> Optional[Dict[str, Any]]:
-        database = self.database
+    def decode(self, msg: can.Message, numeric: bool = True, bus: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        database = self._bus(bus)[1]()
         if database is None:
             return None
         try:
@@ -213,8 +264,8 @@ class ScriptRuntime:
         except Exception:
             return None
 
-    def message(self, name: str) -> MessageBuffer:
-        database = self.database
+    def message(self, name: str, bus: Optional[str] = None) -> MessageBuffer:
+        database = self._bus(bus)[1]()
         if database is None:
             raise ScriptError(f'Load a signal database to send message {name!r} by name')
         if hasattr(database, 'messages'):  # cantools based databases (DBC, DBF, ARXML, KCD, SYM)
@@ -231,10 +282,11 @@ class ScriptRuntime:
 
     # Events
 
-    def send(self, node: Node, msg: can.Message) -> None:
+    def send(self, node: Node, msg: can.Message, bus: Optional[str] = None) -> None:
+        session = self._bus(bus)[0]
         self._sending = node
         try:
-            self.session.send(msg)
+            session.send(msg)
         except SessionError as e:
             raise ScriptError(str(e)) from e
         finally:
@@ -249,22 +301,29 @@ class ScriptRuntime:
         )
 
     def _on_message(self, msg: can.Message) -> None:
+        self._dispatch(msg, None)
+
+    def _dispatch(self, msg: can.Message, bus: Optional[str]) -> None:
         sender = self._sending
         received = None
         for node in self.nodes:
             if node is sender:
                 continue  # Nodes do not receive their own frames
-            for handler, selectors in node._handlers('message'):
+            for handler, (selectors, handler_bus) in node._handlers('message'):
+                if (handler_bus or None) != bus:
+                    continue
                 if received is None:
-                    received = ReceivedMessage(msg, self)
+                    received = ReceivedMessage(msg, self, bus)
                 if self._matches(selectors, msg, received.name):
                     self.call(node, handler, received)
-            for handler, (message, signal) in node._handlers('signal'):
+            for handler, (message, signal, handler_bus) in node._handlers('signal'):
+                if (handler_bus or None) != bus:
+                    continue
                 if received is None:
-                    received = ReceivedMessage(msg, self)
+                    received = ReceivedMessage(msg, self, bus)
                 if received.name != message or signal not in received.signals:
                     continue
-                key = (id(node), message, signal)
+                key = (id(node), bus, message, signal)
                 value = received.signals[signal]
                 if key not in self._signal_values or self._signal_values[key] != value:
                     self._signal_values[key] = value

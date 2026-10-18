@@ -22,6 +22,15 @@ See [Simulation and scripting](../user-guide/simulation.md) for how scripts are 
         - after
         - log
 
+::: can_explorer.scripting.api.Gateway
+    options:
+      members:
+        - source
+        - target
+        - ids
+        - both_directions
+        - transform
+
 ## Handler decorators
 
 ::: can_explorer.scripting.api.on_start

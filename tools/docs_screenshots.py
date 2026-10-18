@@ -6,9 +6,11 @@ Drives the application with simulated buses, ECUs and LIN slaves; no hardware is
 """
 
 import asyncio
+import math
 import os
 import sys
 import tempfile
+import time
 import traceback
 import uuid
 from pathlib import Path
@@ -31,6 +33,7 @@ os.environ.setdefault('QSG_RHI_BACKEND', 'opengl')
 # Use throwaway settings, so the screenshots do not depend on (or change) the user's
 QSettings.setPath(QSettings.Format.NativeFormat, QSettings.Scope.UserScope, tempfile.mkdtemp())
 
+from can_explorer.core.bushealth import ERR_BUSOFF, ERR_CNT, ERR_CRTL, ERR_PROT, ERR_RESTARTED  # noqa: E402
 from can_explorer.core.canopen_tools import CanOpenNodeSimulator, ObjectDictionary  # noqa: E402
 from can_explorer.core.j1939_tools import (  # noqa: E402
     PGN_ADDRESS_CLAIMED,
@@ -76,6 +79,10 @@ async def shot(name: str, delay: float = 0.4):
     await asyncio.sleep(delay)
     window.grabWindow().save(str(OUT / f'{name}.png'))
     print('saved', name)
+
+
+def error_frame(timestamp: float, classes: int, data) -> can.Message:
+    return can.Message(timestamp=timestamp, arbitration_id=classes, is_error_frame=True, data=bytes(data))
 
 
 async def wait_idle(diagnostics):
@@ -229,6 +236,15 @@ async def scenario():
     await shot('lin-trace')
     show_page('lin')
     await shot('lin-schedule')
+    # The vehicle bus and the LIN bus on one timeline
+    simulation.start()
+    await asyncio.sleep(1.0)
+    manager.multi_bus.set_selected('Vehicle', True)
+    manager.multi_bus.set_selected('Body LIN', True)
+    window.setProperty('tool', 'multi-bus')
+    await shot('multi-bus', 0.8)
+    window.setProperty('tool', '')
+    simulation.stop()
     lin.stop_schedule()
     simulator.close()
     slaves.stop()
@@ -344,6 +360,41 @@ async def scenario():
     compare_tabs.setProperty('currentIndex', 1)
     await shot('compare-signals')
     window.setProperty('tool', '')
+
+    # Bus health: ten minutes of a bus with rising error counters, an error passive period and a bus off
+    health = connection.health
+    health.reset()
+    now = time.time()
+    for second in range(600):
+        stamp = now - 600 + second
+        load = 0.32 + 0.08 * math.sin(second / 40) + (0.15 if 300 <= second < 420 else 0)
+        if 240 <= second < 420 and second % 6 == 0:
+            tec = min(255, (second - 240) * 1)
+            classes = ERR_PROT | ERR_CNT | (ERR_CRTL if tec >= 96 else 0)
+            problem = 0x20 if tec >= 128 else 0x08 if tec >= 96 else 0
+            health.on_message(error_frame(stamp, classes, [0, problem, 0x04 | 0x80, 0, 0, 0, tec, 3]))
+        if second == 420:
+            health.on_message(error_frame(stamp, ERR_BUSOFF | ERR_CNT, [0, 0, 0, 0, 0, 0, 255, 3]))
+        if second == 440:
+            health.on_message(error_frame(stamp, ERR_RESTARTED | ERR_CNT, [0, 0x40, 0, 0, 0, 0, 0, 0]))
+        if 420 <= second < 440:
+            load = 0.0
+        health.sample(stamp, load * 2000, 40, load, None)
+    connection.bus_health.set_window(600)
+    window.setProperty('selectedIndex', 0)  # The Vehicle connection
+    show_page('health')
+    await shot('bus-health', 0.8)
+
+    # The command palette
+    palette = [
+        item for item in window.findChildren(QObject) if item.metaObject().className().startswith('CommandPalette')
+    ][0]
+    QMetaObject.invokeMethod(palette, 'open')
+    await asyncio.sleep(0.3)
+    field = [child for child in palette.findChildren(QObject) if 'TextField' in child.metaObject().className()][0]
+    field.setProperty('text', 'con')
+    await shot('command-palette', 0.5)
+    QMetaObject.invokeMethod(palette, 'close')
 
     for name, dialog_name in (('convert-database', 'ConvertDatabaseDialog'), ('preferences', 'PreferencesDialog')):
         dialog = items(dialog_name)[0]

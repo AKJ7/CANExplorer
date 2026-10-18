@@ -63,6 +63,8 @@ computer.
 | `core/j1939_tools.py` | J1939 NAME, DM1/DM2, transport reassembly, network tracking and sending with BAM or RTS/CTS |
 | `core/canopen_tools.py` | EDS/DCF object dictionaries, SDO client, NMT, PDO mappings, network tracking, simulated node |
 | `core/compare.py` | Comparing two recordings |
+| `core/bushealth.py` | Error frame decoding, error states and the bus health history |
+| `core/remote.py` | `RemoteBus`, the python-can interface for buses shared by `can-server` |
 | `core/diagnostic_description.py` | CANdelaStudio CDD reader |
 | `core/trace_store.py` | Trace frames in memory and in temporary files on disk, by absolute index |
 | `core/conditions.py`, `core/recording.py` | Conditions on frames; split and triggered recordings |
@@ -73,9 +75,12 @@ computer.
 | `gui/trace_tools.py`, `gui/workspace.py` | Trace search and bookmarks; workspace files |
 | `gui/diagnostics.py`, `gui/simulation.py` | Diagnostics and simulation controllers, panel bridge |
 | `gui/flashing.py`, `gui/j1939.py`, `gui/canopen.py` | Flashing, J1939 and CANopen controllers of a connection |
-| `gui/database_editor.py`, `gui/compare.py` | Database editor and recording comparison tools |
+| `gui/database_editor.py`, `gui/compare.py`, `gui/multibus.py` | Database editor, recording comparison and multi-bus trace tools |
+| `gui/bushealth.py` | Bus health page of a connection |
+| `gui/translations.py` | Translations from Qt Linguist files |
 | `gui/plot_view.py`, `gui/signal_plot.py` | Time range, cursors and charts of the signal plots; plot item (QQuickPaintedItem) |
 | `gui/app_state.py` | Persistent settings (QSettings) |
 | `gui/qt/CanExplorer/` | QML views, dialogs and dashboard components; `Theme.qml` holds the colours of the six themes, `GlassPanel.qml` the frosted glass of dialogs, menus and popups |
 | `gui/qt/CanExplorerStyle/` | Qt Quick Controls style drawing buttons, inputs, dialogs, menus etc. with the theme colours (Fusion for the rest) |
 | `sys/config.py`, `sys/environment.py` | Application settings; clean-up of snap environments |
+| `can_server/` | `can-server`: shares local CAN interfaces over WebSocket |

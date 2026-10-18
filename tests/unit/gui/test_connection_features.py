@@ -619,3 +619,112 @@ async def test_compare_recordings(manager, data_dir, tmp_path):
     compare.swap()
     await wait_until(lambda: not compare.busy and compare.counts.get('only_a') == 1)
     assert compare.recording_a['name'] == 'b.blf'
+
+
+async def test_multi_bus_trace(manager):
+    channels = [f'multi-{uuid.uuid4().hex}' for _ in range(2)]
+    manager.add_connection({'name': 'Powertrain', 'interface': 'VirtualBus', 'channel': channels[0]})
+    manager.add_connection({'name': 'Body', 'interface': 'VirtualBus', 'channel': channels[1]})
+    for connection in manager.connections:
+        connection.open()
+    peers = [can.Bus(interface='virtual', channel=channel) for channel in channels]
+    multi = manager.multi_bus
+    trace = multi.trace
+    try:
+        peers[0].send(can.Message(arbitration_id=0x100, is_extended_id=False, data=[1]))  # Before selecting
+        await wait_until(lambda: manager.connections[0].session.trace.total == 1)
+        assert [entry['name'] for entry in multi.connections] == ['Powertrain', 'Body']
+        multi.set_selected('Powertrain', True)
+        multi.set_selected('Body', True)
+        assert multi.selected == ['Powertrain', 'Body'] and trace.rowCount() == 1
+        for i in range(3):
+            peers[1].send(can.Message(arbitration_id=0x200 + i, is_extended_id=False, data=[i]))
+            await asyncio.sleep(0.01)
+            peers[0].send(can.Message(arbitration_id=0x100, is_extended_id=False, data=[i]))
+            await asyncio.sleep(0.01)
+        await wait_until(lambda: all(connection.session.trace.total >= 3 for connection in manager.connections))
+        multi.poll()
+        rows = [(trace.display(row, 1), trace.display(row, 4)) for row in range(trace.rowCount())]
+        assert rows == [('Powertrain', '100')] + [
+            pair for i in range(3) for pair in (('Body', f'{0x200 + i:03X}'), ('Powertrain', '100'))
+        ]
+        times = [float(trace.display(row, 0)) for row in range(trace.rowCount())]
+        assert times == sorted(times) and trace.COLUMNS[1] == 'Bus' and multi.frame_count == 7
+
+        multi.set_filter('200-2FF')
+        assert trace.rowCount() == 3 and multi.filter_error == ''
+        multi.set_filter('zz')
+        assert multi.filter_error and trace.rowCount() == 3
+        multi.set_filter('')
+        multi.set_paused(True)
+        peers[0].send(can.Message(arbitration_id=0x101, is_extended_id=False, data=[9]))
+        await wait_until(lambda: manager.connections[0].session.trace.total == 5)
+        multi.poll()
+        assert trace.rowCount() == 7
+        multi.set_paused(False)
+        assert trace.rowCount() == 8
+        multi.clear()
+        assert trace.rowCount() == 0
+
+        manager.remove_connection(1)
+        assert multi.selected == ['Powertrain']
+    finally:
+        for peer in peers:
+            peer.shutdown()
+
+
+async def test_bus_health(manager, channel):
+    from can_explorer.core.bushealth import ERR_BUSOFF, ERR_CNT, ERR_CRTL
+
+    connection = open_connection(manager, channel)
+    health = connection.bus_health
+    peer = can.Bus(interface='virtual', channel=channel)
+    try:
+        assert health.state == '' and not health.has_counters and health.events == []
+        peer.send(can.Message(arbitration_id=0x100, data=[1]))
+        await wait_until(lambda: connection.session.trace.total == 1)
+        connection._sample_bus_statistics()
+        assert health.state == 'active'
+        peer.send(
+            can.Message(arbitration_id=ERR_CRTL | ERR_CNT, is_error_frame=True, data=[0, 0x20, 0, 0, 0, 0, 140, 3])
+        )
+        peer.send(can.Message(arbitration_id=ERR_BUSOFF, is_error_frame=True, data=bytes(8)))
+        await wait_until(lambda: connection.session.trace.total == 3)
+        connection._sample_bus_statistics()
+        assert health.state == 'bus-off' and health.error_frames == 2 and health.counters_text == 'TEC 140 · REC 3'
+        assert (health.bus_off_count, health.passive_count) == (1, 1)
+        assert [event['text'] for event in health.events] == ['bus off', 'TX error passive (TEC 140, REC 3)']
+        assert health.errors == [0.0, 2.0] and health.tec == [140.0] and health.peak_errors == 2
+        assert [segment['state'] for segment in health.timeline] == ['active', 'bus-off']
+        connection.trace.refresh()
+        assert connection.trace.display(2, 6) == 'bus off'
+        health.set_window(3600)
+        assert (health.window_text, health.bucket, health.points) == ('1 h', 30, 120)
+        assert health.errors == [2.0]  # Both seconds in one bucket, its peak
+        health.clear()
+        assert health.error_frames == 0 and health.state == ''
+    finally:
+        peer.shutdown()
+
+
+async def test_remote_connection(manager, channel):
+    from can_server.core.server import BusSpec, ServerThread
+
+    thread = ServerThread([BusSpec('vehicle', 'virtual', channel)])
+    port = thread.start()
+    peer = can.Bus(interface='virtual', channel=channel)
+    try:
+        assert 'RemoteBus' in manager.interfaces
+        manager.add_connection({'name': 'Car', 'interface': 'RemoteBus', 'channel': f'127.0.0.1:{port}/vehicle'})
+        connection = manager.connections[-1]
+        connection.open()
+        await wait_until(lambda: connection.connected)
+        peer.send(can.Message(arbitration_id=0x100, is_extended_id=False, data=[1]))
+        await wait_until(lambda: connection.session.trace.total == 1)
+        assert connection.send('200', '01 02', False, False, 0, False, False) == ''
+        msg = await asyncio.to_thread(peer.recv, 3)
+        assert msg.arbitration_id == 0x200
+        connection.close()
+    finally:
+        peer.shutdown()
+        thread.stop()

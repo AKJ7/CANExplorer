@@ -10,7 +10,7 @@
 |---|---|
 | Connection name | Name in the sidebar |
 | Bus | **CAN** or **LIN** ([LIN](lin.md) works through SocketCAN LIN drivers such as sllin) |
-| Interface | The python-can interface, e.g. *SocketcanBus*, *PcanBus*, *KvaserBus*, *VirtualBus* |
+| Interface | The python-can interface, e.g. *SocketcanBus*, *PcanBus*, *KvaserBus*, *VirtualBus*, or *RemoteBus* for a bus shared by [can-server](remote-buses.md) on another computer |
 | Channel | Channel of the interface, e.g. `can0`, `PCAN_USBBUS1` or any name for *VirtualBus*. **Detect** probes all installed drivers and lists their channels; you can also type a channel |
 | Protocol | Protocol decoder for the *Info* column: Raw, ISO-TP, UDS, J1939, CANopen ([Protocol decoding](protocols.md)) |
 | Bitrate | Nominal bitrate (CAN) |

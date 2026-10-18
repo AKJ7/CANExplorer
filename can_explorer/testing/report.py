@@ -1,4 +1,5 @@
-"""Test reports: a standalone HTML page and JUnit XML for continuous integration servers."""
+"""Test reports: a standalone HTML page, JUnit XML for continuous integration servers and a Markdown summary
+(e.g. for the job summary of GitHub Actions)."""
 
 import html
 import xml.etree.ElementTree as ET
@@ -45,6 +46,10 @@ summary::-webkit-details-marker { display: none; }
 .steps td.kind { color: var(--muted); width: 60px; }
 .ok { color: #2ecc71; } .nok { color: #e74c3c; }
 pre.error { background: var(--alt); padding: 10px; border-radius: 8px; overflow-x: auto; }
+.req { border: 1px solid var(--border); border-radius: 6px; padding: 0 6px; font-size: 12px; color: var(--muted); }
+table.reqs { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 12px; overflow: hidden; }
+table.reqs th, table.reqs td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+table.reqs th { color: var(--muted); font-weight: 600; }
 """
 
 
@@ -82,8 +87,20 @@ def to_html(report: TestReport) -> str:
             f'<tr><td class="muted">{html.escape(key)}</td><td>{html.escape(value)}</td></tr>'
             for key, value in report.environment.items()
         ),
-        '</table><h2>Test cases</h2>',
+        '</table>',
     ]
+    requirements = report.requirements()
+    if requirements:
+        parts += [
+            '<h2>Requirements</h2><table class="reqs"><tr><th>Requirement</th><th>Verdict</th><th>Test cases</th></tr>',
+            *(
+                f'<tr><td>{html.escape(requirement)}</td><td>{_pill(verdict)}</td>'
+                f'<td>{", ".join(html.escape(result.key) for result in results)}</td></tr>'
+                for requirement, verdict, results in requirements
+            ),
+            '</table>',
+        ]
+    parts.append('<h2>Test cases</h2>')
     module = None
     for result in report.results:
         if result.module != module:
@@ -94,6 +111,7 @@ def to_html(report: TestReport) -> str:
         parts += [
             f'<details{is_open}><summary>{_pill(result.verdict)}',
             f'<span class="title">{html.escape(result.title)}</span>',
+            *(f'<span class="req">{html.escape(requirement)}</span>' for requirement in result.requirements),
             f'<span class="muted">{checks}</span><span class="muted">{result.duration:.2f} s</span></summary>',
             '<div class="steps">',
         ]
@@ -142,6 +160,10 @@ def to_junit(report: TestReport) -> str:
         )
         for result in results:
             case = ET.SubElement(suite, 'testcase', classname=module, name=result.name, time=f'{result.duration:.3f}')
+            if result.requirements:
+                properties = ET.SubElement(case, 'properties')
+                for requirement in result.requirements:
+                    ET.SubElement(properties, 'property', name='requirement', value=requirement)
             failed_steps = [step.text for step in result.steps if step.passed is False]
             if result.verdict == Verdict.FAILED:
                 ET.SubElement(case, 'failure', message='; '.join(failed_steps)[:500]).text = '\n'.join(failed_steps)
@@ -159,14 +181,68 @@ def to_junit(report: TestReport) -> str:
     return '<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(suites, encoding='unicode') + '\n'
 
 
+MARKDOWN_SYMBOLS = {
+    Verdict.PASSED: '✅',
+    Verdict.FAILED: '❌',
+    Verdict.ERROR: '💥',
+    Verdict.SKIPPED: '⏭️',
+    Verdict.PENDING: '⏳',
+    Verdict.RUNNING: '⏳',
+}
+
+
+def _cell(text: str) -> str:
+    return text.replace('|', '\\|').replace('\n', ' ')
+
+
+def to_markdown(report: TestReport) -> str:
+    """A summary: overall verdict, the requirements and the test cases, with the failed checks."""
+    counts = ', '.join(
+        f'{report.count(verdict)} {label}'
+        for label, verdict in (
+            ('passed', Verdict.PASSED),
+            ('failed', Verdict.FAILED),
+            ('errors', Verdict.ERROR),
+            ('skipped', Verdict.SKIPPED),
+        )
+    )
+    lines = [
+        f'## {MARKDOWN_SYMBOLS.get(report.verdict, "")} {report.title}',
+        '',
+        f'{len(report.results)} test cases: {counts} in {report.duration:.1f} s',
+        '',
+    ]
+    requirements = report.requirements()
+    if requirements:
+        lines += ['| Requirement | Verdict | Test cases |', '|---|---|---|']
+        lines += [
+            f'| {_cell(requirement)} | {MARKDOWN_SYMBOLS.get(verdict, "")} {verdict} | '
+            f'{_cell(", ".join(result.key for result in results))} |'
+            for requirement, verdict, results in requirements
+        ]
+        lines.append('')
+    lines += ['| Test case | Verdict | Duration | Notes |', '|---|---|---|---|']
+    for result in report.results:
+        notes = [step.text for step in result.steps if step.passed is False]
+        if result.verdict in (Verdict.ERROR, Verdict.SKIPPED) and result.error:
+            notes.append(result.error.split('\n')[0])
+        lines.append(
+            f'| {_cell(result.key)} | {MARKDOWN_SYMBOLS.get(result.verdict, "")} {result.verdict} | '
+            f'{result.duration:.2f} s | {_cell("; ".join(notes))} |'
+        )
+    return '\n'.join(lines) + '\n'
+
+
 def write_report(report: TestReport, path: str | Path) -> Path:
-    """Write the report as HTML or JUnit XML, by the extension (.html/.htm or .xml)."""
+    """Write the report as HTML, JUnit XML or Markdown, by the extension (.html/.htm, .xml or .md)."""
     path = Path(path)
     suffix = path.suffix.lower()
     if suffix in ('.html', '.htm'):
         path.write_text(to_html(report), encoding='utf-8')
     elif suffix == '.xml':
         path.write_text(to_junit(report), encoding='utf-8')
+    elif suffix == '.md':
+        path.write_text(to_markdown(report), encoding='utf-8')
     else:
-        raise ValueError(f'Reports are written as .html or .xml (JUnit), not {suffix or path.name!r}')
+        raise ValueError(f'Reports are written as .html, .xml (JUnit) or .md, not {suffix or path.name!r}')
     return path
