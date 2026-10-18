@@ -33,6 +33,8 @@ class UdsServer:
         seed: bytes = b'\x12\x34',
         key_function: Callable[[int, bytes], bytes] = xor_key,
         slow_routines: Tuple[int, ...] = (),
+        max_block_length: int = 0x402,
+        download_requires_security: bool = False,
     ):
         self.dids = dict(dids or {0xF190: b'WDB1234567890ABCD', 0xF18C: b'SN-0001'})
         self.dtcs = list(dtcs if dtcs is not None else [(0x012345, 0x09), (0xC10000, 0x08)])
@@ -44,6 +46,12 @@ class UdsServer:
         self._pending_seed_level: Optional[int] = None
         self.tester_present_count = 0
         self.requests: List[bytes] = []
+        # Flashing: memory written by RequestDownload/TransferData/RequestTransferExit, erased ranges
+        self.max_block_length = max_block_length
+        self.download_requires_security = download_requires_security
+        self.memory: Dict[int, bytes] = {}
+        self.erased: List[Tuple[int, int]] = []
+        self._download: Optional[Dict] = None
 
     @staticmethod
     def _negative(sid: int, code: int) -> List[bytes]:
@@ -63,6 +71,9 @@ class UdsServer:
             0x27: self._security_access,
             0x2E: self._write_did,
             0x31: self._routine_control,
+            0x34: self._request_download,
+            0x36: self._transfer_data,
+            0x37: self._request_transfer_exit,
             0x3E: self._tester_present,
         }.get(sid)
         if handler is None:
@@ -143,10 +154,65 @@ class UdsServer:
         if len(request) < 4:
             return self._negative(0x31, 0x13)
         routine = int.from_bytes(request[2:4], 'big')
+        if routine == 0xFF00 and request[1] == 0x01 and len(request) > 5:  # eraseMemory
+            address, size = self._memory_range(request[4:])
+            if address is None:
+                return self._negative(0x31, 0x13)
+            self.erased.append((address, size))
         response = bytes([0x71]) + request[1:4] + bytes([0x00])
         if routine in self.slow_routines:
             return [bytes([NEGATIVE_RESPONSE, 0x31, RESPONSE_PENDING]), response]
         return [response]
+
+    @staticmethod
+    def _memory_range(data: bytes) -> Tuple[Optional[int], int]:
+        """Address and size after an addressAndLengthFormatIdentifier."""
+        address_bytes, size_bytes = data[0] & 0x0F, data[0] >> 4
+        if not address_bytes or not size_bytes or len(data) != 1 + address_bytes + size_bytes:
+            return None, 0
+        address = int.from_bytes(data[1 : 1 + address_bytes], 'big')
+        return address, int.from_bytes(data[1 + address_bytes :], 'big')
+
+    def _request_download(self, request: bytes) -> List[bytes]:
+        if len(request) < 5:
+            return self._negative(0x34, 0x13)
+        if self.session != 0x02:
+            return self._negative(0x34, 0x7F)  # Service not supported in the active session
+        if self.download_requires_security and self.unlocked_level is None:
+            return self._negative(0x34, 0x33)
+        if self._download is not None:
+            return self._negative(0x34, 0x22)
+        address, size = self._memory_range(request[2:])
+        if address is None:
+            return self._negative(0x34, 0x13)
+        if request[1] != 0x00:
+            return self._negative(0x34, 0x31)  # No compression or encryption
+        self._download = {'address': address, 'size': size, 'data': bytearray(), 'counter': 1}
+        return [bytes([0x74, 0x20]) + self.max_block_length.to_bytes(2, 'big')]
+
+    def _transfer_data(self, request: bytes) -> List[bytes]:
+        download = self._download
+        if download is None:
+            return self._negative(0x36, 0x24)
+        if len(request) < 2 or len(request) > self.max_block_length:
+            return self._negative(0x36, 0x13)
+        if request[1] != download['counter']:
+            if request[1] == (download['counter'] - 1) & 0xFF:
+                return [bytes([0x76, request[1]])]  # Repeated block: acknowledged, not written again
+            return self._negative(0x36, 0x73)
+        if len(download['data']) + len(request) - 2 > download['size']:
+            return self._negative(0x36, 0x71)
+        download['data'] += request[2:]
+        download['counter'] = (download['counter'] + 1) & 0xFF
+        return [bytes([0x76, request[1]])]
+
+    def _request_transfer_exit(self, request: bytes) -> List[bytes]:
+        download = self._download
+        if download is None or len(download['data']) != download['size']:
+            return self._negative(0x37, 0x24)
+        self.memory[download['address']] = bytes(download['data'])
+        self._download = None
+        return [bytes([0x77])]
 
 
 class UdsEcuSimulator:

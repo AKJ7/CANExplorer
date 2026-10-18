@@ -181,6 +181,13 @@ Rectangle {
             onClicked: root.toolSelected("database-editor")
         }
 
+        NavItem {
+            text: qsTr("Compare recordings")
+            glyph: "⇄"
+            active: root.currentTool === "compare"
+            onClicked: root.toolSelected("compare")
+        }
+
         Item { Layout.fillHeight: true }
 
         Rectangle {

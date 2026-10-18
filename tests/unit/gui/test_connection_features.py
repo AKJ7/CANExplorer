@@ -71,9 +71,9 @@ async def test_signal_tracking_and_plot(manager, channel, data_dir):
     assert updates
 
     plot = SignalPlot()
-    plot.connection = connection
-    plot.signal_key = 'EngineData.EngineSpeed'
-    plot.line_color = QColor('red')
+    plot.view = connection.plot_view
+    plot.keys = ['EngineData.EngineSpeed']
+    plot.palette = [QColor('red')]
     plot.setWidth(400)
     plot.setHeight(150)
     image = QImage(400, 150, QImage.Format.Format_ARGB32)
@@ -86,6 +86,88 @@ async def test_signal_tracking_and_plot(manager, channel, data_dir):
 
     connection.unload_database()
     assert connection.tracked_signals == [] and connection.database_signals == []
+
+
+async def test_plot_view(manager, channel, data_dir, tmp_path):
+    import csv
+    import math
+
+    connection = open_connection(manager, channel)
+    connection.load_database(QUrl.fromLocalFile(str(data_dir / 'example.dbc')))
+    connection.track_signal('EngineData', 'EngineSpeed', 'rpm')
+    connection.track_signal('EngineData', 'CoolantTemp', 'degC')
+    view = connection.plot_view
+    assert view.charts == [['EngineData.EngineSpeed'], ['EngineData.CoolantTemp']]
+    view.move_to_chart('EngineData.CoolantTemp', 0)
+    assert view.charts == [['EngineData.EngineSpeed', 'EngineData.CoolantTemp']]
+    assert view.separate_scales(0)  # Different units
+    view.move_to_chart('EngineData.CoolantTemp', -1)
+    assert len(view.charts) == 2
+
+    # Values at known times: speed i * 64 rpm (raw i * 64, factor 0.25) at 10 + i * 0.1 s
+    series = connection.session.signals
+    for i in range(100):
+        message = can.Message(
+            arbitration_id=0x100,
+            is_extended_id=False,
+            timestamp=10 + i * 0.1,
+            data=bytes([0, i, 40 + i % 5, 0, 0, 0, 0, 0]),
+        )
+        series.update(message, connection.session.decoder.database)
+    connection.session.start_time = 10.0
+    assert view.follow and view.time_range() == (pytest.approx(9.9), pytest.approx(19.9))
+    view.set_window(5)
+    assert view.time_range()[0] == pytest.approx(14.9)
+
+    view.fit_all()
+    start, end = view.time_range()
+    assert not view.follow and start < 10 and end > 19.9
+    view.zoom(0.5, 15.0)
+    assert view.time_range()[1] - view.time_range()[0] == pytest.approx((end - start) / 2)
+    view.pan(1.0)
+    assert view.time_range()[0] == pytest.approx(15.0 - (15.0 - start) / 2 + 1.0)
+
+    view.set_cursor(0, 12.05)  # Holds the value of 12.0 s
+    view.set_cursor(1, 14.0)
+    rows = {row['key']: row for row in view.readout}
+    speed = rows['EngineData.EngineSpeed']
+    assert speed['c1'] == 20 * 64 and speed['c2'] == 40 * 64 and speed['delta'] == 20 * 64
+    assert speed['minimum'] == 21 * 64 and speed['maximum'] == 40 * 64 and speed['count'] == 20
+    assert view.cursor_times['delta'] == '1950.000 ms'
+
+    message = view.export_csv(QUrl.fromLocalFile(str(tmp_path / 'signals.csv')), False)
+    assert message == 'Exported 100 rows of 2 signals to signals.csv'
+    with open(tmp_path / 'signals.csv') as file:
+        rows = list(csv.reader(file))
+    assert rows[0] == ['time_s', 'EngineData.EngineSpeed [rpm]', 'EngineData.CoolantTemp [degC]']
+    assert rows[1][0] == '0.000000' and float(rows[-1][1]) == 99 * 64
+    visible = view.export_csv(QUrl.fromLocalFile(str(tmp_path / 'visible.csv')), True)
+    assert 'Exported' in visible and int(visible.split()[1].replace(',', '')) < 100
+
+    # Drawing several signals with separate scales and cursors
+    plot = SignalPlot()
+    plot.view = view
+    plot.keys = ['EngineData.EngineSpeed', 'EngineData.CoolantTemp']
+    plot.separate_scales = True
+    plot.palette = [QColor('red'), QColor('lime')]
+    plot.setWidth(500)
+    plot.setHeight(200)
+    assert plot.time_at(70) == pytest.approx(view.time_range()[0])
+    assert plot.seconds_per_pixel() > 0
+    image = QImage(500, 200, QImage.Format.Format_ARGB32)
+    image.fill(0)
+    painter = QPainter(image)
+    plot.paint(painter)
+    painter.end()
+    colours = [QColor(image.pixel(x, y)) for x in range(500) for y in range(200)]
+    assert sum(1 for colour in colours if colour.red() > 200 and colour.green() < 100) > 30
+    assert sum(1 for colour in colours if colour.green() > 200 and colour.red() < 100) > 30
+
+    view.clear_cursors()
+    view.follow_live()
+    assert not view.has_cursors and view.follow and not math.isnan(view.time_range()[1])
+    connection.untrack_signal('EngineData', 'CoolantTemp')
+    assert view.charts == [['EngineData.EngineSpeed']]
 
 
 async def test_export_selection(manager, channel, tmp_path):
@@ -304,3 +386,236 @@ def test_database_file_filters(manager):
         assert suffix in first
     assert 'AUTOSAR ARXML (*.arxml)' in manager.database_file_filters
     assert 'CANdelaStudio CDD (*.cdd)' in manager.database_file_filters
+
+
+async def test_j1939_page(manager, channel, data_dir):
+    from can_explorer.core.j1939_tools import PGN_ADDRESS_CLAIMED, PGN_DM1, Dtc, J1939Name, build_can_id, encode_dm
+
+    connection = open_connection(manager, channel, protocol='J1939')
+    connection.load_database(QUrl.fromLocalFile(str(data_dir / 'example.dbc')))
+    j1939 = connection.j1939
+    assert j1939.active
+    assert '0x0FEF1 VehicleSpeed' in j1939.pgn_names and '0x0FECA DM1' in j1939.pgn_names
+    peer = can.Bus(interface='virtual', channel=channel)
+
+    def send(can_id, data):
+        peer.send(can.Message(arbitration_id=can_id, is_extended_id=True, data=bytes(data)))
+
+    name = J1939Name((1 << 63) | (123 << 21) | 4567)
+    send(build_can_id(PGN_ADDRESS_CLAIMED, 0x00), name.to_bytes())
+    send(build_can_id(PGN_DM1, 0x00), encode_dm([Dtc(110, 0, 3)], {'MIL': 'on'}))
+    send(build_can_id(0xF004, 0x03, priority=3), bytes(8))
+    await wait_until(lambda: len(j1939.nodes) == 2, timeout=5)
+    engine, other = j1939.nodes
+    assert (engine['address_text'], engine['function'], engine['manufacturer']) == ('0x00', 'Engine', 123)
+    assert engine['lamps'] == ['MIL'] and engine['active_dtcs'] == 1 and engine['previous_dtcs'] == -1
+    assert not other['claimed'] and other['frames'] == 1
+    details = j1939.node_details(0)
+    assert details['dm1']['dtcs'][0]['name'] == 'Engine coolant temperature'
+    assert {pgn['label'] for pgn in details['pgns']} == {'0x0EE00 Address Claimed', '0x0FECA DM1'}
+
+    def received():
+        frames = []
+        while (frame := peer.recv(timeout=0.2)) is not None:
+            frames.append(frame)
+        return frames
+
+    assert j1939.request_dm2(0) == '' and j1939.clear_dtcs(0, False) == ''
+    assert j1939.send_pgn('VehicleSpeed', 6, 'FF', 'WheelSpeed=100') == ''
+    await wait_until(lambda: not j1939.busy)
+    frames = received()
+    assert [(frame.arbitration_id, bytes(frame.data)) for frame in frames] == [
+        (0x18EA00F9, b'\xcb\xfe\x00'),  # Request DM2 from 0x00
+        (0x18EA00F9, b'\xd3\xfe\x00'),  # Request DM11: clear active codes
+        (0x18FEF1F9, b'\xff\x00\x64\xff\xff\xff\xff\xff'),  # 100 km/h, other bytes "not available"
+    ]
+    assert j1939.send_pgn('VehicleSpeed', 6, 'FF', 'Nope=1') == "VehicleSpeed has no signal 'Nope'"
+    assert j1939.send_pgn('Unknown', 6, 'FF', '00') == "Unknown PGN 'Unknown'"
+    assert j1939.set_tool_address('1G').startswith('Invalid hex')
+    assert j1939.send_pgn('0xEF00', 6, '42', '00 ' * 20) == ''  # RTS/CTS to a node that does not answer
+    await wait_until(lambda: not j1939.busy, timeout=5)
+    assert j1939.log[-1]['error'] and 'did not answer' in j1939.log[-1]['text']
+    j1939.clear()
+    assert j1939.nodes == [] or all(node['address'] == 0xF9 for node in j1939.nodes)
+    peer.shutdown()
+
+
+async def test_canopen_page(manager, channel):
+    from pathlib import Path
+
+    from can_explorer.core.canopen_tools import CanOpenNodeSimulator, ObjectDictionary
+
+    eds = Path(__file__).parents[3] / 'examples' / 'canopen' / 'io_module.eds'
+    connection = open_connection(manager, channel, protocol='CANopen')
+    canopen = connection.canopen
+    assert canopen.active and canopen.objects == [] and canopen.pdos == []
+    slave = BusSession(LiveSource(BusConfig('virtual', channel)))
+    slave.start()
+    node = CanOpenNodeSimulator(slave, 5, ObjectDictionary.from_file(eds), heartbeat_ms=50)
+    node.start()
+    try:
+        await wait_until(lambda: [entry['node_id'] for entry in canopen.nodes] == [5])
+        canopen.set_node(5)
+
+        # Without a dictionary: hex values and PDO configuration read from the node
+        assert canopen.sdo_read('1018', '01') == ''
+        await wait_until(lambda: not canopen.busy)
+        assert canopen.log[-1]['text'] == 'Node 5 0x1018:01 Identity object sub 1 = 55 0A 00 00'
+        assert canopen.read_pdo_configuration() == ''
+        await wait_until(lambda: not canopen.busy)
+        assert canopen.log[-1]['text'] == 'Read the configuration of 3 PDOs from node 5'
+        assert [(pdo['name'], pdo['cob_id']) for pdo in canopen.pdos] == [
+            ('RPDO1', '205'),
+            ('TPDO1', '185'),
+            ('TPDO2', '285'),
+        ]
+
+        assert canopen.load_dictionary(QUrl.fromLocalFile(str(eds))) == ''
+        assert canopen.device_name == 'CANExplorer · IO module 8DI 8DO 2AI'
+        assert {'index': '2100', 'name': 'Module temperature', 'type': 'REAL32'}.items() <= next(
+            o for o in canopen.objects if o['index'] == '2100'
+        ).items()
+        assert canopen.sdo_read('1008', '0') == ''
+        await wait_until(lambda: not canopen.busy)
+        assert canopen.log[-1]['text'] == 'Node 5 0x1008:00 Manufacturer device name = "IO module 8DI 8DO 2AI"'
+        assert canopen.sdo_write('1017', '0', '200') == ''
+        await wait_until(lambda: not canopen.busy)
+        assert node.values[(0x1017, 0)] == (200).to_bytes(2, 'little')
+        assert canopen.sdo_write('1017', '0', 'fast') == 'UNSIGNED16 needs a number, got \'fast\''
+        assert canopen.sdo_write('1000', '0', '1') == ''
+        await wait_until(lambda: not canopen.busy)
+        assert canopen.log[-1] == {'text': 'SDO abort 0x06010002: Attempt to write a read only object', 'error': True}
+
+        assert canopen.nmt(0x01, False) == ''
+        await wait_until(lambda: canopen.nodes[0]['state'] == 'Operational', timeout=5)
+        await wait_until(lambda: canopen.pdos[1]['received'], timeout=5)
+        values = [variable['value'] for variable in canopen.pdos[1]['variables']]
+        assert values == ['5', '1200', '-350']
+        assert 'Analogue input 1=1200' in connection.session.decoder.protocol.describe(
+            can.Message(arbitration_id=0x185, is_extended_id=False, data=[5, 0xB0, 4, 0xA2, 0xFE])
+        )
+        node.emergency(0x4210, 0x09)
+        await wait_until(lambda: canopen.emergencies != [])
+        assert canopen.emergencies[0]['text'] == 'Device temperature' and canopen.nodes[0]['emcy_count'] == 1
+        assert canopen.nmt(0x33, True).startswith('Unknown NMT command')
+        assert canopen.send_sync() == ''
+    finally:
+        node.stop()
+        slave.stop()
+
+
+async def test_flashing(manager, channel, tmp_path):
+    from pathlib import Path
+
+    from can_explorer.core.flashing import load_image
+
+    connection = open_connection(manager, channel)
+    flashing = connection.flashing
+    firmware = Path(__file__).parents[3] / 'examples' / 'flashing' / 'firmware.hex'
+    key_file = Path(__file__).parents[3] / 'examples' / 'flashing' / 'simulator_key.py'
+    assert flashing.start({}) == 'Open a firmware file first'
+    assert flashing.load_file(QUrl.fromLocalFile(str(tmp_path / 'missing.hex')), '0').startswith('Could not read')
+    (tmp_path / 'broken.hex').write_text(':0100000000FE\n')
+    assert 'checksum error' in flashing.load_file(QUrl.fromLocalFile(str(tmp_path / 'broken.hex')), '0')
+    assert flashing.load_file(QUrl.fromLocalFile(str(firmware)), '0') == ''
+    assert flashing.image_text.startswith('21504 bytes in 2 segments: 0x08004000–0x08008FFF, 0x08040000–0x080403FF')
+    assert not flashing.binary
+    (tmp_path / 'app.bin').write_bytes(bytes(100))
+    assert flashing.load_file(QUrl.fromLocalFile(str(tmp_path / 'app.bin')), '8000') == '' and flashing.binary
+    assert flashing.image_text.startswith('100 bytes in 1 segment: 0x00008000–0x00008063')
+    assert flashing.load_file(QUrl.fromLocalFile(str(firmware)), '') == ''
+
+    ecu_session = BusSession(LiveSource(BusConfig('virtual', channel)))
+    ecu_session.start()
+    ecu = UdsEcuSimulator(ecu_session, server=UdsServer(download_requires_security=True))
+    ecu.start()
+    try:
+        assert (
+            flashing.start({'security_level': 1}) == 'Choose the key file in the Diagnostics view for security access'
+        )
+        assert flashing.start({'security_level': 2}) == 'Security access levels for requesting a seed are odd'
+        assert flashing.start({'erase_routine': 'XYZ'}) == "Invalid hex erase routine: 'XYZ'"
+        assert flashing.start({}) == ''  # Without security access: denied
+        await wait_until(lambda: not flashing.running, timeout=10)
+        assert flashing.state == 'failed' and 'ecurity' in flashing.error
+        assert [step['status'] for step in flashing.steps][:3] == ['done', 'done', 'failed']
+
+        connection.diagnostics.set_key_file(QUrl.fromLocalFile(str(key_file)))
+        options = {'security_level': 1, 'check': True, 'check_routine': 'FF01', 'max_block': 0x202}
+        assert flashing.start(options) == ''
+        assert flashing.start(options) == 'Flashing is in progress'
+        await wait_until(lambda: not flashing.running, timeout=20)
+        assert flashing.state == 'done', flashing.error
+        image = load_image(firmware)
+        assert ecu.server.memory == {segment.address: segment.data for segment in image.segments}
+        assert flashing.progress == 1.0 and flashing.progress_text.startswith('21.0 KiB of 21.0 KiB')
+        assert all(step['status'] == 'done' for step in flashing.steps)
+        assert flashing.steps[3]['detail'] == '20480 / 20480 bytes, blocks of 512'
+
+        assert flashing.start(options) == ''  # Cancelled during the download
+        await wait_until(lambda: flashing.progress > 0.1, timeout=10)
+        flashing.cancel()
+        await wait_until(lambda: not flashing.running)
+        assert flashing.state == 'cancelled' and 'skipped' in [step['status'] for step in flashing.steps]
+    finally:
+        ecu.stop()
+        ecu_session.stop()
+
+
+async def test_compare_recordings(manager, data_dir, tmp_path):
+    compare = manager.compare
+
+    def write(name, speeds, start):
+        with can.Logger(str(tmp_path / name)) as logger:
+            for i, speed in enumerate(speeds):
+                raw = int(speed * 4)
+                logger.on_message_received(
+                    can.Message(
+                        timestamp=start + i * 0.1,
+                        arbitration_id=0x100,
+                        is_extended_id=False,
+                        data=[raw & 0xFF, raw >> 8, 90, 3, 0, 0, 0, 0],
+                    )
+                )
+                if name.startswith('b') and i % 5 == 0:
+                    logger.on_message_received(
+                        can.Message(
+                            timestamp=start + i * 0.1 + 0.01,
+                            arbitration_id=0x7E8,
+                            is_extended_id=False,
+                            data=[3, 0x7F, 0x22, 0x31],
+                        )
+                    )
+
+    write('a.asc', [800 + 10 * i for i in range(30)], 10.0)
+    write('b.blf', [800 + 10 * i if i < 20 else 900 for i in range(30)], 50.0)
+    assert compare.open_file('a', QUrl.fromLocalFile(str(tmp_path / 'notes.txt'))).startswith('Unsupported log format')
+    assert compare.open_file('a', QUrl.fromLocalFile(str(tmp_path / 'a.asc'))) == ''
+    assert compare.open_file('b', QUrl.fromLocalFile(str(tmp_path / 'b.blf'))) == ''
+    await wait_until(lambda: not compare.busy and compare.has_result)
+    assert compare.recording_a['text'] == '30 frames · 1 identifiers · 2.9 s'
+    assert compare.counts == {'only_a': 0, 'only_b': 1, 'changed': 1, 'same': 0}
+    engine = compare.identifiers[0]
+    assert (engine['id'], engine['status'], engine['differing'], engine['paired']) == ('100', 'changed', 10, 30)
+    assert engine['first_time'] == '2.000' and engine['cycle_a'] == '100.0'
+    assert compare.identifiers[1]['status'] == 'only_b' and compare.identifiers[1]['cycle_b'] == '500.0'
+
+    assert compare.load_database(QUrl.fromLocalFile(str(data_dir / 'example.dbc'))) == ''
+    await wait_until(lambda: not compare.busy and compare.signal_differences)
+    assert compare.identifiers[0]['name'] == 'EngineData'
+    speed = compare.signal_differences[0]
+    assert speed['key'] == 'EngineData.EngineSpeed' and speed['range_b'] == '800 … 990'
+    assert (speed['differing'], speed['max_difference'], speed['first']) == (10, '190', '2.000 s: 1000 → 900')
+
+    assert compare.set_alignment('id', 'XYZ') == "Invalid hex identifier: 'XYZ'"
+    assert compare.set_alignment('id', '7E8') == ''
+    await wait_until(lambda: not compare.busy and compare.align_error)
+    assert compare.align_error == '7E8 is not in recording A; aligned by the start instead'
+    assert compare.set_alignment('sequence', '') == ''
+    await wait_until(lambda: not compare.busy and not compare.align_error)
+
+    message = compare.export_csv(QUrl.fromLocalFile(str(tmp_path / 'diff.csv')))
+    assert message == 'Saved diff.csv' and (tmp_path / 'diff.csv').read_text().startswith('id;status;')
+    compare.swap()
+    await wait_until(lambda: not compare.busy and compare.counts.get('only_a') == 1)
+    assert compare.recording_a['name'] == 'b.blf'

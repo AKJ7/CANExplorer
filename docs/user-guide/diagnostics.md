@@ -70,5 +70,5 @@ alternatives) and shared DID structures. Data of other types is shown in hex.
 ## Simulated ECU
 
 `can_explorer.core.simulation` contains a UDS server (sessions, DIDs, security access with the key *seed XOR 0xFF*,
-DTCs, routines) reachable over ISO-TP (`UdsEcuSimulator`) or behind simulated LIN slaves (`LinSlaveSimulator`). The
+DTCs, routines, downloads for [flashing](flashing.md)) reachable over ISO-TP (`UdsEcuSimulator`) or behind simulated LIN slaves (`LinSlaveSimulator`). The
 tests and `tools/docs_screenshots.py` use them; the latter shows how to run one next to the application.

@@ -27,7 +27,8 @@
 - Trace and per-identifier overview (cycle times, changed bytes highlighted, sortable columns), display filters
   such as `100-1FF !123 ext rx fd`, search by text, data pattern or signal condition, and bookmarks
 - Millions of frames per session: older frames are paged to disk
-- Live signal plots
+- Signal plots with zoom and pan over the whole buffer, two cursors with values and statistics, several signals per
+  chart and CSV export
 
 **Recording and replay**
 - ASC, BLF, CSV, candump LOG, PEAK TRC, SQLite, ASAM MF4 and gzip compressed text logs
@@ -35,14 +36,22 @@
   `EngineData.EngineSpeed > 6000`, keeping the time before and after the event
 - Replay at 0.25× to 10× or as fast as possible, with pause and jumping to any position
 - Replay of a recording onto a real bus, filtered and repeated
+- Comparison of two recordings: identifiers only in one of them, changed cycle times and payloads, and signal
+  values, aligned by time, by a trigger identifier or by frame sequence
 
 **Signal databases**
 - Vector DBC, BUSMASTER DBF, AUTOSAR ARXML (including container PDUs), Kayak KCD, PCAN SYM and LIN LDF
-- Database editor with a bit layout view and consistency checks, and conversion between the formats
+- Database editor for CAN and LIN databases (frames, signals, nodes, encodings, schedule tables) with a bit layout
+  view and consistency checks, and conversion between the formats
 
 **Diagnostics and protocols**
 - UDS over ISO-TP and the LIN transport layer: sessions, reset, data identifiers, security access with your own
   seed/key algorithm, DTCs, routines; CANdelaStudio CDD descriptions for named and decoded identifiers
+- ECU flashing over UDS (RequestDownload/TransferData) from Intel HEX, S-record or binary files, with progress
+- J1939: nodes with their address claims, DM1/DM2 trouble codes and lamps, clearing codes, requests and sending
+  parameter groups by name with BAM or RTS/CTS
+- CANopen master: NMT, SDO access to object dictionaries from EDS/DCF files, PDO mappings with live values,
+  emergency messages
 - Decoding of ISO-TP, UDS, J1939, CANopen and LIN diagnostic frames in the trace
 - LIN master schedule tables
 

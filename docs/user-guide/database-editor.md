@@ -1,6 +1,7 @@
 # Database editor
 
-The database editor creates and changes CAN signal databases: their messages, signals and nodes. Open it with
+The database editor creates and changes signal databases: CAN databases with their messages, signals and nodes,
+and LIN description files with their frames, signals, nodes, encoding types and schedule tables. Open it with
 **Database editor** under *Tools* in the sidebar, **⋮ → Edit Signal Database…**, the welcome page, or **Edit
 database** in the toolbar of a connection, which opens the database the connection decodes with.
 
@@ -14,9 +15,10 @@ database** in the toolbar of a connection, which opens the database the connecti
 | BUSMASTER DBF (`.dbf`) | ✓ | ✓ |
 | Kayak KCD (`.kcd`) | ✓ | ✓ |
 | PCAN Symbol (`.sym`) | ✓ | ✓ |
-| AUTOSAR ARXML (`.arxml`) | ✓ | Save as one of the formats above |
+| AUTOSAR ARXML (`.arxml`) | ✓ | Save as one of the CAN formats above |
+| LIN description file (`.ldf`) | ✓ | ✓ (see [LIN databases](#lin-databases)) |
 
-LIN description files (LDF) and CANdelaStudio diagnostic descriptions (CDD) cannot be edited.
+**New ▾** creates an empty CAN or LIN database. CANdelaStudio diagnostic descriptions (CDD) cannot be edited.
 
 **Save** writes back to the opened file; **Save as…** writes another file, in the format of its extension, which
 also converts the database. When the format cannot hold everything, the editor lists what was left out under
@@ -76,3 +78,49 @@ signal.
 
 *Problems* lists what makes frames undecodable or ambiguous: overlapping signals, signals reaching beyond the
 message length, minimums above maximums and identifiers used by two messages. They do not prevent saving.
+
+## LIN databases
+
+A LIN description file opens with four tabs.
+
+![Editing a LIN description file](../assets/screenshots/database-editor-lin.png)
+
+**Frames and signals** works like the CAN messages above, with the properties of LIN frames and signals:
+
+| Frame | |
+|---|---|
+| Identifier | 0 to 0x3B (0x3C and above are the diagnostic frames) |
+| Length | 1 to 8 bytes |
+| Publisher | The node sending the response; it also publishes the frame's signals |
+
+| Signal | |
+|---|---|
+| Start bit, length | Bit offset in the frame and width (1 to 64 bits); LIN sends the least significant bit first |
+| Initial value | A number, or for byte arrays the bytes, e.g. `1, 2, 3, 4` for a 32 bit signal |
+| Subscribers | The nodes receiving the signal |
+| Encoding type | How raw values translate into physical values and texts, see below |
+
+**Nodes** sets the bus speed, the LIN protocol and language versions, the channel name and the master node with
+its time base and jitter, and lists the slave nodes with their node attributes: configured and initial NAD,
+supplier and function ID, variant and LIN protocol. Renaming a node renames it in all frames, signals and
+schedule tables; a node that still publishes frames or signals cannot be removed.
+
+**Encoding types** and **Schedule tables** are edited as text in the syntax of the LDF and checked when
+**Apply** is pressed:
+
+```text
+logical_value, 0, "off";
+physical_value, 1, 254, 0.5, -40, "degC";
+```
+
+```text
+SeatStatus delay 10 ms;
+MasterReq delay 20 ms;
+AssignNAD { SeatECU } delay 20 ms;
+```
+
+Renaming a frame or signal also renames it in schedule tables, sporadic and event triggered frames, node
+attributes and encodings; removing a frame removes its signals and its schedule entries. The file is written in
+the LDF syntax and read back with the LIN parser before it replaces the file, so only valid files are saved.
+Comments of the original file are not kept.
+

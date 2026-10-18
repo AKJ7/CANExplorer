@@ -14,6 +14,7 @@ from can_explorer.core.database_editor import (
     format_choices,
 )
 from can_explorer.core.database_io import READ_SUFFIXES, WRITE_SUFFIXES, DatabaseFormatError
+from can_explorer.core.ldf_editor import LIN_SPEEDS, LdfEditor
 from can_explorer.sys.log_handler import get_logger
 
 logger = get_logger(__name__)
@@ -24,7 +25,10 @@ FORMAT_NAMES = {
     '.kcd': 'Kayak KCD',
     '.sym': 'PCAN Symbol',
     '.arxml': 'AUTOSAR ARXML',
+    '.ldf': 'LIN description file',
 }
+EDIT_SUFFIXES = READ_SUFFIXES + ('.ldf',)
+SAVE_SUFFIXES = WRITE_SUFFIXES + ('.ldf',)
 
 
 def _local_path(url: QUrl | str) -> Path:
@@ -46,7 +50,7 @@ class DatabaseEditorController(QObject):
 
     def __init__(self, parent: Optional[QObject] = None):
         super().__init__(parent)
-        self._editor: Optional[DatabaseEditor] = None
+        self._editor: Optional[DatabaseEditor | LdfEditor] = None
         self._message = ''
         self._signal = ''
         self._notes: List[str] = []  # Warnings of the last load or save
@@ -55,12 +59,23 @@ class DatabaseEditorController(QObject):
 
     @pyqtProperty('QStringList', constant=True)
     def open_filters(self) -> List[str]:
-        patterns = ' '.join(f'*{suffix}' for suffix in READ_SUFFIXES)
-        return [f'Signal databases ({patterns})', *(f'{FORMAT_NAMES[suffix]} (*{suffix})' for suffix in READ_SUFFIXES)]
+        patterns = ' '.join(f'*{suffix}' for suffix in EDIT_SUFFIXES)
+        return [f'Signal databases ({patterns})', *(f'{FORMAT_NAMES[suffix]} (*{suffix})' for suffix in EDIT_SUFFIXES)]
 
-    @pyqtProperty('QStringList', constant=True)
+    @pyqtProperty('QStringList', notify=changed)
     def save_filters(self) -> List[str]:
-        return [f'{FORMAT_NAMES[suffix]} (*{suffix})' for suffix in WRITE_SUFFIXES]
+        """LIN databases are saved as LDF, CAN databases in the CAN formats."""
+        suffixes = ('.ldf',) if self.lin else WRITE_SUFFIXES
+        return [f'{FORMAT_NAMES[suffix]} (*{suffix})' for suffix in suffixes]
+
+    @property
+    def lin(self) -> bool:
+        return isinstance(self._editor, LdfEditor)
+
+    @pyqtProperty(str, notify=changed)
+    def kind(self) -> str:
+        """'can' or 'lin' (or '' without a database)."""
+        return '' if self._editor is None else 'lin' if self.lin else 'can'
 
     @pyqtProperty(bool, notify=changed)
     def open(self) -> bool:
@@ -95,23 +110,43 @@ class DatabaseEditorController(QObject):
     def notes(self) -> List[str]:
         return list(self._notes)
 
-    def _set_editor(self, editor: DatabaseEditor, notes: List[str]) -> None:
+    def _set_editor(self, editor: DatabaseEditor | LdfEditor, notes: List[str]) -> None:
         self._editor, self._notes = editor, notes
-        messages = editor.messages
-        self._message = messages[0].name if messages else ''
-        self._signal = messages[0].signals[0].name if messages and messages[0].signals else ''
+        names = self._message_names()
+        self._message = names[0] if names else ''
+        signals = self._signal_names(self._message)
+        self._signal = signals[0] if signals else ''
         self.changed.emit()
         self.selection_changed.emit()
+
+    def _message_names(self) -> List[str]:
+        if self.lin:
+            return [frame['name'] for frame in self._editor.frames]
+        return [message.name for message in self._editor.messages] if self._editor else []
+
+    def _signal_names(self, message: str) -> List[str]:
+        if not message or self._editor is None:
+            return []
+        try:
+            if self.lin:
+                return [signal['name'] for signal, _ in self._editor.frame_signals(message)]
+            return [signal.name for signal in self._editor.message(message).signals]
+        except EditError:
+            return []
 
     @pyqtSlot()
     def new_database(self):
         self._set_editor(DatabaseEditor(), [])
 
+    @pyqtSlot()
+    def new_lin_database(self):
+        self._set_editor(LdfEditor(), [])
+
     @pyqtSlot(QUrl, result=str)
     def open_file(self, url: QUrl) -> str:
         path = _local_path(url)
         try:
-            editor = DatabaseEditor(path)
+            editor = LdfEditor(path) if path.suffix.lower() == '.ldf' else DatabaseEditor(path)
         except Exception as e:
             return f'Could not open {path.name}: {e}'
         notes = list(editor.warnings)
@@ -145,7 +180,7 @@ class DatabaseEditorController(QObject):
     def _save(self, path: Optional[Path]) -> str:
         try:
             self._notes = self._editor.save(path)
-        except (DatabaseFormatError, OSError) as e:
+        except (DatabaseFormatError, EditError, OSError) as e:
             return str(e)
         except Exception as e:  # The writers reject content they cannot express
             logger.exception('Saving the database failed')
@@ -161,6 +196,20 @@ class DatabaseEditorController(QObject):
     def messages(self) -> List[Dict[str, Any]]:
         if self._editor is None:
             return []
+        if self.lin:
+            return [
+                {
+                    'name': frame['name'],
+                    'id': f'{frame["frame_id"]:02X}',
+                    'extended': False,
+                    'fd': False,
+                    'length': frame.get('length') or 8,
+                    'signals': len(frame['signals']),
+                    'senders': frame['publisher'],
+                    'issue': bool(self._editor.frame_issues(frame)),
+                }
+                for frame in self._editor.frames
+            ]
         issues = self._issue_messages()
         return [
             {
@@ -178,6 +227,10 @@ class DatabaseEditorController(QObject):
 
     def _issue_messages(self) -> set:
         return {message.name for message in self._editor.messages if self._editor.message_issues(message)}
+
+    @pyqtProperty('QVariantList', constant=True)
+    def lin_speeds(self) -> List[int]:
+        return list(LIN_SPEEDS)
 
     @pyqtProperty('QStringList', notify=changed)
     def nodes(self) -> List[str]:
@@ -205,8 +258,8 @@ class DatabaseEditorController(QObject):
     def select_message(self, name: str):
         if name != self._message:
             self._message = name
-            signals = self._current_message_object()
-            self._signal = signals.signals[0].name if signals and signals.signals else ''
+            signals = self._signal_names(name)
+            self._signal = signals[0] if signals else ''
             self.selection_changed.emit()
 
     @pyqtSlot(str)
@@ -219,16 +272,24 @@ class DatabaseEditorController(QObject):
         if self._editor is None or not self._message:
             return None
         try:
-            return self._editor.message(self._message)
+            return self._editor.frame(self._message) if self.lin else self._editor.message(self._message)
         except EditError:
             return None
 
     @pyqtProperty('QVariantMap', notify=selection_changed)
     def message(self) -> Dict[str, Any]:
-        """Properties of the selected message."""
+        """Properties of the selected message (a frame in LIN databases)."""
         message = self._current_message_object()
         if message is None:
             return {}
+        if self.lin:
+            return {
+                'name': message['name'],
+                'frame_id': f'{message["frame_id"]:02X}',
+                'length': message.get('length') or 8,
+                'lengths': [str(length) for length in range(1, 9)],
+                'publisher': message['publisher'],
+            }
         return {
             'name': message.name,
             'frame_id': f'{message.frame_id:X}',
@@ -249,6 +310,23 @@ class DatabaseEditorController(QObject):
         message = self._current_message_object()
         if message is None:
             return []
+        if self.lin:
+            rows = []
+            for signal, offset in self._editor.frame_signals(message['name']):
+                initial = signal['init_value']
+                rows.append(
+                    {
+                        'name': signal['name'],
+                        'start': offset,
+                        'length': signal['width'],
+                        'byte_order': 'little_endian',  # LIN sends the least significant bit first
+                        'initial': ', '.join(map(str, initial)) if isinstance(initial, list) else str(initial),
+                        'receivers': ', '.join(signal.get('subscribers', [])),
+                        'publisher': signal['publisher'],
+                        'encoding': self._editor.signal_encoding(signal['name']),
+                    }
+                )
+            return rows
         return [
             {
                 'name': signal.name,
@@ -286,7 +364,7 @@ class DatabaseEditorController(QObject):
             return []
         return [
             owners[0] if len(owners) == 1 else -1 if not owners else -2
-            for owners in self._editor.bit_layout(message.name)
+            for owners in self._editor.bit_layout(self._message)
         ]
 
     # Edits
@@ -305,7 +383,7 @@ class DatabaseEditorController(QObject):
     @pyqtSlot(result=str)
     def add_message(self) -> str:
         def edit():
-            self._message = self._editor.add_message()
+            self._message = self._editor.add_frame() if self.lin else self._editor.add_message()
             self._signal = ''
 
         return self._apply(edit)
@@ -313,20 +391,21 @@ class DatabaseEditorController(QObject):
     @pyqtSlot('QVariantMap', result=str)
     def update_message(self, fields: Dict[str, Any]) -> str:
         def edit():
-            self._message = self._editor.update_message(self._message, **fields)
+            update = self._editor.update_frame if self.lin else self._editor.update_message
+            self._message = update(self._message, **fields)
 
         return self._apply(edit)
 
     @pyqtSlot(result=str)
     def remove_message(self) -> str:
         def edit():
-            names = [message.name for message in self._editor.messages]
+            names = self._message_names()
             index = names.index(self._message)
-            self._editor.remove_message(self._message)
+            (self._editor.remove_frame if self.lin else self._editor.remove_message)(self._message)
             names.pop(index)
             self._message = names[min(index, len(names) - 1)] if names else ''
-            message = self._current_message_object()
-            self._signal = message.signals[0].name if message and message.signals else ''
+            signals = self._signal_names(self._message)
+            self._signal = signals[0] if signals else ''
 
         return self._apply(edit)
 
@@ -339,6 +418,10 @@ class DatabaseEditorController(QObject):
 
     @pyqtSlot('QVariantMap', result=str)
     def update_signal(self, fields: Dict[str, Any]) -> str:
+        if self.lin and 'receivers' in fields:  # The form's field; LIN calls them subscribers
+            fields = {**fields, 'subscribers': fields['receivers']}
+            del fields['receivers']
+
         def edit():
             self._signal = self._editor.update_signal(self._message, self._signal, **fields)
 
@@ -347,7 +430,7 @@ class DatabaseEditorController(QObject):
     @pyqtSlot(result=str)
     def remove_signal(self) -> str:
         def edit():
-            names = [signal.name for signal in self._editor.message(self._message).signals]
+            names = self._signal_names(self._message)
             index = names.index(self._signal)
             self._editor.remove_signal(self._message, self._signal)
             names.pop(index)
@@ -362,3 +445,130 @@ class DatabaseEditorController(QObject):
     @pyqtSlot(str, result=str)
     def remove_node(self, name: str) -> str:
         return self._apply(lambda: self._editor.remove_node(name))
+
+    # LIN databases: header, nodes, encodings and schedule tables
+
+    @pyqtProperty('QVariantMap', notify=changed)
+    def lin_header(self) -> Dict[str, Any]:
+        if not self.lin:
+            return {}
+        data, master = self._editor.data, self._editor.master
+        return {
+            'speed': data.get('speed', 19200),
+            'protocol_version': data.get('protocol_version', ''),
+            'language_version': data.get('language_version', ''),
+            'channel_name': data.get('channel_name') or '',
+            'master': master.get('name', ''),
+            'timebase': f'{master.get("timebase", 0) * 1000:g}',
+            'jitter': f'{master.get("jitter", 0) * 1000:g}',
+        }
+
+    @pyqtSlot('QVariantMap', result=str)
+    def set_lin_header(self, fields: Dict[str, Any]) -> str:
+        """speed, protocol_version, language_version, channel_name, master, timebase (ms), jitter (ms)."""
+
+        def edit():
+            header = {
+                key: fields[key]
+                for key in ('speed', 'protocol_version', 'language_version', 'channel_name')
+                if key in fields
+            }
+            if header:
+                self._editor.set_header(**header)
+            if any(key in fields for key in ('master', 'timebase', 'jitter')):
+                self._editor.set_master(fields.get('master'), fields.get('timebase'), fields.get('jitter'))
+
+        return self._apply(edit)
+
+    @pyqtProperty('QVariantList', notify=changed)
+    def slave_nodes(self) -> List[Dict[str, Any]]:
+        if not self.lin:
+            return []
+        rows = []
+        for name in self._editor.slaves:
+            attributes = self._editor.node_attributes(name)
+            product = attributes.get('product_id') or {}
+            rows.append(
+                {
+                    'name': name,
+                    'configured_nad': f'{attributes.get("configured_nad", 0):02X}',
+                    'initial_nad': f'{attributes.get("initial_nad", 0):02X}',
+                    'supplier_id': f'{product.get("supplier_id", 0):04X}',
+                    'function_id': f'{product.get("function_id", 0):04X}',
+                    'variant': str(product.get('variant', 0)),
+                    'lin_protocol': attributes.get('lin_protocol', ''),
+                }
+            )
+        return rows
+
+    @pyqtSlot(str, str, result=str)
+    def rename_node(self, old: str, new: str) -> str:
+        return self._apply(lambda: self._editor.rename_node(old, new))
+
+    @pyqtSlot(str, 'QVariantMap', result=str)
+    def update_node(self, name: str, fields: Dict[str, Any]) -> str:
+        """Node attributes: configured_nad, initial_nad, supplier_id, function_id (hexadecimal), variant, lin_protocol."""
+        hexadecimal = ('configured_nad', 'initial_nad', 'supplier_id', 'function_id')
+        values = {
+            key: f'0x{value}' if key in hexadecimal and not str(value).lower().startswith('0x') else value
+            for key, value in fields.items()
+        }
+        return self._apply(lambda: self._editor.update_node_attributes(name, **values))
+
+    @pyqtProperty('QVariantList', notify=changed)
+    def encodings(self) -> List[Dict[str, Any]]:
+        if not self.lin:
+            return []
+        return [
+            {
+                'name': entry['name'],
+                'text': self._editor.encoding_text(entry['name']),
+                'signals': ', '.join(self._editor.encoding_signals(entry['name'])),
+            }
+            for entry in self._editor.encodings
+        ]
+
+    @pyqtProperty('QStringList', notify=changed)
+    def encoding_names(self) -> List[str]:
+        return [entry['name'] for entry in self._editor.encodings] if self.lin else []
+
+    @pyqtSlot(str, result=str)
+    def add_encoding(self, name: str) -> str:
+        return self._apply(lambda: self._editor.add_encoding(name))
+
+    @pyqtSlot(str, str, result=str)
+    def rename_encoding(self, old: str, new: str) -> str:
+        return self._apply(lambda: self._editor.rename_encoding(old, new))
+
+    @pyqtSlot(str, result=str)
+    def remove_encoding(self, name: str) -> str:
+        return self._apply(lambda: self._editor.remove_encoding(name))
+
+    @pyqtSlot(str, str, result=str)
+    def set_encoding_text(self, name: str, text: str) -> str:
+        return self._apply(lambda: self._editor.set_encoding_text(name, text))
+
+    @pyqtProperty('QVariantList', notify=changed)
+    def schedules(self) -> List[Dict[str, Any]]:
+        if not self.lin:
+            return []
+        return [
+            {'name': table['name'], 'text': self._editor.schedule_text(table['name'])}
+            for table in self._editor.schedules
+        ]
+
+    @pyqtSlot(str, result=str)
+    def add_schedule(self, name: str) -> str:
+        return self._apply(lambda: self._editor.add_schedule(name))
+
+    @pyqtSlot(str, str, result=str)
+    def rename_schedule(self, old: str, new: str) -> str:
+        return self._apply(lambda: self._editor.rename_schedule(old, new))
+
+    @pyqtSlot(str, result=str)
+    def remove_schedule(self, name: str) -> str:
+        return self._apply(lambda: self._editor.remove_schedule(name))
+
+    @pyqtSlot(str, str, result=str)
+    def set_schedule_text(self, name: str, text: str) -> str:
+        return self._apply(lambda: self._editor.set_schedule_text(name, text))

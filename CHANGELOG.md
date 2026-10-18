@@ -8,6 +8,33 @@ Only `0.0.1` has been tagged so far. Later development stages are listed by date
 ## [Unreleased]
 
 ### Added
+- **Comparing recordings** (*Tools* → *Compare recordings*): two log files side by side — identifiers only in
+  one of them, changed cycle times, lengths and payloads, paired by start time, by the first frame of an
+  identifier or by frame sequence; with a signal database, value ranges, means and differences of every signal;
+  CSV export.
+- **Signal plot analysis**: zoom (mouse wheel) and pan (drag) over the whole signal buffer (200,000 points per
+  signal), fixed live windows of 5 s to 5 min and *Fit all*; two **cursors** (click, Shift+click) with the values
+  at both cursors, the difference and the minimum, maximum and mean between them; several signals per chart,
+  each with its own scale or a shared one; **CSV export** of all or the visible range.
+- **LIN database editing**: LDF files open in the database editor with tabs for frames and signals, nodes with
+  their node attributes, encoding types and schedule tables. A new LDF writer saves all sections of LIN 2.x files
+  (diagnostic frames, sporadic and event triggered frames, signal groups, all schedule commands); saved files are
+  checked by reading them back. **New ▾** creates CAN or LIN databases.
+- **J1939 tools**: the **J1939** view of J1939 connections lists the nodes with their address claims (NAME
+  fields), lamps and trouble codes; shows the DM1 and DM2 codes of a node with SPN names and FMI texts; requests
+  address claims and DM2, clears codes with DM11/DM3; and sends any parameter group by name, number or database
+  message from hex data or signal values, with BAM or RTS/CTS for more than 8 bytes. The trace decodes address
+  claims and DM1/DM2, also after transport protocol reassembly.
+- **CANopen master tools**: the **CANopen** view of CANopen connections lists the nodes with their NMT state and
+  emergency messages; sends NMT commands and SYNC; loads object dictionaries from EDS and DCF files; reads and
+  writes objects over SDO (expedited and segmented, with abort codes explained) in their data types; and shows the
+  PDO mappings, from the dictionary or read from the node, with the received values. The trace names SDO objects
+  and decodes PDO values with the dictionary. `CanOpenNodeSimulator` simulates a node from an EDS file, and
+  `examples/canopen/io_module.eds` describes an example I/O module.
+- **ECU flashing**: the **Flashing** view programs ECUs over UDS from Intel HEX, S-record or binary files:
+  programming session, security access, erasing, RequestDownload/TransferData/RequestTransferExit per segment
+  with the ECU's block size, a check routine and an ECU reset, with progress, transfer rate and cancelling. The
+  simulated ECU accepts downloads; `examples/flashing` has an example firmware and the simulator's key file.
 - Serial CAN adapters (slcan, python-can's serial protocol) work out of the box: `python-can[serial]` installs
   pyserial.
 - **Jumping within replays**: the playback bar has a position slider and 10 s back/forward buttons; "Replay from

@@ -10,6 +10,9 @@ FrameTable 1.0 FrameTable.qml
 TransmitPanel 1.0 TransmitPanel.qml
 SignalsView 1.0 SignalsView.qml
 DiagnosticsView 1.0 DiagnosticsView.qml
+FlashView 1.0 FlashView.qml
+J1939View 1.0 J1939View.qml
+CanOpenView 1.0 CanOpenView.qml
 LinScheduleView 1.0 LinScheduleView.qml
 SimulationView 1.0 SimulationView.qml
 singleton Actions 1.0 Actions.qml
@@ -27,6 +30,7 @@ WelcomeView 1.0 WelcomeView.qml
 PlaybackBar 1.0 PlaybackBar.qml
 BusReplayDialog 1.0 BusReplayDialog.qml
 DatabaseEditorView 1.0 DatabaseEditorView.qml
+CompareView 1.0 CompareView.qml
 TestsView 1.0 TestsView.qml
 GlassPanel 1.0 GlassPanel.qml
 TraceFindBar 1.0 TraceFindBar.qml

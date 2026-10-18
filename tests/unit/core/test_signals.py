@@ -49,3 +49,15 @@ def test_series_window_edges(start, end, expected):
     for i in range(25):
         series.append(float(i), 0.0)
     assert series.window(start, end)[0] == expected
+
+
+def test_series_value_at_and_statistics():
+    from can_explorer.core.signals import SignalSeries
+
+    series = SignalSeries(100)
+    for time, value in ((1.0, 10.0), (2.0, 30.0), (3.0, float('nan')), (4.0, 20.0)):
+        series.append(time, value)
+    assert series.value_at(0.5) is None and series.value_at(1.0) == 10.0 and series.value_at(2.9) == 30.0
+    assert series.statistics(1.5, 4.0) == (20.0, 30.0, 25.0, 2)  # NaN ignored
+    assert series.statistics(5.0, 6.0) is None
+    assert series.first == (1.0, 10.0)

@@ -1,0 +1,172 @@
+/* A LIN 2.1 description using most of the language, for the LDF writer tests */
+LIN_description_file;
+LIN_protocol_version = "2.1";
+LIN_language_version = "2.1";
+LIN_speed = 19.2 kbps;
+Channel_name = "Body";
+
+Nodes {
+  Master: CEM, 5 ms, 0.1 ms;
+  Slaves: LSM, RSM, DoorLeft;
+}
+
+Signals {
+  InternalLightsRequest: 2, 0, CEM, LSM, RSM;
+  RightIntLightsSwitch: 8, 0, RSM, CEM;
+  LeftIntLightsSwitch: 8, 0, LSM, CEM;
+  LSMerror: 1, 0, LSM, CEM;
+  RSMerror: 1, 0, RSM, CEM;
+  IntTest: 2, 0, LSM, CEM;
+  Serial: 32, {1, 2, 3, 4}, DoorLeft, CEM;
+  Temperature: 12, 400, DoorLeft, CEM;
+}
+
+Diagnostic_signals {
+  MasterReqB0: 8, 0;
+  MasterReqB1: 8, 0;
+  SlaveRespB0: 8, 0;
+  SlaveRespB1: 8, 0;
+}
+
+Frames {
+  CEM_Frm1: 0x01, CEM, 1 {
+    InternalLightsRequest, 0;
+  }
+  LSM_Frm1: 0x02, LSM, 2 {
+    LeftIntLightsSwitch, 8;
+  }
+  LSM_Frm2: 0x03, LSM, 1 {
+    LSMerror, 0;
+    IntTest, 1;
+  }
+  RSM_Frm1: 0x04, RSM, 2 {
+    RightIntLightsSwitch, 8;
+  }
+  RSM_Frm2: 0x05, RSM, 1 {
+    RSMerror, 0;
+  }
+  Door_Frm1: 0x20, DoorLeft, 8 {
+    Serial, 0;
+    Temperature, 32;
+  }
+}
+
+Sporadic_frames {
+  SporadicControlFrame: LSM_Frm1, RSM_Frm1;
+}
+
+Event_triggered_frames {
+  Node_Status_Event: Collision_resolver, 0x06, RSM_Frm1, LSM_Frm1;
+}
+
+Diagnostic_frames {
+  MasterReq: 0x3C {
+    MasterReqB0, 0;
+    MasterReqB1, 8;
+  }
+  SlaveResp: 0x3D {
+    SlaveRespB0, 0;
+    SlaveRespB1, 8;
+  }
+}
+
+Node_attributes {
+  RSM {
+    LIN_protocol = "2.1";
+    configured_NAD = 0x20;
+    initial_NAD = 0x01;
+    product_id = 0x4E4E, 0x4553, 1;
+    response_error = RSMerror;
+    P2_min = 150 ms;
+    ST_min = 50 ms;
+    N_As_timeout = 1000 ms;
+    N_Cr_timeout = 1000 ms;
+    configurable_frames {
+      Node_Status_Event;
+      CEM_Frm1;
+      RSM_Frm1;
+      RSM_Frm2;
+    }
+  }
+  LSM {
+    LIN_protocol = "2.1";
+    configured_NAD = 0x21;
+    initial_NAD = 0x02;
+    product_id = 0x4A4F, 0x4841;
+    response_error = LSMerror;
+    fault_state_signals = IntTest;
+    P2_min = 150 ms;
+    ST_min = 50 ms;
+    configurable_frames {
+      Node_Status_Event;
+      CEM_Frm1;
+      LSM_Frm1;
+      LSM_Frm2;
+    }
+  }
+  DoorLeft {
+    LIN_protocol = "2.1";
+    configured_NAD = 0x22;
+    initial_NAD = 0x22;
+    product_id = 0x1234, 0x0001;
+  }
+}
+
+Schedule_tables {
+  Configuration_Schedule {
+    AssignNAD { LSM } delay 15 ms;
+    AssignFrameIdRange { LSM, 0 } delay 15 ms;
+    AssignFrameId { RSM, CEM_Frm1 } delay 15 ms;
+    UnassignFrameId { RSM, CEM_Frm1 } delay 15 ms;
+    AssignFrameIdRange { RSM, 0, 0x01, 0x02, 0x03, 0x04 } delay 15 ms;
+    ConditionalChangeNAD { 0x7F, 0x01, 0x03, 0x01, 0xFF, 0x01 } delay 15 ms;
+    DataDump { RSM, 0x10, 0x80, 0x00, 0xFF, 0xFF } delay 15 ms;
+    SaveConfiguration { RSM } delay 15 ms;
+    FreeFormat { 0x3C, 0xB2, 0x00, 0x00, 0xFF, 0x7F, 0xFF, 0xFF } delay 15 ms;
+    MasterReq delay 10 ms;
+    SlaveResp delay 10 ms;
+  }
+  Normal_Schedule {
+    CEM_Frm1 delay 15 ms;
+    LSM_Frm2 delay 15 ms;
+    RSM_Frm2 delay 15 ms;
+    Node_Status_Event delay 10 ms;
+    Door_Frm1 delay 10 ms;
+  }
+  Collision_resolver {
+    RSM_Frm1 delay 15 ms;
+    LSM_Frm1 delay 15 ms;
+  }
+}
+
+Signal_encoding_types {
+  Dig2Bit {
+    logical_value, 0, "off";
+    logical_value, 1, "on";
+    logical_value, 2, "error";
+    logical_value, 3, "void";
+  }
+  ErrorEncoding {
+    logical_value, 0, "OK";
+    logical_value, 1, "error";
+  }
+  FactorEncoding {
+    logical_value, 0, "OFF";
+    physical_value, 1, 254, 1, 100, "lux";
+    logical_value, 255, "FAULT";
+  }
+  TemperatureEncoding {
+    physical_value, 0, 4095, 0.1, -40, "degC";
+  }
+  SerialEncoding {
+    bcd_value;
+  }
+}
+
+Signal_representation {
+  Dig2Bit: InternalLightsRequest;
+  ErrorEncoding: RSMerror, LSMerror;
+  FactorEncoding: RightIntLightsSwitch, LeftIntLightsSwitch;
+  TemperatureEncoding: Temperature;
+  SerialEncoding: Serial;
+}

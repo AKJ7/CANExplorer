@@ -13,6 +13,7 @@ import traceback
 import uuid
 from pathlib import Path
 
+import can
 import qasync
 from PyQt6 import sip
 from PyQt6.QtCore import Q_ARG, QMetaObject, QObject, QSettings, QUrl
@@ -30,6 +31,16 @@ os.environ.setdefault('QSG_RHI_BACKEND', 'opengl')
 # Use throwaway settings, so the screenshots do not depend on (or change) the user's
 QSettings.setPath(QSettings.Format.NativeFormat, QSettings.Scope.UserScope, tempfile.mkdtemp())
 
+from can_explorer.core.canopen_tools import CanOpenNodeSimulator, ObjectDictionary  # noqa: E402
+from can_explorer.core.j1939_tools import (  # noqa: E402
+    PGN_ADDRESS_CLAIMED,
+    PGN_DM1,
+    PGN_DM2,
+    Dtc,
+    J1939Name,
+    J1939Sender,
+    encode_dm,
+)
 from can_explorer.core.session import BusSession  # noqa: E402
 from can_explorer.core.simulation import LinSlaveSimulator, UdsEcuSimulator, UdsServer  # noqa: E402
 from can_explorer.core.sources import BusConfig, LiveSource  # noqa: E402
@@ -138,7 +149,16 @@ async def scenario():
     connection.overview.sort_by(3)  # Count, descending
     await shot('overview')
     show_page('signals')
+    # Engine and vehicle speed in one chart, a zoomed range and both cursors
+    plot_view = connection.plot_view
+    plot_view.move_to_chart('VehicleSpeed.WheelSpeed', 0)
+    plot_view.fit_all()
+    start, end = plot_view.time_range()
+    plot_view.set_cursor(0, start + (end - start) * 0.3)
+    plot_view.set_cursor(1, start + (end - start) * 0.75)
     await shot('signals', 1.0)
+    plot_view.clear_cursors()
+    plot_view.follow_live()
     show_page('simulation')
     await shot('simulation')
 
@@ -155,6 +175,14 @@ async def scenario():
         await wait_idle(diagnostics)
     show_page('diagnostics')
     await shot('diagnostics')
+    # Flashing the example firmware into the simulated ECU
+    flashing = connection.flashing
+    flashing.load_file(QUrl.fromLocalFile(str(ROOT / 'examples' / 'flashing' / 'firmware.hex')), '')
+    flashing.start({})  # The options of the form
+    while flashing.running:
+        await asyncio.sleep(0.05)
+    show_page('flash')
+    await shot('flashing')
     # Test automation: the example tests against the simulation
     tests = connection.tests
     tests.load_script(QUrl.fromLocalFile(str(ROOT / 'examples' / 'testing' / 'vehicle_tests.py')))
@@ -205,6 +233,118 @@ async def scenario():
     simulator.close()
     slaves.stop()
 
+    # J1939 network with an engine reporting trouble codes, a transmission, brakes and a node without a claim
+    truck_channel = f'docs-j1939-{uuid.uuid4().hex[:6]}'
+    manager.add_connection({'name': 'Truck', 'interface': 'VirtualBus', 'channel': truck_channel, 'protocol': 'J1939'})
+    truck = manager.connections[-1]
+    truck.open()
+    ecus = BusSession(LiveSource(BusConfig('virtual', truck_channel)))
+    ecus.start()
+    ecu_sender = J1939Sender(ecus)
+    names = {0x00: (0, 0, 123, 4567), 0x03: (3, 0, 123, 812), 0x0B: (11, 0, 68, 99001), 0x17: (23, 1, 274, 51)}
+    for address, (function, instance, manufacturer, identity) in names.items():
+        name = J1939Name((1 << 63) | (function << 40) | (instance << 35) | (manufacturer << 21) | identity)
+        await ecu_sender.send(PGN_ADDRESS_CLAIMED, name.to_bytes(), source=address, priority=6)
+    await ecu_sender.send(PGN_ADDRESS_CLAIMED, J1939Name((1 << 63) | (23 << 40) | (274 << 21) | 52).to_bytes(), 0xFE)
+    for _ in range(5):
+        await ecu_sender.send(0xF004, bytes([0xF0, 0x7D, 0x7D, 0x60, 0x3B, 0x00, 0xF0, 0x7D]), source=0x00, priority=3)
+        await ecu_sender.send(0xF005, bytes([0x7D, 0x00, 0x00, 0x7D, 0x03, 0xFF, 0xFF, 0xFF]), source=0x03, priority=3)
+        await ecu_sender.send(0xFEBF, bytes(8), source=0x0B)
+        await ecu_sender.send(0xFEF1, bytes([0xFF, 0x00, 0x50, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]), source=0x21)
+        await asyncio.sleep(0.05)
+    dm1 = encode_dm([Dtc(110, 0, 3), Dtc(100, 1, 1)], {'MIL': 'on', 'AWL': 'on'})
+    await ecu_sender.send(PGN_DM1, dm1, source=0x00)  # 10 bytes: BAM
+    await ecu_sender.send(PGN_DM2, encode_dm([Dtc(190, 2, 4), Dtc(94, 18, 1), Dtc(3216, 16, 2)]), source=0x00)
+    await ecu_sender.send(PGN_DM1, encode_dm([Dtc(521, 31, 1)], {'AWL': 'on'}), source=0x0B)
+    truck.j1939.request_address_claims()
+    show_page('j1939')
+    await asyncio.sleep(0.7)
+    [page for page in items('J1939View') if page.isVisible()][0].setProperty('selected', 0)
+    await shot('j1939', 0.6)
+    ecus.stop()
+
+    # CANopen network: two simulated I/O modules
+    machine_channel = f'docs-canopen-{uuid.uuid4().hex[:6]}'
+    manager.add_connection(
+        {'name': 'Machine', 'interface': 'VirtualBus', 'channel': machine_channel, 'protocol': 'CANopen'}
+    )
+    machine = manager.connections[-1]
+    machine.open()
+    slaves = BusSession(LiveSource(BusConfig('virtual', machine_channel)))
+    slaves.start()
+    eds = ROOT / 'examples' / 'canopen' / 'io_module.eds'
+    modules = [CanOpenNodeSimulator(slaves, node_id, ObjectDictionary.from_file(eds), 200) for node_id in (5, 6, 12)]
+    for module in modules:
+        module.start()
+    modules[0].set_value(0x6401, 1, 2471)
+    modules[0].set_value(0x6000, 1, 0b10110001)
+    canopen = machine.canopen
+    canopen.load_dictionary(QUrl.fromLocalFile(str(eds)))
+    canopen.set_node(5)
+    await asyncio.sleep(0.3)
+    canopen.nmt(0x01, True)
+    canopen.set_node(12)
+    canopen.nmt(0x02, False)
+    canopen.set_node(5)
+    modules[1].emergency(0x4210, 0x09, b'\x5a')
+    modules[1].emergency(0x0000, 0x00)
+    modules[1].emergency(0x8130, 0x11)
+    for start in (
+        lambda: canopen.sdo_read('1018', '04'),
+        lambda: canopen.sdo_read('1008', '00'),
+        lambda: canopen.sdo_write('1017', '00', '200'),
+        lambda: canopen.sdo_write('1000', '00', '0'),
+        lambda: canopen.sdo_read('2000', '00'),
+    ):
+        start()
+        while canopen.busy:
+            await asyncio.sleep(0.02)
+    show_page('canopen')
+    await asyncio.sleep(0.7)
+    await shot('canopen')
+    tabs = [tab for tab in items('TabBar') if hasattr(tab, 'isVisible') and tab.isVisible()][0]
+    tabs.setProperty('currentIndex', 1)
+    canopen.send_sync()
+    await shot('canopen-pdos', 0.7)
+    for module in modules:
+        module.stop()
+    slaves.stop()
+
+    # Comparing the recording with a variant: lower engine speed after 2 s, vehicle speed every 2nd frame, one more ID
+    variant = recording.with_name('vehicle_variant.asc')
+    with can.LogReader(str(recording)) as reader, can.Logger(str(variant)) as writer:
+        first = None
+        count = 0
+        for msg in reader:
+            first = msg.timestamp if first is None else first
+            if msg.arbitration_id == 0x100 and msg.timestamp - first > 2.0:
+                raw = int.from_bytes(msg.data[:2], 'little') * 9 // 10
+                msg.data[:2] = raw.to_bytes(2, 'little')
+            if msg.is_extended_id:
+                count += 1
+                if count % 2:
+                    continue
+            writer.on_message_received(msg)
+            if msg.arbitration_id == 0x100 and count % 50 == 0:
+                writer.on_message_received(
+                    can.Message(timestamp=msg.timestamp, arbitration_id=0x7DF, is_extended_id=False, data=[2, 1, 0x0D])
+                )
+    compare_tool = manager.compare
+    compare_tool.open_file('a', QUrl.fromLocalFile(str(recording)))
+    compare_tool.open_file('b', QUrl.fromLocalFile(str(variant)))
+    compare_tool.load_database(QUrl.fromLocalFile(str(EXAMPLES / 'vehicle.dbc')))
+    while compare_tool.busy or not compare_tool.has_result:
+        await asyncio.sleep(0.05)
+    await asyncio.sleep(0.2)
+    while compare_tool.busy:
+        await asyncio.sleep(0.05)
+    window.setProperty('tool', 'compare')
+    await shot('compare')
+    compare_tabs = [tab for tab in items('TabBar') if hasattr(tab, 'isVisible') and tab.isVisible()][0]
+    compare_tabs.setProperty('currentIndex', 1)
+    await shot('compare-signals')
+    window.setProperty('tool', '')
+
     for name, dialog_name in (('convert-database', 'ConvertDatabaseDialog'), ('preferences', 'PreferencesDialog')):
         dialog = items(dialog_name)[0]
         dialog.open()
@@ -225,6 +365,14 @@ async def scenario():
     window.resize(1440, 1400)
     await shot('database-editor-layout')
     window.resize(1440, 900)
+    # A LIN database
+    lin_database = Path(tempfile.mkdtemp()) / 'body.ldf'
+    lin_database.write_bytes((DATA / 'full.ldf').read_bytes())
+    editor.new_database()
+    editor.open_path(str(lin_database))
+    editor.select_message('Door_Frm1')
+    editor.select_signal('Temperature')
+    await shot('database-editor-lin')
     window.setProperty('tool', '')
 
     manager.close_all()

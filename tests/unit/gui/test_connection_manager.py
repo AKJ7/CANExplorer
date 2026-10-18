@@ -420,3 +420,71 @@ async def test_workspace_round_trip(manager, tmp_path):
     assert 'panel' in problems and 'not found' in problems and len(manager.connections) == 2
     assert 'not a CANExplorer workspace' in manager.open_workspace(QUrl.fromLocalFile(str(Path(moved) / 'vehicle.dbc')))
     manager.close_all()
+
+
+async def test_database_editor_with_lin_databases(manager, data_dir, tmp_path):
+    import shutil
+
+    shutil.copy(data_dir / 'full.ldf', tmp_path / 'body.ldf')
+    editor = manager.database_editor
+    assert editor.open_path(str(tmp_path / 'body.ldf')) == ''
+    assert editor.kind == 'lin' and editor.format == 'LIN description file' and editor.writable
+    assert editor.save_filters == ['LIN description file (*.ldf)']
+    assert editor.current_message == 'CEM_Frm1' and editor.message['publisher'] == 'CEM'
+    assert editor.messages[5] == {
+        'name': 'Door_Frm1',
+        'id': '20',
+        'extended': False,
+        'fd': False,
+        'length': 8,
+        'signals': 2,
+        'senders': 'DoorLeft',
+        'issue': False,
+    }
+    editor.select_message('Door_Frm1')
+    assert [signal['name'] for signal in editor.signals] == ['Serial', 'Temperature']
+    assert editor.signals[0]['initial'] == '1, 2, 3, 4' and editor.signals[1]['encoding'] == 'TemperatureEncoding'
+    assert editor.layout[32:44] == [1] * 12
+
+    assert editor.update_message({'frame_id': '0x22', 'length': 6}) == ''
+    editor.select_signal('Temperature')
+    assert editor.update_signal({'receivers': 'CEM, LSM', 'encoding': '', 'initial': '100'}) == ''
+    assert editor.signals[1]['receivers'] == 'CEM, LSM' and editor.signals[1]['encoding'] == ''
+    assert 'overlaps' in (editor.update_signal({'start': 20}) or editor.issues[0])
+    assert editor.update_signal({'start': 32}) == '' and editor.issues == []
+    assert editor.add_message() == '' and editor.current_message == 'Frame1'
+    assert editor.update_message({'publisher': 'LSM'}) == '' and editor.add_signal() == ''
+
+    header = editor.lin_header
+    assert (header['speed'], header['master'], header['timebase'], header['channel_name']) == (
+        19200,
+        'CEM',
+        '5',
+        'Body',
+    )
+    assert editor.set_lin_header({'speed': '10417', 'timebase': '10'}) == ''
+    assert editor.lin_header['speed'] == 10417
+    nodes = {node['name']: node for node in editor.slave_nodes}
+    assert nodes['RSM']['configured_nad'] == '20' and nodes['RSM']['supplier_id'] == '4E4E'
+    assert editor.add_node('DoorRight') == '' and editor.update_node('DoorRight', {'configured_nad': '30'}) == ''
+    assert {node['name']: node for node in editor.slave_nodes}['DoorRight']['configured_nad'] == '30'
+    assert editor.rename_node('DoorRight', 'DoorRearRight') == ''
+
+    encodings = {entry['name']: entry for entry in editor.encodings}
+    assert encodings['ErrorEncoding']['signals'] == 'RSMerror, LSMerror'
+    assert 'physical_value, 1, 254, 1, 100, "lux";' in encodings['FactorEncoding']['text']
+    assert editor.add_encoding('PercentEncoding') == ''
+    assert editor.set_encoding_text('PercentEncoding', 'physical_value, 0, 200, 0.5, 0, "%";') == ''
+    assert 'Invalid' in editor.set_encoding_text('PercentEncoding', 'oops')
+    assert editor.add_schedule('Fast') == ''
+    assert editor.set_schedule_text('Fast', 'CEM_Frm1 delay 5 ms;\nFrame1 delay 5 ms;') == ''
+    assert {table['name']: table for table in editor.schedules}['Fast'][
+        'text'
+    ] == 'CEM_Frm1 delay 5 ms;\nFrame1 delay 5 ms;'
+
+    assert editor.save() == '' and not editor.dirty
+    assert 'saved as .ldf' in editor.save_as(QUrl.fromLocalFile(str(tmp_path / 'body.dbc')))
+    database = open_signal_database(tmp_path / 'body.ldf')
+    assert database.baudrate == 10417 and database.frame('Door_Frm1').frame_id == 0x22
+    editor.new_lin_database()
+    assert editor.kind == 'lin' and editor.file_name == 'Untitled' and editor.messages == []

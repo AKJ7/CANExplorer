@@ -4,10 +4,11 @@ import QtQuick.Dialogs 6.2
 import QtQuick.Layouts 1.15
 import CanExplorer 1.0
 
-// Editor of CAN signal databases (DBC, DBF, KCD, SYM; ARXML saved as one of those).
+// Editor of signal databases: CAN (DBC, DBF, KCD, SYM; ARXML saved as one of those) and LIN (LDF).
 ColumnLayout {
     id: root
     readonly property var editor: connectionManager.database_editor
+    readonly property bool lin: editor.kind === "lin"
     readonly property var message: editor.message
     readonly property var signal: editor.signals.find(item => item.name === editor.current_signal) || null
     readonly property int signalIndex: editor.signals.findIndex(item => item.name === editor.current_signal)
@@ -72,7 +73,7 @@ ColumnLayout {
     // A text property of the selected signal, applied when editing finishes
     component SignalField: TextField {
         property string field
-        text: root.signal ? root.signal[field] : ""
+        text: root.signal && root.signal[field] !== undefined ? root.signal[field] : ""  // CAN or LIN fields
         Layout.fillWidth: true
         onEditingFinished: {
             if (!root.signal || text === String(root.signal[field]))
@@ -132,8 +133,20 @@ ColumnLayout {
             }
 
             Button {
-                text: qsTr("New")
-                onClicked: root.confirmDiscard(() => root.editor.new_database())
+                id: newButton
+                text: qsTr("New ▾")
+                onClicked: newMenu.popup(newButton, 0, newButton.height)
+                Menu {
+                    id: newMenu
+                    MenuItem {
+                        text: qsTr("CAN database")
+                        onTriggered: root.confirmDiscard(() => root.editor.new_database())
+                    }
+                    MenuItem {
+                        text: qsTr("LIN database (LDF)")
+                        onTriggered: root.confirmDiscard(() => root.editor.new_lin_database())
+                    }
+                }
             }
             Button {
                 text: qsTr("Open…")
@@ -179,7 +192,7 @@ ColumnLayout {
             anchors.centerIn: parent
             spacing: 14
             Label {
-                text: qsTr("Open a signal database to edit its messages, signals and nodes, or create a new one.")
+                text: qsTr("Open a CAN or LIN database to edit its messages or frames, signals and nodes, or create a new one.")
                 color: Theme.muted
                 Layout.alignment: Qt.AlignHCenter
             }
@@ -191,22 +204,37 @@ ColumnLayout {
                     onClicked: openDialog.open()
                 }
                 Button {
-                    text: qsTr("New database")
+                    text: qsTr("New CAN database")
                     onClicked: root.editor.new_database()
+                }
+                Button {
+                    text: qsTr("New LIN database")
+                    onClicked: root.editor.new_lin_database()
                 }
             }
         }
     }
 
+    // LIN databases have more parts than frames and signals
+    TabBar {
+        id: linTabs
+        visible: root.editor.open && root.lin
+        Layout.fillWidth: true
+        TabButton { text: qsTr("Frames and signals"); width: implicitWidth }
+        TabButton { text: qsTr("Nodes"); width: implicitWidth }
+        TabButton { text: qsTr("Encoding types"); width: implicitWidth }
+        TabButton { text: qsTr("Schedule tables"); width: implicitWidth }
+    }
+
     RowLayout {
-        visible: root.editor.open
+        visible: root.editor.open && (!root.lin || linTabs.currentIndex === 0)
         spacing: Theme.spacing
         Layout.fillWidth: true
         Layout.fillHeight: true
 
         // Messages
         Card {
-            title: qsTr("Messages (%1)").arg(root.editor.messages.length)
+            title: (root.lin ? qsTr("Frames (%1)") : qsTr("Messages (%1)")).arg(root.editor.messages.length)
             Layout.preferredWidth: 330
             Layout.fillHeight: true
             headerItems: [
@@ -313,7 +341,8 @@ ColumnLayout {
                     Layout.preferredHeight: 80
                     Label {
                         anchors.centerIn: parent
-                        text: qsTr("The database has no messages yet; add one with +.")
+                        text: root.lin ? qsTr("The database has no frames yet; add one with +.")
+                                       : qsTr("The database has no messages yet; add one with +.")
                         color: Theme.muted
                     }
                 }
@@ -321,7 +350,7 @@ ColumnLayout {
                 // Message properties
                 Card {
                     visible: root.message.name !== undefined
-                    title: qsTr("Message")
+                    title: root.lin ? qsTr("Frame") : qsTr("Message")
                     Layout.fillWidth: true
                     Layout.preferredHeight: messageGrid.implicitHeight + 70
 
@@ -339,7 +368,7 @@ ColumnLayout {
                             onEditingFinished: if (text !== root.message.name)
                                 root.apply(root.editor.update_message({ name: text }), () => text = root.message.name)
                         }
-                        FieldLabel { text: qsTr("Identifier (hex)") }
+                        FieldLabel { text: root.lin ? qsTr("Identifier (hex, 0–3B)") : qsTr("Identifier (hex)") }
                         TextField {
                             text: root.message.frame_id || ""
                             font.family: "monospace"
@@ -356,8 +385,17 @@ ColumnLayout {
                             Layout.fillWidth: true
                             onActivated: index => root.apply(root.editor.update_message({ length: Number(currentText) }))
                         }
-                        FieldLabel { text: qsTr("Cycle time (ms)") }
+                        FieldLabel { text: qsTr("Publisher"); visible: root.lin }
+                        ComboBox {
+                            visible: root.lin
+                            model: root.editor.nodes
+                            currentIndex: root.editor.nodes.indexOf(root.message.publisher || "")
+                            Layout.fillWidth: true
+                            onActivated: index => root.apply(root.editor.update_message({ publisher: currentText }))
+                        }
+                        FieldLabel { text: qsTr("Cycle time (ms)"); visible: !root.lin }
                         TextField {
+                            visible: !root.lin
                             text: root.message.cycle_time || ""
                             placeholderText: qsTr("not cyclic")
                             Layout.fillWidth: true
@@ -365,8 +403,9 @@ ColumnLayout {
                                 root.apply(root.editor.update_message({ cycle_time: text }), () => text = root.message.cycle_time)
                         }
 
-                        FieldLabel { text: qsTr("Senders") }
+                        FieldLabel { text: qsTr("Senders"); visible: !root.lin }
                         TextField {
+                            visible: !root.lin
                             text: root.message.senders || ""
                             placeholderText: qsTr("Node names, comma separated")
                             Layout.fillWidth: true
@@ -374,6 +413,7 @@ ColumnLayout {
                                 root.apply(root.editor.update_message({ senders: text }), () => text = root.message.senders)
                         }
                         RowLayout {
+                            visible: !root.lin
                             Layout.columnSpan: 2
                             CheckBox {
                                 text: qsTr("Extended (29 bit)")
@@ -388,8 +428,9 @@ ColumnLayout {
                             }
                         }
 
-                        FieldLabel { text: qsTr("Comment") }
+                        FieldLabel { text: qsTr("Comment"); visible: !root.lin }
                         TextField {
+                            visible: !root.lin
                             text: root.message.comment || ""
                             Layout.columnSpan: 3
                             Layout.fillWidth: true
@@ -483,64 +524,87 @@ ColumnLayout {
 
                             FieldLabel { text: qsTr("Name") }
                             SignalField { field: "name" }
-                            FieldLabel { text: qsTr("Unit") }
-                            SignalField { field: "unit" }
+                            FieldLabel { text: qsTr("Unit"); visible: !root.lin }
+                            SignalField { field: "unit"; visible: !root.lin }
+                            FieldLabel { text: qsTr("Encoding type"); visible: root.lin }
+                            ComboBox {
+                                visible: root.lin
+                                model: [qsTr("(none)")].concat(root.editor.encoding_names)
+                                currentIndex: root.signal && root.signal.encoding ? root.editor.encoding_names.indexOf(root.signal.encoding) + 1 : 0
+                                Layout.fillWidth: true
+                                onActivated: index => root.apply(root.editor.update_signal({ encoding: index === 0 ? "" : currentText }))
+                            }
 
                             FieldLabel { text: qsTr("Start bit") }
                             SignalField { field: "start" }
                             FieldLabel { text: qsTr("Length (bits)") }
                             SignalField { field: "length" }
 
-                            FieldLabel { text: qsTr("Byte order") }
+                            FieldLabel { text: qsTr("Byte order"); visible: !root.lin }
                             ComboBox {
+                                visible: !root.lin
                                 model: [qsTr("Intel (little endian)"), qsTr("Motorola (big endian)")]
                                 currentIndex: root.signal && root.signal.byte_order === "big_endian" ? 1 : 0
                                 Layout.fillWidth: true
                                 onActivated: index => root.apply(root.editor.update_signal({ byte_order: root.editor.byte_orders[index] }))
                             }
-                            FieldLabel { text: qsTr("Value type") }
+                            FieldLabel { text: qsTr("Value type"); visible: !root.lin }
                             ComboBox {
+                                visible: !root.lin
                                 model: [qsTr("Unsigned"), qsTr("Signed")]
                                 currentIndex: root.signal && root.signal.is_signed ? 1 : 0
                                 Layout.fillWidth: true
                                 onActivated: index => root.apply(root.editor.update_signal({ is_signed: index === 1 }))
                             }
 
-                            FieldLabel { text: qsTr("Factor") }
-                            SignalField { field: "scale" }
-                            FieldLabel { text: qsTr("Offset") }
-                            SignalField { field: "offset" }
+                            FieldLabel { text: qsTr("Factor"); visible: !root.lin }
+                            SignalField { field: "scale"; visible: !root.lin }
+                            FieldLabel { text: qsTr("Offset"); visible: !root.lin }
+                            SignalField { field: "offset"; visible: !root.lin }
 
-                            FieldLabel { text: qsTr("Minimum") }
-                            SignalField { field: "minimum"; placeholderText: qsTr("none") }
-                            FieldLabel { text: qsTr("Maximum") }
-                            SignalField { field: "maximum"; placeholderText: qsTr("none") }
+                            FieldLabel { text: qsTr("Minimum"); visible: !root.lin }
+                            SignalField { field: "minimum"; placeholderText: qsTr("none"); visible: !root.lin }
+                            FieldLabel { text: qsTr("Maximum"); visible: !root.lin }
+                            SignalField { field: "maximum"; placeholderText: qsTr("none"); visible: !root.lin }
 
-                            FieldLabel { text: qsTr("Initial value (raw)") }
-                            SignalField { field: "initial"; placeholderText: qsTr("none") }
-                            FieldLabel { text: qsTr("Receivers") }
+                            FieldLabel { text: root.lin ? qsTr("Initial value") : qsTr("Initial value (raw)") }
+                            SignalField {
+                                field: "initial"
+                                placeholderText: root.lin ? qsTr("number, or bytes: 1, 2, 3") : qsTr("none")
+                            }
+                            FieldLabel { text: root.lin ? qsTr("Subscribers") : qsTr("Receivers") }
                             SignalField { field: "receivers"; placeholderText: qsTr("Node names, comma separated") }
 
-                            FieldLabel { text: qsTr("Value descriptions") }
+                            FieldLabel { text: qsTr("Published by"); visible: root.lin }
+                            Label {
+                                visible: root.lin
+                                text: root.signal && root.signal.publisher ? qsTr("%1 (the publisher of the frame)").arg(root.signal.publisher) : ""
+                                color: Theme.text
+                                Layout.columnSpan: 3
+                            }
+
+                            FieldLabel { text: qsTr("Value descriptions"); visible: !root.lin }
                             SignalField {
+                                visible: !root.lin
                                 field: "choices"
                                 placeholderText: qsTr("e.g. 0=Off; 1=On; 3=Error")
                                 Layout.columnSpan: 3
                             }
 
-                            FieldLabel { text: qsTr("Comment") }
+                            FieldLabel { text: qsTr("Comment"); visible: !root.lin }
                             SignalField {
+                                visible: !root.lin
                                 field: "comment"
                                 Layout.columnSpan: 3
                             }
 
                             FieldLabel {
-                                visible: root.signal !== null && root.signal.multiplex !== ""
+                                visible: !!(root.signal && root.signal.multiplex)
                                 text: qsTr("Multiplexing")
                             }
                             Label {
-                                visible: root.signal !== null && root.signal.multiplex !== ""
-                                text: root.signal ? root.signal.multiplex : ""
+                                visible: !!(root.signal && root.signal.multiplex)
+                                text: root.signal && root.signal.multiplex ? root.signal.multiplex : ""
                                 color: Theme.text
                                 Layout.columnSpan: 3
                             }
@@ -652,6 +716,309 @@ ColumnLayout {
                 }
             }
         }
+    }
+
+    // LIN: bus and nodes
+    ScrollView {
+        id: nodesView
+        visible: root.editor.open && root.lin && linTabs.currentIndex === 1
+        contentWidth: availableWidth
+        clip: true
+        Layout.fillWidth: true
+        Layout.fillHeight: true
+
+        ColumnLayout {
+            width: nodesView.availableWidth
+            spacing: Theme.spacing
+
+            Card {
+                title: qsTr("Bus")
+                Layout.fillWidth: true
+                Layout.preferredHeight: busGrid.implicitHeight + 70
+                GridLayout {
+                    id: busGrid
+                    anchors.fill: parent
+                    columns: 4
+                    columnSpacing: 12
+                    rowSpacing: 8
+
+                    FieldLabel { text: qsTr("Speed (bit/s)") }
+                    ComboBox {
+                        editable: true
+                        model: root.editor.lin_speeds
+                        editText: String(root.editor.lin_header.speed || "")
+                        Layout.fillWidth: true
+                        onAccepted: root.apply(root.editor.set_lin_header({ speed: editText }))
+                        onActivated: index => root.apply(root.editor.set_lin_header({ speed: currentText }))
+                    }
+                    FieldLabel { text: qsTr("Channel name") }
+                    TextField {
+                        text: root.editor.lin_header.channel_name || ""
+                        placeholderText: qsTr("optional")
+                        Layout.fillWidth: true
+                        onEditingFinished: if (text !== root.editor.lin_header.channel_name)
+                            root.apply(root.editor.set_lin_header({ channel_name: text }))
+                    }
+                    FieldLabel { text: qsTr("Protocol version") }
+                    TextField {
+                        text: root.editor.lin_header.protocol_version || ""
+                        Layout.fillWidth: true
+                        onEditingFinished: if (text !== root.editor.lin_header.protocol_version)
+                            root.apply(root.editor.set_lin_header({ protocol_version: text }), () => text = root.editor.lin_header.protocol_version)
+                    }
+                    FieldLabel { text: qsTr("Language version") }
+                    TextField {
+                        text: root.editor.lin_header.language_version || ""
+                        Layout.fillWidth: true
+                        onEditingFinished: if (text !== root.editor.lin_header.language_version)
+                            root.apply(root.editor.set_lin_header({ language_version: text }), () => text = root.editor.lin_header.language_version)
+                    }
+                    FieldLabel { text: qsTr("Master node") }
+                    TextField {
+                        text: root.editor.lin_header.master || ""
+                        Layout.fillWidth: true
+                        onEditingFinished: if (text !== root.editor.lin_header.master)
+                            root.apply(root.editor.set_lin_header({ master: text }), () => text = root.editor.lin_header.master)
+                    }
+                    FieldLabel { text: qsTr("Time base / jitter (ms)") }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        TextField {
+                            text: root.editor.lin_header.timebase || ""
+                            Layout.fillWidth: true
+                            onEditingFinished: if (text !== root.editor.lin_header.timebase)
+                                root.apply(root.editor.set_lin_header({ timebase: text }), () => text = root.editor.lin_header.timebase)
+                        }
+                        TextField {
+                            text: root.editor.lin_header.jitter || ""
+                            Layout.fillWidth: true
+                            onEditingFinished: if (text !== root.editor.lin_header.jitter)
+                                root.apply(root.editor.set_lin_header({ jitter: text }), () => text = root.editor.lin_header.jitter)
+                        }
+                    }
+                }
+            }
+
+            Card {
+                title: qsTr("Slave nodes (%1)").arg(root.editor.slave_nodes.length)
+                Layout.fillWidth: true
+                Layout.preferredHeight: 120 + root.editor.slave_nodes.length * 46
+                headerItems: [
+                    TextField {
+                        id: newNodeField
+                        placeholderText: qsTr("New node name")
+                        Layout.preferredWidth: 180
+                        onAccepted: addNodeButton.clicked()
+                    },
+                    Button {
+                        id: addNodeButton
+                        text: qsTr("Add")
+                        enabled: newNodeField.text.trim().length > 0
+                        onClicked: if (root.apply(root.editor.add_node(newNodeField.text.trim()))) newNodeField.text = ""
+                    }
+                ]
+
+                GridLayout {
+                    anchors.fill: parent
+                    columns: 8
+                    columnSpacing: 10
+                    rowSpacing: 6
+
+                    Repeater {
+                        model: [qsTr("Name"), qsTr("Configured NAD"), qsTr("Initial NAD"), qsTr("Supplier ID"),
+                                qsTr("Function ID"), qsTr("Variant"), qsTr("LIN protocol"), ""]
+                        FieldLabel { required property string modelData; text: modelData }
+                    }
+                    Repeater {
+                        model: root.editor.slave_nodes
+                        delegate: Repeater {
+                            id: nodeRow
+                            required property var modelData
+                            model: ["name", "configured_nad", "initial_nad", "supplier_id", "function_id", "variant", "lin_protocol", ""]
+                            Item {
+                                required property string modelData
+                                implicitHeight: 36
+                                implicitWidth: modelData === "" ? 36 : 110
+                                Layout.fillWidth: modelData !== ""
+                                TextField {
+                                    visible: parent.modelData !== ""
+                                    anchors.fill: parent
+                                    text: parent.modelData ? nodeRow.modelData[parent.modelData] : ""
+                                    font.family: parent.modelData === "name" ? Qt.application.font.family : "monospace"
+                                    onEditingFinished: {
+                                        const key = parent.modelData
+                                        if (text === nodeRow.modelData[key])
+                                            return
+                                        const change = {}
+                                        change[key] = text
+                                        const error = key === "name" ? root.editor.rename_node(nodeRow.modelData.name, text)
+                                                                      : root.editor.update_node(nodeRow.modelData.name, change)
+                                        root.apply(error, () => text = nodeRow.modelData[key])
+                                    }
+                                }
+                                ToolButton {
+                                    visible: parent.modelData === ""
+                                    anchors.centerIn: parent
+                                    text: "✕"
+                                    ToolTip.visible: hovered
+                                    ToolTip.text: qsTr("Remove the node")
+                                    onClicked: root.apply(root.editor.remove_node(nodeRow.modelData.name))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // LIN: encoding types and schedule tables, both edited as LDF text
+    component TextItemsView: RowLayout {
+        id: itemsView
+        required property var items
+        required property string heading
+        required property string help
+        property var addItem
+        property var renameItem
+        property var removeItem
+        property var setText
+        property string current: items.length > 0 ? items[0].name : ""
+        readonly property var item: items.find(entry => entry.name === current) || null
+
+        spacing: Theme.spacing
+
+        Card {
+            title: qsTr("%1 (%2)").arg(itemsView.heading).arg(itemsView.items.length)
+            Layout.preferredWidth: 300
+            Layout.fillHeight: true
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: 6
+                RowLayout {
+                    TextField {
+                        id: newItemField
+                        placeholderText: qsTr("New name")
+                        Layout.fillWidth: true
+                        onAccepted: addItemButton.clicked()
+                    }
+                    Button {
+                        id: addItemButton
+                        text: qsTr("Add")
+                        enabled: newItemField.text.trim().length > 0
+                        onClicked: {
+                            const name = newItemField.text.trim()
+                            if (root.apply(itemsView.addItem(name))) {
+                                itemsView.current = name
+                                newItemField.text = ""
+                            }
+                        }
+                    }
+                }
+                ListView {
+                    clip: true
+                    spacing: 4
+                    model: itemsView.items
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    delegate: ItemDelegate {
+                        required property var modelData
+                        width: ListView.view.width
+                        text: modelData.name
+                        highlighted: modelData.name === itemsView.current
+                        onClicked: itemsView.current = modelData.name
+                    }
+                }
+            }
+        }
+
+        Card {
+            visible: itemsView.item !== null
+            title: itemsView.item ? itemsView.item.name : ""
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            headerItems: [
+                Button {
+                    text: qsTr("Remove")
+                    onClicked: root.apply(itemsView.removeItem(itemsView.current))
+                }
+            ]
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: 8
+                RowLayout {
+                    FieldLabel { text: qsTr("Name") }
+                    TextField {
+                        text: itemsView.item ? itemsView.item.name : ""
+                        Layout.fillWidth: true
+                        onEditingFinished: {
+                            if (!itemsView.item || text === itemsView.item.name)
+                                return
+                            const name = text
+                            if (root.apply(itemsView.renameItem(itemsView.current, name), () => text = itemsView.current))
+                                itemsView.current = name
+                        }
+                    }
+                }
+                Label {
+                    visible: itemsView.item !== null && itemsView.item.signals !== undefined
+                    text: itemsView.item && itemsView.item.signals ? qsTr("Used by: %1").arg(itemsView.item.signals) : qsTr("Used by no signal")
+                    color: Theme.muted
+                    font.pixelSize: 12
+                }
+                ScrollView {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    TextArea {
+                        id: itemText
+                        text: itemsView.item ? itemsView.item.text : ""
+                        font.family: "monospace"
+                        wrapMode: TextEdit.NoWrap
+                    }
+                }
+                RowLayout {
+                    Label {
+                        text: itemsView.help
+                        color: Theme.muted
+                        font.pixelSize: 12
+                        wrapMode: Text.Wrap
+                        Layout.fillWidth: true
+                    }
+                    Button {
+                        text: qsTr("Apply")
+                        highlighted: itemsView.item !== null && itemText.text !== itemsView.item.text
+                        enabled: highlighted
+                        onClicked: root.apply(itemsView.setText(itemsView.current, itemText.text),
+                                              () => itemText.text = itemsView.item.text)
+                    }
+                }
+            }
+        }
+    }
+
+    TextItemsView {
+        visible: root.editor.open && root.lin && linTabs.currentIndex === 2
+        Layout.fillWidth: true
+        Layout.fillHeight: true
+        items: root.editor.encodings
+        heading: qsTr("Encoding types")
+        help: qsTr('One value per line, as in an LDF: logical_value, 0, "off";  physical_value, 1, 254, 0.5, -40, "degC";  bcd_value;  ascii_value;')
+        addItem: name => root.editor.add_encoding(name)
+        renameItem: (old, name) => root.editor.rename_encoding(old, name)
+        removeItem: name => root.editor.remove_encoding(name)
+        setText: (name, text) => root.editor.set_encoding_text(name, text)
+    }
+
+    TextItemsView {
+        visible: root.editor.open && root.lin && linTabs.currentIndex === 3
+        Layout.fillWidth: true
+        Layout.fillHeight: true
+        items: root.editor.schedules
+        heading: qsTr("Schedule tables")
+        help: qsTr("One entry per line, as in an LDF: SeatStatus delay 10 ms;  MasterReq delay 20 ms;  AssignNAD { SeatECU } delay 20 ms;")
+        addItem: name => root.editor.add_schedule(name)
+        renameItem: (old, name) => root.editor.rename_schedule(old, name)
+        removeItem: name => root.editor.remove_schedule(name)
+        setText: (name, text) => root.editor.set_schedule_text(name, text)
     }
 
     FileDialog {

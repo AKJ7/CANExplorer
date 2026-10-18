@@ -166,6 +166,17 @@ class DiagnosticsController(QObject):
         self.set_tester_present(False)
         return ''
 
+    @pyqtProperty(str, notify=changed)
+    def addressing_text(self) -> str:
+        if self.is_lin:
+            return f'NAD 0x{self._nad:02X}'
+        width = 8 if self._extended else 3
+        return f'request 0x{self._request_id:0{width}X}, response 0x{self._response_id:0{width}X}'
+
+    def create_transport(self):
+        """A transport with the current addressing, e.g. for flashing; the caller closes it."""
+        return self._transport()
+
     def _transport(self):
         if self.is_lin:
             return LinTpClient(self.session, self._nad)

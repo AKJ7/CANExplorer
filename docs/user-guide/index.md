@@ -12,7 +12,7 @@ The window is laid out as a dashboard:
 - The window has no system title bar. Drag the top bar or the logo to move it, double-click the top bar to
   maximize or restore it, and use the buttons at the top right to minimize, maximize or close it. The window can
   be resized from its edges.
-- *Tools* in the sidebar opens the [database editor](database-editor.md).
+- *Tools* in the sidebar opens the [database editor](database-editor.md) and [compares recordings](compare-recordings.md).
 - The trace, overview and signals views have a toolbar to pause or clear the view, record, export and load a
   signal database.
 
@@ -26,6 +26,9 @@ database or reopen a recent connection.
 | **Overview** | One row per identifier with the latest data |
 | **Signals** | Live plots of database signals |
 | **Diagnostics** | UDS requests to an ECU (not for log replays) |
+| **J1939** | Nodes with their address claims and trouble codes, requests and sending parameter groups ([J1939 connections](j1939.md)) |
+| **CANopen** | NMT, SDO access to object dictionaries (EDS/DCF), PDOs and emergencies ([CANopen connections](canopen.md)) |
+| **Flashing** | Programming ECUs over UDS from Intel HEX, S-record or binary files ([Flashing](flashing.md), not for log replays) |
 | **LIN Schedule** | LIN master schedule tables (LIN connections) |
 | **Simulation** | Simulated nodes and QML panels (not for log replays) |
 | **Tests** | Automated test scripts with verdicts and reports (not for log replays) |

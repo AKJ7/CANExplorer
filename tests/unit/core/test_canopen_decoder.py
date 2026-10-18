@@ -39,3 +39,22 @@ def test_describe(can_id, data, expected):
 
 def test_extended_frames_are_ignored():
     assert CanOpenDecoder().describe(can.Message(arbitration_id=0x185, is_extended_id=True)) is None
+
+
+def test_object_dictionary_names_sdo_objects_and_decodes_pdos():
+    from pathlib import Path
+
+    from can_explorer.core.canopen_tools import ObjectDictionary
+
+    decoder = CanOpenDecoder()
+    decoder.set_dictionary(ObjectDictionary.from_file(Path(__file__).parents[3] / 'examples/canopen/io_module.eds'), 5)
+    assert decoder.describe(msg(0x605, [0x40, 0x18, 0x10, 0x01, 0, 0, 0, 0])).endswith(
+        'read 0x1018:01 Identity object.Vendor-ID'
+    )
+    assert decoder.describe(msg(0x606, [0x40, 0x18, 0x10, 0x01, 0, 0, 0, 0])).endswith('read 0x1018:01')
+    assert (
+        decoder.describe(msg(0x185, [0x05, 0xB0, 0x04, 0xA2, 0xFE]))
+        == 'TPDO1 node 5: Digital inputs 1-8=5, Analogue input 1=1200, Analogue input 2=-350'
+    )
+    decoder.set_dictionary(None, 0)
+    assert decoder.describe(msg(0x185, [0x05])) == 'TPDO1 node 5: 05'

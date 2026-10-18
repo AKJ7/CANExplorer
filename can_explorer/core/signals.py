@@ -1,4 +1,5 @@
-from bisect import bisect_left
+import math
+from bisect import bisect_left, bisect_right
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Tuple
 
@@ -34,6 +35,24 @@ class SignalSeries:
     def last(self) -> Optional[Tuple[float, float]]:
         return (self.times[-1], self.values[-1]) if self.times else None
 
+    @property
+    def first(self) -> Optional[Tuple[float, float]]:
+        return (self.times[0], self.values[0]) if self.times else None
+
+    def value_at(self, time: float) -> Optional[float]:
+        """The value at `time`: of the last point at or before it (signals hold their value between frames)."""
+        index = bisect_right(self.times, time) - 1
+        return self.values[index] if index >= 0 else None
+
+    def statistics(self, start: float, end: float) -> Optional[Tuple[float, float, float, int]]:
+        """(minimum, maximum, mean, count) of the finite values with start <= time <= end."""
+        first = bisect_left(self.times, start)
+        last = bisect_right(self.times, end)
+        values = [value for value in self.values[first:last] if math.isfinite(value)]
+        if not values:
+            return None
+        return min(values), max(values), sum(values) / len(values), len(values)
+
     def clear(self) -> None:
         self.times.clear()
         self.values.clear()
@@ -45,7 +64,7 @@ class SignalTracker:
     Only frames carrying a tracked signal are decoded, so tracking does not slow down the other traffic.
     """
 
-    def __init__(self, max_points: int = 50_000):
+    def __init__(self, max_points: int = 200_000):
         self.max_points = max_points
         self.series: Dict[str, SignalSeries] = {}
         self._by_message: Dict[str, Set[str]] = {}

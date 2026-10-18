@@ -54,10 +54,15 @@ computer.
 | `core/busstats.py` | Frame rates and bus load |
 | `core/signals.py` | Time series of tracked signals |
 | `core/database_io.py`, `core/dbf.py` | Loading, saving and converting signal databases; BUSMASTER DBF |
+| `core/database_editor.py`, `core/ldf_editor.py`, `core/ldf_writer.py` | Editing CAN databases and LDF files; writing LDF files |
 | `core/decoding.py`, `core/ldf.py` | Signal decoding with cantools databases and LDF files |
 | `core/protocols/` | Passive ISO-TP, J1939 and CANopen decoders |
 | `core/lin.py`, `core/lin_tp.py`, `core/lin_schedule.py` | LIN frames and decoder, LIN transport client, LIN master |
 | `core/isotp_client.py`, `core/uds.py` | Active ISO-TP client and UDS client and decoder |
+| `core/flashing.py` | Intel HEX, S-record and binary images; UDS download sequence |
+| `core/j1939_tools.py` | J1939 NAME, DM1/DM2, transport reassembly, network tracking and sending with BAM or RTS/CTS |
+| `core/canopen_tools.py` | EDS/DCF object dictionaries, SDO client, NMT, PDO mappings, network tracking, simulated node |
+| `core/compare.py` | Comparing two recordings |
 | `core/diagnostic_description.py` | CANdelaStudio CDD reader |
 | `core/trace_store.py` | Trace frames in memory and in temporary files on disk, by absolute index |
 | `core/conditions.py`, `core/recording.py` | Conditions on frames; split and triggered recordings |
@@ -67,7 +72,9 @@ computer.
 | `gui/models.py` | Trace (a paged view of the trace store) and overview table models |
 | `gui/trace_tools.py`, `gui/workspace.py` | Trace search and bookmarks; workspace files |
 | `gui/diagnostics.py`, `gui/simulation.py` | Diagnostics and simulation controllers, panel bridge |
-| `gui/signal_plot.py` | Plot item (QQuickPaintedItem) |
+| `gui/flashing.py`, `gui/j1939.py`, `gui/canopen.py` | Flashing, J1939 and CANopen controllers of a connection |
+| `gui/database_editor.py`, `gui/compare.py` | Database editor and recording comparison tools |
+| `gui/plot_view.py`, `gui/signal_plot.py` | Time range, cursors and charts of the signal plots; plot item (QQuickPaintedItem) |
 | `gui/app_state.py` | Persistent settings (QSettings) |
 | `gui/qt/CanExplorer/` | QML views, dialogs and dashboard components; `Theme.qml` holds the colours of the six themes, `GlassPanel.qml` the frosted glass of dialogs, menus and popups |
 | `gui/qt/CanExplorerStyle/` | Qt Quick Controls style drawing buttons, inputs, dialogs, menus etc. with the theme colours (Fusion for the rest) |

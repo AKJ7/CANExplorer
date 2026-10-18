@@ -19,7 +19,7 @@ ApplicationWindow {
     readonly property var currentConnection: currentIndex >= 0 ? connectionManager.connections[currentIndex] : null
     readonly property var currentConnectionView: currentIndex >= 0 ? connectionViews.itemAt(currentIndex) : null
     property var notifications: []
-    // A tool shown instead of the connections: "" or "database-editor"
+    // A tool shown instead of the connections: "", "database-editor" or "compare"
     property string tool: ""
     property bool closeConfirmed: false
     // Dragged with the handle on the right edge of the sidebar
@@ -220,8 +220,10 @@ ApplicationWindow {
 
             TopBar {
                 connection: mainWindow.tool === "" ? mainWindow.currentConnection : null
-                title: mainWindow.tool === "database-editor" ? qsTr("Database editor") : ""
+                title: mainWindow.tool === "database-editor" ? qsTr("Database editor")
+                    : mainWindow.tool === "compare" ? qsTr("Compare recordings") : ""
                 pageTitle: mainWindow.tool === "database-editor" ? connectionManager.database_editor.file_name
+                    : mainWindow.tool === "compare" ? compareView.pageTitle
                     : mainWindow.currentConnectionView ? mainWindow.currentConnectionView.pageTitle : ""
                 notifications: mainWindow.notifications
                 onClearNotifications: mainWindow.notifications = []
@@ -231,6 +233,14 @@ ApplicationWindow {
             DatabaseEditorView {
                 id: databaseEditorView
                 visible: mainWindow.tool === "database-editor"
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.margins: 24
+            }
+
+            CompareView {
+                id: compareView
+                visible: mainWindow.tool === "compare"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.margins: 24

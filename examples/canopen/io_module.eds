@@ -1,0 +1,375 @@
+[FileInfo]
+FileName=io_module.eds
+FileVersion=1
+FileRevision=0
+EDSVersion=4.0
+Description=Digital and analogue I/O module (CiA 401) for the CANExplorer examples
+CreatedBy=CANExplorer
+
+[DeviceInfo]
+VendorName=CANExplorer
+VendorNumber=0x00000A55
+ProductName=IO module 8DI 8DO 2AI
+ProductNumber=0x00000401
+RevisionNumber=0x00010002
+BaudRate_125=1
+BaudRate_250=1
+BaudRate_500=1
+BaudRate_1000=1
+SimpleBootUpMaster=0
+SimpleBootUpSlave=1
+Granularity=8
+NrOfRXPDO=1
+NrOfTXPDO=2
+LSS_Supported=0
+
+[MandatoryObjects]
+SupportedObjects=3
+1=0x1000
+2=0x1001
+3=0x1018
+
+[OptionalObjects]
+SupportedObjects=11
+1=0x1008
+2=0x1017
+3=0x1400
+4=0x1600
+5=0x1800
+6=0x1801
+7=0x1A00
+8=0x1A01
+9=0x6000
+10=0x6200
+11=0x6401
+
+[ManufacturerObjects]
+SupportedObjects=2
+1=0x2000
+2=0x2100
+
+[1000]
+ParameterName=Device type
+ObjectType=0x7
+DataType=0x0007
+AccessType=ro
+DefaultValue=0x000F0191
+PDOMapping=0
+
+[1001]
+ParameterName=Error register
+ObjectType=0x7
+DataType=0x0005
+AccessType=ro
+DefaultValue=0
+PDOMapping=1
+
+[1008]
+ParameterName=Manufacturer device name
+ObjectType=0x7
+DataType=0x0009
+AccessType=const
+DefaultValue=IO module 8DI 8DO 2AI
+PDOMapping=0
+
+[1017]
+ParameterName=Producer heartbeat time
+ObjectType=0x7
+DataType=0x0006
+AccessType=rw
+DefaultValue=500
+PDOMapping=0
+
+[1018]
+ParameterName=Identity object
+ObjectType=0x9
+SubNumber=5
+
+[1018sub0]
+ParameterName=Highest sub-index supported
+ObjectType=0x7
+DataType=0x0005
+AccessType=ro
+DefaultValue=4
+PDOMapping=0
+
+[1018sub1]
+ParameterName=Vendor-ID
+ObjectType=0x7
+DataType=0x0007
+AccessType=ro
+DefaultValue=0x00000A55
+PDOMapping=0
+
+[1018sub2]
+ParameterName=Product code
+ObjectType=0x7
+DataType=0x0007
+AccessType=ro
+DefaultValue=0x00000401
+PDOMapping=0
+
+[1018sub3]
+ParameterName=Revision number
+ObjectType=0x7
+DataType=0x0007
+AccessType=ro
+DefaultValue=0x00010002
+PDOMapping=0
+
+[1018sub4]
+ParameterName=Serial number
+ObjectType=0x7
+DataType=0x0007
+AccessType=ro
+DefaultValue=12345
+PDOMapping=0
+
+[1400]
+ParameterName=RPDO1 communication parameter
+ObjectType=0x9
+SubNumber=3
+
+[1400sub0]
+ParameterName=Highest sub-index supported
+ObjectType=0x7
+DataType=0x0005
+AccessType=const
+DefaultValue=2
+PDOMapping=0
+
+[1400sub1]
+ParameterName=COB-ID used by RPDO
+ObjectType=0x7
+DataType=0x0007
+AccessType=rw
+DefaultValue=$NODEID+0x200
+PDOMapping=0
+
+[1400sub2]
+ParameterName=Transmission type
+ObjectType=0x7
+DataType=0x0005
+AccessType=rw
+DefaultValue=255
+PDOMapping=0
+
+[1600]
+ParameterName=RPDO1 mapping parameter
+ObjectType=0x9
+SubNumber=2
+
+[1600sub0]
+ParameterName=Number of mapped objects
+ObjectType=0x7
+DataType=0x0005
+AccessType=rw
+DefaultValue=1
+PDOMapping=0
+
+[1600sub1]
+ParameterName=Mapped object 1
+ObjectType=0x7
+DataType=0x0007
+AccessType=rw
+DefaultValue=0x62000108
+PDOMapping=0
+
+[1800]
+ParameterName=TPDO1 communication parameter
+ObjectType=0x9
+SubNumber=4
+
+[1800sub0]
+ParameterName=Highest sub-index supported
+ObjectType=0x7
+DataType=0x0005
+AccessType=const
+DefaultValue=5
+PDOMapping=0
+
+[1800sub1]
+ParameterName=COB-ID used by TPDO
+ObjectType=0x7
+DataType=0x0007
+AccessType=rw
+DefaultValue=$NODEID+0x180
+PDOMapping=0
+
+[1800sub2]
+ParameterName=Transmission type
+ObjectType=0x7
+DataType=0x0005
+AccessType=rw
+DefaultValue=255
+PDOMapping=0
+
+[1800sub5]
+ParameterName=Event timer
+ObjectType=0x7
+DataType=0x0006
+AccessType=rw
+DefaultValue=100
+PDOMapping=0
+
+[1801]
+ParameterName=TPDO2 communication parameter
+ObjectType=0x9
+SubNumber=3
+
+[1801sub0]
+ParameterName=Highest sub-index supported
+ObjectType=0x7
+DataType=0x0005
+AccessType=const
+DefaultValue=2
+PDOMapping=0
+
+[1801sub1]
+ParameterName=COB-ID used by TPDO
+ObjectType=0x7
+DataType=0x0007
+AccessType=rw
+DefaultValue=$NODEID+0x280
+PDOMapping=0
+
+[1801sub2]
+ParameterName=Transmission type
+ObjectType=0x7
+DataType=0x0005
+AccessType=rw
+DefaultValue=1
+PDOMapping=0
+
+[1A00]
+ParameterName=TPDO1 mapping parameter
+ObjectType=0x9
+SubNumber=4
+
+[1A00sub0]
+ParameterName=Number of mapped objects
+ObjectType=0x7
+DataType=0x0005
+AccessType=rw
+DefaultValue=3
+PDOMapping=0
+
+[1A00sub1]
+ParameterName=Mapped object 1
+ObjectType=0x7
+DataType=0x0007
+AccessType=rw
+DefaultValue=0x60000108
+PDOMapping=0
+
+[1A00sub2]
+ParameterName=Mapped object 2
+ObjectType=0x7
+DataType=0x0007
+AccessType=rw
+DefaultValue=0x64010110
+PDOMapping=0
+
+[1A00sub3]
+ParameterName=Mapped object 3
+ObjectType=0x7
+DataType=0x0007
+AccessType=rw
+DefaultValue=0x64010210
+PDOMapping=0
+
+[1A01]
+ParameterName=TPDO2 mapping parameter
+ObjectType=0x9
+SubNumber=2
+
+[1A01sub0]
+ParameterName=Number of mapped objects
+ObjectType=0x7
+DataType=0x0005
+AccessType=rw
+DefaultValue=1
+PDOMapping=0
+
+[1A01sub1]
+ParameterName=Mapped object 1
+ObjectType=0x7
+DataType=0x0007
+AccessType=rw
+DefaultValue=0x21000020
+PDOMapping=0
+
+[2000]
+ParameterName=Installation note
+ObjectType=0x7
+DataType=0x0009
+AccessType=rw
+DefaultValue=Cabinet 3, rail B
+PDOMapping=0
+
+[2100]
+ParameterName=Module temperature
+ObjectType=0x7
+DataType=0x0008
+AccessType=ro
+DefaultValue=36.5
+PDOMapping=1
+
+[6000]
+ParameterName=Read input 8-bit
+ObjectType=0x8
+SubNumber=2
+
+[6000sub0]
+ParameterName=Number of input groups
+ObjectType=0x7
+DataType=0x0005
+AccessType=ro
+DefaultValue=1
+PDOMapping=0
+
+[6000sub1]
+ParameterName=Digital inputs 1-8
+ObjectType=0x7
+DataType=0x0005
+AccessType=ro
+DefaultValue=0x05
+PDOMapping=1
+
+[6200]
+ParameterName=Write output 8-bit
+ObjectType=0x8
+CompactSubObj=1
+DataType=0x0005
+AccessType=rww
+DefaultValue=0
+PDOMapping=1
+
+[6401]
+ParameterName=Read analogue input 16-bit
+ObjectType=0x8
+SubNumber=3
+
+[6401sub0]
+ParameterName=Number of analogue inputs
+ObjectType=0x7
+DataType=0x0005
+AccessType=ro
+DefaultValue=2
+PDOMapping=0
+
+[6401sub1]
+ParameterName=Analogue input 1
+ObjectType=0x7
+DataType=0x0003
+AccessType=ro
+DefaultValue=1200
+PDOMapping=1
+
+[6401sub2]
+ParameterName=Analogue input 2
+ObjectType=0x7
+DataType=0x0003
+AccessType=ro
+DefaultValue=-350
+PDOMapping=1

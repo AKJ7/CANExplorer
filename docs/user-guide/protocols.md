@@ -8,8 +8,8 @@ frame in arrival order, so multi-frame transfers are reassembled.
 | Raw | Nothing (only the signal database) |
 | ISO-TP | ISO 15765-2 single, first, consecutive and flow control frames; reassembled payloads |
 | UDS | ISO-TP, plus the UDS services in the reassembled payloads |
-| J1939 | Priority, PGN with names of common PGNs, source and destination address, requests, transport protocol (BAM and RTS/CTS) with reassembly |
-| CANopen | NMT, SYNC, EMCY, TIME, PDOs, SDO requests and responses, heartbeat and node guarding |
+| J1939 | Priority, PGN with names of common PGNs, source and destination address, requests, address claims with the NAME, DM1/DM2 lamps and trouble codes, transport protocol (BAM and RTS/CTS) with reassembly; see also the [J1939 view](j1939.md) |
+| CANopen | NMT, SYNC, EMCY, TIME, PDOs, SDO requests and responses, heartbeat and node guarding; with an object dictionary loaded in the [CANopen view](canopen.md), SDO object names and PDO values |
 | LIN | Headers and responses, diagnostic frames, see [LIN](lin.md) |
 
 !!! tip "Choose the protocol of the traffic"
@@ -32,5 +32,5 @@ ReadDataByIdentifier data into fields.
 ## Limits
 
 - ISO-TP: normal addressing; the extended and mixed addressing formats are not decoded.
-- J1939: names are known for a few common PGNs; signals of J1939 messages are decoded with a DBC.
+- J1939: names are known for common PGNs and SPNs; signals of J1939 messages are decoded with a DBC.
 - CANopen: the predefined connection set (default COB-IDs).

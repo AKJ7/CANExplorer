@@ -46,12 +46,16 @@ nav:
       - Trace and overview: user-guide/trace-and-overview.md
       - Filters: user-guide/filters.md
       - Recording, replay and export: user-guide/recording-and-replay.md
+      - Comparing recordings: user-guide/compare-recordings.md
       - Signal databases: user-guide/signal-databases.md
       - Database editor: user-guide/database-editor.md
       - Signal plots: user-guide/signal-plots.md
       - Transmitting: user-guide/transmitting.md
       - Protocol decoding: user-guide/protocols.md
       - Diagnostics (UDS): user-guide/diagnostics.md
+      - Flashing: user-guide/flashing.md
+      - J1939: user-guide/j1939.md
+      - CANopen: user-guide/canopen.md
       - LIN: user-guide/lin.md
       - Simulation and scripting: user-guide/simulation.md
       - Test automation: user-guide/test-automation.md

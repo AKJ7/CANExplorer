@@ -60,7 +60,7 @@ def test_dashboard_pages_and_themes_render_without_warnings(window, qtbot):
         stack.extend(item.childItems())
     view = stack[-1]
     pages = [page['key'] for page in view.property('pages').toVariant()]
-    assert pages == ['dashboard', 'trace', 'overview', 'signals', 'diagnostics', 'simulation', 'tests']
+    assert pages == ['dashboard', 'trace', 'overview', 'signals', 'diagnostics', 'flash', 'simulation', 'tests']
     for page in pages:
         view.setProperty('page', page)
         qtbot.wait(30)
@@ -120,6 +120,28 @@ def test_database_editor_renders_without_warnings(window, qtbot, data_dir, tmp_p
     assert editor.add_message() == '' and editor.add_signal() == ''
     assert editor.update_message({'is_fd': True, 'length': 64}) == ''
     qtbot.wait(50)
+
+    # A LIN database: frames and signals, nodes, encoding types and schedule tables
+    shutil.copy(data_dir / 'full.ldf', tmp_path / 'body.ldf')
+    editor.new_database()  # No unsaved changes to ask about
+    assert editor.open_path(str(tmp_path / 'body.ldf')) == ''
+    qtbot.wait(50)
+    from PyQt6 import sip
+    from PyQt6.QtQuick import QQuickWindow
+
+    stack = [sip.cast(root, QQuickWindow).contentItem()]
+    tabs = None
+    while stack:
+        item = stack.pop()
+        if 'TabBar' in item.metaObject().className() and item.property('count') == 4:
+            tabs = item
+            break
+        stack.extend(item.childItems())
+    assert tabs is not None and tabs.isVisible()
+    editor.select_message('Door_Frm1')
+    for index in range(4):
+        tabs.setProperty('currentIndex', index)
+        qtbot.wait(40)
     editor.new_database()
     qtbot.wait(30)
     root.setProperty('tool', '')
@@ -386,3 +408,126 @@ def test_simulation_panels_render(window, qtbot, data_dir, tmp_path):
     assert warnings == []
     errors = [line for line in simulation.console if line['level'] == 'error']
     assert len(errors) == 1 and errors[0]['source'] == 'panel broken' and 'broken.qml' in errors[0]['text']
+
+
+def test_j1939_page_renders_without_warnings(window, qtbot):
+    import can
+    from PyQt6 import sip
+    from PyQt6.QtQuick import QQuickWindow
+
+    from can_explorer.core.j1939_tools import PGN_ADDRESS_CLAIMED, PGN_DM1, Dtc, J1939Name, build_can_id, encode_dm
+
+    engine, manager, warnings = window
+    manager.add_connection(
+        {'name': 'Truck', 'interface': 'VirtualBus', 'channel': f'qml-{uuid.uuid4().hex}', 'protocol': 'J1939'}
+    )
+    network = manager.connections[-1].j1939.network
+    for can_id, data in (
+        (build_can_id(PGN_ADDRESS_CLAIMED, 0x00), J1939Name((1 << 63) | (123 << 21) | 4567).to_bytes()),
+        (build_can_id(PGN_DM1, 0x00), encode_dm([Dtc(110, 0, 3), Dtc(100, 1, 1)], {'MIL': 'on', 'AWL': 'on'})),
+        (build_can_id(PGN_ADDRESS_CLAIMED, 0xFE), J1939Name(5).to_bytes()),
+        (build_can_id(0xF004, 0x03), bytes(8)),
+    ):
+        network.on_message(can.Message(arbitration_id=can_id, is_extended_id=True, data=data))
+    qtbot.wait(50)
+    stack = [sip.cast(engine.rootObjects()[0], QQuickWindow).contentItem()]
+    while not stack[-1].metaObject().className().startswith('ConnectionView'):
+        item = stack.pop()
+        stack.extend(item.childItems())
+    view = stack[-1]
+    assert 'j1939' in [page['key'] for page in view.property('pages').toVariant()]
+    view.setProperty('page', 'j1939')
+    qtbot.wait(600)  # One refresh of the node list
+    stack = [view]
+    while not stack[-1].metaObject().className().startswith('J1939View'):
+        item = stack.pop()
+        stack.extend(item.childItems())
+    page = stack[-1]
+    page.setProperty('selected', 0)
+    qtbot.wait(50)
+    page.setProperty('selected', 3)
+    qtbot.wait(50)
+    assert warnings == []
+    manager.remove_connection(0)
+    qtbot.wait(50)
+    assert warnings == []
+
+
+def test_canopen_page_renders_without_warnings(window, qtbot):
+    from pathlib import Path
+
+    import can
+    from PyQt6 import sip
+    from PyQt6.QtCore import QUrl
+    from PyQt6.QtQuick import QQuickWindow
+
+    engine, manager, warnings = window
+    manager.add_connection(
+        {'name': 'Machine', 'interface': 'VirtualBus', 'channel': f'qml-{uuid.uuid4().hex}', 'protocol': 'CANopen'}
+    )
+    canopen = manager.connections[-1].canopen
+    eds = Path(__file__).parents[3] / 'examples' / 'canopen' / 'io_module.eds'
+    assert canopen.load_dictionary(QUrl.fromLocalFile(str(eds))) == ''
+    for can_id, data in (
+        (0x705, [0x05]),
+        (0x085, [0x10, 0x42, 0x09, 0, 0, 0, 0, 0]),
+        (0x185, [5, 0xB0, 4, 0xA2, 0xFE]),
+    ):
+        canopen.network.on_message(can.Message(arbitration_id=can_id, is_extended_id=False, data=data))
+    canopen.set_node(5)
+    stack = [sip.cast(engine.rootObjects()[0], QQuickWindow).contentItem()]
+    while not stack[-1].metaObject().className().startswith('ConnectionView'):
+        item = stack.pop()
+        stack.extend(item.childItems())
+    view = stack[-1]
+    view.setProperty('page', 'canopen')
+    qtbot.wait(600)
+    stack = [view]
+    while not stack[-1].metaObject().className().startswith('TabBar'):
+        item = stack.pop()
+        stack.extend(item.childItems())
+    stack[-1].setProperty('currentIndex', 1)  # PDOs
+    qtbot.wait(100)
+    assert warnings == []
+    manager.remove_connection(0)
+    qtbot.wait(50)
+    assert warnings == []
+
+
+def test_compare_tool_renders_without_warnings(window, qtbot, data_dir):
+    import can
+    from PyQt6 import sip
+    from PyQt6.QtQuick import QQuickWindow
+
+    from can_explorer.core.compare import compare, read_recording
+    from can_explorer.core.decoding import open_signal_database
+
+    engine, manager, warnings = window
+    controller = manager.compare
+
+    def frames(count, changed):
+        return [
+            can.Message(
+                timestamp=i * 0.01, arbitration_id=0x100, is_extended_id=False, data=[i if i < changed else 0, 0, 90]
+            )
+            for i in range(count)
+        ]
+
+    a, b = read_recording('a.asc', frames(40, 40)), read_recording('b.blf', frames(30, 10))
+    controller.set_recording('a', a)
+    controller.set_recording('b', b)
+    controller._database = open_signal_database(data_dir / 'example.dbc')
+    controller._comparison = compare(a, b, database=controller._database)
+    controller.result_changed.emit()
+    window_item = sip.cast(engine.rootObjects()[0], QQuickWindow)
+    window_item.setProperty('tool', 'compare')
+    qtbot.wait(100)
+    stack = [window_item.contentItem()]
+    while not stack[-1].metaObject().className().startswith('TabBar'):
+        item = stack.pop()
+        stack.extend(item.childItems())
+    stack[-1].setProperty('currentIndex', 1)  # Signals
+    qtbot.wait(100)
+    window_item.setProperty('tool', '')
+    qtbot.wait(50)
+    assert warnings == []

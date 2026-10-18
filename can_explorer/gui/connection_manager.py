@@ -23,10 +23,15 @@ from can_explorer.core.session import BusSession, SessionError, SessionState
 from can_explorer.core.log_formats import file_filters
 from can_explorer.core.sources import BusConfig, FileSource, LiveSource, MessageSource
 from can_explorer.gui.app_state import AppState
+from can_explorer.gui.compare import CompareController
 from can_explorer.gui.database_editor import DatabaseEditorController
+from can_explorer.gui.canopen import CanOpenController
 from can_explorer.gui.diagnostics import DiagnosticsController
+from can_explorer.gui.flashing import FlashController
+from can_explorer.gui.j1939 import J1939Controller
 from can_explorer.gui.playback import BusReplay, ReplayPlayback
 from can_explorer.gui.simulation import SimulationController
+from can_explorer.gui.plot_view import PlotView
 from can_explorer.gui.testing import TestController
 from can_explorer.gui.trace_tools import TraceTools
 from can_explorer.gui.workspace import SUFFIX as WORKSPACE_SUFFIX
@@ -91,6 +96,7 @@ class CanConnection(QObject):
         describe = session.decoder.full_description
         self._trace = TraceModel(session.trace, lambda: self.session.start_time, describe, parent=self)
         self._overview = OverviewModel(session.statistics, describe, parent=self)
+        self._plot_view = PlotView(self, parent=self)
         self._trace_tools = TraceTools(self._trace, lambda: session.decoder.database, describe, parent=self)
         self._filter = MessageFilter()
         self._filter_error = ''
@@ -101,6 +107,9 @@ class CanConnection(QObject):
         self._scheduler: Optional[LinScheduler] = None
         self._history: deque = deque(maxlen=HISTORY_SECONDS)
         self._diagnostics = DiagnosticsController(self, parent=self)
+        self._j1939 = J1939Controller(self, parent=self)
+        self._canopen = CanOpenController(self, parent=self)
+        self._flashing = FlashController(self, parent=self)
         self._simulation = SimulationController(self, parent=self)
         self._tests = TestController(self, parent=self)
         self._replay = ReplayPlayback(self, parent=self)
@@ -314,6 +323,7 @@ class CanConnection(QObject):
         self.stop_schedule()
         self._bus_replay.stop()
         self._tests.shutdown()
+        self._flashing.shutdown()
         self._diagnostics.shutdown()
         self._simulation.shutdown()
         self.session.stop()
@@ -604,8 +614,28 @@ class CanConnection(QObject):
         return self._diagnostics
 
     @pyqtProperty(QObject, constant=True)
+    def j1939(self) -> J1939Controller:
+        """Nodes, trouble codes and sending of parameter groups on J1939 connections."""
+        return self._j1939
+
+    @pyqtProperty(QObject, constant=True)
+    def flashing(self) -> FlashController:
+        """Programming ECUs over UDS."""
+        return self._flashing
+
+    @pyqtProperty(QObject, constant=True)
+    def canopen(self) -> CanOpenController:
+        """NMT, SDO access and PDOs on CANopen connections."""
+        return self._canopen
+
+    @pyqtProperty(QObject, constant=True)
     def simulation(self) -> SimulationController:
         return self._simulation
+
+    @pyqtProperty(QObject, constant=True)
+    def plot_view(self) -> PlotView:
+        """Time range, cursors and charts of the signal plots."""
+        return self._plot_view
 
     @pyqtProperty(QObject, constant=True)
     def trace_tools(self) -> TraceTools:
@@ -728,6 +758,7 @@ class ConnectionManager(QObject):
         self._detection: Optional[asyncio.Future] = None
         self._workspace_file = ''
         self._database_editor = DatabaseEditorController(parent=self)
+        self._compare = CompareController(parent=self)
         self._database_editor.saved.connect(self._reload_database)
         QGuiApplication.instance().aboutToQuit.connect(self.close_all)
 
@@ -800,6 +831,11 @@ class ConnectionManager(QObject):
     @pyqtProperty(QObject, constant=True)
     def database_editor(self) -> DatabaseEditorController:
         return self._database_editor
+
+    @pyqtProperty(QObject, constant=True)
+    def compare(self) -> CompareController:
+        """Comparing two recordings."""
+        return self._compare
 
     def _reload_database(self, path: str) -> None:
         """Connections decoding with a database that was edited and saved use the new version."""

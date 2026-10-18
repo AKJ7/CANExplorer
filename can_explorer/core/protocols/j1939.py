@@ -88,7 +88,21 @@ class J1939Decoder:
             detail = self._transport_data(j1939_id, data)
         elif j1939_id.pgn == PGN_REQUEST and len(data) >= 3:
             detail = f'requests {self.pgn_label(int.from_bytes(data[:3], "little"))}'
+        else:
+            detail = self._payload(j1939_id.pgn, bytes(data))
         return f'{header}: {detail}' if detail else header
+
+    @staticmethod
+    def _payload(pgn: int, data: bytes) -> Optional[str]:
+        """Address claims and diagnostic messages, single frame or reassembled."""
+        from can_explorer.core.j1939_tools import PGN_ADDRESS_CLAIMED, PGN_DM1, PGN_DM2, J1939Name, decode_dm
+
+        if pgn == PGN_ADDRESS_CLAIMED and len(data) >= 8:
+            return f'NAME {J1939Name.from_bytes(data).describe()}'
+        if pgn in (PGN_DM1, PGN_DM2):
+            message = decode_dm(data)
+            return message.describe() if message is not None else None
+        return None
 
     def _transport_control(self, j1939_id: J1939Id, data: bytearray) -> Optional[str]:
         if len(data) < 8:
@@ -125,8 +139,10 @@ class J1939Decoder:
         if sequence >= session.packets:
             del self._sessions[key]
             payload = session.data[: session.size]
-            return (
+            text = (
                 f'TP.DT #{sequence}: complete {self.pgn_label(session.pgn)} '
                 f'({session.size} B): {format_hex(payload, self._preview)}'
             )
+            detail = self._payload(session.pgn, bytes(payload))
+            return f'{text} — {detail}' if detail else text
         return f'TP.DT #{sequence}/{session.packets}'

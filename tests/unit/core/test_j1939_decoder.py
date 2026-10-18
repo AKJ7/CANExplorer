@@ -25,7 +25,7 @@ def test_bam_transfer_is_reassembled():
     assert announce.endswith('TP.BAM 10 B in 2 packets for PGN 0x0FECA DM1')
     assert decoder.describe(msg(0x1CEBFF00, [1, *payload[:7]])).endswith('TP.DT #1/2')
     complete = decoder.describe(msg(0x1CEBFF00, [2, *payload[7:], 0xFF, 0xFF, 0xFF, 0xFF]))
-    assert complete.endswith('complete PGN 0x0FECA DM1 (10 B): 01 02 03 04 05 06 07 08 09 0A')
+    assert 'complete PGN 0x0FECA DM1 (10 B): 01 02 03 04 05 06 07 08 09 0A — PL on: SPN 1027, FMI 5' in complete
 
 
 def test_out_of_order_transport_data():

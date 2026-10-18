@@ -47,6 +47,20 @@ class CanOpenDecoder:
 
     name = 'CANopen'
 
+    def __init__(self):
+        # Object dictionary of one node (set by the CANopen view): names SDO objects and decodes its PDOs
+        self.dictionary = None
+        self.dictionary_node = 0
+        self._pdos: dict = {}
+
+    def set_dictionary(self, dictionary, node_id: int) -> None:
+        from can_explorer.core.canopen_tools import pdo_mappings
+
+        self.dictionary, self.dictionary_node = dictionary, node_id
+        self._pdos = {}
+        if dictionary is not None:
+            self._pdos = {pdo.cob_id: pdo for pdo in pdo_mappings(dictionary, node_id) if pdo.valid and pdo.variables}
+
     def reset(self) -> None:
         pass
 
@@ -70,10 +84,19 @@ class CanOpenDecoder:
             return f'EMCY node {node}: error {error_code:#06x} register {data[2]:#04x}'
         if cob_id == 0x100:
             return 'TIME'
+        if cob_id in self._pdos:
+            pdo = self._pdos[cob_id]
+            values = ', '.join(f'{name.split(".")[-1]}={value}' for name, value in pdo.decode(data))
+            return f'{pdo.name} node {node}: {values}'
         if function in PDO_NAMES and node:
             return f'{PDO_NAMES[function]} node {node}: {format_hex(data)}'
         if function in (0x580, 0x600) and node:
-            return self._sdo(function == 0x600, node, data)
+            text = self._sdo(function == 0x600, node, data)
+            if self.dictionary is not None and node == self.dictionary_node and len(data) >= 4:
+                command = data[0] >> 5
+                if command in ((1, 2, 4) if function == 0x600 else (2, 3, 4)):
+                    text += f' {self.dictionary.name(int.from_bytes(data[1:3], "little"), data[3])}'
+            return text
         if function == 0x700 and node:
             if not data:
                 return f'Node guarding request node {node}'

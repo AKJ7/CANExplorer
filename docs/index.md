@@ -35,7 +35,8 @@ buses. It runs on Linux, Windows and macOS with any interface supported by
 
     ---
 
-    Record to ASC, BLF, CSV, LOG, TRC and SQLite files and replay them with their original timing.
+    Record to ASC, BLF, CSV, LOG, TRC, SQLite and MF4 files, replay them with their original timing and compare
+    two recordings.
 
     [:octicons-arrow-right-24: Recording and replay](user-guide/recording-and-replay.md)
 
@@ -43,7 +44,8 @@ buses. It runs on Linux, Windows and macOS with any interface supported by
 
     ---
 
-    UDS over ISO-TP and the LIN transport layer, with DTCs, security access and CANdelaStudio CDD descriptions.
+    UDS over ISO-TP and the LIN transport layer, with DTCs, security access, CANdelaStudio CDD descriptions and
+    ECU flashing.
 
     [:octicons-arrow-right-24: Diagnostics](user-guide/diagnostics.md)
 
@@ -51,7 +53,8 @@ buses. It runs on Linux, Windows and macOS with any interface supported by
 
     ---
 
-    Passive decoding of ISO-TP, UDS, J1939, CANopen and LIN; LIN master schedule tables.
+    Decoding of ISO-TP, UDS, J1939, CANopen and LIN; J1939 network and trouble code tools, a CANopen master and
+    LIN master schedule tables.
 
     [:octicons-arrow-right-24: Protocol decoding](user-guide/protocols.md)
 
