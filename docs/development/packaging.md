@@ -68,8 +68,31 @@ It writes `packaging/icons/`, `can_explorer/gui/qt/CanExplorer/images/logo.png`,
 | Workflow | Runs | Does |
 |---|---|---|
 | `build.yaml` | Pushes and pull requests to `develop` | ruff and black; tests on Linux, Windows and macOS with Python 3.10 and 3.14 |
-| `release.yaml` | `v*` tags; manually; pull requests changing the packaging | Builds the bundles and installers for Windows, Linux and macOS (PyInstaller, or Nuitka when started manually), installs each one to check that it starts, and stores them as workflow artifacts for 90 days. For tags it also publishes a GitHub release with the installers, the zip archives and `SHA256SUMS.txt` (a pre-release for tags such as `v1.0.0-rc1`) |
+| `release.yaml` | Pushes and merges to `master`; `v*` tags; manually; pull requests changing the packaging | Builds the bundles and installers for Windows, Linux and macOS (PyInstaller, or Nuitka when started manually), installs each one to check that it starts, and stores them as workflow artifacts for 90 days. For `master` it publishes them to GitHub Packages (see below); for tags it publishes a GitHub release with the installers, the zip archives and `SHA256SUMS.txt` (a pre-release for tags such as `v1.0.0-rc1`) |
 | `docs.yaml` | Pushes and pull requests to `develop` | Builds the documentation strictly; publishes it to GitHub Pages from `develop` |
+
+### Installers in GitHub Packages
+
+Every push or merge to `master` publishes the installers, the zip archives and `SHA256SUMS.txt` to GitHub Packages,
+as the OCI artifact `ghcr.io/akj7/canexplorer-installers` (GitHub Packages has no registry for plain files; the
+container registry stores them, and they are listed under the repository's *Packages*). Its tags:
+
+| Tag | Points to |
+|---|---|
+| `latest` | The latest build of `master` |
+| `<version>`, e.g. `1.0.0` | The latest build of `master` with that version in `pyproject.toml` |
+| `sha-<commit>`, e.g. `sha-3d4a3b2` | The build of that commit |
+
+Download them with [ORAS](https://oras.land/docs/installation):
+
+```bash
+oras pull ghcr.io/akj7/canexplorer-installers:latest     # Into the current directory
+sha256sum -c SHA256SUMS.txt                              # Check the files
+```
+
+The package is created private on the first publish; to let anyone download it, set its visibility to public in
+the package settings on GitHub (*Packages → canexplorer-installers → Package settings*). Private packages need a
+login first: `oras login ghcr.io -u <user>` with a personal access token with `read:packages`.
 
 ### Releasing a version
 
