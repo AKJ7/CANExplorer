@@ -23,9 +23,9 @@ def test_recent_connections_are_unique_and_bounded(state):
 
 
 def test_recent_log_files_persist(state, tmp_path):
-    state.add_recent_log_file('/logs/a.blf', 'J1939', False)
+    state.add_recent_log_file('/logs/a.blf', 'J1939', 0.0)
     reloaded = AppState(QSettings(str(tmp_path / 'settings.ini'), QSettings.Format.IniFormat))
-    assert reloaded.recent_log_files == [{'path': '/logs/a.blf', 'protocol': 'J1939', 'realtime': False}]
+    assert reloaded.recent_log_files == [{'path': '/logs/a.blf', 'protocol': 'J1939', 'speed': 0.0}]
     reloaded.clear_recent()
     assert reloaded.recent_log_files == [] and reloaded.recent_connections == []
 

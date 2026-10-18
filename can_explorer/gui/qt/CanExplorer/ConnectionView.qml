@@ -19,7 +19,8 @@ ColumnLayout {
     ].concat(connection.can_transmit ? [{ key: "diagnostics", title: qsTr("Diagnostics"), icon: "✚" }] : [])
      .concat(connection.is_lin ? [{ key: "lin", title: qsTr("LIN Schedule"), icon: "⏱" }] : [])
      .concat(connection.can_transmit ? [{ key: "simulation", title: qsTr("Simulation"), icon: "▶" }] : [])
-    readonly property var pageKeys: ["dashboard", "trace", "overview", "signals", "diagnostics", "lin", "simulation"]
+     .concat(connection.can_transmit ? [{ key: "tests", title: qsTr("Tests"), icon: "✓" }] : [])
+    readonly property var pageKeys: ["dashboard", "trace", "overview", "signals", "diagnostics", "lin", "simulation", "tests"]
     property string page: "dashboard"
     readonly property string pageTitle: (pages.find(item => item.key === page) || pages[0]).title
     readonly property bool tablePage: page === "trace" || page === "overview"
@@ -43,6 +44,26 @@ ColumnLayout {
             currentTable.selectAll()
     }
 
+    // Playback of a replayed log file
+    PlaybackBar {
+        visible: root.connection.is_replay && root.connection.replay.active
+        playback: root.connection.replay
+        restartAction: () => root.connection.open()
+        Layout.fillWidth: true
+    }
+
+    // Log file transmitted on the bus
+    PlaybackBar {
+        visible: root.connection.bus_replay.active
+        playback: root.connection.bus_replay
+        heading: qsTr("Replaying %1 on the bus").arg(root.connection.bus_replay.file_name)
+            + (root.connection.bus_replay.loop ? qsTr(" (pass %1)").arg(root.connection.bus_replay.iteration + 1) : "")
+        stopAction: () => root.connection.bus_replay.stop()
+        restartAction: () => { const error = busReplayDialog.start(); if (error) statusLabel.show(error) }
+        dismissAction: () => root.connection.bus_replay.dismiss()
+        Layout.fillWidth: true
+    }
+
     RowLayout {
         visible: root.tablePage || root.page === "signals"
         spacing: 8
@@ -64,6 +85,14 @@ ColumnLayout {
             onClicked: root.connection.recording ? root.connection.stop_recording() : recordDialog.open()
         }
         Button {
+            visible: root.connection.can_transmit
+            text: qsTr("Replay to bus…")
+            enabled: root.connection.connected
+            ToolTip.visible: hovered
+            ToolTip.text: qsTr("Transmit the frames of a log file on this bus with their recorded timing")
+            onClicked: busReplayDialog.open()
+        }
+        Button {
             text: qsTr("Export…")
             ToolTip.visible: hovered
             ToolTip.text: qsTr("Save the selected trace rows, or all displayed rows, to a log file")
@@ -72,6 +101,13 @@ ColumnLayout {
         Button {
             text: root.connection.database_file ? qsTr("Unload database") : qsTr("Load database…")
             onClicked: root.connection.database_file ? root.connection.unload_database() : databaseDialog.open()
+        }
+        Button {
+            visible: /\.(dbc|dbf|kcd|sym|arxml)$/i.test(root.connection.database_file)
+            text: qsTr("Edit database")
+            ToolTip.visible: hovered
+            ToolTip.text: qsTr("Open the database in the editor; saving it updates the decoding")
+            onClicked: Actions.editDatabaseFile(root.connection.database_file)
         }
         ComboBox {
             id: busBox
@@ -168,6 +204,12 @@ ColumnLayout {
                 }
             }
         }
+        Loader {
+            active: root.connection.can_transmit
+            sourceComponent: TestsView {
+                connection: root.connection
+            }
+        }
     }
 
     TransmitPanel {
@@ -192,12 +234,18 @@ ColumnLayout {
         }
     }
 
+    BusReplayDialog {
+        id: busReplayDialog
+        connection: root.connection
+    }
+
     FileDialog {
         id: recordDialog
         title: qsTr("Record to file")
         fileMode: FileDialog.SaveFile
         nameFilters: connectionManager.log_file_filters.slice(1)
-        defaultSuffix: "asc"
+        // The suffix of the chosen format when none is typed (e.g. "asc.gz")
+        defaultSuffix: selectedNameFilter.extensions.length > 0 ? selectedNameFilter.extensions[0] : "asc"
         onAccepted: root.connection.start_recording(selectedFile)
     }
 
@@ -206,7 +254,8 @@ ColumnLayout {
         title: qsTr("Export trace")
         fileMode: FileDialog.SaveFile
         nameFilters: connectionManager.log_file_filters.slice(1)
-        defaultSuffix: "asc"
+        // The suffix of the chosen format when none is typed (e.g. "asc.gz")
+        defaultSuffix: selectedNameFilter.extensions.length > 0 ? selectedNameFilter.extensions[0] : "asc"
         onAccepted: {
             const selection = traceTable.selectionModel.hasSelection ? traceTable.selectionModel : null
             statusLabel.show(root.connection.export_trace(selectedFile, selection))

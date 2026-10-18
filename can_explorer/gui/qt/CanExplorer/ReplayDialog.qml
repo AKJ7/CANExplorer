@@ -11,9 +11,10 @@ Dialog {
     anchors.centerIn: parent
     standardButtons: Dialog.Ok | Dialog.Cancel
     property url selectedFile
+    readonly property var speeds: [0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 0.0]  // As core/playback.py SPEEDS
 
     onAboutToShow: standardButton(Dialog.Ok).enabled = Qt.binding(() => dialog.selectedFile.toString().length > 0)
-    onAccepted: connectionManager.open_log_file(selectedFile, protocolBox.currentText, realtimeBox.checked)
+    onAccepted: connectionManager.open_log_file(selectedFile, protocolBox.currentText, speeds[speedBox.currentIndex])
 
     GridLayout {
         columns: 3
@@ -38,11 +39,16 @@ Dialog {
             Layout.fillWidth: true
         }
 
-        CheckBox {
-            id: realtimeBox
-            text: qsTr("Reproduce original timing")
-            checked: true
-            Layout.columnSpan: 3
+        Label { text: qsTr("Speed") }
+        ComboBox {
+            id: speedBox
+            model: dialog.speeds.map(speed => speed === 1 ? qsTr("1× (recorded timing)")
+                                     : speed === 0 ? qsTr("As fast as possible") : `${speed}×`)
+            currentIndex: 2
+            Layout.columnSpan: 2
+            Layout.fillWidth: true
+            ToolTip.visible: hovered
+            ToolTip.text: qsTr("Can be changed, and the replay paused, while it runs")
         }
     }
 

@@ -7,11 +7,11 @@ T.Dialog {
     id: control
 
     implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
-                            contentWidth + leftPadding + rightPadding,
+                            implicitContentWidth + leftPadding + rightPadding,
                             implicitHeaderWidth,
                             implicitFooterWidth)
     implicitHeight: Math.max(implicitBackgroundHeight + topInset + bottomInset,
-                             contentHeight + topPadding + bottomPadding
+                             implicitContentHeight + topPadding + bottomPadding
                              + (implicitHeaderHeight > 0 ? implicitHeaderHeight + spacing : 0)
                              + (implicitFooterHeight > 0 ? implicitFooterHeight + spacing : 0))
 
@@ -26,16 +26,26 @@ T.Dialog {
         NumberAnimation { property: "opacity"; from: 1.0; to: 0.0; duration: 90 }
     }
 
-    background: Rectangle {
-        color: Theme.card
-        radius: Theme.radius
-        border.color: Theme.border
+    background: GlassPanel {
+        radius: Theme.radius + 4
+    }
+
+    // The title moves the dialog. Centred dialogs are anchored, which would pin them: the anchor is released
+    // while the dialog is dragged and restored when it closes, so it opens centred again.
+    property var _anchor: undefined
+    property bool _moved: false
+    onClosed: {
+        if (_moved) {
+            anchors.centerIn = _anchor
+            _moved = false
+        }
     }
 
     header: T.Label {
+        id: titleLabel
         text: control.title
         visible: control.title
-        elide: Text.ElideRight
+        // No eliding: an elided title makes the dialog's implicit width depend on itself (binding loop)
         font.bold: true
         font.pixelSize: Theme.titleSize + 1
         color: Theme.text
@@ -43,6 +53,38 @@ T.Dialog {
         rightPadding: 22
         topPadding: 20
         bottomPadding: 10
+
+        HoverHandler {
+            cursorShape: dragHandler.active ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+        }
+        DragHandler {
+            id: dragHandler
+            target: null
+            property point start
+            onActiveChanged: {
+                if (!active)
+                    return
+                if (!control._moved) {
+                    control._anchor = control.anchors.centerIn
+                    const x = control.x, y = control.y
+                    control.anchors.centerIn = undefined
+                    control.x = x
+                    control.y = y
+                    control._moved = true
+                }
+                start = Qt.point(control.x, control.y)
+            }
+            onTranslationChanged: {
+                if (!active)
+                    return
+                // Keep the dialog inside the window (x and y are relative to the item the dialog is declared in)
+                const overlay = control.T.Overlay.overlay
+                const origin = overlay && control.parent ? control.parent.mapToItem(overlay, 0, 0) : Qt.point(0, 0)
+                const width = overlay ? overlay.width : 1e6, height = overlay ? overlay.height : 1e6
+                control.x = Math.max(-origin.x, Math.min(width - origin.x - control.width, start.x + translation.x))
+                control.y = Math.max(-origin.y, Math.min(height - origin.y - control.height, start.y + translation.y))
+            }
+        }
     }
 
     footer: DialogButtonBox {
@@ -50,7 +92,7 @@ T.Dialog {
     }
 
     T.Overlay.modal: Rectangle {
-        color: Qt.rgba(0, 0, 0, Theme.dark ? 0.55 : 0.35)
+        color: Qt.rgba(0, 0, 0, Theme.dark ? 0.35 : 0.18)
     }
 
     T.Overlay.modeless: Rectangle {

@@ -24,4 +24,9 @@ TopBar 1.0 TopBar.qml
 AppMenu 1.0 AppMenu.qml
 DashboardView 1.0 DashboardView.qml
 WelcomeView 1.0 WelcomeView.qml
+PlaybackBar 1.0 PlaybackBar.qml
+BusReplayDialog 1.0 BusReplayDialog.qml
+DatabaseEditorView 1.0 DatabaseEditorView.qml
+TestsView 1.0 TestsView.qml
+GlassPanel 1.0 GlassPanel.qml
 singleton Theme 1.0 Theme.qml

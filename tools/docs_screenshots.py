@@ -23,6 +23,10 @@ OUT = ROOT / 'docs' / 'assets' / 'screenshots'
 DATA = ROOT / 'tests' / 'data'
 EXAMPLES = ROOT / 'examples' / 'simulation'
 
+# Render with OpenGL like on a desktop (the default offscreen renderer cannot draw the blur of the glass dialogs)
+os.environ.setdefault('QT_QUICK_BACKEND', 'rhi')
+os.environ.setdefault('QSG_RHI_BACKEND', 'opengl')
+
 # Use throwaway settings, so the screenshots do not depend on (or change) the user's
 QSettings.setPath(QSettings.Format.NativeFormat, QSettings.Scope.UserScope, tempfile.mkdtemp())
 
@@ -89,6 +93,8 @@ async def scenario():
     simulation.start()
     simulation.panel.set_variable('ignition', True)
     simulation.panel.set_variable('target_speed', 2400)
+    recording = Path(tempfile.mkdtemp()) / 'vehicle.blf'
+    connection.start_recording(QUrl.fromLocalFile(str(recording)))
     connection.track_signal('EngineData', 'EngineSpeed', 'rpm')
     connection.track_signal('VehicleSpeed', 'WheelSpeed', 'km/h')
     connection.track_signal('EngineData', 'CoolantTemp', 'degC')
@@ -104,6 +110,7 @@ async def scenario():
     )
     ecu.start()
 
+    connection.stop_recording()
     show_page('dashboard')
     await shot('dashboard', 1.0)
     show_page('trace')
@@ -130,9 +137,32 @@ async def scenario():
         await wait_idle(diagnostics)
     show_page('diagnostics')
     await shot('diagnostics')
+    # Test automation: the example tests against the simulation
+    tests = connection.tests
+    tests.load_script(QUrl.fromLocalFile(str(ROOT / 'examples' / 'testing' / 'vehicle_tests.py')))
+    ecu.stop()  # The diagnostics test is skipped without an ECU
+    tests.run_selected()
+    while tests.running:
+        await asyncio.sleep(0.1)
+    tests.show_case('EngineTests.speed_follows_the_target')
+    show_page('tests')
+    await shot('tests')
+
     simulation.stop()
-    ecu.stop()
     ecu_session.stop()
+
+    # Replaying the recording on the bus, and as a log file
+    simulation.panel.set_variable('ignition', False)
+    connection.clear()
+    assert connection.bus_replay.start(QUrl.fromLocalFile(str(recording)), 1.0, True, '') == ''
+    show_page('trace')
+    await shot('bus-replay', 1.5)
+    connection.bus_replay.dismiss()
+    manager.open_log_file(QUrl.fromLocalFile(str(recording)), 'Raw', 1.0)
+    await asyncio.sleep(1.2)
+    manager.connections[-1].replay.set_paused(True)
+    await shot('replay')
+    manager.remove_connection(len(manager.connections) - 1)
 
     # LIN connection with simulated slaves
     lin_channel = f'docs-lin-{uuid.uuid4().hex[:6]}'
@@ -162,6 +192,22 @@ async def scenario():
         dialog.open()
         await shot(name)
         dialog.close()
+
+    # Database editor, on a copy of the example database
+    database = Path(tempfile.mkdtemp()) / 'vehicle.dbc'
+    database.write_bytes((EXAMPLES / 'vehicle.dbc').read_bytes())
+    editor = manager.database_editor
+    editor.open_path(str(database))
+    editor.select_message('EngineData')
+    editor.select_signal('CoolantTemp')
+    window.setProperty('tool', 'database-editor')
+    await shot('database-editor')
+    # The whole editor with the bit layout, a Motorola signal overlapping another one
+    editor.update_signal({'byte_order': 'big_endian', 'start': 19, 'length': 12})
+    window.resize(1440, 1400)
+    await shot('database-editor-layout')
+    window.resize(1440, 900)
+    window.setProperty('tool', '')
 
     manager.close_all()
     if warnings:

@@ -60,7 +60,7 @@ def test_dashboard_pages_and_themes_render_without_warnings(window, qtbot):
         stack.extend(item.childItems())
     view = stack[-1]
     pages = [page['key'] for page in view.property('pages').toVariant()]
-    assert pages == ['dashboard', 'trace', 'overview', 'signals', 'diagnostics', 'simulation']
+    assert pages == ['dashboard', 'trace', 'overview', 'signals', 'diagnostics', 'simulation', 'tests']
     for page in pages:
         view.setProperty('page', page)
         qtbot.wait(30)
@@ -70,6 +70,162 @@ def test_dashboard_pages_and_themes_render_without_warnings(window, qtbot):
     manager.app_state.set_theme('Dark')
     manager.error_occurred.emit('Something failed')
     qtbot.wait(50)
+    assert warnings == []
+
+
+async def test_playback_bars_render_without_warnings(window, qapp, tmp_path):
+    import asyncio
+
+    import can
+    from PyQt6.QtCore import QUrl
+
+    engine, manager, warnings = window
+    path = tmp_path / 'log.asc'
+    with can.Logger(path) as logger:
+        for i in range(200):
+            logger.on_message_received(can.Message(arbitration_id=i, timestamp=i * 0.01))
+    manager.open_log_file(QUrl.fromLocalFile(str(path)), 'Raw', 1.0)
+    manager.add_connection({'name': 'Bus', 'interface': 'VirtualBus', 'channel': f'qml-{uuid.uuid4().hex}'})
+    bus = manager.connections[-1]
+    bus.open()
+    assert bus.bus_replay.start(QUrl.fromLocalFile(str(path)), 1.0, True, '') == ''
+    for _ in range(20):
+        await asyncio.sleep(0.01)
+        qapp.processEvents()
+    manager.connections[0].replay.set_paused(True)
+    bus.bus_replay.stop()
+    for _ in range(10):
+        await asyncio.sleep(0.01)
+        qapp.processEvents()
+    assert warnings == []
+
+
+def test_database_editor_renders_without_warnings(window, qtbot, data_dir, tmp_path):
+    import shutil
+
+    engine, manager, warnings = window
+    root = engine.rootObjects()[0]
+    root.setProperty('tool', 'database-editor')
+    qtbot.wait(50)
+    editor = manager.database_editor
+    path = tmp_path / 'complex.dbc'
+    shutil.copy(data_dir / 'complex.dbc', path)
+    assert editor.open_path(str(path)) == ''
+    qtbot.wait(50)
+    for message in editor.messages[:4]:
+        editor.select_message(message['name'])
+        for signal in editor.signals[:3]:
+            editor.select_signal(signal['name'])
+            qtbot.wait(10)
+    assert editor.add_message() == '' and editor.add_signal() == ''
+    assert editor.update_message({'is_fd': True, 'length': 64}) == ''
+    qtbot.wait(50)
+    editor.new_database()
+    qtbot.wait(30)
+    root.setProperty('tool', '')
+    qtbot.wait(30)
+    assert warnings == []
+
+
+async def test_tests_view_renders_while_running(window, qapp):
+    import asyncio
+    from pathlib import Path
+
+    from PyQt6.QtCore import QUrl
+
+    examples = Path(__file__).resolve().parents[3] / 'examples'
+    engine, manager, warnings = window
+    manager.add_connection({'name': 'Bus', 'interface': 'VirtualBus', 'channel': f'qml-{uuid.uuid4().hex}'})
+    connection = manager.connections[-1]
+    connection.open()
+    tests = connection.tests
+    assert tests.load_script(QUrl.fromLocalFile(str(examples / 'testing' / 'vehicle_tests.py'))) == ''
+    view = engine.rootObjects()[0]
+    view.setProperty('selectedIndex', 0)
+    for _ in range(5):
+        await asyncio.sleep(0.01)
+        qapp.processEvents()
+    connection_view = next(
+        item for item in _visual_items(view) if item.metaObject().className().startswith('ConnectionView')
+    )
+    connection_view.setProperty('page', 'tests')
+    assert tests.run_case('GearboxTests') == ''  # Fails without database and simulation: renders errors too
+    for _ in range(60):
+        await asyncio.sleep(0.02)
+        qapp.processEvents()
+        if not tests.running:
+            break
+    tests.show_case('GearboxTests.obd_vehicle_speed_request')
+    for _ in range(5):
+        await asyncio.sleep(0.01)
+        qapp.processEvents()
+    assert warnings == []
+
+
+def _visual_items(window):
+    from PyQt6 import sip
+    from PyQt6.QtQuick import QQuickWindow
+
+    stack = [sip.cast(window, QQuickWindow).contentItem()]
+    while stack:
+        item = stack.pop()
+        yield item
+        stack.extend(item.childItems())
+
+
+def _drag(qtbot, window, start, end, steps=8):
+    from PyQt6.QtCore import QPoint, Qt
+    from PyQt6.QtTest import QTest
+
+    QTest.mouseMove(window, QPoint(*start))
+    QTest.mousePress(window, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, QPoint(*start))
+    for step in range(1, steps + 1):
+        x = start[0] + (end[0] - start[0]) * step // steps
+        y = start[1] + (end[1] - start[1]) * step // steps
+        QTest.mouseMove(window, QPoint(x, y))
+        qtbot.wait(10)
+    QTest.mouseRelease(window, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, QPoint(*end))
+    qtbot.wait(30)
+
+
+def test_sidebar_resizing_and_dialog_dragging(window, qtbot):
+    from PyQt6 import sip
+    from PyQt6.QtCore import QObject, QPoint, Qt
+    from PyQt6.QtQuick import QQuickWindow
+    from PyQt6.QtTest import QTest
+
+    engine, manager, warnings = window
+    view = sip.cast(engine.rootObjects()[0], QQuickWindow)
+    view.resize(1200, 800)
+    view.show()
+    qtbot.wait(100)
+    sidebar = next(item for item in _visual_items(view) if item.metaObject().className().startswith('Sidebar'))
+    width = round(sidebar.width())
+    assert width == 232
+
+    _drag(qtbot, view, (width, 400), (width + 80, 400))
+    assert round(sidebar.width()) == 312 and manager.app_state.sidebar_width() == 312
+    _drag(qtbot, view, (312, 400), (20, 400))  # Not narrower than the minimum
+    assert round(sidebar.width()) == manager.app_state.min_sidebar_width
+    QTest.mouseDClick(view, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, QPoint(180, 400))
+    qtbot.wait(30)
+    assert round(sidebar.width()) == 232 and manager.app_state.sidebar_width() == 232
+
+    dialog = next(o for o in view.findChildren(QObject) if o.metaObject().className().startswith('PreferencesDialog'))
+    dialog.open()
+    qtbot.wait(200)
+    x, y = dialog.property('x'), dialog.property('y')
+    _drag(qtbot, view, (int(x) + 60, int(y) + 30), (int(x) - 140, int(y) + 130))
+    assert (round(dialog.property('x') - x), round(dialog.property('y') - y)) == (-200, 100)
+    _drag(qtbot, view, (int(x) - 80, int(y) + 130), (-500, -500))  # Stays inside the window
+    assert dialog.property('x') >= 0 and dialog.property('y') >= 0
+    dialog.close()
+    qtbot.wait(200)
+    dialog.open()  # Centred again
+    qtbot.wait(200)
+    assert (round(dialog.property('x')), round(dialog.property('y'))) == (round(x), round(y))
+    dialog.close()
+    qtbot.wait(100)
     assert warnings == []
 
 

@@ -7,12 +7,11 @@ from typing import AsyncIterator, List, Optional, Protocol
 
 import can
 
+from can_explorer.core.log_formats import is_log_file, unsupported_message
+from can_explorer.core.playback import PlaybackClock, scan_log
 from can_explorer.sys.log_handler import get_logger
 
 logger = get_logger(__name__)
-
-# File formats python-can can read back (can.LogReader) and write (can.Logger)
-LOG_FILE_SUFFIXES = ('.asc', '.blf', '.csv', '.log', '.trc', '.db')
 
 # Receive timeout of the notifier thread; bounds how long closing a bus blocks the caller
 NOTIFIER_TIMEOUT = 0.1
@@ -244,19 +243,28 @@ class LiveSource:
 
 
 class FileSource:
-    """Replays a log file. With realtime=True the original inter-frame timing is reproduced."""
+    """Replays a log file with its recorded timing scaled by `speed` (0: as fast as possible).
 
-    def __init__(self, path: str | Path, realtime: bool = True):
+    The playback can be paused and its speed changed through `clock`; `duration` is known once a background
+    scan of the file is done.
+    """
+
+    def __init__(self, path: str | Path, realtime: bool = True, speed: Optional[float] = None):
         self.path = Path(path)
-        self.realtime = realtime
+        self.clock = PlaybackClock((1.0 if realtime else 0.0) if speed is None else speed)
+        self.duration: Optional[float] = None
         self._bridge: Optional[ThreadBridge] = None
         self._stop = threading.Event()
         self._slots: Optional[threading.Semaphore] = None
         self._thread: Optional[threading.Thread] = None
 
     @property
+    def realtime(self) -> bool:
+        return self.clock.speed > 0
+
+    @property
     def description(self) -> str:
-        return f'Replay of {self.path.name}{"" if self.realtime else " (as fast as possible)"}'
+        return f'Replay of {self.path.name}'
 
     @property
     def can_send(self) -> bool:
@@ -281,13 +289,21 @@ class FileSource:
     def open(self, loop: asyncio.AbstractEventLoop) -> None:
         if not self.path.is_file():
             raise SourceError(f'Log file not found: {self.path}')
-        if self.path.suffix.lower() not in LOG_FILE_SUFFIXES:
-            raise SourceError(f'Unsupported log file format: {self.path.suffix}')
+        if not is_log_file(self.path):
+            raise SourceError(unsupported_message(self.path))
         self._bridge = ThreadBridge(loop)
         self._slots = threading.Semaphore(FILE_CHUNKS_AHEAD)
         self._stop.clear()
         self._thread = threading.Thread(target=self._read, name=f'FileSource-{self.path.name}', daemon=True)
         self._thread.start()
+        if self.duration is None:
+            threading.Thread(target=self._scan, name=f'FileScan-{self.path.name}', daemon=True).start()
+
+    def _scan(self) -> None:
+        try:
+            _, self.duration = scan_log(self.path)
+        except Exception as e:  # The playback reports read errors itself
+            logger.debug(f'Could not scan {self.path}: {e}')
 
     def _put_chunk(self, chunk: list) -> bool:
         # Backpressure: wait until the consumer has taken an earlier chunk
@@ -321,8 +337,8 @@ class FileSource:
             self._bridge.put(_EOF)
 
     async def batches(self) -> AsyncIterator[List[can.Message]]:
-        loop = asyncio.get_running_loop()
-        first_timestamp = start = None
+        clock = self.clock
+        first_timestamp = None
         while True:
             for item in await self._bridge.get_batch():
                 if item is _EOF:
@@ -330,20 +346,22 @@ class FileSource:
                 if isinstance(item, BaseException):
                     raise SourceError(f'Could not read {self.path.name}: {item}') from item
                 self._slots.release()
-                if not self.realtime:
+                if first_timestamp is None and item:
+                    first_timestamp = item[0].timestamp
+                    clock.start()
+                if clock.speed <= 0:
+                    await clock.wait_until(item[-1].timestamp - first_timestamp)  # Only waits while paused
                     yield item
                     continue
-                # Yield the messages that are due, sleep until the next one
+                # Yield the messages that are due, wait until the next one
                 due = []
                 for msg in item:
-                    if first_timestamp is None:
-                        first_timestamp, start = msg.timestamp, loop.time()
-                    delay = (msg.timestamp - first_timestamp) - (loop.time() - start)
-                    if delay > 0.001:
+                    position = msg.timestamp - first_timestamp
+                    if not clock.is_due(position):
                         if due:
                             yield due
                             due = []
-                        await asyncio.sleep(delay)
+                        await clock.wait_until(position)
                     due.append(msg)
                 if due:
                     yield due

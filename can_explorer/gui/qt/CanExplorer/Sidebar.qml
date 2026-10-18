@@ -11,6 +11,9 @@ Rectangle {
     property int currentConnection: -1
     property var pages: []
     property string currentPage: ""
+    property string currentTool: ""
+
+    signal toolSelected(string tool)
 
     signal connectionSelected(int index)
     signal pageSelected(string page)
@@ -136,7 +139,7 @@ Rectangle {
                 required property int index
                 text: modelData.name
                 glyph: modelData.is_lin ? "⇄" : modelData.is_replay ? "⟲" : "⌁"
-                active: index === root.currentConnection
+                active: index === root.currentConnection && root.currentTool === ""
                 dotColor: modelData.state === "open" ? Theme.success
                     : modelData.state === "error" ? Theme.danger : Theme.alpha(Theme.muted, 0.6)
                 onClicked: root.connectionSelected(index)
@@ -163,9 +166,19 @@ Rectangle {
                 required property var modelData
                 text: modelData.title
                 glyph: modelData.icon
-                active: modelData.key === root.currentPage
+                active: modelData.key === root.currentPage && root.currentTool === ""
                 onClicked: root.pageSelected(modelData.key)
             }
+        }
+
+        SectionLabel { text: qsTr("TOOLS") }
+
+        NavItem {
+            text: qsTr("Database editor")
+            glyph: "✎"
+            active: root.currentTool === "database-editor"
+            dotColor: connectionManager.database_editor.dirty ? Theme.warning : "transparent"
+            onClicked: root.toolSelected("database-editor")
         }
 
         Item { Layout.fillHeight: true }
@@ -209,6 +222,7 @@ Rectangle {
                     Label { text: metadata.name; color: Theme.text; font.bold: true }
                     Label { text: qsTr("Version %1").arg(metadata.version); color: Theme.muted; font.pixelSize: 12 }
                 }
+                Item { Layout.fillWidth: true }
             }
         }
     }

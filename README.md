@@ -13,12 +13,13 @@ preview locally with `uv run --group docs mkdocs serve`).
 - Row selection, copy to clipboard (tab separated) and export of the trace to a log file
 - Display filters, e.g. `100-1FF !123 ext rx fd`: hex IDs and ranges, `!` excludes, keywords restrict frame type and direction
 - Bus statistics: Rx/Tx rates, estimated bus load, error frames and bus state
-- Recording to `.asc`, `.blf`, `.csv`, `.log`, `.trc` and `.db`, and replay of those files with or without the original timing
+- Recording to `.asc`, `.blf`, `.csv`, `.log`, `.trc`, `.db`, `.mf4` (with `uv sync --extra mf4`) and gzip compressed `.asc.gz`, `.csv.gz`, `.log.gz`, `.trc.gz`, and replay of those files at 0.25× to 10× of the recorded timing or as fast as possible, with pause and progress; **replay of a log file on a bus** (filtered, repeated)
 - Signal decoding with Vector DBC, BUSMASTER DBF, AUTOSAR ARXML (3 and 4, including container frames), Kayak KCD,
   PCAN SYM and LIN LDF databases, and live **signal plots**. For databases describing several buses (ARXML clusters,
   KCD buses) the bus of the connection is selected from its bitrate or chosen in the toolbar.
 - ECU diagnostic descriptions (Vector CANdelaStudio **CDD**): named data identifiers and decoded ReadDataByIdentifier
   responses in the Diagnostics view and the trace
+- **Database editor** for DBC, DBF, KCD and SYM (and ARXML, saved as one of those): messages, signals, value descriptions and nodes, with a bit layout view and checks for overlapping signals; saving updates the connections using the file
 - Conversion between signal database formats, including **DBC ↔ DBF** (⋮ → Convert Signal Database, or `can-db-convert`)
 - Transmission of single or periodic frames, timed by the application or by the interface
 - **LIN** (through a SocketCAN LIN driver such as [sllin](https://github.com/lin-bus/linux-lin), or the virtual interface): headers and responses in the trace, LDF signal decoding and plots, LIN master schedule tables with editable master signals, header-only transmission
@@ -27,6 +28,7 @@ preview locally with `uv run --group docs mkdocs serve`).
 - **Node simulation and scripting**: simulated bus nodes written in Python (handlers for messages, signals,
   timers and shared variables, sending by database name) and QML panels to control and watch them, in the
   Simulation view. See the [simulation guide](docs/user-guide/simulation.md) and [examples/simulation](examples/simulation).
+- **Test automation**: test scripts in Python check ECUs on the bus (send, wait for frames and signals, check values, cycle times and UDS responses) with pass/fail verdicts, in the Tests view or headless with `can-test` for CI, and HTML/JUnit reports. See [test automation](docs/user-guide/test-automation.md) and [examples/testing](examples/testing).
 - Simulated ECUs and LIN slaves (`can_explorer.core.simulation`) for trying things out without hardware
 - Recent connections and log files, preferences and window geometry are remembered
 
@@ -52,6 +54,8 @@ preview locally with `uv run --group docs mkdocs serve`).
 uv run pytest            # tests (Qt runs headless, buses are python-can virtual buses)
 uv run ruff check .      # lint
 uv run black .           # format
+uv run can-test examples/testing/vehicle_tests.py --database examples/simulation/vehicle.dbc \
+    --simulation examples/simulation/engine_simulation.py   # ECU test scripts, headless
 QT_QPA_PLATFORM=offscreen uv run python tools/benchmark.py   # pipeline and model throughput
 ```
 
@@ -80,19 +84,9 @@ bundles (Nuitka can be selected when starting it manually), and attaches them to
 See [CHANGELOG.md](CHANGELOG.md) for the history of changes.
 
 
-## Roadmap
-1. Project Setup
-    - [x] Initialize git project  
-    - [x] Set basic project structure 
-    - [x] Set package manager and install packages
-    - [x] Set docker and vscode devcontainer
-    - [x] Add parsing and transmission of CAN frame as proof of concept
-    - [x] Release 0.1.0
-2. Transception of CAN frames.
-    - [ ] Implement IsoCan transport and protocol
-    - [ ] Implement J1939 transport and protocol
-    - [ ] Implement ISOTP transport and protocol
-    - [ ] Implement CanOpen transport and protocol
-    - [ ] Release 0.2.0
-3. Move UI to QML
-    - [ ] Add main UI
+## TODO
+
+  - Add graph support 
+  - Add signal watch/graph/generation
+  - Add parallel building and packaging
+  - Update README to show screenshots on entry with download link to the executables

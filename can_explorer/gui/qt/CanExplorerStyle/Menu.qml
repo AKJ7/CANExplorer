@@ -31,12 +31,10 @@ T.Menu {
         NumberAnimation { property: "opacity"; from: 0.0; to: 1.0; duration: 100 }
     }
 
-    background: Rectangle {
+    background: GlassPanel {
         implicitWidth: 230
         implicitHeight: 38
-        color: Theme.card
-        radius: Theme.smallRadius + 2
-        border.color: Theme.border
+        radius: Theme.smallRadius + 4
     }
 
     T.Overlay.modal: Rectangle {

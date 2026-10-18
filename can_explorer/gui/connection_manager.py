@@ -18,10 +18,14 @@ from can_explorer.core.lin import DEFAULT_BAUDRATE, LIN_BAUDRATES, MAX_FRAME_ID
 from can_explorer.core.lin_schedule import LinScheduler
 from can_explorer.core.protocols import PROTOCOL_DECODERS, create_protocol_decoder
 from can_explorer.core.session import BusSession, SessionError, SessionState
-from can_explorer.core.sources import LOG_FILE_SUFFIXES, BusConfig, FileSource, LiveSource, MessageSource
+from can_explorer.core.log_formats import file_filters
+from can_explorer.core.sources import BusConfig, FileSource, LiveSource, MessageSource
 from can_explorer.gui.app_state import AppState
+from can_explorer.gui.database_editor import DatabaseEditorController
 from can_explorer.gui.diagnostics import DiagnosticsController
+from can_explorer.gui.playback import BusReplay, ReplayPlayback
 from can_explorer.gui.simulation import SimulationController
+from can_explorer.gui.testing import TestController
 from can_explorer.gui.models import OverviewModel, TraceModel
 from can_explorer.sys.log_handler import get_logger
 from can_explorer.util import canutils
@@ -89,6 +93,9 @@ class CanConnection(QObject):
         self._history: deque = deque(maxlen=HISTORY_SECONDS)
         self._diagnostics = DiagnosticsController(self, parent=self)
         self._simulation = SimulationController(self, parent=self)
+        self._tests = TestController(self, parent=self)
+        self._replay = ReplayPlayback(self, parent=self)
+        self._bus_replay = BusReplay(self, parent=self)
         self._timer = QTimer(self)
         self._timer.setInterval(refresh_interval_ms)
         self._timer.timeout.connect(self._refresh)
@@ -286,6 +293,8 @@ class CanConnection(QObject):
     @pyqtSlot()
     def close(self):
         self.stop_schedule()
+        self._bus_replay.stop()
+        self._tests.shutdown()
         self._diagnostics.shutdown()
         self._simulation.shutdown()
         self.session.stop()
@@ -294,6 +303,10 @@ class CanConnection(QObject):
         self._timer.setInterval(interval_ms)
 
     def _on_session_state(self, session: BusSession):
+        if not session.is_open:
+            self._bus_replay.stop()
+            self._tests.shutdown()
+        self._replay.refresh()
         if session.is_open:
             self._timer.start()
             self._statistics_timer.start()
@@ -324,6 +337,8 @@ class CanConnection(QObject):
         if self._frame_count != self.session.trace.total:
             self._frame_count = self.session.trace.total
             self.statistics_changed.emit()
+        self._replay.refresh()
+        self._bus_replay.refresh()
 
     @pyqtSlot()
     def clear(self):
@@ -537,6 +552,21 @@ class CanConnection(QObject):
     def simulation(self) -> SimulationController:
         return self._simulation
 
+    @pyqtProperty(QObject, constant=True)
+    def tests(self) -> TestController:
+        """Test scripts, running them and their results."""
+        return self._tests
+
+    @pyqtProperty(QObject, constant=True)
+    def replay(self) -> ReplayPlayback:
+        """Playback of a log file replay connection (pause, speed, progress)."""
+        return self._replay
+
+    @pyqtProperty(QObject, constant=True)
+    def bus_replay(self) -> BusReplay:
+        """Transmission of a log file on the bus of a live connection."""
+        return self._bus_replay
+
     # LIN master schedule
 
     def _ldf(self) -> Optional[LdfDecoder]:
@@ -629,7 +659,20 @@ class ConnectionManager(QObject):
         self._detected_channels: Dict[str, List[str]] = {}
         self._detecting = False
         self._detection: Optional[asyncio.Future] = None
+        self._database_editor = DatabaseEditorController(parent=self)
+        self._database_editor.saved.connect(self._reload_database)
         QGuiApplication.instance().aboutToQuit.connect(self.close_all)
+
+    @pyqtProperty(QObject, constant=True)
+    def database_editor(self) -> DatabaseEditorController:
+        return self._database_editor
+
+    def _reload_database(self, path: str) -> None:
+        """Connections decoding with a database that was edited and saved use the new version."""
+        saved = Path(path).resolve()
+        for connection in self._connections:
+            if connection.database_file and Path(connection.database_file).resolve() == saved:
+                connection.load_database(QUrl.fromLocalFile(str(saved)))
 
     @pyqtProperty(QObject, constant=True)
     def app_state(self) -> AppState:
@@ -661,8 +704,7 @@ class ConnectionManager(QObject):
 
     @pyqtProperty('QStringList', constant=True)
     def log_file_filters(self) -> List[str]:
-        patterns = ' '.join(f'*{suffix}' for suffix in LOG_FILE_SUFFIXES)
-        return [f'CAN log files ({patterns})', *(f'{suffix[1:].upper()} (*{suffix})' for suffix in LOG_FILE_SUFFIXES)]
+        return file_filters()
 
     @pyqtProperty('QStringList', constant=True)
     def database_file_filters(self) -> List[str]:
@@ -804,11 +846,12 @@ class ConnectionManager(QObject):
         if 0 <= index < len(recent):
             self.add_connection(recent[index])
 
-    @pyqtSlot(QUrl, str, bool)
-    def open_log_file(self, url: QUrl, protocol: str, realtime: bool):
+    @pyqtSlot(QUrl, str, float)
+    def open_log_file(self, url: QUrl, protocol: str, speed: float):
+        """Replay a log file into a new connection at `speed` times the recorded timing (0: as fast as possible)."""
         path = _local_path(url)
-        connection = self._add(path.name, FileSource(path, realtime=realtime), protocol)
-        self._app_state.add_recent_log_file(str(path), protocol, realtime)
+        connection = self._add(path.name, FileSource(path, speed=speed), protocol)
+        self._app_state.add_recent_log_file(str(path), protocol, speed)
         connection.open()
 
     @pyqtSlot(int)
@@ -816,9 +859,9 @@ class ConnectionManager(QObject):
         recent = self._app_state.recent_log_files
         if 0 <= index < len(recent):
             entry = recent[index]
-            self.open_log_file(
-                QUrl.fromLocalFile(entry['path']), entry.get('protocol', 'Raw'), entry.get('realtime', True)
-            )
+            # Entries written before the speed was introduced only tell whether the timing was reproduced
+            speed = entry.get('speed', 1.0 if entry.get('realtime', True) else 0.0)
+            self.open_log_file(QUrl.fromLocalFile(entry['path']), entry.get('protocol', 'Raw'), float(speed))
 
     @pyqtSlot(int)
     def remove_connection(self, index: int):

@@ -9,6 +9,8 @@ Rectangle {
     id: root
     property var connection: null
     property string pageTitle: ""
+    // Shown instead of the connection, e.g. "Database editor"
+    property string title: ""
     property var notifications: []
 
     signal clearNotifications()
@@ -68,22 +70,31 @@ Rectangle {
         anchors.rightMargin: 20
         spacing: 14
 
+        // The breadcrumb and the filter shrink (eliding) when the window is narrow
         Label {
-            text: root.connection ? root.connection.name : qsTr("Welcome")
+            text: root.title || (root.connection ? root.connection.name : qsTr("Welcome"))
             color: Theme.text
             font.pixelSize: 16
+            elide: Text.ElideRight
+            Layout.fillWidth: true
+            Layout.minimumWidth: Math.min(implicitWidth, 60)
+            Layout.maximumWidth: implicitWidth
         }
         Label {
-            visible: root.connection !== null
+            visible: root.connection !== null || root.pageTitle.length > 0
             text: "/"
             color: Theme.muted
             font.pixelSize: 16
         }
         Label {
-            visible: root.connection !== null
+            visible: root.connection !== null || root.pageTitle.length > 0
             text: root.pageTitle
             color: Theme.muted
             font.pixelSize: 16
+            elide: Text.ElideRight
+            Layout.fillWidth: true
+            Layout.minimumWidth: Math.min(implicitWidth, 60)
+            Layout.maximumWidth: implicitWidth
         }
 
         Item { Layout.fillWidth: true }
@@ -93,6 +104,9 @@ Rectangle {
             visible: root.connection !== null
             placeholderText: qsTr("Filter: 100-1FF !123 ext rx fd")
             Layout.preferredWidth: 300
+            Layout.minimumWidth: 120
+            Layout.maximumWidth: 300
+            Layout.fillWidth: true
             Layout.preferredHeight: 40
             leftPadding: 18
             color: root.connection && root.connection.filter_error ? Theme.danger : Theme.text
@@ -154,11 +168,7 @@ Rectangle {
                 x: bell.width - width
                 width: 420
                 padding: 12
-                background: Rectangle {
-                    color: Theme.card
-                    radius: Theme.radius
-                    border.color: Theme.border
-                }
+                background: GlassPanel {}
                 contentItem: ColumnLayout {
                     spacing: 8
                     RowLayout {

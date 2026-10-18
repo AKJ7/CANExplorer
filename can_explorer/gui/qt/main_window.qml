@@ -18,9 +18,15 @@ ApplicationWindow {
     readonly property var currentConnection: currentIndex >= 0 ? connectionManager.connections[currentIndex] : null
     readonly property var currentConnectionView: currentIndex >= 0 ? connectionViews.itemAt(currentIndex) : null
     property var notifications: []
+    // A tool shown instead of the connections: "" or "database-editor"
+    property string tool: ""
+    property bool closeConfirmed: false
+    // Dragged with the handle on the right edge of the sidebar
+    property int sidebarWidth: Theme.sidebarWidth
+    readonly property int maximumSidebarWidth: Math.min(connectionManager.app_state.max_sidebar_width, width / 2)
 
     function currentView() {
-        return currentConnectionView
+        return tool === "" ? currentConnectionView : null
     }
 
     function notify(text) {
@@ -56,6 +62,7 @@ ApplicationWindow {
     palette.link: Theme.accent
 
     Component.onCompleted: {
+        sidebarWidth = connectionManager.app_state.sidebar_width()
         const geometry = connectionManager.app_state.window_geometry()
         if (geometry.length === 4) {
             x = geometry[0]
@@ -64,7 +71,14 @@ ApplicationWindow {
             height = geometry[3]
         }
     }
-    onClosing: connectionManager.app_state.save_window_geometry(x, y, width, height)
+    onClosing: close => {
+        if (connectionManager.database_editor.dirty && !closeConfirmed) {
+            close.accepted = false
+            unsavedDialog.open()
+            return
+        }
+        connectionManager.app_state.save_window_geometry(x, y, width, height)
+    }
 
     // The actions have no menu bar to register their shortcuts
     Shortcut { sequences: [StandardKey.New]; onActivated: Actions.newConnection.trigger() }
@@ -85,10 +99,19 @@ ApplicationWindow {
             currentConnection: mainWindow.currentIndex
             pages: mainWindow.currentConnectionView ? mainWindow.currentConnectionView.pages : []
             currentPage: mainWindow.currentConnectionView ? mainWindow.currentConnectionView.page : ""
-            onConnectionSelected: index => mainWindow.selectedIndex = index
-            onPageSelected: page => mainWindow.currentConnectionView.page = page
+            currentTool: mainWindow.tool
+            onConnectionSelected: index => {
+                mainWindow.selectedIndex = index
+                mainWindow.tool = ""
+            }
+            onPageSelected: page => {
+                mainWindow.currentConnectionView.page = page
+                mainWindow.tool = ""
+            }
+            onToolSelected: tool => mainWindow.tool = tool
             Layout.fillHeight: true
-            Layout.preferredWidth: implicitWidth
+            Layout.preferredWidth: Math.max(connectionManager.app_state.min_sidebar_width,
+                                            Math.min(mainWindow.maximumSidebarWidth, mainWindow.sidebarWidth))
         }
 
         ColumnLayout {
@@ -97,15 +120,25 @@ ApplicationWindow {
             Layout.fillHeight: true
 
             TopBar {
-                connection: mainWindow.currentConnection
-                pageTitle: mainWindow.currentConnectionView ? mainWindow.currentConnectionView.pageTitle : ""
+                connection: mainWindow.tool === "" ? mainWindow.currentConnection : null
+                title: mainWindow.tool === "database-editor" ? qsTr("Database editor") : ""
+                pageTitle: mainWindow.tool === "database-editor" ? connectionManager.database_editor.file_name
+                    : mainWindow.currentConnectionView ? mainWindow.currentConnectionView.pageTitle : ""
                 notifications: mainWindow.notifications
                 onClearNotifications: mainWindow.notifications = []
                 Layout.fillWidth: true
             }
 
+            DatabaseEditorView {
+                id: databaseEditorView
+                visible: mainWindow.tool === "database-editor"
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.margins: 24
+            }
+
             StackLayout {
-                visible: connectionManager.connections.length > 0
+                visible: mainWindow.tool === "" && connectionManager.connections.length > 0
                 currentIndex: mainWindow.currentIndex
                 Layout.fillWidth: true
                 Layout.fillHeight: true
@@ -122,7 +155,7 @@ ApplicationWindow {
             }
 
             WelcomeView {
-                visible: connectionManager.connections.length === 0
+                visible: mainWindow.tool === "" && connectionManager.connections.length === 0
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.margins: 24
@@ -130,7 +163,7 @@ ApplicationWindow {
 
             // Status line
             Rectangle {
-                visible: mainWindow.currentConnection !== null
+                visible: mainWindow.tool === "" && mainWindow.currentConnection !== null
                 color: Theme.surface
                 Layout.fillWidth: true
                 Layout.preferredHeight: 30
@@ -165,6 +198,53 @@ ApplicationWindow {
                 }
             }
         }
+    }
+
+    // Drag the right edge of the sidebar to resize it; a double click restores the default width
+    Item {
+        id: sidebarHandle
+        x: sidebar.width - width / 2
+        width: 8
+        height: parent.height
+        z: 50
+        readonly property bool engaged: sidebarHover.hovered || sidebarDrag.active
+
+        Rectangle {
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: 2
+            height: parent.height
+            color: Theme.accent
+            opacity: sidebarHandle.engaged ? 0.8 : 0
+            Behavior on opacity { NumberAnimation { duration: 120 } }
+        }
+        HoverHandler {
+            id: sidebarHover
+            cursorShape: Qt.SplitHCursor
+        }
+        DragHandler {
+            id: sidebarDrag
+            target: null
+            yAxis.enabled: false
+            property int startWidth
+            onActiveChanged: {
+                if (active)
+                    startWidth = sidebar.width
+                else
+                    connectionManager.app_state.set_sidebar_width(mainWindow.sidebarWidth)
+            }
+            onTranslationChanged: if (active) mainWindow.sidebarWidth = Math.round(Math.max(
+                connectionManager.app_state.min_sidebar_width,
+                Math.min(mainWindow.maximumSidebarWidth, startWidth + translation.x)))
+        }
+        TapHandler {
+            onDoubleTapped: {
+                mainWindow.sidebarWidth = Theme.sidebarWidth
+                connectionManager.app_state.set_sidebar_width(Theme.sidebarWidth)
+            }
+        }
+        ToolTip.visible: sidebarHover.hovered && !sidebarDrag.active
+        ToolTip.delay: 800
+        ToolTip.text: qsTr("Drag to resize, double-click to reset")
     }
 
     // Resizing along the edges and corners, as the window has no frame
@@ -300,6 +380,48 @@ ApplicationWindow {
             const view = mainWindow.currentView()
             if (view)
                 view.selectAll()
+        }
+    }
+
+    Connections {
+        target: Actions.editDatabase
+        function onTriggered() {
+            mainWindow.tool = "database-editor"
+        }
+    }
+
+    Connections {
+        target: Actions
+        function onEditDatabaseFile(path) {
+            mainWindow.tool = "database-editor"
+            databaseEditorView.openPath(path)
+        }
+    }
+
+    Dialog {
+        id: unsavedDialog
+        title: qsTr("Unsaved database changes")
+        modal: true
+        anchors.centerIn: Overlay.overlay
+        standardButtons: Dialog.Save | Dialog.Discard | Dialog.Cancel
+        Label {
+            text: qsTr("Save the changes to %1 before quitting?").arg(connectionManager.database_editor.file_name)
+        }
+        onAccepted: {
+            const editor = connectionManager.database_editor
+            const error = editor.writable ? editor.save() : qsTr("Use \"Save as\" in the database editor first")
+            if (error) {
+                mainWindow.tool = "database-editor"
+                mainWindow.notify(error)
+                return
+            }
+            mainWindow.closeConfirmed = true
+            mainWindow.close()
+        }
+        onDiscarded: {
+            close()
+            mainWindow.closeConfirmed = true
+            mainWindow.close()
         }
     }
 

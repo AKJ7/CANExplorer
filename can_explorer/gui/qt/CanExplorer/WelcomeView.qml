@@ -110,6 +110,13 @@ ScrollView {
                 accentColor: Theme.chart[2]
                 onActivated: Actions.convertDatabase.trigger()
             }
+            ActionCard {
+                icon: "✎"
+                heading: qsTr("Edit a database")
+                description: qsTr("Edit the messages, signals and nodes of DBC, DBF, KCD and SYM files.")
+                accentColor: Theme.chart[4]
+                onActivated: Actions.editDatabase.trigger()
+            }
         }
 
         Card {

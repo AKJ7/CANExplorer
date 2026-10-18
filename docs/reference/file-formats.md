@@ -13,8 +13,20 @@ the extension.
 | `.log` | can-utils `candump -l` | Text; readable by `canplayer` |
 | `.trc` | PEAK trace | Text |
 | `.db` | SQLite | One table of frames |
+| `.mf4` | ASAM MDF 4 | Binary measurement data format of ASAM, read by tools such as asammdf and CANape; needs the optional `mf4` extra (see below) |
+| `.asc.gz`, `.csv.gz`, `.log.gz`, `.trc.gz` | The text formats, gzip compressed | Typically 5–10 times smaller; other tools may need the file decompressed first (`gunzip`) |
 
-Timestamps are kept, so replays reproduce the original timing.
+Every format can be recorded, exported, replayed and replayed on a bus. Timestamps are kept, so replays reproduce
+the original timing.
+
+MF4 support uses the [asammdf](https://asammdf.readthedocs.io/) package, which brings numpy and pandas along and
+is therefore optional:
+
+```bash
+uv sync --extra mf4
+```
+
+Without it, MF4 is not offered in the file dialogs and opening an `.mf4` file explains what to install.
 
 ## Signal databases
 

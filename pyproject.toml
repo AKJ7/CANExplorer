@@ -23,6 +23,12 @@ dependencies = [
 [project.scripts]
 main = "can_explorer.__main__:main"
 can-db-convert = "can_explorer.db_convert:main"
+can-test = "can_explorer.testing.cli:main"
+
+[project.optional-dependencies]
+mf4 = [
+    "asammdf>=7",
+]
 
 [dependency-groups]
 dev = [
@@ -39,6 +45,7 @@ test = [
     "pytest-qt",
     "pytest-mock",
     "hypothesis",
+    "asammdf>=7",  # MF4 log files in the format round-trip tests
 ]
 packaging = [
     "nuitka>=4.3.1",

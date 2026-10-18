@@ -53,6 +53,12 @@ Bundle [EnginePdu: EngineSpeed=500 rpm, GearPosition=First; StatusPdu: AliveCoun
 
 The signals of contained PDUs are listed and plotted under the PDU name, e.g. `StatusPdu.AliveCounter`.
 
+## Editing databases
+
+The [database editor](database-editor.md) changes the messages, signals and nodes of DBC, DBF, KCD and SYM files
+(and of ARXML files, saved in one of those formats). **Edit database** in the toolbar opens the database of the
+connection; saving it updates the decoding.
+
 ## Converting databases
 
 **⋮ → Convert Signal Database…** (also on the welcome page) converts between the formats with ✓ in the table above. Choose the source

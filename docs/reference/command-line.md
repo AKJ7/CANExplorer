@@ -27,6 +27,33 @@ On Linux, `main --install-desktop-entry` adds CANExplorer with its icon to the d
 `main --uninstall-desktop-entry` removes it, see
 [Installation](../getting-started/installation.md#desktop-menu-entry-linux).
 
+## can-test
+
+Runs [test scripts](../user-guide/test-automation.md) on a bus without the user interface.
+
+```text
+can-test [-h] [--interface INTERFACE] [--channel CHANNEL] [--bitrate BITRATE] [--fd] [--data-bitrate DATA_BITRATE]
+         [--database DATABASE] [--simulation SIMULATION] [-k FILTER] [--report REPORT] [--junit JUNIT]
+         [--list] [--title TITLE] scripts [scripts ...]
+```
+
+| Argument | Description |
+|---|---|
+| `scripts` | Test scripts (Python files with `TestModule` classes) |
+| `--interface` | python-can interface, e.g. `socketcan`, `pcan`, `vector`; default `virtual` |
+| `--channel` | Channel, e.g. `can0` or `PCAN_USBBUS1`; default `can-test` |
+| `--bitrate`, `--fd`, `--data-bitrate` | Bus timing; default 500000 bit/s, classic CAN |
+| `--database` | Signal database for messages and signals by name |
+| `--simulation` | Simulation script to run on the same bus (repeatable), e.g. to test without hardware |
+| `-k` | Run only the test cases whose `Module.case` contains this text |
+| `--report` | Write an HTML report |
+| `--junit` | Write JUnit XML results |
+| `--list` | List the test cases and exit |
+| `--title` | Title of the reports |
+
+Exit code: 0 when all test cases passed (or were skipped), 1 when any failed or had an error, 2 when the scripts,
+the database or the bus could not be loaded.
+
 ## can-db-convert
 
 Converts signal databases; the formats follow the file extensions.

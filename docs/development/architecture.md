@@ -66,6 +66,6 @@ computer.
 | `gui/diagnostics.py`, `gui/simulation.py` | Diagnostics and simulation controllers, panel bridge |
 | `gui/signal_plot.py` | Plot item (QQuickPaintedItem) |
 | `gui/app_state.py` | Persistent settings (QSettings) |
-| `gui/qt/CanExplorer/` | QML views, dialogs and dashboard components; `Theme.qml` holds the colours of the six themes |
+| `gui/qt/CanExplorer/` | QML views, dialogs and dashboard components; `Theme.qml` holds the colours of the six themes, `GlassPanel.qml` the frosted glass of dialogs, menus and popups |
 | `gui/qt/CanExplorerStyle/` | Qt Quick Controls style drawing buttons, inputs, dialogs, menus etc. with the theme colours (Fusion for the rest) |
 | `sys/config.py`, `sys/environment.py` | Application settings; clean-up of snap environments |

@@ -45,6 +45,7 @@ the trace, overview and signals views have these buttons:
 | Pause view | Freeze the views; frames are still received, recorded and counted, and appear when the view is resumed |
 | Clear | Remove all frames, statistics and plot data of the connection |
 | Record… | Record to a log file, see [Recording, replay and export](recording-and-replay.md) |
+| Replay to bus… | Transmit a log file on the bus, see [Replaying on the bus](recording-and-replay.md#replaying-on-the-bus) |
 | Export… | Save the selected trace rows, or all displayed rows, to a log file |
 | Load database… | Load a signal database or a CDD diagnostic description, see [Signal databases](signal-databases.md) |
 | Bus selector | Shown for databases describing several buses |

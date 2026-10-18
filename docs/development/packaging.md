@@ -21,6 +21,10 @@ Both builds include the QML files, the Qt QML modules, the grammar files of ldfp
 interface modules (which python-can imports by name at run time). Nuitka cannot relate the package metadata of an
 editable install to the package, so the build writes the version into a generated module instead.
 
+MF4 log files are only supported when asammdf is installed in the build environment. The release bundles are
+built without it to keep them small (it adds numpy and pandas); to include it, sync with `--extra mf4` before
+building.
+
 ## Icons
 
 The application icon (`.ico` on Windows, `.icns` on macOS, `.png` on Linux) is set on the bundle and on the

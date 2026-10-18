@@ -83,10 +83,9 @@ T.ComboBox {
             T.ScrollIndicator.vertical: ScrollIndicator {}
         }
 
-        background: Rectangle {
-            color: Theme.card
-            radius: Theme.smallRadius
-            border.color: Theme.border
+        background: GlassPanel {
+            radius: Theme.smallRadius + 2
+            shadow: false
         }
     }
 }

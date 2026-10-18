@@ -15,6 +15,10 @@ Item {
     property alias selectAll: selectAllAction
     property alias preferences: preferencesAction
     property alias convertDatabase: convertDatabaseAction
+    property alias editDatabase: editDatabaseAction
+
+    // Open a database file in the editor (e.g. the one of a connection)
+    signal editDatabaseFile(string path)
 
     Action {
         id: exitAction
@@ -71,6 +75,12 @@ Item {
         id: convertDatabaseAction
         text: qsTr("Con&vert Signal Database...")
         icon.name: "document-save-as"
+    }
+
+    Action {
+        id: editDatabaseAction
+        text: qsTr("&Edit Signal Database...")
+        icon.name: "document-edit"
     }
 
     Action {

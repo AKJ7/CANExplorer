@@ -43,6 +43,7 @@ Menu {
     MenuItem { action: Actions.copy }
     MenuItem { action: Actions.selectAll }
     MenuSeparator {}
+    MenuItem { action: Actions.editDatabase }
     MenuItem { action: Actions.convertDatabase }
     MenuItem { action: Actions.preferences }
     MenuSeparator {}

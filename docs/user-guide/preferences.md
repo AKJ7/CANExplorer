@@ -16,7 +16,7 @@
 
 ## Stored state
 
-CANExplorer remembers the recent connections and log files, the preferences, the theme and the window position and size. They
+CANExplorer remembers the recent connections and log files, the preferences, the theme, the width of the sidebar and the window position and size. They
 are stored with Qt's settings mechanism:
 
 | Platform | Location |

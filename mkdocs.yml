@@ -47,16 +47,19 @@ nav:
       - Filters: user-guide/filters.md
       - Recording, replay and export: user-guide/recording-and-replay.md
       - Signal databases: user-guide/signal-databases.md
+      - Database editor: user-guide/database-editor.md
       - Signal plots: user-guide/signal-plots.md
       - Transmitting: user-guide/transmitting.md
       - Protocol decoding: user-guide/protocols.md
       - Diagnostics (UDS): user-guide/diagnostics.md
       - LIN: user-guide/lin.md
       - Simulation and scripting: user-guide/simulation.md
+      - Test automation: user-guide/test-automation.md
       - Preferences and settings: user-guide/preferences.md
   - Reference:
       - reference/index.md
       - Scripting API: reference/scripting-api.md
+      - Test API: reference/test-api.md
       - QML panel API: reference/panel-api.md
       - Command line: reference/command-line.md
       - File formats: reference/file-formats.md

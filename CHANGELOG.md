@@ -8,6 +8,36 @@ Only `0.0.1` has been tagged so far. Later development stages are listed by date
 ## [Unreleased]
 
 ### Added
+- **Movable dialogs**: dragging the title of a dialog moves it, within the window; it opens centred again.
+- **Resizable sidebar**: drag its right edge (180–420 pixels, at most half the window), double-click to restore the
+  default; the width is remembered. The top bar's breadcrumb and filter field shrink in narrow windows instead of
+  pushing the window buttons out.
+- **Glass dialogs**: dialogs, menus, popups, combo box lists and the notifications are frosted glass — the window
+  content behind them blurred under a translucent theme tint, with a light edge, a sheen and a soft shadow. With
+  Qt's software renderer they fall back to opaque panels. The documentation screenshots are rendered with OpenGL.
+- **Test automation**: test scripts (`TestModule` classes with `@testcase` methods) check ECUs on the bus with a
+  test context offering checks (soft and required), sending by database name or identifier, waiting for frames and
+  signal values, cycle time measurement, UDS requests and the simulation's variables. Verdicts passed, failed,
+  error (exceptions, timeouts, failing setup) and skipped. They run in the new **Tests** view of a connection (select,
+  run, stop, live results and logs) or headless with `can-test` (exit code for CI, `--simulation` to test against
+  simulated nodes), with HTML and JUnit XML reports. Example in `examples/testing`.
+- **Database editor** (Tools → Database editor, ⋮ → Edit Signal Database…, or "Edit database" on a connection):
+  create and edit DBC, DBF, KCD and SYM databases, and ARXML databases saved as one of them. Messages
+  (name, identifier, length, CAN FD, cycle time, senders, comment), signals (position, byte order, sign, factor,
+  offset, range, unit, initial value, receivers, value descriptions, comment) and nodes; a colour coded bit layout;
+  checks for overlapping or out-of-frame signals and duplicate identifiers; notes on what the target format cannot
+  store; confirmation before discarding unsaved changes. Connections decoding with a saved file reload it.
+- Fixed a binding loop in the dialog style (an elided dialog title).
+- **More log formats** for recording, export, replay and replay on the bus: ASAM **MF4** (with the optional `mf4`
+  extra, which installs asammdf) and gzip compressed text logs (`.asc.gz`, `.csv.gz`, `.log.gz`, `.trc.gz`). One
+  list of formats (`core/log_formats.py`) serves all of them, so every recordable format can be replayed; the file
+  dialogs name each format and add the extension of the chosen one.
+- **Replay on the bus**: "Replay to bus…" transmits the frames of a log file on a connected bus with their recorded
+  timing, at 0.25× to 10× or as fast as possible, optionally filtered and repeated, with a playback bar (progress,
+  pause, speed, stop). Errors stop it with a notification.
+- **Replay controls**: replays of log files can be paused and resumed and their speed changed while they run
+  (0.25× to 10×, or as fast as possible), with a playback bar showing position, length and frames. The replay
+  dialog asks for the speed instead of "reproduce original timing".
 - Documentation in the **Dracula** colour scheme (`docs/stylesheets/dracula.css`, on top of Material for MkDocs).
 - **Logo** with a transparent background: shown in the sidebar, on the welcome page and in the About dialog, as
   window icon, as icon of the PyInstaller and Nuitka bundles (`.ico`, `.icns`, `.png`) and as logo and favicon of

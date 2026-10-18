@@ -15,6 +15,9 @@ DEFAULT_MAX_TRACE_ROWS = 100_000
 DEFAULT_REFRESH_INTERVAL_MS = 33
 TRACE_ROWS_RANGE = (1_000, 2_000_000)
 REFRESH_INTERVAL_RANGE = (16, 1_000)
+# Width of the sidebar in pixels; the default must match Theme.sidebarWidth
+DEFAULT_SIDEBAR_WIDTH = 232
+SIDEBAR_WIDTH_RANGE = (180, 420)
 
 
 class AppState(QObject):
@@ -65,8 +68,8 @@ class AppState(QObject):
     def recent_log_files(self) -> List[Dict[str, Any]]:
         return self._load_list('recent/log_files')
 
-    def add_recent_log_file(self, path: str, protocol: str, realtime: bool) -> None:
-        entry = {'path': path, 'protocol': protocol, 'realtime': realtime}
+    def add_recent_log_file(self, path: str, protocol: str, speed: float) -> None:
+        entry = {'path': path, 'protocol': protocol, 'speed': speed}
         self._store_list('recent/log_files', self._push(self.recent_log_files, entry, 'path'))
         self.recent_log_files_changed.emit()
 
@@ -128,6 +131,27 @@ class AppState(QObject):
             self._settings.setValue('appearance/theme', theme)
             self._settings.sync()
             self.preferences_changed.emit()
+
+    # Layout
+
+    @pyqtProperty(int, constant=True)
+    def min_sidebar_width(self) -> int:
+        return SIDEBAR_WIDTH_RANGE[0]
+
+    @pyqtProperty(int, constant=True)
+    def max_sidebar_width(self) -> int:
+        return SIDEBAR_WIDTH_RANGE[1]
+
+    @pyqtSlot(result=int)
+    def sidebar_width(self) -> int:
+        """Stored width of the sidebar (read when the window opens)."""
+        return self._int('window/sidebar_width', DEFAULT_SIDEBAR_WIDTH, SIDEBAR_WIDTH_RANGE)
+
+    @pyqtSlot(int)
+    def set_sidebar_width(self, width: int) -> None:
+        low, high = SIDEBAR_WIDTH_RANGE
+        self._settings.setValue('window/sidebar_width', max(low, min(high, int(width))))
+        self._settings.sync()
 
     # Window geometry
 

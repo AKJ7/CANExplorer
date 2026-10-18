@@ -10,7 +10,8 @@ from can_explorer.core.busstats import BusSnapshot, BusStatistics
 from can_explorer.core.decoding import FrameDecoder
 from can_explorer.core.frames import Frame, clone_message
 from can_explorer.core.signals import SignalTracker
-from can_explorer.core.sources import LOG_FILE_SUFFIXES, MessageSource, SourceError
+from can_explorer.core.log_formats import is_log_file, unsupported_message
+from can_explorer.core.sources import MessageSource, SourceError
 from can_explorer.core.store import IdStatistics, TraceBuffer
 from can_explorer.sys.log_handler import get_logger
 
@@ -307,8 +308,8 @@ class BusSession:
 
     @staticmethod
     def _check_log_format(path: Path) -> None:
-        if path.suffix.lower() not in LOG_FILE_SUFFIXES:
-            raise SessionError(f'Unsupported log format {path.suffix!r}, use one of {", ".join(LOG_FILE_SUFFIXES)}')
+        if not is_log_file(path):
+            raise SessionError(unsupported_message(path))
 
     def start_recording(self, path: str | Path) -> None:
         path = Path(path)

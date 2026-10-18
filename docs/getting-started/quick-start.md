@@ -50,7 +50,8 @@ shifts and both nodes send their messages.
 
 Press **Record…**, choose a file such as `demo.blf`, let it record for a while and press **Stop recording**.
 **⋮ → Replay Log File…** (++ctrl+o++) opens the recording as a new connection and plays it back with its original
-timing.
+timing; the playback bar pauses it and changes its speed. **Replay to bus…** on the *Demo* connection sends the
+recording on the bus again.
 
 ## Next steps
 
