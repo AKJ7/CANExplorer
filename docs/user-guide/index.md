@@ -7,6 +7,9 @@ The window is laid out as a dashboard:
 - The **top bar** shows the current connection and view, the frame [filter](filters.md), the **Connect** /
   **Disconnect** button, the notifications (🔔; errors also pop up briefly at the bottom right) and the
   application menu **⋮** with all commands and their keyboard shortcuts.
+- The window has no system title bar. Drag the top bar or the logo to move it, double-click the top bar to
+  maximize or restore it, and use the buttons at the top right to minimize, maximize or close it. The window can
+  be resized from its edges.
 - The trace, overview and signals views have a toolbar to pause or clear the view, record, export and load a
   signal database.
 

@@ -12,6 +12,7 @@ from PyQt6.QtCore import (
     QMessageLogContext,
 )
 from can_explorer.sys.log_handler import get_logger
+from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication
 from typing import Callable, Dict, List
 import signal
@@ -19,17 +20,21 @@ import sys
 from can_explorer.util.gui import get_res_path
 from can_explorer.gui.application_metadata import ApplicationMetadata
 from can_explorer.gui.connection_manager import ConnectionManager
+from can_explorer.desktop import APP_ID
 from can_explorer.gui.signal_plot import register_qml_types
 
 logger = get_logger(__name__)
+
+
+APP_ICON = 'CanExplorer/images/logo.png'  # Generated from docs/assets/logo.png by tools/make_icons.py
 
 
 def create_qml_engine(
     context: Dict[str, QObject], on_warnings: Callable[[List[QQmlError]], None]
 ) -> QQmlApplicationEngine:
     """Load the main window with the given context properties (e.g. {'metadata': ...})."""
-    # Fusion follows the theme palette on every platform (the native Windows and macOS styles cannot be recoloured)
-    os.environ.setdefault('QT_QUICK_CONTROLS_STYLE', 'Fusion')
+    # Controls drawn with the theme colours on every platform (the native styles cannot be recoloured)
+    os.environ.setdefault('QT_QUICK_CONTROLS_STYLE', 'CanExplorerStyle')  # can_explorer/gui/qt/CanExplorerStyle
     register_qml_types()
     engine = QQmlApplicationEngine()
     engine.setOutputWarningsToStandardError(False)
@@ -46,6 +51,8 @@ class MainApplication(QApplication):
         super().__init__(sys.argv)
         self.setOrganizationName('AKJ7')
         self.setApplicationName('CANExplorer')
+        self.setWindowIcon(QIcon(str(get_res_path(APP_ICON))))
+        self.setDesktopFileName(APP_ID)  # Lets Linux desktops match the window to the installed desktop entry
         self.metadata = ApplicationMetadata(parent=self)
         self.connection_manager = ConnectionManager(parent=self)
         qInstallMessageHandler(self._message_handler)

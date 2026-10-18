@@ -86,3 +86,56 @@ def test_overview_refreshes_only_changed_rows(qapp):
     model.select_all(selection)
     model.copy_selection(selection)
     assert '<b>' not in QGuiApplication.clipboard().text()
+
+
+def test_overview_highlight_color(qapp):
+    statistics = IdStatistics()
+    model = OverviewModel(statistics)
+    statistics.update(frame(0x100, b'\x01\x02', timestamp=1.0))
+    statistics.update(frame(0x100, b'\x01\x03', timestamp=1.1))
+    model.refresh(*statistics.drain_changes())
+    changes = []
+    model.dataChanged.connect(lambda top, bottom: changes.append((top.column(), bottom.column())))
+    model.highlight_color = '#f39c12'
+    assert changes == [(6, 6)]
+    assert cell(model, 0, 6) == '01 <font color="#f39c12"><b>03</b></font>'
+
+
+def test_overview_sorting(qapp):
+    statistics = IdStatistics()
+    model = OverviewModel(statistics)
+    for can_id, count in ((0x300, 1), (0x100, 3), (0x200, 2)):
+        for i in range(count):
+            statistics.update(frame(can_id, bytes([can_id >> 8]), timestamp=1.0 + i))
+    model.refresh(*statistics.drain_changes())
+
+    def ids():
+        return [cell(model, row, 0) for row in range(model.rowCount())]
+
+    assert ids() == ['100', '200', '300']
+    model.sort_by(3)  # Count, ascending
+    assert ids() == ['300', '200', '100'] and model.headerData(3, Qt.Orientation.Horizontal) == 'Count ▲'
+    model.sort_by(3)
+    assert ids() == ['100', '200', '300'] and model.headerData(3, Qt.Orientation.Horizontal) == 'Count ▼'
+
+    # Live updates keep the order, and selections stay on their identifiers
+    selection = QItemSelectionModel(model)
+    selection.select(
+        model.index(2, 0), QItemSelectionModel.SelectionFlag.Select | QItemSelectionModel.SelectionFlag.Rows
+    )
+    for i in range(5):
+        statistics.update(frame(0x300, b'\x03', timestamp=5.0 + i))
+    model.refresh(*statistics.drain_changes())
+    assert ids() == ['300', '100', '200']
+    assert model.selected_rows(selection) == [0]
+
+    model.sort_by(4)  # Cycle time: 0x300 has none
+    model.sort_by(4)
+    model.sort_by(4)  # Third click: back to the identifiers
+    assert ids() == ['100', '200', '300'] and model.headerData(4, Qt.Orientation.Horizontal) == 'Cycle [ms]'
+
+    # New identifiers are inserted in the sort order
+    model.sort_by(6)
+    statistics.update(frame(0x050, b'\x02', timestamp=9.0))
+    model.refresh(*statistics.drain_changes())
+    assert ids() == ['100', '050', '200', '300']

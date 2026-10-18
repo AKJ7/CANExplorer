@@ -1,6 +1,16 @@
-from typing import Callable, Dict, Iterable, List, Optional, Set
+from typing import Any, Callable, Dict, Iterable, List, Optional, Set
 
-from PyQt6.QtCore import QAbstractTableModel, QItemSelection, QItemSelectionModel, QModelIndex, QObject, Qt, pyqtSlot
+from PyQt6.QtCore import (
+    QAbstractTableModel,
+    QItemSelection,
+    QItemSelectionModel,
+    QModelIndex,
+    QObject,
+    Qt,
+    pyqtProperty,
+    pyqtSignal,
+    pyqtSlot,
+)
 from PyQt6.QtGui import QGuiApplication
 
 from can_explorer.core.filters import MessageFilter
@@ -191,7 +201,8 @@ class TraceModel(FrameTableModel):
 
 
 class OverviewModel(FrameTableModel):
-    """One row per (identifier, direction) with the latest data; bytes changed by the last update are bold."""
+    """One row per (identifier, direction) with the latest data; bytes that differ from the previous frame of the
+    identifier are highlighted. Sorted by identifier, or by the column chosen with `sort_by`."""
 
     COLUMNS = ('ID [hex]', 'Dir', 'Type', 'Count', 'Cycle [ms]', 'DLC', 'Data [hex]', 'Info')
     ALIGNMENTS = (
@@ -205,6 +216,11 @@ class OverviewModel(FrameTableModel):
         ALIGN_LEFT,
     )
     DATA_COLUMN = 6
+    INFO_COLUMN = 7
+    # Columns whose values change with new frames of a row; sorting by them reorders the rows on updates
+    VOLATILE_COLUMNS = frozenset((3, 4, 5, 6, 7))
+
+    highlight_color_changed = pyqtSignal()
 
     def __init__(self, statistics: IdStatistics, describe: Describe = _plain_info, parent: Optional[QObject] = None):
         super().__init__(parent)
@@ -213,6 +229,111 @@ class OverviewModel(FrameTableModel):
         self._keys: List[IdKey] = []
         self._rows_by_key: Dict[IdKey, int] = {}
         self._filter = MessageFilter()
+        self._sort_column = -1  # -1: by identifier
+        self._sort_descending = False
+        self._highlight_color = ''
+
+    # Highlighting
+
+    def get_highlight_color(self) -> str:
+        return self._highlight_color
+
+    def set_highlight_color(self, color: str) -> None:
+        if color != self._highlight_color:
+            self._highlight_color = color
+            self.highlight_color_changed.emit()
+            if self._keys:
+                column = self.DATA_COLUMN
+                self.dataChanged.emit(self.index(0, column), self.index(len(self._keys) - 1, column))
+
+    highlight_color = pyqtProperty(
+        str, get_highlight_color, set_highlight_color, notify=highlight_color_changed
+    )  # Colour of changed bytes, e.g. '#f39c12'; bold only when empty
+
+    def _format_data(self, data: bytes, changed: Iterable[bool]) -> str:
+        if self._highlight_color:
+            marked = f'<font color="{self._highlight_color}"><b>{{:02X}}</b></font>'
+        else:
+            marked = '<b>{:02X}</b>'
+        return ' '.join(
+            marked.format(byte) if is_changed else f'{byte:02X}'
+            for byte, is_changed in zip(data, changed, strict=False)
+        )
+
+    # Sorting
+
+    @property
+    def sort_column(self) -> int:
+        return self._sort_column
+
+    @property
+    def sort_descending(self) -> bool:
+        return self._sort_descending
+
+    @pyqtSlot(int)
+    def sort_by(self, column: int) -> None:
+        """Header click: sort ascending by the column, then descending, then back to the identifier order."""
+        if column != self._sort_column:
+            self._sort_column, self._sort_descending = column, False
+        elif not self._sort_descending:
+            self._sort_descending = True
+        else:
+            self._sort_column, self._sort_descending = -1, False
+        self.headerDataChanged.emit(Qt.Orientation.Horizontal, 0, len(self.COLUMNS) - 1)
+        self._reorder()
+
+    def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
+        if (
+            orientation == Qt.Orientation.Horizontal
+            and role == Qt.ItemDataRole.DisplayRole
+            and section == self._sort_column
+        ):
+            return f'{self.COLUMNS[section]} {"▼" if self._sort_descending else "▲"}'
+        return super().headerData(section, orientation, role)
+
+    def _sort_value(self, key: IdKey) -> Any:
+        entry = self._statistics.entries[key]
+        msg = entry.last.message
+        match self._sort_column:
+            case 0:
+                return msg.is_extended_id, msg.arbitration_id
+            case 1:
+                return msg.is_rx
+            case 2:
+                return frame_type(msg)
+            case 3:
+                return entry.count
+            case 4:  # Unknown cycle times last
+                return (entry.cycle_time is None) != self._sort_descending, entry.cycle_time or 0.0
+            case 5:
+                return msg.dlc
+            case 6:
+                return bytes(msg.data)
+            case 7:
+                return self._describe(entry.last)
+        return 0
+
+    def _ordered(self, keys: Iterable[IdKey]) -> List[IdKey]:
+        keys = sorted(keys)  # Identifier order, also the tie breaker of the other columns
+        if self._sort_column >= 0:
+            keys.sort(key=self._sort_value, reverse=self._sort_descending)
+        return keys
+
+    def _reorder(self) -> None:
+        """Apply the sort order, keeping selections (persistent indexes) on their rows."""
+        keys = self._ordered(self._keys)
+        if keys == self._keys:
+            return
+        self.layoutAboutToBeChanged.emit()
+        old_keys = self._keys
+        self._keys = keys
+        self._rows_by_key = {key: row for row, key in enumerate(keys)}
+        persistent = self.persistentIndexList()
+        self.changePersistentIndexList(
+            persistent,
+            [self.index(self._rows_by_key[old_keys[index.row()]], index.column()) for index in persistent],
+        )
+        self.layoutChanged.emit()
 
     def rowCount(self, parent=QModelIndex()) -> int:
         return 0 if parent.isValid() else len(self._keys)
@@ -240,10 +361,7 @@ class OverviewModel(FrameTableModel):
             case 5:
                 return str(msg.dlc)
             case 6:
-                return ' '.join(
-                    f'<b>{byte:02X}</b>' if changed else f'{byte:02X}'
-                    for byte, changed in zip(msg.data, entry.changed, strict=False)
-                )
+                return self._format_data(msg.data, entry.changed)
             case 7:
                 return self._describe(frame)
         return ''
@@ -261,7 +379,9 @@ class OverviewModel(FrameTableModel):
     def rebuild(self) -> None:
         self.beginResetModel()
         matches = self._filter.matches
-        self._keys = sorted(key for key, entry in self._statistics.entries.items() if matches(entry.last.message))
+        self._keys = self._ordered(
+            key for key, entry in self._statistics.entries.items() if matches(entry.last.message)
+        )
         self._rows_by_key = {key: row for row, key in enumerate(self._keys)}
         self.endResetModel()
 
@@ -269,6 +389,8 @@ class OverviewModel(FrameTableModel):
         if added:
             self.rebuild()
             return
+        if changed and self._sort_column in self.VOLATILE_COLUMNS:
+            self._reorder()
         rows = sorted(row for row in map(self._rows_by_key.get, changed) if row is not None)
         if not rows:
             return
@@ -284,5 +406,7 @@ class OverviewModel(FrameTableModel):
                 start = previous = row
 
     def refresh_descriptions(self) -> None:
+        if self._sort_column == self.INFO_COLUMN:
+            self._reorder()
         if self._keys:
             self.dataChanged.emit(self.index(0, 7), self.index(len(self._keys) - 1, 7))

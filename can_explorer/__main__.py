@@ -29,7 +29,14 @@ def run_app() -> int:
     return 0
 
 
+DESKTOP_ENTRY_OPTIONS = ('--install-desktop-entry', '--uninstall-desktop-entry')
+
+
 def main():
+    if len(sys.argv) == 2 and sys.argv[1] in DESKTOP_ENTRY_OPTIONS:
+        from can_explorer import desktop
+
+        sys.exit(desktop.run(sys.argv[1]))
     sys.exit(run_app())
 
 

@@ -12,10 +12,20 @@ Dialog {
     ColumnLayout {
         spacing: 12
 
-        Label {
-            text: qsTr("%1 (v%2)").arg(metadata.name).arg(metadata.version)
-            font.pixelSize: 20
-            font.bold: true
+        RowLayout {
+            spacing: 16
+            Image {
+                source: "images/logo.png"
+                sourceSize: Qt.size(160, 160)
+                mipmap: true
+                Layout.preferredWidth: 80
+                Layout.preferredHeight: 80
+            }
+            Label {
+                text: qsTr("%1 (v%2)").arg(metadata.name).arg(metadata.version)
+                font.pixelSize: 20
+                font.bold: true
+            }
         }
 
         Label {

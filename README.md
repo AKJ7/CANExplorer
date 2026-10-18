@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/assets/logo-banner.png" alt="CANExplorer logo" width="420"></p>
+
 # CANExplorer
 A CANbus-Analyse Tool for all platforms.
 
@@ -7,7 +9,7 @@ preview locally with `uv run --group docs mkdocs serve`).
 ## Features
 - Live monitoring of any [python-can](https://python-can.readthedocs.io/) interface (SocketCAN, PCAN, Vector, Kvaser, slcan, gs_usb, virtual, …), including CAN FD with a separate data bitrate, and channel detection
 - **Dashboard** with frame rates, bus load, error frames, a bus activity chart, traffic breakdown and the busiest identifiers; six colour themes
-- **Trace** view (chronological, buffer size configurable) and **Overview** per identifier (count, cycle time, changed bytes in bold)
+- **Trace** view (chronological, buffer size configurable) and **Overview** per identifier (count, cycle time, changed bytes highlighted, sortable by any column)
 - Row selection, copy to clipboard (tab separated) and export of the trace to a log file
 - Display filters, e.g. `100-1FF !123 ext rx fd`: hex IDs and ranges, `!` excludes, keywords restrict frame type and direction
 - Bus statistics: Rx/Tx rates, estimated bus load, error frames and bus state

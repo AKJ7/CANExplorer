@@ -1,6 +1,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import QtQuick.Window 2.15
 import CanExplorer 1.0
 
 // Breadcrumb, frame filter, connect button, notifications and the application menu.
@@ -16,6 +17,43 @@ Rectangle {
     implicitHeight: 72
 
     onConnectionChanged: filterField.text = connection ? connection.filter_text : ""
+
+    // The window has no title bar: the top bar moves it, and a double click maximizes or restores it
+    DragHandler {
+        target: null
+        grabPermissions: PointerHandler.CanTakeOverFromAnything
+        onActiveChanged: if (active) root.Window.window.startSystemMove()
+    }
+    TapHandler {
+        onDoubleTapped: root.toggleMaximized()
+    }
+
+    function toggleMaximized() {
+        const window = root.Window.window
+        if (window.visibility === Window.Maximized)
+            window.showNormal()
+        else
+            window.showMaximized()
+    }
+
+    component WindowButton: ToolButton {
+        id: windowButton
+        property color hoverColor: Theme.alpha(Theme.text, 0.12)
+        implicitWidth: 40
+        implicitHeight: 32
+        font.pixelSize: 15
+        contentItem: Label {
+            text: windowButton.text
+            font: windowButton.font
+            color: windowButton.hovered && windowButton.hoverColor === Theme.danger ? "white" : Theme.text
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
+        }
+        background: Rectangle {
+            radius: Theme.smallRadius
+            color: windowButton.hovered ? windowButton.hoverColor : "transparent"
+        }
+    }
 
     Rectangle {
         anchors.bottom: parent.bottom
@@ -77,21 +115,9 @@ Rectangle {
                 : (root.connection.is_replay ? qsTr("Replay") : qsTr("Connect"))
             Layout.preferredHeight: 40
             onClicked: root.connection.connected ? root.connection.close() : root.connection.open()
-            contentItem: Label {
-                text: connectButton.text
-                color: root.connection && root.connection.connected ? Theme.text : "white"
-                font.bold: true
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
-            }
-            background: Rectangle {
-                implicitWidth: 120
-                radius: height / 2
-                color: root.connection && root.connection.connected
-                    ? (connectButton.hovered ? Theme.alpha(Theme.text, 0.12) : Theme.card)
-                    : (connectButton.hovered ? Qt.lighter(Theme.accent, 1.15) : Theme.accent)
-                border.color: Theme.alpha(Theme.border, 0.8)
-            }
+            highlighted: root.connection !== null && !root.connection.connected
+            font.bold: true
+            Layout.preferredWidth: Math.max(120, implicitWidth)
         }
 
         // Notifications
@@ -187,6 +213,36 @@ Rectangle {
             font.pixelSize: 20
             onClicked: appMenu.popup(menuButton, 0, menuButton.height)
             AppMenu { id: appMenu }
+        }
+
+        Rectangle {
+            width: 1
+            height: 28
+            color: Theme.alpha(Theme.border, 0.8)
+        }
+
+        // Window controls
+        RowLayout {
+            spacing: 2
+            WindowButton {
+                text: "—"
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Minimize")
+                onClicked: root.Window.window.showMinimized()
+            }
+            WindowButton {
+                text: root.Window.window && root.Window.window.visibility === Window.Maximized ? "❐" : "☐"
+                ToolTip.visible: hovered
+                ToolTip.text: text === "❐" ? qsTr("Restore") : qsTr("Maximize")
+                onClicked: root.toggleMaximized()
+            }
+            WindowButton {
+                text: "✕"
+                hoverColor: Theme.danger
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Close")
+                onClicked: Actions.exit.trigger()
+            }
         }
     }
 }

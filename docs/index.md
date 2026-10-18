@@ -1,3 +1,7 @@
+<p align="center" markdown>
+  ![CANExplorer logo](assets/logo-banner.png){ width="420" }
+</p>
+
 # CANExplorer
 
 CANExplorer is a cross-platform tool to monitor, analyse, diagnose and simulate **CAN**, **CAN FD** and **LIN**

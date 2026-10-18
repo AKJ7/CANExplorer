@@ -23,6 +23,10 @@ uv run main --log_level WARNING
 CANEXPLORER_LOG_LEVEL=DEBUG uv run main
 ```
 
+On Linux, `main --install-desktop-entry` adds CANExplorer with its icon to the desktop's application menu and
+`main --uninstall-desktop-entry` removes it, see
+[Installation](../getting-started/installation.md#desktop-menu-entry-linux).
+
 ## can-db-convert
 
 Converts signal databases; the formats follow the file extensions.

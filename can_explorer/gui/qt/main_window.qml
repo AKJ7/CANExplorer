@@ -1,11 +1,13 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import QtQuick.Window 2.15
 import CanExplorer 1.0
 
 
 ApplicationWindow {
     visible: true
+    flags: Qt.Window | Qt.FramelessWindowHint
     width: 1200
     height: 750
     id: mainWindow
@@ -164,6 +166,28 @@ ApplicationWindow {
             }
         }
     }
+
+    // Resizing along the edges and corners, as the window has no frame
+    component ResizeEdge: Item {
+        id: edge
+        required property int edges
+        property int cursor: Qt.ArrowCursor
+        z: 100
+        HoverHandler { cursorShape: edge.cursor }
+        DragHandler {
+            target: null
+            onActiveChanged: if (active) mainWindow.startSystemResize(edge.edges)
+        }
+    }
+    readonly property int resizeMargin: mainWindow.visibility === Window.Maximized ? 0 : 5
+    ResizeEdge { edges: Qt.LeftEdge; cursor: Qt.SizeHorCursor; x: 0; y: mainWindow.resizeMargin; width: mainWindow.resizeMargin; height: parent.height - 2 * mainWindow.resizeMargin }
+    ResizeEdge { edges: Qt.RightEdge; cursor: Qt.SizeHorCursor; x: parent.width - width; y: mainWindow.resizeMargin; width: mainWindow.resizeMargin; height: parent.height - 2 * mainWindow.resizeMargin }
+    ResizeEdge { edges: Qt.TopEdge; cursor: Qt.SizeVerCursor; x: mainWindow.resizeMargin; y: 0; width: parent.width - 2 * mainWindow.resizeMargin; height: mainWindow.resizeMargin }
+    ResizeEdge { edges: Qt.BottomEdge; cursor: Qt.SizeVerCursor; x: mainWindow.resizeMargin; y: parent.height - height; width: parent.width - 2 * mainWindow.resizeMargin; height: mainWindow.resizeMargin }
+    ResizeEdge { edges: Qt.LeftEdge | Qt.TopEdge; cursor: Qt.SizeFDiagCursor; width: mainWindow.resizeMargin * 2; height: width }
+    ResizeEdge { edges: Qt.RightEdge | Qt.TopEdge; cursor: Qt.SizeBDiagCursor; x: parent.width - width; width: mainWindow.resizeMargin * 2; height: width }
+    ResizeEdge { edges: Qt.LeftEdge | Qt.BottomEdge; cursor: Qt.SizeBDiagCursor; y: parent.height - height; width: mainWindow.resizeMargin * 2; height: width }
+    ResizeEdge { edges: Qt.RightEdge | Qt.BottomEdge; cursor: Qt.SizeFDiagCursor; x: parent.width - width; y: parent.height - height; width: mainWindow.resizeMargin * 2; height: width }
 
     // Error toast; the messages are kept in the notifications of the top bar
     Rectangle {

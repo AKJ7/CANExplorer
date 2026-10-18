@@ -8,6 +8,8 @@ copyright: Copyright &copy; 2024–2026 AKJ7
 
 theme:
   name: material
+  logo: assets/icon.png
+  favicon: assets/favicon.png
   features:
     - navigation.tabs
     - navigation.sections
@@ -20,18 +22,9 @@ theme:
     - content.tabs.link
     - toc.follow
   palette:
-    - media: "(prefers-color-scheme: light)"
-      scheme: default
-      primary: indigo
-      toggle:
-        icon: material/weather-night
-        name: Switch to dark mode
-    - media: "(prefers-color-scheme: dark)"
-      scheme: slate
-      primary: indigo
-      toggle:
-        icon: material/weather-sunny
-        name: Switch to light mode
+    scheme: slate  # Recoloured to Dracula by docs/stylesheets/dracula.css
+    primary: custom
+    accent: custom
   icon:
     repo: fontawesome/brands/github
 
@@ -122,6 +115,9 @@ plugins:
             heading_level: 3
             filters: ["!^_"]
             merge_init_into_class: true
+
+extra_css:
+  - stylesheets/dracula.css
 
 extra:
   social:

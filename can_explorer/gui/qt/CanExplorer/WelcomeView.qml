@@ -59,17 +59,30 @@ ScrollView {
         width: root.availableWidth
         spacing: Theme.spacing
 
-        Label {
-            text: qsTr("Welcome to %1").arg(metadata.name)
-            color: Theme.text
-            font.pixelSize: 28
-            font.bold: true
+        RowLayout {
+            spacing: 20
             Layout.topMargin: 12
-        }
-        Label {
-            text: qsTr("Monitor, analyse, diagnose and simulate CAN, CAN FD and LIN buses.")
-            color: Theme.muted
-            font.pixelSize: 15
+            Image {
+                source: "images/logo.png"
+                sourceSize: Qt.size(176, 176)
+                mipmap: true
+                Layout.preferredWidth: 88
+                Layout.preferredHeight: 88
+            }
+            ColumnLayout {
+                spacing: 6
+                Label {
+                    text: qsTr("Welcome to %1").arg(metadata.name)
+                    color: Theme.text
+                    font.pixelSize: 28
+                    font.bold: true
+                }
+                Label {
+                    text: qsTr("Monitor, analyse, diagnose and simulate CAN, CAN FD and LIN buses.")
+                    color: Theme.muted
+                    font.pixelSize: 15
+                }
+            }
         }
 
         RowLayout {

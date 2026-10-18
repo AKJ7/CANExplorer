@@ -25,6 +25,13 @@ ColumnLayout {
     readonly property bool tablePage: page === "trace" || page === "overview"
 
     // Table shown on the current page, used by Copy / Select All
+    // Bytes that differ from the previous frame of an identifier are shown in this colour in the overview
+    Binding {
+        target: root.connection.overview
+        property: "highlight_color"
+        value: String(Theme.warning)
+    }
+
     readonly property var currentTable: page === "trace" ? traceTable : page === "overview" ? overviewTable : null
 
     function copySelection() {
@@ -36,52 +43,33 @@ ColumnLayout {
             currentTable.selectAll()
     }
 
-    component ToolbarButton: Button {
-        id: control
-        property bool accent: false
-        implicitHeight: 34
-        contentItem: Label {
-            text: control.text
-            color: control.accent || control.checked ? "white" : Theme.text
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-        }
-        background: Rectangle {
-            implicitWidth: 90
-            radius: height / 2
-            color: control.accent || control.checked ? (control.hovered ? Qt.lighter(Theme.accent, 1.15) : Theme.accent)
-                : control.hovered ? Theme.alpha(Theme.text, 0.1) : Theme.card
-            border.color: Theme.alpha(Theme.border, 0.8)
-        }
-    }
-
     RowLayout {
         visible: root.tablePage || root.page === "signals"
         spacing: 8
         Layout.fillWidth: true
 
-        ToolbarButton {
+        Button {
             text: qsTr("Pause view")
             checkable: true
             checked: root.connection.paused
             onToggled: root.connection.set_paused(checked)
         }
-        ToolbarButton {
+        Button {
             text: qsTr("Clear")
             onClicked: root.connection.clear()
         }
-        ToolbarButton {
+        Button {
             text: root.connection.recording ? qsTr("● Stop recording") : qsTr("Record…")
-            accent: root.connection.recording
+            highlighted: root.connection.recording
             onClicked: root.connection.recording ? root.connection.stop_recording() : recordDialog.open()
         }
-        ToolbarButton {
+        Button {
             text: qsTr("Export…")
             ToolTip.visible: hovered
             ToolTip.text: qsTr("Save the selected trace rows, or all displayed rows, to a log file")
             onClicked: exportDialog.open()
         }
-        ToolbarButton {
+        Button {
             text: root.connection.database_file ? qsTr("Unload database") : qsTr("Load database…")
             onClicked: root.connection.database_file ? root.connection.unload_database() : databaseDialog.open()
         }
@@ -144,6 +132,7 @@ ColumnLayout {
                 anchors.fill: parent
                 model: root.connection.overview
                 columnWidths: [90, 40, 70, 80, 90, 40, 200, 0]
+                sortable: true
             }
         }
         Card {

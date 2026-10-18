@@ -1,0 +1,182 @@
+/* Dracula colour scheme (https://draculatheme.com/contribute#color-palette) for Material for MkDocs.
+   Overrides Material's dark scheme "slate", so all of its dark styles still apply. */
+
+:root {
+  --dracula-background: #282a36;
+  --dracula-darker: #21222c;
+  --dracula-darkest: #191a21;
+  --dracula-current-line: #44475a;
+  --dracula-foreground: #f8f8f2;
+  --dracula-comment: #6272a4;
+  --dracula-cyan: #8be9fd;
+  --dracula-green: #50fa7b;
+  --dracula-orange: #ffb86c;
+  --dracula-pink: #ff79c6;
+  --dracula-purple: #bd93f9;
+  --dracula-red: #ff5555;
+  --dracula-yellow: #f1fa8c;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-hue: 231;
+
+  /* Page */
+  --md-default-bg-color: var(--dracula-background);
+  --md-default-bg-color--light: rgba(40, 42, 54, 0.54);
+  --md-default-bg-color--lighter: rgba(40, 42, 54, 0.26);
+  --md-default-bg-color--lightest: rgba(40, 42, 54, 0.07);
+  --md-default-fg-color: rgba(248, 248, 242, 0.92);
+  --md-default-fg-color--light: rgba(248, 248, 242, 0.68);
+  --md-default-fg-color--lighter: rgba(248, 248, 242, 0.36);
+  --md-default-fg-color--lightest: rgba(248, 248, 242, 0.12);
+
+  /* Header, tabs and accents */
+  --md-primary-fg-color: var(--dracula-darker);
+  --md-primary-fg-color--light: var(--dracula-current-line);
+  --md-primary-fg-color--dark: var(--dracula-darkest);
+  --md-primary-bg-color: var(--dracula-foreground);
+  --md-primary-bg-color--light: rgba(248, 248, 242, 0.7);
+  --md-accent-fg-color: var(--dracula-pink);
+  --md-accent-fg-color--transparent: rgba(255, 121, 198, 0.1);
+  --md-accent-bg-color: var(--dracula-background);
+
+  /* Text */
+  --md-typeset-color: var(--dracula-foreground);
+  --md-typeset-a-color: var(--dracula-purple);
+  --md-typeset-mark-color: rgba(241, 250, 140, 0.3);
+  --md-typeset-table-color: rgba(98, 114, 164, 0.35);
+  --md-typeset-table-color--light: rgba(98, 114, 164, 0.1);
+  --md-typeset-kbd-color: var(--dracula-current-line);
+  --md-typeset-kbd-accent-color: var(--dracula-comment);
+  --md-typeset-kbd-border-color: var(--dracula-darkest);
+  --md-admonition-bg-color: var(--dracula-darker);
+  --md-admonition-fg-color: var(--dracula-foreground);
+
+  /* Code */
+  --md-code-bg-color: var(--dracula-darker);
+  --md-code-fg-color: var(--dracula-foreground);
+  --md-code-hl-color: var(--dracula-current-line);
+  --md-code-hl-color--light: rgba(68, 71, 90, 0.5);
+  --md-code-hl-number-color: var(--dracula-purple);
+  --md-code-hl-special-color: var(--dracula-orange);
+  --md-code-hl-function-color: var(--dracula-green);
+  --md-code-hl-constant-color: var(--dracula-purple);
+  --md-code-hl-keyword-color: var(--dracula-pink);
+  --md-code-hl-string-color: var(--dracula-yellow);
+  --md-code-hl-name-color: var(--dracula-foreground);
+  --md-code-hl-operator-color: var(--dracula-pink);
+  --md-code-hl-punctuation-color: var(--dracula-foreground);
+  --md-code-hl-comment-color: var(--dracula-comment);
+  --md-code-hl-generic-color: var(--dracula-comment);
+  --md-code-hl-variable-color: var(--dracula-orange);
+
+  /* Footer */
+  --md-footer-fg-color: var(--dracula-foreground);
+  --md-footer-fg-color--light: rgba(248, 248, 242, 0.7);
+  --md-footer-fg-color--lighter: rgba(248, 248, 242, 0.45);
+  --md-footer-bg-color: var(--dracula-darker);
+  --md-footer-bg-color--dark: var(--dracula-darkest);
+}
+
+/* Class names in code (e.g. `class Engine(Node)`) in cyan, like Dracula does */
+[data-md-color-scheme="slate"] .highlight .nc,
+[data-md-color-scheme="slate"] .highlight .nn {
+  color: var(--dracula-cyan);
+}
+
+[data-md-color-scheme="slate"] .md-typeset :not(pre) > code {
+  color: var(--dracula-green);
+}
+
+[data-md-color-scheme="slate"] .md-typeset a code {
+  color: inherit;
+}
+
+/* Headings */
+[data-md-color-scheme="slate"] .md-typeset h1 {
+  color: var(--dracula-purple);
+}
+
+[data-md-color-scheme="slate"] .md-typeset h2,
+[data-md-color-scheme="slate"] .md-typeset h3 {
+  color: var(--dracula-pink);
+}
+
+/* Navigation: the current page in purple */
+[data-md-color-scheme="slate"] .md-nav__link--active,
+[data-md-color-scheme="slate"] .md-nav__item .md-nav__link--active {
+  color: var(--dracula-purple);
+}
+
+/* Admonitions in the Dracula accents */
+[data-md-color-scheme="slate"] .md-typeset .admonition,
+[data-md-color-scheme="slate"] .md-typeset details {
+  border-color: var(--dracula-purple);
+}
+
+[data-md-color-scheme="slate"] .md-typeset :is(.note, .info, .abstract) {
+  border-color: var(--dracula-cyan);
+}
+
+[data-md-color-scheme="slate"] .md-typeset :is(.note, .info, .abstract) > :is(.admonition-title, summary) {
+  background-color: rgba(139, 233, 253, 0.1);
+}
+
+[data-md-color-scheme="slate"] .md-typeset :is(.note, .info, .abstract) > :is(.admonition-title, summary)::before {
+  background-color: var(--dracula-cyan);
+}
+
+[data-md-color-scheme="slate"] .md-typeset :is(.tip, .success, .example) {
+  border-color: var(--dracula-green);
+}
+
+[data-md-color-scheme="slate"] .md-typeset :is(.tip, .success, .example) > :is(.admonition-title, summary) {
+  background-color: rgba(80, 250, 123, 0.1);
+}
+
+[data-md-color-scheme="slate"] .md-typeset :is(.tip, .success, .example) > :is(.admonition-title, summary)::before {
+  background-color: var(--dracula-green);
+}
+
+[data-md-color-scheme="slate"] .md-typeset :is(.warning, .question) {
+  border-color: var(--dracula-orange);
+}
+
+[data-md-color-scheme="slate"] .md-typeset :is(.warning, .question) > :is(.admonition-title, summary) {
+  background-color: rgba(255, 184, 108, 0.1);
+}
+
+[data-md-color-scheme="slate"] .md-typeset :is(.warning, .question) > :is(.admonition-title, summary)::before {
+  background-color: var(--dracula-orange);
+}
+
+[data-md-color-scheme="slate"] .md-typeset :is(.danger, .failure, .bug) {
+  border-color: var(--dracula-red);
+}
+
+[data-md-color-scheme="slate"] .md-typeset :is(.danger, .failure, .bug) > :is(.admonition-title, summary) {
+  background-color: rgba(255, 85, 85, 0.1);
+}
+
+[data-md-color-scheme="slate"] .md-typeset :is(.danger, .failure, .bug) > :is(.admonition-title, summary)::before {
+  background-color: var(--dracula-red);
+}
+
+/* Feature cards of the home page */
+[data-md-color-scheme="slate"] .md-typeset .grid.cards > ul > li {
+  background-color: var(--dracula-darker);
+  border-color: var(--dracula-current-line);
+}
+
+[data-md-color-scheme="slate"] .md-typeset .grid.cards > ul > li:hover {
+  border-color: var(--dracula-purple);
+}
+
+[data-md-color-scheme="slate"] .md-typeset .grid.cards .twemoji {
+  color: var(--dracula-purple);
+}
+
+/* Search highlights */
+[data-md-color-scheme="slate"] .md-search-result mark {
+  color: var(--dracula-pink);
+}

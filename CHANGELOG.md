@@ -8,6 +8,15 @@ Only `0.0.1` has been tagged so far. Later development stages are listed by date
 ## [Unreleased]
 
 ### Added
+- Documentation in the **Dracula** colour scheme (`docs/stylesheets/dracula.css`, on top of Material for MkDocs).
+- **Logo** with a transparent background: shown in the sidebar, on the welcome page and in the About dialog, as
+  window icon, as icon of the PyInstaller and Nuitka bundles (`.ico`, `.icns`, `.png`) and as logo and favicon of
+  the documentation, all generated from the artwork `docs/assets/logo.png` by `tools/make_icons.py`.
+- **Desktop icon on Linux**: `--install-desktop-entry` adds CANExplorer with its icon to the desktop's application
+  menu (`--uninstall-desktop-entry` removes it), and the window is matched to that entry.
+- **Overview sorting**: clicking a column header sorts the overview by that column (ascending, descending, back to
+  identifier order); the order is kept while frames arrive, and selections follow their rows. Bytes that differ
+  from the previous frame of an identifier are highlighted in colour as well as bold.
 - **Dashboard user interface** modelled on the learnqt.guide dashboards: a sidebar with the connections and the
   views of the selected connection, a top bar with breadcrumb, filter field, connect button, notifications and
   the application menu, rounded cards throughout and a welcome page with quick actions and recent connections.
@@ -15,7 +24,10 @@ Only `0.0.1` has been tagged so far. Later development stages are listed by date
   sparklines and trends, a bus activity area chart, a traffic breakdown donut chart and the busiest identifiers.
   Six colour themes (Dark, Purple, Nord, Ocean, Forest, Light) are selectable in the preferences. The menu bar
   and the connection tabs are replaced by the sidebar and the **⋮** menu, and errors appear as notifications
-  instead of modal dialogs.
+  instead of modal dialogs. The window is frameless: the top bar moves it and holds the minimize, maximize and
+  close buttons, and the edges resize it.
+  A custom Qt Quick Controls style (`CanExplorerStyle`) draws all buttons, text fields, combo boxes, spin boxes,
+  check boxes, switches, dialogs, menus, tooltips, tabs, scroll bars and sliders in the theme colours.
 - **Documentation site** built with MkDocs and Material for MkDocs (`docs/`, `mkdocs.yml`): installation, quick start,
   a user guide for every part of the application, reference pages (scripting API generated from the docstrings, QML
   panel API, command line, file formats, keyboard shortcuts) and development guides, with screenshots generated

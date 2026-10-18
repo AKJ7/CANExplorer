@@ -30,6 +30,21 @@ settings can be passed on the command line, see [Command line](../reference/comm
     makes Qt applications abort with *Settings schema 'org.gnome.settings-daemon.plugins.xsettings' does not
     contain a key named 'antialiasing'*. CANExplorer removes these variables at startup, so it starts normally.
 
+## Desktop menu entry (Linux)
+
+On Windows and macOS the application carries its icon, so it appears with the logo on the desktop, in the start
+menu, the dock and the Finder. On Linux, add CANExplorer with its icon to the application menu of your desktop
+with
+
+```bash
+uv run main --install-desktop-entry          # From source
+./CANExplorer --install-desktop-entry        # Standalone bundle
+```
+
+This writes `~/.local/share/applications/io.github.akj7.CANExplorer.desktop` and the icons in
+`~/.local/share/icons/hicolor/`, starting the application from where it was run. The desktop also shows the logo
+for the running window. `--uninstall-desktop-entry` removes them again.
+
 ## Setting up interfaces
 
 CANExplorer opens interfaces through python-can, so the driver of your adapter must be installed. The

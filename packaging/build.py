@@ -28,7 +28,9 @@ DIST = ROOT / 'dist'
 BUILD = ROOT / 'build'
 NAME = 'CANExplorer'
 LAUNCHER = ROOT / 'packaging' / 'launcher.py'
+ICONS = ROOT / 'packaging' / 'icons'  # Generated from docs/assets/logo.png by tools/make_icons.py
 QML_DIR = ROOT / 'can_explorer' / 'gui' / 'qt'
+RESOURCES_DIR = ROOT / 'can_explorer' / 'resources'  # Desktop entry icons
 DISTRIBUTION = 'can-explorer'
 VERSION_MODULE = ROOT / 'can_explorer' / '_build_version.py'
 # Packages whose data files are read at runtime: the LDF grammar and the lark grammars it imports
@@ -53,9 +55,13 @@ def build_pyinstaller() -> Path:
         NAME,
         '--windowed',
         '--noconfirm',
+        '--icon',
+        str(ICONS / ('canexplorer.icns' if sys.platform == 'darwin' else 'canexplorer.ico')),
         '--clean',
         '--add-data',
         f'{QML_DIR}{os.pathsep}can_explorer/gui/qt',
+        '--add-data',
+        f'{RESOURCES_DIR}{os.pathsep}can_explorer/resources',
         # The application version is read from the package metadata
         '--copy-metadata',
         DISTRIBUTION,
@@ -102,6 +108,7 @@ def build_nuitka(onefile: bool) -> Path:
         # QML modules (QtQuick, Controls, Dialogs, Layouts) on top of the default Qt plugins
         '--include-qt-plugins=qml',
         f'--include-data-dir={QML_DIR}=can_explorer/gui/qt',
+        f'--include-data-dir={RESOURCES_DIR}=can_explorer/resources',
         '--include-module=can_explorer._build_version',
         *(f'--include-package={package}' for package in DYNAMIC_PACKAGES),
         # Nuitka's own package configuration already includes the lark grammars
@@ -114,9 +121,11 @@ def build_nuitka(onefile: bool) -> Path:
         '--company-name=AKJ7',
     ]
     if sys.platform == 'win32':
-        arguments.append('--windows-console-mode=disable')
-    if sys.platform == 'darwin':
-        arguments.append(f'--macos-app-name={NAME}')
+        arguments += ['--windows-console-mode=disable', f'--windows-icon-from-ico={ICONS / "canexplorer.ico"}']
+    elif sys.platform == 'darwin':
+        arguments += [f'--macos-app-name={NAME}', f'--macos-app-icon={ICONS / "canexplorer.icns"}']
+    else:
+        arguments.append(f'--linux-icon={ICONS / "canexplorer.png"}')
     # Nuitka cannot relate the package metadata of an editable install (uv sync) to the package, so the
     # version is compiled in instead (see can_explorer/__version__.py)
     VERSION_MODULE.write_text(f'VERSION = {version(DISTRIBUTION)!r}\n')

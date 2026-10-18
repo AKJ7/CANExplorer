@@ -1,6 +1,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import QtQuick.Window 2.15
 import CanExplorer 1.0
 
 // Navigation: connections, the views of the selected connection, settings and application information.
@@ -85,22 +86,24 @@ Rectangle {
         anchors.fill: parent
         spacing: 2
 
-        // Logo
+        // Logo; also moves the window, which has no title bar
         RowLayout {
+            DragHandler {
+                target: null
+                onActiveChanged: if (active) root.Window.window.startSystemMove()
+            }
             Layout.fillWidth: true
             Layout.leftMargin: 24
             Layout.topMargin: 24
             Layout.bottomMargin: 12
-            spacing: 14
-            Rectangle {
-                width: 22
-                height: 22
-                rotation: 45
-                radius: 4
-                gradient: Gradient {
-                    GradientStop { position: 0.0; color: Qt.lighter(Theme.accent, 1.3) }
-                    GradientStop { position: 1.0; color: Theme.accent }
-                }
+            spacing: 12
+            Image {
+                source: "images/logo.png"
+                sourceSize: Qt.size(64, 64)
+                Layout.preferredWidth: 34
+                Layout.preferredHeight: 34
+                smooth: true
+                mipmap: true
             }
             Label {
                 text: metadata.name

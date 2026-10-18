@@ -29,7 +29,11 @@ The overview has one row per identifier and direction, sorted by identifier.
 |---|---|
 | Count | Number of frames |
 | Cycle [ms] | Time since the previous frame of the identifier |
-| Data [hex] | Latest data; bytes that changed with the latest frame are **bold** |
+| Data [hex] | Latest data; bytes that differ from the previous frame of the identifier are highlighted in **bold orange** (the warning colour of the theme) |
+
+Click a column header to sort the overview by that column, click it again to reverse the order, and a third time
+to return to the identifier order. The sorted column is marked with ▲ or ▼. Rows move as their values change
+(e.g. when sorted by count), and selected rows stay selected.
 
 ## Toolbar
 

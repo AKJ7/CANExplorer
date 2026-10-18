@@ -11,6 +11,8 @@ ColumnLayout {
     // Width per column in pixels; 0 makes the column fill the remaining space
     required property var columnWidths
     property bool autoScroll: false
+    // Clicking a column header calls model.sort_by(column)
+    property bool sortable: false
     readonly property alias selectionModel: selection
 
     function copySelection() {
@@ -29,16 +31,19 @@ ColumnLayout {
         clip: true
         Layout.fillWidth: true
         delegate: Rectangle {
+            id: headerCell
             required property string display
+            required property int column
+            readonly property bool sorted: /[▲▼]$/.test(display)
             implicitHeight: 36
             implicitWidth: headerLabel.implicitWidth + 16
-            color: Theme.cardAlt
+            color: root.sortable && headerHover.hovered ? Qt.lighter(Theme.cardAlt, Theme.dark ? 1.25 : 0.97) : Theme.cardAlt
             Label {
                 id: headerLabel
                 anchors.fill: parent
                 leftPadding: 8
                 text: parent.display
-                color: Theme.muted
+                color: headerCell.sorted ? Theme.accent : Theme.muted
                 font.bold: true
                 elide: Text.ElideRight
                 verticalAlignment: Text.AlignVCenter
@@ -48,6 +53,15 @@ ColumnLayout {
                 width: parent.width
                 height: 1
                 color: Theme.border
+            }
+            HoverHandler {
+                id: headerHover
+                enabled: root.sortable
+                cursorShape: Qt.PointingHandCursor
+            }
+            TapHandler {
+                enabled: root.sortable
+                onTapped: root.model.sort_by(headerCell.column)
             }
         }
     }

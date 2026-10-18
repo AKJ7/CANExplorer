@@ -109,6 +109,8 @@ async def scenario():
     show_page('trace')
     await shot('trace')
     show_page('overview')
+    connection.overview.sort_by(3)
+    connection.overview.sort_by(3)  # Count, descending
     await shot('overview')
     show_page('signals')
     await shot('signals', 1.0)

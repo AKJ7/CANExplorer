@@ -21,6 +21,23 @@ Both builds include the QML files, the Qt QML modules, the grammar files of ldfp
 interface modules (which python-can imports by name at run time). Nuitka cannot relate the package metadata of an
 editable install to the package, so the build writes the version into a generated module instead.
 
+## Icons
+
+The application icon (`.ico` on Windows, `.icns` on macOS, `.png` on Linux) is set on the bundle and on the
+window; on Linux, `--install-desktop-entry` installs a desktop menu entry with the icon (see
+[Installation](../getting-started/installation.md#desktop-menu-entry-linux)). The icons, the logo in the
+application and the logo and favicon of this documentation are generated from the logo artwork
+`docs/assets/logo.png`, drawn on black: the tool first makes the background transparent
+(`docs/assets/logo-transparent.png`), keeping the glow as a soft edge. After changing the logo, run
+
+```bash
+QT_QPA_PLATFORM=offscreen uv run python tools/make_icons.py
+```
+
+It writes `packaging/icons/`, `can_explorer/gui/qt/CanExplorer/images/logo.png`, the desktop entry icons in
+`can_explorer/resources/icons/` and `docs/assets/logo-transparent.png`, `icon.png`, `favicon.png` and
+`logo-banner.png`.
+
 ## Continuous integration
 
 | Workflow | Runs | Does |
