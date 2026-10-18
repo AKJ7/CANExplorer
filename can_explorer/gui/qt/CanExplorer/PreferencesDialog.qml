@@ -78,7 +78,9 @@ Dialog {
             text: qsTr("About %1 GB of disk at most. Trace settings apply to connections opened afterwards.")
                 .arg((Math.max(0, historyBox.value - rowsBox.value) * 160 / 1e9).toFixed(1))
             font.italic: true
+            wrapMode: Text.Wrap
             Layout.columnSpan: 2
+            Layout.preferredWidth: 480  // Wrapped, so the dialog's width does not depend on the font
         }
 
         Label { text: qsTr("View refresh interval (ms)") }

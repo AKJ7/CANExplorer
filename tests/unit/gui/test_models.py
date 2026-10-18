@@ -1,3 +1,5 @@
+import os
+
 import can
 from PyQt6.QtCore import QItemSelectionModel, Qt
 from PyQt6.QtGui import QGuiApplication
@@ -62,7 +64,9 @@ def test_trace_model_pages_through_frames_on_disk(qapp, tmp_path):
         history=count,
         directory=tmp_path,
     )
-    assert store.uses_disk and store.disk_frames > 0 and any(tmp_path.iterdir()) is False  # Anonymous files
+    assert store.uses_disk and store.disk_frames > 0
+    if os.name != 'nt':  # POSIX: the temporary files have no name; Windows shows them until they are closed
+        assert not any(tmp_path.iterdir())
     model = TraceModel(store, lambda: 0.0)
     model.rebuild()
     assert model.rowCount() == count
@@ -70,6 +74,8 @@ def test_trace_model_pages_through_frames_on_disk(qapp, tmp_path):
     assert cell(model, 5, 0) == '5.000000' and cell(model, 5, 5) == '05'
     model.set_filter(MessageFilter.parse('3'))
     assert [model.absolute_index(row) for row in range(model.rowCount())] == list(range(3, count, 0x800))
+    store.clear()  # Closes the files on disk, which removes them on every platform
+    assert not any(tmp_path.iterdir())
 
 
 def test_paused_view_keeps_its_rows(qapp):

@@ -1,4 +1,5 @@
 import asyncio
+import time
 import uuid
 
 import pytest
@@ -95,3 +96,31 @@ def test_uds_descriptions():
     assert describe_response(bytes([0x7F, 0x27, 0x35])) == 'Negative response to SecurityAccess: invalidKey'
     assert describe_response(bytes([0x50, 0x03])) == 'Positive response to DiagnosticSessionControl: 03'
     assert describe_response(b'') == 'empty response'
+
+
+@pytest.mark.parametrize('st_min, separation', [(0xF1, 0.0001), (0x05, 0.005)])
+async def test_separation_time_is_kept_precisely(tester_and_ecu, st_min, separation):
+    """Consecutive frames are never closer than STmin, and sub-millisecond STmin does not take a timer tick each
+    (about 15.6 ms on Windows, which made long transfers time out)."""
+    tester_session, ecu_session = tester_and_ecu
+    times = []
+
+    def on_message(msg):
+        if msg.arbitration_id == 0x7E0 and msg.data and msg.data[0] >> 4 == 2:  # Consecutive frames
+            times.append(time.perf_counter())
+
+    tester_session.add_message_listener(on_message)
+    payload = bytes(i % 256 for i in range(700 if st_min == 0xF1 else 120))
+    with (
+        IsoTpClient(tester_session, 0x7E0, 0x7E8) as tester,
+        IsoTpClient(ecu_session, 0x7E8, 0x7E0, block_size=0, st_min=st_min) as ecu,
+    ):
+        started = time.perf_counter()
+        received = asyncio.ensure_future(ecu.receive(5))
+        await tester.send(payload)
+        assert await received == payload
+        elapsed = time.perf_counter() - started
+    gaps = [later - earlier for earlier, later in zip(times, times[1:], strict=False)]
+    assert gaps and min(gaps) >= separation * 0.95
+    if st_min == 0xF1:
+        assert elapsed < 1.0, f'{len(times)} frames took {elapsed:.2f} s'

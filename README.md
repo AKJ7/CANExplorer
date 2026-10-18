@@ -10,8 +10,8 @@
 </p>
 
 <p align="center">
-  <a href="https://akj7.github.com/canexplorer/">Documentation</a> ·
-  <a href="https://akj7.github.com/canexplorer/getting-started/quick-start/">Quick start</a> ·
+  <a href="https://akj7.github.io/CANExplorer/">Documentation</a> ·
+  <a href="https://akj7.github.io/CANExplorer/getting-started/quick-start/">Quick start</a> ·
   <a href="https://github.com/AKJ7/CANExplorer/releases">Downloads</a> ·
   <a href="CHANGELOG.md">Changelog</a>
 </p>
@@ -68,7 +68,7 @@
 - Connections, databases, filters, plots and scripts saved in one workspace file
 - Dashboard-style interface with six colour themes, a command palette (Ctrl+K) and English and German texts
 
-See the [documentation](https://akj7.github.com/canexplorer/) for a guide to every feature.
+See the [documentation](https://akj7.github.io/CANExplorer/) for a guide to every feature.
 
 ## Installation
 
@@ -86,17 +86,17 @@ With [uv](https://docs.astral.sh/uv/getting-started/installation/) and Python 3.
 git clone https://github.com/AKJ7/CANExplorer.git
 cd CANExplorer
 uv sync                  # Add --extra mf4 for ASAM MF4 log files (installs asammdf, numpy and pandas)
-uv run main
+uv run canexplorer
 ```
 
-On Linux, `uv run main --install-desktop-entry` adds CANExplorer with its icon to the application menu.
+On Linux, `uv run canexplorer --install-desktop-entry` adds CANExplorer with its icon to the application menu.
 
 ### Interfaces
 
 Install the driver of your adapter; CANExplorer talks to it through python-can. On Linux most adapters are
 SocketCAN interfaces, configured with `ip link`; serial adapters (slcan, python-can's serial protocol) need no
 driver. The *virtual* interface works everywhere without hardware. The
-[installation guide](https://akj7.github.com/canexplorer/getting-started/installation/) has the details.
+[installation guide](https://akj7.github.io/CANExplorer/getting-started/installation/) has the details.
 
 ## Try it without hardware
 
@@ -111,13 +111,13 @@ uv run can-test examples/testing/vehicle_tests.py \
 
 In the application, connect to a *VirtualBus*, load `examples/simulation/vehicle.dbc` and run
 `engine_simulation.py` in the Simulation view; the
-[quick start](https://akj7.github.com/canexplorer/getting-started/quick-start/) walks through it.
+[quick start](https://akj7.github.io/CANExplorer/getting-started/quick-start/) walks through it.
 
 ## Command line
 
 | Command | Purpose |
 |---|---|
-| `uv run main` | The application. Options such as `--log_level DEBUG`, or `CANEXPLORER_*` environment variables |
+| `uv run canexplorer` | The application. Options such as `--log_level DEBUG`, or `CANEXPLORER_*` environment variables |
 | `uv run can-test SCRIPT …` | Run ECU test scripts on a bus; exit code and HTML/JUnit reports for CI |
 | `uv run can-db-convert IN OUT` | Convert signal databases, e.g. `vehicle.dbc vehicle.dbf`, or one bus with `system.arxml powertrain.dbc --bus Powertrain` |
 
@@ -134,7 +134,7 @@ uv run python packaging/installer.py           # Installers of the platform in d
 The core (`can_explorer/core`) is Qt-independent asyncio code; `can_explorer/gui` adapts it to the QML interface
 in `can_explorer/gui/qt`, and Qt and asyncio share one event loop through
 [qasync](https://github.com/CabbageDevelopment/qasync). The
-[development guide](https://akj7.github.com/canexplorer/development/) covers the architecture, testing,
+[development guide](https://akj7.github.io/CANExplorer/development/) covers the architecture, testing,
 packaging and contributing.
 
 ## License

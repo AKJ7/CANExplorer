@@ -29,7 +29,8 @@ def launch_command() -> List[str]:
         return [str(Path(sys.argv[0]).resolve())]
     if getattr(sys, 'frozen', False):  # PyInstaller
         return [sys.executable]
-    script = Path(sys.executable).with_name('main')  # Console script of the environment (uv sync, pip install)
+    # Console script of the environment (uv sync, pip install)
+    script = Path(sys.executable).with_name('canexplorer.exe' if sys.platform == 'win32' else 'canexplorer')
     if script.exists():
         return [str(script)]
     return [sys.executable, '-m', 'can_explorer']

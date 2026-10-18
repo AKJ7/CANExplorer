@@ -1,27 +1,54 @@
 [project]
 name = "can-explorer"
 version = "0.0.1"
-description = "CAN analysis tool for all platform"
+description = "Monitor, analyse, diagnose, simulate and test CAN, CAN FD and LIN buses"
 authors = [{ name = "AKJ7", email = "akj123429@gmail.com" }]
 license = "MIT"
 readme = "README.md"
-keywords = ['canbus', 'can', 'gui', 'analyze']
+keywords = ["can", "can-fd", "lin", "canbus", "automotive", "uds", "j1939", "canopen", "dbc", "python-can"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: X11 Applications :: Qt",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Manufacturing",
+    "Intended Audience :: Science/Research",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Software Development :: Embedded Systems",
+    "Topic :: Software Development :: Testing",
+    "Topic :: System :: Networking :: Monitoring",
+]
 requires-python = ">=3.10"
 dependencies = [
     "PyQt6~=6.9.0",
     "python-can[serial]",
     "cantools",
     "qasync",
-    "pydantic",
-    "pydantic-settings",
-    # can_server
+    "pydantic-settings",  # Settings from options, environment variables and .env files
+    # can-server and its client (RemoteBus); click for the can-server command line
     "aiohttp",
     "click",
     "ldfparser==0.26.0",  # Pinned: pre-1.0, minor versions may break the API
 ]
 
+[project.urls]
+Homepage = "https://github.com/AKJ7/CANExplorer"
+Documentation = "https://akj7.github.io/CANExplorer/"
+Repository = "https://github.com/AKJ7/CANExplorer"
+Issues = "https://github.com/AKJ7/CANExplorer/issues"
+Changelog = "https://github.com/AKJ7/CANExplorer/blob/develop/CHANGELOG.md"
+
 [project.scripts]
-main = "can_explorer.__main__:main"
+canexplorer = "can_explorer.__main__:main"
 can-db-convert = "can_explorer.db_convert:main"
 can-test = "can_explorer.testing.cli:main"
 can-server = "can_server.__main__:main"

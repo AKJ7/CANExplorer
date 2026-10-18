@@ -235,7 +235,10 @@ def test_command_line(tmp_path, capsys):
     assert can_test(args + ['-k', 'Gearbox', '--report', str(report), '--junit', str(junit)]) == 0
     output = capsys.readouterr().out
     assert 'PASS  GearboxTests.obd_vehicle_speed_request' in output and '2 test cases: 2 passed' in output
-    assert report.read_text().startswith('<!doctype html>') and ET.parse(junit).getroot().get('failures') == '0'
+    assert (
+        report.read_text(encoding='utf-8').startswith('<!doctype html>')
+        and ET.parse(junit).getroot().get('failures') == '0'
+    )
     assert can_test(args + ['-k', 'nothing matches']) == 2
     assert can_test([str(tmp_path / 'missing.py')]) == 2
     assert can_test(args[:1] + ['--report', str(tmp_path / 'report.txt')]) == 2
@@ -333,7 +336,7 @@ def test_markdown_summary(tmp_path, capsys):
     summary = tmp_path / 'step_summary'  # Like $GITHUB_STEP_SUMMARY: no extension, appended to
     summary.write_text('Earlier step\n')
     assert can_test([str(path), '--channel', f'cli-{uuid.uuid4().hex}', '--markdown', str(summary)]) == 1
-    text = summary.read_text()
+    text = summary.read_text(encoding='utf-8')
     assert text.startswith('Earlier step\n## ❌ CANExplorer test run')
     assert '| REQ-LIM-002 | ✅ passed | Limits.positional[1,2], Limits.positional[3,4] |' in text
     assert '| Limits.below_five[7] | ❌ failed |' in text and '7 < 5' in text

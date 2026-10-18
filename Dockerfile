@@ -1,29 +1,36 @@
-FROM ubuntu:noble
+# Development image of CANExplorer: Python (through uv), the Qt runtime libraries for headless tests and the Linux
+# CAN tools (can-utils, iproute2 for vcan interfaces). See docker-compose.yml for how it is used.
+FROM ubuntu:24.04
 
-# There is this ugly bug caused by the fact that on Ubuntu 24.xx there
-# is already a default user called ubuntu, located with id 1000 and 
-# group id 1000. Forwarding a new docker user inside the container
-# is rejected as the local group and user are allocated to 1000.
-# The trick is to shift the default-created ubuntu user inside the 
-# container to another id and group 
-# See: https://github.com/microsoft/vscode-remote-release/issues/10030
-RUN usermod -u 2000 ubuntu && groupmod -g 2000 ubuntu
-ARG DOCKER_USER=can_explorer
+ENV LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    DEBIAN_FRONTEND=noninteractive \
+    TZ=Etc/UTC
 
-ENV LANG C.UTF-8
-ENV LC_ALL C.UTF-8
-ENV TZ="Europe/Berlin"
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
-
-RUN apt -y update && apt -y install \
-    sudo git vim curl python3 python3-pip iproute2 can-utils \
-    libglib2.0-0 libglu1-mesa-dev libxkbcommon-x11-0 build-essential libgl1-mesa-dev libdbus-1-dev libxcb-* \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates curl git sudo iproute2 can-utils kmod \
+        libegl1 libgl1 libglib2.0-0 libxkbcommon0 libxkbcommon-x11-0 libxcb-cursor0 libfontconfig1 libdbus-1-3 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=ghcr.io/astral-sh/uv:0.11.26 /uv /uvx /usr/local/bin/
 
-RUN useradd -ms /bin/bash $DOCKER_USER
-RUN usermod -aG sudo $DOCKER_USER && echo "${DOCKER_USER} ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/${DOCKER_USER}
-RUN chmod 0440 /etc/sudoers.d/${DOCKER_USER}
-USER $DOCKER_USER
-ENTRYPOINT bash -c "uv sync --locked"
+# Ubuntu images have a user "ubuntu" with uid 1000; give it another uid so the developer's uid can be used, which
+# keeps files created in the mounted source owned by the developer (see
+# https://github.com/microsoft/vscode-remote-release/issues/10030)
+ARG USER=can_explorer
+ARG UID=1000
+RUN usermod -u 2000 ubuntu && groupmod -g 2000 ubuntu \
+    && useradd --create-home --shell /bin/bash --uid ${UID} ${USER} \
+    && echo "${USER} ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/${USER} && chmod 0440 /etc/sudoers.d/${USER}
+USER ${USER}
+
+# The virtual environment and uv's cache live outside the mounted source (they are named volumes in
+# docker-compose.yml), so the host's .venv is not overwritten with Linux binaries of the container
+ENV UV_PROJECT_ENVIRONMENT=/home/${USER}/venv \
+    UV_CACHE_DIR=/home/${USER}/uv-cache \
+    UV_LINK_MODE=copy \
+    QT_QPA_PLATFORM=offscreen
+RUN mkdir -p /home/${USER}/venv /home/${USER}/uv-cache
+
+WORKDIR /home/${USER}/CANExplorer
+CMD ["bash"]

@@ -6,11 +6,28 @@
 git clone https://github.com/AKJ7/CANExplorer.git
 cd CANExplorer
 uv sync            # Runtime, dev, test and packaging dependencies in .venv
-uv run main        # Start the application
+uv run canexplorer        # Start the application
 ```
 
 Dependencies are declared in `pyproject.toml` and locked in `uv.lock`. The dependency groups are `dev` (linters),
 `test`, `packaging` (PyInstaller, Nuitka) and `docs` (MkDocs).
+
+## Docker
+
+`docker-compose.yml` runs the project in a container with Python, the Qt libraries for headless tests and the
+Linux CAN tools. The source is mounted; the virtual environment lives in a volume of its own.
+
+```bash
+docker compose run --rm test        # The test suite
+docker compose run --rm dev         # A shell, e.g. for `uv sync && uv run pytest` or virtual CAN buses:
+                                    #   sudo ip link add vcan0 type vcan && sudo ip link set vcan0 up
+CAN_SERVER_TOKEN=secret docker compose up -d can-server   # Share the host's can0, see Remote buses
+```
+
+The `can-server` service uses the host's network, so it sees the host's CAN interfaces and listens on port 8765;
+`CAN_SERVER_BUS` (default `vehicle=socketcan:can0:500000`) and `CAN_SERVER_PORT` change the bus and the port, and
+it does not start without `CAN_SERVER_TOKEN`. Set `UID` to your user id (`id -u`) when it is not 1000, so files
+created in the source belong to you.
 
 ## Tests
 

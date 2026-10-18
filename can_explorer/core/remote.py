@@ -17,6 +17,8 @@ import can
 from can.bus import BusState
 
 DEFAULT_PORT = 8765
+# Version of the can-server protocol; clients and servers must speak the same one
+PROTOCOL_VERSION = 1
 CONNECT_TIMEOUT = 5.0
 _CLOSED = object()
 
@@ -99,7 +101,7 @@ class RemoteBus(can.BusABC):
         self._task = asyncio.run_coroutine_threadsafe(self._run(), self._loop)
         if not self._ready.wait(timeout):
             self._stop_loop()
-            raise can.CanInitializationError(f'No answer from {self.url} within {timeout:.0f} s')
+            raise can.CanInitializationError(f'Could not connect to {self.url}: no answer within {timeout:.0f} s')
         if self._error is not None:
             self._stop_loop()
             raise can.CanInitializationError(self._error)
@@ -110,7 +112,9 @@ class RemoteBus(can.BusABC):
 
         try:
             async with aiohttp.ClientSession() as http:
-                async with http.ws_connect(self.url, heartbeat=20) as ws:
+                separator = '&' if '?' in self.url else '?'
+                url = f'{self.url}{separator}protocol={PROTOCOL_VERSION}'
+                async with http.ws_connect(url, heartbeat=20) as ws:
                     self._ws = ws
                     async for message in ws:
                         if message.type != aiohttp.WSMsgType.TEXT:
@@ -122,6 +126,8 @@ class RemoteBus(can.BusABC):
             self._error = {
                 401: 'The server needs a token: add ?token=… to the channel',
                 404: f'The server has no bus {self.name!r}',
+                426: f'The server speaks another protocol version than this CANExplorer ({PROTOCOL_VERSION}); '
+                'update the older of the two',
             }.get(e.status, f'Could not connect to {self.url}: {e.status} {e.message}')
         except Exception as e:
             self._error = self._error or f'Could not connect to {self.url}: {e}'
@@ -138,6 +144,12 @@ class RemoteBus(can.BusABC):
         elif kind == 'info':
             self.info = message
             self._remote_state = message.get('state', '')
+            protocol = message.get('protocol')
+            if protocol != PROTOCOL_VERSION:  # Servers that do not check the version of the client themselves
+                self._error = (
+                    f'The server speaks protocol version {protocol}, this CANExplorer version {PROTOCOL_VERSION}; '
+                    'update the older of the two'
+                )
             self._ready.set()
         elif kind == 'state':
             self._remote_state = message.get('state', '')

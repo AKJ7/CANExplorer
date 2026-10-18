@@ -119,3 +119,12 @@ def test_cli_validates_buses():
     result = CliRunner().invoke(cli, ['--bus', 'nonsense'])
     assert result.exit_code == 2 and 'expected NAME=INTERFACE:CHANNEL' in result.output
     assert 'RemoteBus' in CliRunner().invoke(cli, ['--help']).output
+
+
+def test_protocol_versions_must_match(server, monkeypatch):
+    import can_explorer.core.remote as remote
+
+    port, _ = server
+    monkeypatch.setattr(remote, 'PROTOCOL_VERSION', remote.PROTOCOL_VERSION + 1)  # A newer client
+    with pytest.raises(can.CanInitializationError, match='another protocol version'):
+        RemoteBus(f'127.0.0.1:{port}/vehicle?token=secret')

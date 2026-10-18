@@ -69,7 +69,7 @@ class ApplicationMetadata(QObject):
             'Runtime version': f'{self.runtime_version}',
             'QT': f'v{self.qt_version}',
             'PYQT': f'v{self.pyqt_version}',
-            'Powered by': f'{self.license_type}',
+            'License': f'{self.license_type}',
             'Copyright': f'@ {self.creation_year}-{self.actual_year} {self.author}',
         }
         return '\n'.join([f'{key}: {value}' for key, value in info.items()])

@@ -12,15 +12,14 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
     app_name: str = 'CANExplorer'
-    debug_mode: Optional[bool] = True
     console_log_file: str = 'stdout'
-    log_level: str = 'DEBUG'
+    log_level: str = 'INFO'
     production_build: Optional[bool] = False
     log_format: str = '%(asctime)s.%(msecs)03d [%(levelname)-7s] %(name)-35s: %(message)s'
     date_format: str = '%Y-%m-%d %H:%M:%S'
     creation_year: int = 2025
     author: str = 'AKJ7'
-    license_type: str = 'GPL3'
+    license_type: str = 'MIT'
     platform: str = sys.platform
 
     def apply_cli_args(self, args: Optional[list[str]] = None) -> None:

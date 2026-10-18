@@ -4,7 +4,7 @@ This walk-through uses a virtual bus and the simulation in `examples/simulation`
 
 ## 1. Create a connection
 
-Start CANExplorer (`uv run main`, or the executable of a bundle).
+Start CANExplorer (`uv run canexplorer`, or the executable of a bundle).
 
 ![CANExplorer after starting](../assets/screenshots/welcome.png)
 

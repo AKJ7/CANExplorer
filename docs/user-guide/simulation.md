@@ -122,4 +122,4 @@ a millisecond and depends on the load of the application; for hardware accurate 
 ## Packaged builds
 
 In the standalone bundles, scripts can import CANExplorer, python-can, cantools and the standard library modules
-the application itself uses. For scripts that need other packages, run CANExplorer from source (`uv run main`).
+the application itself uses. For scripts that need other packages, run CANExplorer from source (`uv run canexplorer`).

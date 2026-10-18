@@ -1,20 +1,50 @@
+# Development containers of CANExplorer (the source is mounted, not copied):
+#
+#   docker compose run --rm dev          A shell; e.g. `uv sync && uv run pytest`, or virtual CAN buses with
+#                                        `sudo ip link add vcan0 type vcan && sudo ip link set vcan0 up`
+#   docker compose run --rm test         The test suite, headless
+#   CAN_SERVER_TOKEN=secret docker compose up can-server
+#                                        Shares the host's can0 with CANExplorer on other computers (port 8765);
+#                                        other buses with e.g. CAN_SERVER_BUS="body=socketcan:can1:125000"
+#
+# Set UID to your user id (`id -u`) if it is not 1000, so files created in the source belong to you.
+
+x-common: &common
+  build:
+    context: .
+    args:
+      UID: ${UID:-1000}
+  image: canexplorer-dev
+  volumes:
+    - .:/home/can_explorer/CANExplorer
+    - venv:/home/can_explorer/venv
+    - uv-cache:/home/can_explorer/uv-cache
+
 services:
-    gui:
-        build: .
-        user: can_explorer
-        privileged: true
-        volumes:
-            - .:/home/can_explorer/can_explorer
-        working_dir: /home/can_explorer/can_explorer
-#        healthcheck:
-#            test: true
-#            interval: 30s
-#            timeout: 1m
-#            retries: 2
-#            start_period: 1m
-        entrypoint: bash -c "uv sync --locked && uv tree"
-        command: >
-            bash -c "echo Hallo world"
+  dev:
+    <<: *common
+    # Creating vcan interfaces and using SocketCAN needs the container to manage network devices
+    privileged: true
+    network_mode: host
+    stdin_open: true
+    tty: true
 
-                
+  test:
+    <<: *common
+    command: bash -c "uv sync --locked && uv run pytest -o log_cli=false"
 
+  can-server:
+    <<: *common
+    # The host's network: its CAN interfaces and the server port
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      CAN_SERVER_TOKEN: ${CAN_SERVER_TOKEN:-}
+    command: >
+      bash -c "test -n \"$$CAN_SERVER_TOKEN\" || { echo 'Set CAN_SERVER_TOKEN to the token clients must present'; exit 1; } &&
+               uv sync --locked --no-default-groups &&
+               exec uv run --no-sync can-server --bus '${CAN_SERVER_BUS:-vehicle=socketcan:can0:500000}' --port ${CAN_SERVER_PORT:-8765}"
+
+volumes:
+  venv:
+  uv-cache:

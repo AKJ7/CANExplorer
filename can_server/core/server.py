@@ -25,11 +25,10 @@ from typing import Any, Dict, List, Optional, Set
 import can
 from aiohttp import WSMsgType, web
 
-from can_explorer.core.remote import RX, decode_frame, encode_frame
+from can_explorer.core.remote import PROTOCOL_VERSION, RX, decode_frame, encode_frame
 
 logger = logging.getLogger(__name__)
 
-PROTOCOL_VERSION = 1
 MAX_BATCH = 500
 CLIENT_QUEUE = 2000  # Batches buffered per client before frames are dropped (slow network)
 STATE_INTERVAL = 1.0
@@ -210,6 +209,11 @@ class CanServer:
         hub = self.hubs.get(request.match_info['name'])
         if hub is None:
             raise web.HTTPNotFound(text=f'Unknown bus {request.match_info["name"]!r}; buses: {", ".join(self.hubs)}')
+        client_protocol = request.query.get('protocol', str(PROTOCOL_VERSION))
+        if client_protocol != str(PROTOCOL_VERSION):
+            raise web.HTTPUpgradeRequired(
+                text=f'This server speaks protocol version {PROTOCOL_VERSION}, the client {client_protocol}'
+            )
         ws = web.WebSocketResponse(heartbeat=20)
         await ws.prepare(request)
         if hub.bus is None:

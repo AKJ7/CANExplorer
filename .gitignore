@@ -143,3 +143,13 @@ can_explorer/_build_version.py
 
 # MkDocs
 site/
+
+# Workspaces, recordings and exports saved in the repository root while trying the application
+/*.cxw
+/*.asc
+/*.asc.gz
+/*.blf
+/*.trc
+/*.mf4
+/*.csv
+/*.db

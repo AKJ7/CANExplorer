@@ -1,4 +1,5 @@
 import asyncio
+import time
 from dataclasses import dataclass
 from typing import Optional
 
@@ -10,10 +11,22 @@ CLASSIC_FRAME = 8
 FD_FRAME = 64
 FD_LENGTHS = (8, 12, 16, 20, 24, 32, 48, 64)
 MAX_WAIT_FRAMES = 10
+# Waits shorter than this are busy-waited: the event loop cannot time them (Windows: 15.6 ms resolution)
+SPIN_TIME = 0.002
 
 
 class IsoTpError(Exception):
     pass
+
+
+async def _wait_until(deadline: float) -> None:
+    """Wait until a time.perf_counter() deadline, precisely: event loop timers are only as fine as the system
+    timer (about 15.6 ms on Windows), which would make separation times below that (e.g. 100 µs) far longer."""
+    remaining = deadline - time.perf_counter()
+    if remaining > SPIN_TIME:
+        await asyncio.sleep(remaining - SPIN_TIME)
+    while time.perf_counter() < deadline:
+        pass  # At most SPIN_TIME of busy waiting
 
 
 def parse_st_min(st_min: int) -> float:
@@ -104,13 +117,17 @@ class IsoTpClient:
         self._send_frame(header + payload[:first])
         offset, sequence = first, 1
         chunk = self._frame_size - 1
+        last_sent = time.perf_counter()
         while offset < length:
             block_size, separation = await self._wait_flow_control()
             sent_in_block = 0
             while offset < length and (block_size == 0 or sent_in_block < block_size):
-                if sent_in_block or separation:
-                    await asyncio.sleep(separation)
+                if separation:
+                    await _wait_until(last_sent + separation)
+                elif sent_in_block:
+                    await asyncio.sleep(0)  # Let the receiver and the GUI run between frames
                 self._send_frame(bytes([0x20 | sequence]) + payload[offset : offset + chunk])
+                last_sent = time.perf_counter()
                 offset += chunk
                 sequence = (sequence + 1) & 0x0F
                 sent_in_block += 1

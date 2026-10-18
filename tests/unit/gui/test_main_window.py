@@ -247,9 +247,13 @@ def test_sidebar_resizing_and_dialog_dragging(window, qtbot):
     dialog.open()
     qtbot.wait(200)
     x, y = dialog.property('x'), dialog.property('y')
-    _drag(qtbot, view, (int(x) + 60, int(y) + 30), (int(x) - 140, int(y) + 130))
-    assert (round(dialog.property('x') - x), round(dialog.property('y') - y)) == (-200, 100)
-    _drag(qtbot, view, (int(x) - 80, int(y) + 130), (-500, -500))  # Stays inside the window
+    # Move by as much as fits next to the (centred) dialog: its size depends on the platform's fonts
+    dx = -min(200, int(x) - 1)
+    dy = min(100, int(view.height() - y - dialog.property('height')) - 1)
+    assert dx < -20 and dy > 20, (x, y, dialog.property('width'), dialog.property('height'))
+    _drag(qtbot, view, (int(x) + 60, int(y) + 30), (int(x) + 60 + dx, int(y) + 30 + dy))
+    assert (round(dialog.property('x') - x), round(dialog.property('y') - y)) == (dx, dy)
+    _drag(qtbot, view, (int(x) + 60 + dx, int(y) + 30 + dy), (-500, -500))  # Stays inside the window
     assert dialog.property('x') >= 0 and dialog.property('y') >= 0
     dialog.close()
     qtbot.wait(200)

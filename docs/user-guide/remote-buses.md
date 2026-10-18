@@ -29,7 +29,9 @@ use a bus at the same time; frames one of them sends are received by the others.
     server in a trusted network (or behind a VPN), and do not expose it to the internet. The connection is not
     encrypted; put a TLS proxy in front of the server and use `wss://` URLs when it crosses untrusted networks.
 
-To start the server with the Pi, a systemd unit such as this one works:
+With Docker, `CAN_SERVER_TOKEN=… docker compose up -d can-server` in the repository runs it as a service (see
+[Building and testing](../development/building.md#docker)). To start the server with the Pi without Docker, a systemd
+unit such as this one works:
 
 ```ini
 [Unit]

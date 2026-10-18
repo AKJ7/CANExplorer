@@ -35,10 +35,10 @@ installation from source.
 git clone https://github.com/AKJ7/CANExplorer.git
 cd CANExplorer
 uv sync
-uv run main
+uv run canexplorer
 ```
 
-`uv sync` creates a virtual environment in `.venv` with all dependencies. `uv run main` starts the application;
+`uv sync` creates a virtual environment in `.venv` with all dependencies. `uv run canexplorer` starts the application;
 settings can be passed on the command line, see [Command line](../reference/command-line.md).
 
 !!! tip "Starting from the VS Code snap terminal"
@@ -53,7 +53,7 @@ menu, the dock and the Finder. On Linux, add CANExplorer with its icon to the ap
 with
 
 ```bash
-uv run main --install-desktop-entry          # From source
+uv run canexplorer --install-desktop-entry          # From source
 ./CANExplorer --install-desktop-entry        # Standalone bundle
 ```
 
