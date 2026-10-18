@@ -136,7 +136,14 @@ jobs:
           hdiutil attach dist/installers/*.dmg -mountpoint /Volumes/CANExplorer -nobrowse -quiet
           /Volumes/CANExplorer/CANExplorer.app/Contents/MacOS/CANExplorer --help
           test -L /Volumes/CANExplorer/Applications
-          hdiutil detach /Volumes/CANExplorer -quiet
+          # Detaching fails with "resource busy" (exit 16) while Spotlight still indexes the fresh volume or the
+          # app's process lets go of it: retry, then force it
+          for attempt in 1 2 3 4 5; do
+            hdiutil detach /Volumes/CANExplorer -quiet && exit 0
+            echo "Volume busy, retrying ($attempt)"
+            sleep 2
+          done
+          hdiutil detach /Volumes/CANExplorer -force -quiet
 
       - name: Store the installers
         uses: actions/upload-artifact@v4

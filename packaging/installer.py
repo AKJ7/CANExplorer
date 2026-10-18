@@ -19,6 +19,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.request
 from importlib.metadata import version
 from pathlib import Path
@@ -152,22 +153,30 @@ def macos_dmg(bundle: Path) -> Path:
         staging = Path(staging)
         run(['ditto', bundle, staging / bundle.name])  # Keeps symlinks, permissions and extended attributes
         (staging / 'Applications').symlink_to('/Applications')
-        run(
-            [
-                'hdiutil',
-                'create',
-                '-volname',
-                NAME,
-                '-srcfolder',
-                staging,
-                '-fs',
-                'HFS+',
-                '-format',
-                'UDZO',
-                '-ov',
-                target,
-            ]
-        )
+        create = [
+            'hdiutil',
+            'create',
+            '-volname',
+            NAME,
+            '-srcfolder',
+            staging,
+            '-fs',
+            'HFS+',
+            '-format',
+            'UDZO',
+            '-ov',
+            target,
+        ]
+        # hdiutil create fails now and then with "Resource busy" on CI machines (a scanner holds the image): retry
+        for attempt in range(1, 4):
+            try:
+                run(create)
+                break
+            except subprocess.CalledProcessError:
+                if attempt == 3:
+                    raise
+                print(f'hdiutil create failed, retrying ({attempt})', flush=True)
+                time.sleep(5)
     return target
 
 
