@@ -83,6 +83,8 @@ ColumnLayout {
             text: root.connection.recording ? qsTr("● Stop recording") : qsTr("Record…")
             highlighted: root.connection.recording
             onClicked: root.connection.recording ? root.connection.stop_recording() : recordDialog.open()
+            ToolTip.visible: hovered && root.connection.recording
+            ToolTip.text: root.connection.recording_status
         }
         Button {
             visible: root.connection.can_transmit
@@ -128,6 +130,12 @@ ColumnLayout {
         Item { Layout.fillWidth: true }
 
         Pill {
+            visible: root.connection.recording
+            text: root.connection.recording_triggered ? root.connection.recording_status : qsTr("● REC")
+            tint: root.connection.recording_triggered && root.connection.recording_status.startsWith("armed")
+                ? Theme.warning : Theme.danger
+        }
+        Pill {
             visible: root.connection.database_file.length > 0
             text: root.connection.database_file.split(/[\\/]/).pop()
             tint: Theme.chart[4]
@@ -153,12 +161,28 @@ ColumnLayout {
         }
         Card {
             padding: 1
-            FrameTable {
-                id: traceTable
+            ColumnLayout {
                 anchors.fill: parent
-                model: root.connection.trace
-                columnWidths: [110, 40, 70, 90, 40, 200, 0]
-                autoScroll: autoScrollBox.checked
+                spacing: 0
+                TraceFindBar {
+                    id: findBar
+                    tools: root.connection.trace_tools
+                    table: traceTable
+                    Layout.fillWidth: true
+                    Layout.margins: 8
+                }
+                FrameTable {
+                    id: traceTable
+                    model: root.connection.trace
+                    columnWidths: [110, 40, 70, 90, 40, 200, 0]
+                    autoScroll: autoScrollBox.checked
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    onContextMenuRequested: row => {
+                        traceMenu.row = row
+                        traceMenu.popup()
+                    }
+                }
             }
         }
         Card {
@@ -239,14 +263,62 @@ ColumnLayout {
         connection: root.connection
     }
 
-    FileDialog {
+    RecordDialog {
         id: recordDialog
-        title: qsTr("Record to file")
-        fileMode: FileDialog.SaveFile
-        nameFilters: connectionManager.log_file_filters.slice(1)
-        // The suffix of the chosen format when none is typed (e.g. "asc.gz")
-        defaultSuffix: selectedNameFilter.extensions.length > 0 ? selectedNameFilter.extensions[0] : "asc"
-        onAccepted: root.connection.start_recording(selectedFile)
+        connection: root.connection
+    }
+
+    Connections {
+        target: root.connection
+        function onRecording_event(text) {
+            statusLabel.show(text)
+        }
+    }
+
+    // Context menu of the trace rows
+    Menu {
+        id: traceMenu
+        property int row: -1
+        MenuItem {
+            text: qsTr("Bookmark / remove bookmark\tCtrl+B")
+            onTriggered: findBar.toggleBookmarks()
+        }
+        MenuItem {
+            text: qsTr("Copy selected rows\tCtrl+C")
+            onTriggered: traceTable.copySelection()
+        }
+        MenuItem {
+            visible: root.connection.is_replay
+            height: visible ? implicitHeight : 0
+            text: qsTr("Replay from here")
+            onTriggered: root.connection.replay_from_row(traceMenu.row)
+        }
+        MenuItem {
+            text: qsTr("Find…\tCtrl+F")
+            onTriggered: findBar.focusSearch()
+        }
+    }
+
+    // Shortcuts of the trace; only the visible connection reacts
+    Shortcut {
+        sequence: StandardKey.Find
+        enabled: root.visible && root.page === "trace"
+        onActivated: findBar.focusSearch()
+    }
+    Shortcut {
+        sequences: [StandardKey.FindNext, "F3"]
+        enabled: root.visible && root.page === "trace"
+        onActivated: findBar.find(true)
+    }
+    Shortcut {
+        sequences: [StandardKey.FindPrevious, "Shift+F3"]
+        enabled: root.visible && root.page === "trace"
+        onActivated: findBar.find(false)
+    }
+    Shortcut {
+        sequence: "Ctrl+B"
+        enabled: root.visible && root.page === "trace"
+        onActivated: findBar.toggleBookmarks()
     }
 
     FileDialog {

@@ -1,4 +1,6 @@
-from typing import Any, Callable, Dict, Iterable, List, Optional, Set
+from array import array
+from bisect import bisect_left
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Set, Tuple
 
 from PyQt6.QtCore import (
     QAbstractTableModel,
@@ -16,6 +18,7 @@ from PyQt6.QtGui import QGuiApplication
 from can_explorer.core.filters import MessageFilter
 from can_explorer.core.frames import Frame, format_hex, frame_type
 from can_explorer.core.store import IdKey, IdStatistics
+from can_explorer.core.trace_store import TraceStore
 
 ALIGN_LEFT = Qt.AlignmentFlag.AlignLeft
 ALIGN_RIGHT = Qt.AlignmentFlag.AlignRight
@@ -23,6 +26,7 @@ ALIGN_CENTER = Qt.AlignmentFlag.AlignHCenter
 
 TEXT_ALIGNMENT_ROLE = Qt.ItemDataRole.TextAlignmentRole
 RICH_TEXT_ROLE = Qt.ItemDataRole.UserRole + 1
+BOOKMARK_ROLE = Qt.ItemDataRole.UserRole + 2
 
 Describe = Callable[[Frame], str]
 
@@ -46,6 +50,7 @@ class FrameTableModel(QAbstractTableModel):
         roles = super().roleNames()
         roles[TEXT_ALIGNMENT_ROLE] = b'textAlignment'
         roles[RICH_TEXT_ROLE] = b'richText'
+        roles[BOOKMARK_ROLE] = b'bookmarked'
         return roles
 
     def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
@@ -68,6 +73,8 @@ class FrameTableModel(QAbstractTableModel):
             return (self.ALIGNMENTS[index.column()] | Qt.AlignmentFlag.AlignVCenter).value
         if role == RICH_TEXT_ROLE:
             return self.is_rich(index.column())
+        if role == BOOKMARK_ROLE:
+            return False
         return None
 
     def display(self, row: int, column: int) -> str:
@@ -108,38 +115,85 @@ class FrameTableModel(QAbstractTableModel):
 
 
 class TraceModel(FrameTableModel):
-    """Chronological list of frames, bounded to `max_rows`. Rows are appended in batches."""
+    """View of the trace store: all retained frames, or those matching the display filter.
+
+    Rows refer to frames by their absolute index in the store, so the view can page through frames on disk.
+    `refresh()` follows the store (new frames at the end, dropped ones at the front); without it, e.g. while the
+    view is paused, the rows stay as they are. Frames dropped from the store meanwhile show empty rows.
+    Bookmarks mark frames by absolute index.
+    """
 
     COLUMNS = ('Time [s]', 'Dir', 'Type', 'ID [hex]', 'DLC', 'Data [hex]', 'Info')
     ALIGNMENTS = (ALIGN_RIGHT, ALIGN_CENTER, ALIGN_CENTER, ALIGN_RIGHT, ALIGN_RIGHT, ALIGN_LEFT, ALIGN_LEFT)
+    INFO_COLUMN = 6
+
+    bookmarks_changed = pyqtSignal()
 
     def __init__(
         self,
+        store: TraceStore,
         start_time: Callable[[], Optional[float]],
-        max_rows: int,
         describe: Describe = _plain_info,
         parent: Optional[QObject] = None,
     ):
         super().__init__(parent)
+        self._store = store
         self._start_time = start_time
-        self._max_rows = max_rows
         self._describe = describe
-        self._rows: List[Frame] = []
         self._filter = MessageFilter()
+        self._indices: Optional[array] = None  # Absolute indices of the matching frames; None: all frames
+        self._first = 0  # Without a filter: the absolute index of row 0 ...
+        self._count = 0  # ... and the number of rows
+        self._scanned = 0  # With a filter: frames before this absolute index were checked
+        self._bookmarks: Dict[int, str] = {}  # Absolute index -> note
 
     @property
-    def frames(self) -> List[Frame]:
-        return self._rows
+    def store(self) -> TraceStore:
+        return self._store
+
+    def data(self, index: QModelIndex, role=Qt.ItemDataRole.DisplayRole):
+        if role == BOOKMARK_ROLE:
+            return index.isValid() and self.absolute_index(index.row()) in self._bookmarks
+        return super().data(index, role)
+
+    # Rows
 
     def rowCount(self, parent=QModelIndex()) -> int:
-        return 0 if parent.isValid() else len(self._rows)
+        if parent.isValid():
+            return 0
+        return len(self._indices) if self._indices is not None else self._count
+
+    def absolute_index(self, row: int) -> int:
+        if self._indices is not None:
+            return self._indices[row] if 0 <= row < len(self._indices) else -1
+        return self._first + row if 0 <= row < self._count else -1
+
+    def row_of(self, absolute: int) -> int:
+        """The row showing a frame, or -1."""
+        if self._indices is not None:
+            row = bisect_left(self._indices, absolute)
+            return row if row < len(self._indices) and self._indices[row] == absolute else -1
+        row = absolute - self._first
+        return row if 0 <= row < self._count else -1
+
+    def frame(self, row: int) -> Optional[Frame]:
+        index = self.absolute_index(row)
+        return self._store.get(index) if index >= 0 else None
+
+    def time(self, frame: Frame) -> float:
+        """Seconds since the start of the session."""
+        msg = frame.message
+        start = self._start_time()
+        return msg.timestamp - (msg.timestamp if start is None else start)
 
     def display(self, row: int, column: int) -> str:
-        frame = self._rows[row]
+        frame = self.frame(row)
+        if frame is None:
+            return ''
         msg = frame.message
         match column:
             case 0:
-                return f'{msg.timestamp - (self._start_time() or msg.timestamp):.6f}'
+                return f'{self.time(frame):.6f}'
             case 1:
                 return 'Rx' if msg.is_rx else 'Tx'
             case 2:
@@ -154,50 +208,135 @@ class TraceModel(FrameTableModel):
                 return self._describe(frame)
         return ''
 
-    def set_max_rows(self, max_rows: int, frames: Iterable[Frame]) -> None:
-        self._max_rows = max_rows
-        self.rebuild(frames)
+    # Following the store
 
-    def set_filter(self, message_filter: MessageFilter, frames: Iterable[Frame]) -> None:
+    def set_filter(self, message_filter: MessageFilter) -> None:
         self._filter = message_filter
-        self.rebuild(frames)
+        self.rebuild()
 
-    def rebuild(self, frames: Iterable[Frame]) -> None:
+    def rebuild(self) -> None:
+        """Show the store's current frames again (after a filter change or clearing)."""
         self.beginResetModel()
+        store = self._store
         if self._filter.is_empty:
-            rows = list(frames)
+            self._indices = None
+            self._first, self._count = store.first, len(store)
         else:
             matches = self._filter.matches
-            rows = [frame for frame in frames if matches(frame.message)]
-        self._rows = rows[-self._max_rows :]
+            self._indices = array(
+                'Q', (index for index, frame in enumerate(store, start=store.first) if matches(frame.message))
+            )
+        self._scanned = store.total
+        if store.total == 0:
+            self._bookmarks.clear()
+            self.bookmarks_changed.emit()
         self.endResetModel()
+
+    def refresh(self) -> None:
+        """Remove the rows of frames dropped from the store and add rows for new frames."""
+        store = self._store
+        first, total = store.first, store.total
+        if total < self._scanned or (self._indices is None and total < self._first + self._count):
+            self.rebuild()  # The store was cleared
+            return
+        if self._indices is None:
+            dropped = min(max(0, first - self._first), self._count)
+            if dropped:
+                self.beginRemoveRows(QModelIndex(), 0, dropped - 1)
+                self._first += dropped
+                self._count -= dropped
+                self.endRemoveRows()
+            if self._count == 0:
+                self._first = max(self._first, first)
+            new = total - (self._first + self._count)
+            if new > 0:
+                self.beginInsertRows(QModelIndex(), self._count, self._count + new - 1)
+                self._count += new
+                self.endInsertRows()
+        else:
+            dropped = bisect_left(self._indices, first)
+            if dropped:
+                self.beginRemoveRows(QModelIndex(), 0, dropped - 1)
+                del self._indices[:dropped]
+                self.endRemoveRows()
+            matches = self._filter.matches
+            new = [
+                index
+                for index, frame in enumerate(
+                    store.iter_from(max(self._scanned, first)), start=max(self._scanned, first)
+                )
+                if matches(frame.message)
+            ]
+            if new:
+                rows = len(self._indices)
+                self.beginInsertRows(QModelIndex(), rows, rows + len(new) - 1)
+                self._indices.extend(new)
+                self.endInsertRows()
+        self._scanned = total
 
     def refresh_descriptions(self) -> None:
         """The description column changed (e.g. a database was loaded)."""
-        if self._rows:
-            self.dataChanged.emit(self.index(0, 6), self.index(len(self._rows) - 1, 6))
+        rows = self.rowCount()
+        if rows:
+            self.dataChanged.emit(self.index(0, self.INFO_COLUMN), self.index(rows - 1, self.INFO_COLUMN))
 
-    def append_frames(self, frames: List[Frame]) -> None:
-        if not self._filter.is_empty:
-            matches = self._filter.matches
-            frames = [frame for frame in frames if matches(frame.message)]
-        if not frames:
-            return
-        frames = frames[-self._max_rows :]
-        overflow = len(self._rows) + len(frames) - self._max_rows
-        if overflow > 0:
-            self.beginRemoveRows(QModelIndex(), 0, overflow - 1)
-            del self._rows[:overflow]
-            self.endRemoveRows()
-        first = len(self._rows)
-        self.beginInsertRows(QModelIndex(), first, first + len(frames) - 1)
-        self._rows.extend(frames)
-        self.endInsertRows()
+    # Selection and export
 
-    def selected_frames(self, selection_model: Optional[QItemSelectionModel]) -> List[Frame]:
+    def selected_frames(self, selection_model: Optional[QItemSelectionModel]) -> Iterator[Frame]:
+        """The selected frames, or all rows without a selection (frames dropped from the store are skipped)."""
         if selection_model is None or not selection_model.hasSelection():
-            return list(self._rows)
-        return [self._rows[row] for row in self.selected_rows(selection_model)]
+            rows: Iterable[int] = range(self.rowCount())
+        else:
+            rows = self.selected_rows(selection_model)
+        for row in rows:
+            frame = self.frame(row)
+            if frame is not None:
+                yield frame
+
+    # Bookmarks
+
+    @pyqtSlot(QItemSelectionModel, result=int)
+    def toggle_bookmarks(self, selection_model: QItemSelectionModel) -> int:
+        """Bookmark the selected rows, or remove their bookmarks when all of them have one. Returns the count."""
+        indices = [self.absolute_index(row) for row in self.selected_rows(selection_model)]
+        indices = [index for index in indices if index >= 0]
+        if not indices:
+            return 0
+        if all(index in self._bookmarks for index in indices):
+            for index in indices:
+                del self._bookmarks[index]
+        else:
+            for index in indices:
+                self._bookmarks.setdefault(index, '')
+        self._bookmarks_changed(indices)
+        return len(indices)
+
+    def set_bookmark_note(self, absolute: int, note: str) -> None:
+        if absolute in self._bookmarks:
+            self._bookmarks[absolute] = note
+            self.bookmarks_changed.emit()
+
+    def remove_bookmark(self, absolute: int) -> None:
+        if self._bookmarks.pop(absolute, None) is not None:
+            self._bookmarks_changed([absolute])
+
+    def clear_bookmarks(self) -> None:
+        indices = list(self._bookmarks)
+        self._bookmarks.clear()
+        self._bookmarks_changed(indices)
+
+    def _bookmarks_changed(self, indices: Iterable[int]) -> None:
+        last = len(self.COLUMNS) - 1
+        for index in indices:
+            row = self.row_of(index)
+            if row >= 0:
+                self.dataChanged.emit(self.index(row, 0), self.index(row, last), [BOOKMARK_ROLE])
+        self.bookmarks_changed.emit()
+
+    @property
+    def bookmarks(self) -> List[Tuple[int, str, Optional[Frame]]]:
+        """(absolute index, note, frame or None when no longer in the store), oldest first."""
+        return [(index, self._bookmarks[index], self._store.get(index)) for index in sorted(self._bookmarks)]
 
 
 class OverviewModel(FrameTableModel):

@@ -254,6 +254,7 @@ class FileSource:
         self.clock = PlaybackClock((1.0 if realtime else 0.0) if speed is None else speed)
         self.duration: Optional[float] = None
         self._bridge: Optional[ThreadBridge] = None
+        self._generation = 0  # Of the reader thread; seeking back starts a new one
         self._stop = threading.Event()
         self._slots: Optional[threading.Semaphore] = None
         self._thread: Optional[threading.Thread] = None
@@ -292,12 +293,24 @@ class FileSource:
         if not is_log_file(self.path):
             raise SourceError(unsupported_message(self.path))
         self._bridge = ThreadBridge(loop)
-        self._slots = threading.Semaphore(FILE_CHUNKS_AHEAD)
-        self._stop.clear()
-        self._thread = threading.Thread(target=self._read, name=f'FileSource-{self.path.name}', daemon=True)
-        self._thread.start()
+        self.clock.reset()  # A new replay starts at the beginning (unless seek() moves it before the first frame)
+        self._start_reader()
         if self.duration is None:
             threading.Thread(target=self._scan, name=f'FileScan-{self.path.name}', daemon=True).start()
+
+    def _start_reader(self) -> None:
+        """Read the file from its beginning in a new thread; items of earlier readers are dropped."""
+        self._stop.set()
+        self._generation += 1
+        self._stop = threading.Event()
+        self._slots = threading.Semaphore(FILE_CHUNKS_AHEAD)
+        self._thread = threading.Thread(
+            target=self._read,
+            args=(self._generation, self._stop, self._slots),
+            name=f'FileSource-{self.path.name}',
+            daemon=True,
+        )
+        self._thread.start()
 
     def _scan(self) -> None:
         try:
@@ -305,42 +318,60 @@ class FileSource:
         except Exception as e:  # The playback reports read errors itself
             logger.debug(f'Could not scan {self.path}: {e}')
 
-    def _put_chunk(self, chunk: list) -> bool:
-        # Backpressure: wait until the consumer has taken an earlier chunk
-        while not self._slots.acquire(timeout=0.2):
-            if self._stop.is_set():
-                return False
-        self._bridge.put(chunk)
-        return not self._stop.is_set()
+    def _read(self, generation: int, stop: threading.Event, slots: threading.Semaphore) -> None:
+        def put_chunk(chunk: list) -> bool:
+            # Backpressure: wait until the consumer has taken an earlier chunk
+            while not slots.acquire(timeout=0.2):
+                if stop.is_set():
+                    return False
+            self._bridge.put((generation, chunk))
+            return not stop.is_set()
 
-    def _read(self) -> None:
         try:
             with can.LogReader(self.path) as reader:
                 chunk = []
                 for msg in reader:
                     chunk.append(msg)
                     if len(chunk) >= FILE_CHUNK:
-                        if not self._put_chunk(chunk):
+                        if not put_chunk(chunk):
                             return
                         chunk = []
-                if chunk and not self._put_chunk(chunk):
+                if chunk and not put_chunk(chunk):
                     return
         except Exception as e:
             logger.error(f'Could not read {self.path}: {e}')
-            self._bridge.put(e)
+            self._bridge.put((generation, e))
             return
-        self._bridge.put(_EOF)
+        self._bridge.put((generation, _EOF))
 
     def close(self) -> None:
         self._stop.set()
         if self._bridge is not None:
-            self._bridge.put(_EOF)
+            self._bridge.put((self._generation, _EOF))
+
+    def seek(self, position: float) -> bool:
+        """Continue the replay at `position` seconds of the recording.
+
+        Forward, the frames in between are delivered at once (so statistics stay complete). Backward, the file is
+        read again from its beginning up to the position; then True is returned, and the frames delivered so far
+        should be cleared.
+        """
+        if self._bridge is None:
+            raise SourceError('The replay is not running')
+        position = max(0.0, position)
+        restart = position < self.clock.position
+        if restart:
+            self._start_reader()
+        self.clock.seek(position)
+        return restart
 
     async def batches(self) -> AsyncIterator[List[can.Message]]:
         clock = self.clock
         first_timestamp = None
         while True:
-            for item in await self._bridge.get_batch():
+            for generation, item in await self._bridge.get_batch():
+                if generation != self._generation:
+                    continue  # From a reader replaced by seeking back
                 if item is _EOF:
                     return
                 if isinstance(item, BaseException):
@@ -348,10 +379,16 @@ class FileSource:
                 self._slots.release()
                 if first_timestamp is None and item:
                     first_timestamp = item[0].timestamp
-                    clock.start()
+                    if not clock.started:
+                        clock.start()
                 if clock.speed <= 0:
-                    await clock.wait_until(item[-1].timestamp - first_timestamp)  # Only waits while paused
-                    yield item
+                    # Only waits while paused
+                    await clock.wait_until(
+                        item[-1].timestamp - first_timestamp,
+                        lambda generation=generation: generation != self._generation,
+                    )
+                    if generation == self._generation:
+                        yield item
                     continue
                 # Yield the messages that are due, wait until the next one
                 due = []
@@ -361,9 +398,13 @@ class FileSource:
                         if due:
                             yield due
                             due = []
-                        await clock.wait_until(position)
+                        if generation != self._generation:
+                            break
+                        await clock.wait_until(position, lambda generation=generation: generation != self._generation)
+                        if generation != self._generation:
+                            break
                     due.append(msg)
-                if due:
+                if due and generation == self._generation:
                     yield due
 
     def send(self, msg: can.Message) -> None:

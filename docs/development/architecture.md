@@ -59,10 +59,13 @@ computer.
 | `core/lin.py`, `core/lin_tp.py`, `core/lin_schedule.py` | LIN frames and decoder, LIN transport client, LIN master |
 | `core/isotp_client.py`, `core/uds.py` | Active ISO-TP client and UDS client and decoder |
 | `core/diagnostic_description.py` | CANdelaStudio CDD reader |
+| `core/trace_store.py` | Trace frames in memory and in temporary files on disk, by absolute index |
+| `core/conditions.py`, `core/recording.py` | Conditions on frames; split and triggered recordings |
 | `core/simulation.py` | Simulated UDS ECU and LIN slaves (tests, demos) |
 | `scripting/` | Simulation node API and runtime |
 | `gui/connection_manager.py` | Connections, preferences and channel detection for QML |
-| `gui/models.py` | Trace and overview table models |
+| `gui/models.py` | Trace (a paged view of the trace store) and overview table models |
+| `gui/trace_tools.py`, `gui/workspace.py` | Trace search and bookmarks; workspace files |
 | `gui/diagnostics.py`, `gui/simulation.py` | Diagnostics and simulation controllers, panel bridge |
 | `gui/signal_plot.py` | Plot item (QQuickPaintedItem) |
 | `gui/app_state.py` | Persistent settings (QSettings) |

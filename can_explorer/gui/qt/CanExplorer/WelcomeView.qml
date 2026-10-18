@@ -111,11 +111,54 @@ ScrollView {
                 onActivated: Actions.convertDatabase.trigger()
             }
             ActionCard {
+                icon: "▣"
+                heading: qsTr("Open a workspace")
+                description: qsTr("Connections, databases, filters, plots and scripts saved together.")
+                accentColor: Theme.chart[5]
+                onActivated: Actions.openWorkspace.trigger()
+            }
+            ActionCard {
                 icon: "✎"
                 heading: qsTr("Edit a database")
                 description: qsTr("Edit the messages, signals and nodes of DBC, DBF, KCD and SYM files.")
                 accentColor: Theme.chart[4]
                 onActivated: Actions.editDatabase.trigger()
+            }
+        }
+
+        Card {
+            title: qsTr("Recent workspaces")
+            visible: connectionManager.app_state.recent_workspaces.length > 0
+            Layout.fillWidth: true
+            Layout.preferredHeight: 72 + connectionManager.app_state.recent_workspaces.length * 46
+
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: 6
+                Repeater {
+                    model: connectionManager.app_state.recent_workspaces
+                    ItemDelegate {
+                        required property var modelData
+                        required property int index
+                        Layout.fillWidth: true
+                        implicitHeight: 40
+                        onClicked: Actions.openRecentWorkspace(index)
+                        background: Rectangle {
+                            radius: Theme.smallRadius
+                            color: parent.hovered ? Theme.alpha(Theme.accent, 0.14) : Theme.cardAlt
+                        }
+                        contentItem: RowLayout {
+                            spacing: 12
+                            Label { text: modelData.name; color: Theme.text; font.bold: true; Layout.leftMargin: 4 }
+                            Label {
+                                text: modelData.path
+                                color: Theme.muted
+                                elide: Text.ElideMiddle
+                                Layout.fillWidth: true
+                            }
+                        }
+                    }
+                }
             }
         }
 

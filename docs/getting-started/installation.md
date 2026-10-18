@@ -83,6 +83,13 @@ and their configuration. A few common cases:
     name inside CANExplorer share one bus, which is enough to try out the application, to replay logs and to run
     [simulations](../user-guide/simulation.md).
 
+=== "Serial adapters (all platforms)"
+
+    Adapters on a serial port need no driver. Lawicel/slcan compatible adapters (CANable with slcan firmware,
+    USBtin, …) use the interface *slcanBus* with the serial port as channel, e.g. `/dev/ttyACM0` or `COM3`;
+    a baud rate other than the default is given after `@`, e.g. `/dev/ttyUSB0@115200`. *SerialBus* speaks
+    python-can's own serial protocol. The bitrate of the bus is set in the connection dialog.
+
 === "Windows and macOS"
 
     Install the driver of your adapter (PEAK PCAN-Basic, Kvaser CANlib, Vector XL Driver Library, …), then choose

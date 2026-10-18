@@ -133,6 +133,19 @@ class PlaybackController(QObject):
     def error(self) -> str:
         return self._error()
 
+    @pyqtProperty(bool, notify=changed)
+    def can_seek(self) -> bool:
+        return self._duration() is not None and self._state() in ('playing', 'paused', 'finished', 'stopped')
+
+    @pyqtSlot(float)
+    def seek(self, position: float):
+        """Continue at `position` seconds of the recording."""
+        self._seek(max(0.0, position))
+        self.refresh()
+
+    def _seek(self, position: float) -> None:
+        raise NotImplementedError
+
     @pyqtSlot(float)
     def set_speed(self, speed: float):
         clock = self._clock()
@@ -168,6 +181,20 @@ class ReplayPlayback(PlaybackController):
     def _frames(self) -> int:
         return self.connection.session.trace.total
 
+    def _seek(self, position: float) -> None:
+        source = self.source
+        if source is None:
+            return
+        connection = self.connection
+        if not connection.session.is_open:  # Finished or stopped: replay again up to the position
+            connection.clear()
+            connection.open()
+            if not connection.session.is_open:
+                return
+        elif position < source.clock.position:
+            connection.clear()  # The frames are delivered again from the beginning of the file
+        source.seek(position)
+
     def _state(self) -> str:
         if self.source is None:
             return ''
@@ -202,6 +229,10 @@ class BusReplay(PlaybackController):
 
     def _state(self) -> str:
         return self._player.state if self._player else ''
+
+    def _seek(self, position: float) -> None:
+        if self._player is not None:
+            self._player.seek(position)
 
     def _loop(self) -> bool:
         return bool(self._player and self._player.loop)

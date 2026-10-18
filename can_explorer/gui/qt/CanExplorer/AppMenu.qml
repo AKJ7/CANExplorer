@@ -40,6 +40,26 @@ Menu {
     }
     MenuItem { action: Actions.closeConnection }
     MenuSeparator {}
+    MenuItem { action: Actions.openWorkspace }
+    Menu {
+        id: recentWorkspacesMenu
+        title: qsTr("Recent W&orkspaces")
+        enabled: connectionManager.app_state.recent_workspaces.length > 0
+        Instantiator {
+            model: connectionManager.app_state.recent_workspaces
+            delegate: MenuItem {
+                required property var modelData
+                required property int index
+                text: modelData.name
+                onTriggered: Actions.openRecentWorkspace(index)
+            }
+            onObjectAdded: (index, object) => recentWorkspacesMenu.insertItem(index, object)
+            onObjectRemoved: (index, object) => recentWorkspacesMenu.removeItem(object)
+        }
+    }
+    MenuItem { action: Actions.saveWorkspace }
+    MenuItem { action: Actions.saveWorkspaceAs }
+    MenuSeparator {}
     MenuItem { action: Actions.copy }
     MenuItem { action: Actions.selectAll }
     MenuSeparator {}

@@ -52,6 +52,11 @@ class PlaybackClock:
             return self._offset
         return self._offset + (time.monotonic() - self._since) * self._speed
 
+    def reset(self) -> None:
+        """Back to the beginning, not started and not paused (the speed is kept)."""
+        self._offset, self._since, self._paused = 0.0, None, False
+        self._notify()
+
     def start(self, position: float = 0.0) -> None:
         self._offset, self._since = position, time.monotonic()
         self._notify()
@@ -73,19 +78,29 @@ class PlaybackClock:
             self._paused = False
             self._notify()
 
+    def seek(self, position: float) -> None:
+        """Continue at `position`: frames before it are due at once, also while paused."""
+        self._offset, self._since = max(0.0, position), time.monotonic()
+        self._notify()
+
     def is_due(self, position: float) -> bool:
         """Whether a frame at this recording time can be played now (as fast as possible, it moves the position on)."""
         if self._paused:
-            return False
+            return position <= self._offset
         if self._speed <= 0:
             self._offset = max(self._offset, position)
             return True
         return (position - self.position) / self._speed <= DUE_TOLERANCE
 
-    async def wait_until(self, position: float) -> None:
-        """Wait until the playback reaches `position`; follows pauses and speed changes while waiting."""
+    async def wait_until(self, position: float, interrupted: Optional[Callable[[], bool]] = None) -> None:
+        """Wait until the playback reaches `position`; follows pauses, speed changes and seeking while waiting.
+        `interrupted` is checked whenever the clock changes, and ends the wait early when it returns True."""
         while True:
+            if interrupted is not None and interrupted():
+                return
             if self._paused:
+                if position <= self._offset:
+                    return
                 await self._wait_for_change(None)
                 continue
             if self._speed <= 0:
@@ -146,6 +161,8 @@ class LogPlayer:
         self.iteration = 0  # Completed passes when looping
         self.duration: Optional[float] = None
         self.error = ''
+        self._skip_until = 0.0  # Frames before this position are skipped (seeking)
+        self._restart = False  # Seeking back: the current pass starts again from the beginning of the file
         self._state = self.STOPPED
         self._task: Optional[asyncio.Task] = None
         self._on_finished = on_finished
@@ -173,6 +190,16 @@ class LogPlayer:
         if self._state in (self.PLAYING,):
             self._state = self.STOPPED
 
+    def seek(self, position: float) -> None:
+        """Continue at `position` seconds of the recording; the frames before it are not sent."""
+        if not self.running:
+            return
+        position = max(0.0, position)
+        if position < self.clock.position:
+            self._restart = True
+        self._skip_until = position
+        self.clock.seek(position)
+
     async def _scan(self) -> None:
         try:
             _, self.duration = await asyncio.get_running_loop().run_in_executor(None, scan_log, self.path)
@@ -183,11 +210,16 @@ class LogPlayer:
         from can_explorer.core.sources import FileSource  # Imported here: sources imports this module
 
         try:
+            fresh = True
             while True:
-                await self._play_once(FileSource(self.path, speed=0))
+                await self._play_once(FileSource(self.path, speed=0), fresh)
+                if self._restart:  # Seeking back: the same pass again, skipping up to the position
+                    self._restart, fresh = False, False
+                    continue
                 if not self.loop:
                     break
                 self.iteration += 1
+                self._skip_until, fresh = 0.0, True
             self._state = self.FINISHED
         except asyncio.CancelledError:
             self._state = self.STOPPED
@@ -197,18 +229,29 @@ class LogPlayer:
         if self._on_finished is not None:
             self._on_finished(self)
 
-    async def _play_once(self, source) -> None:
+    async def _play_once(self, source, fresh: bool) -> None:
+        """One pass through the file; `fresh` starts the clock at 0 (not when repeating a pass after seeking)."""
         source.open(asyncio.get_running_loop())
         try:
             first = None
             async for batch in source.batches():
                 for msg in batch:
-                    if msg.is_error_frame or not self.filter.matches(msg):
-                        continue
+                    if self._restart:
+                        return
                     if first is None:
                         first = msg.timestamp
-                        self.clock.start()
-                    await self.clock.wait_until(msg.timestamp - first)
+                        if fresh:
+                            self.clock.start()
+                    if msg.is_error_frame or not self.filter.matches(msg):
+                        continue
+                    position = msg.timestamp - first
+                    if position < self._skip_until:
+                        continue
+                    await self.clock.wait_until(position, lambda: self._restart)
+                    if self._restart:
+                        return
+                    if position < self._skip_until:  # Seeking forward ended the wait for this frame
+                        continue
                     self.session.send(self._copy(msg))
                     self.sent += 1
                 await asyncio.sleep(0)  # Let the GUI run between batches sent as fast as possible

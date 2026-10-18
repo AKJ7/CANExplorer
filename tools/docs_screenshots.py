@@ -15,7 +15,7 @@ from pathlib import Path
 
 import qasync
 from PyQt6 import sip
-from PyQt6.QtCore import QObject, QSettings, QUrl
+from PyQt6.QtCore import Q_ARG, QMetaObject, QObject, QSettings, QUrl
 from PyQt6.QtQuick import QQuickWindow
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -115,6 +115,24 @@ async def scenario():
     await shot('dashboard', 1.0)
     show_page('trace')
     await shot('trace')
+
+    # Searching the trace and bookmarking the result, through the find bar's functions (QTest key presses would
+    # process events inside this coroutine, which qasync does not allow)
+    connection.set_paused(True)
+    find_bar = [bar for bar in items('TraceFindBar') if bar.isVisible()][0]
+    field = [child for child in find_bar.childItems() if 'TextField' in child.metaObject().className()][0]
+    field.setProperty('text', 'EngineData.EngineSpeed > 3500')
+    QMetaObject.invokeMethod(find_bar, 'focusSearch')
+    QMetaObject.invokeMethod(find_bar, 'find', Q_ARG('QVariant', True))
+    await asyncio.sleep(0.4)
+    QMetaObject.invokeMethod(find_bar, 'toggleBookmarks')
+    await shot('trace-search')
+    view = [view for view in items('ConnectionView') if view.isVisible()][0]
+    record_dialog = [o for o in view.findChildren(QObject) if o.metaObject().className().startswith('RecordDialog')][0]
+    record_dialog.open()
+    await shot('record-dialog')
+    record_dialog.close()
+    connection.set_paused(False)
     show_page('overview')
     connection.overview.sort_by(3)
     connection.overview.sort_by(3)  # Count, descending

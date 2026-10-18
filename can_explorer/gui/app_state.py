@@ -1,7 +1,9 @@
 import json
+import tempfile
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from PyQt6.QtCore import QObject, QSettings, pyqtProperty, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QObject, QSettings, QStandardPaths, pyqtProperty, pyqtSignal, pyqtSlot
 
 from can_explorer.sys.log_handler import get_logger
 
@@ -15,6 +17,9 @@ DEFAULT_MAX_TRACE_ROWS = 100_000
 DEFAULT_REFRESH_INTERVAL_MS = 33
 TRACE_ROWS_RANGE = (1_000, 2_000_000)
 REFRESH_INTERVAL_RANGE = (16, 1_000)
+# Frames of the trace kept in total, the older ones on disk (0: only the frames in memory)
+DEFAULT_TRACE_HISTORY = 5_000_000
+TRACE_HISTORY_RANGE = (0, 50_000_000)
 # Width of the sidebar in pixels; the default must match Theme.sidebarWidth
 DEFAULT_SIDEBAR_WIDTH = 232
 SIDEBAR_WIDTH_RANGE = (180, 420)
@@ -25,6 +30,7 @@ class AppState(QObject):
 
     recent_connections_changed = pyqtSignal()
     recent_log_files_changed = pyqtSignal()
+    recent_workspaces_changed = pyqtSignal()
     preferences_changed = pyqtSignal()
 
     def __init__(self, settings: Optional[QSettings] = None, parent: Optional[QObject] = None):
@@ -73,10 +79,23 @@ class AppState(QObject):
         self._store_list('recent/log_files', self._push(self.recent_log_files, entry, 'path'))
         self.recent_log_files_changed.emit()
 
+    # Recent workspaces
+
+    @pyqtProperty('QVariantList', notify=recent_workspaces_changed)
+    def recent_workspaces(self) -> List[Dict[str, Any]]:
+        return self._load_list('recent/workspaces')
+
+    def add_recent_workspace(self, path: str) -> None:
+        entry = {'path': path, 'name': Path(path).stem}
+        self._store_list('recent/workspaces', self._push(self.recent_workspaces, entry, 'path'))
+        self.recent_workspaces_changed.emit()
+
     @pyqtSlot()
     def clear_recent(self) -> None:
         self._store_list('recent/connections', [])
         self._store_list('recent/log_files', [])
+        self._store_list('recent/workspaces', [])
+        self.recent_workspaces_changed.emit()
         self.recent_connections_changed.emit()
         self.recent_log_files_changed.emit()
 
@@ -104,6 +123,35 @@ class AppState(QObject):
     @pyqtProperty(int, constant=True)
     def max_trace_rows_limit(self) -> int:
         return TRACE_ROWS_RANGE[1]
+
+    @pyqtProperty(int, notify=preferences_changed)
+    def trace_history(self) -> int:
+        return self._int('preferences/trace_history', DEFAULT_TRACE_HISTORY, TRACE_HISTORY_RANGE)
+
+    @pyqtProperty(int, constant=True)
+    def max_trace_history(self) -> int:
+        return TRACE_HISTORY_RANGE[1]
+
+    @staticmethod
+    def default_trace_directory() -> str:
+        """In the user's cache directory: the system's temporary directory is often in memory."""
+        cache = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.CacheLocation)
+        return str(Path(cache or tempfile.gettempdir()) / 'trace')
+
+    @pyqtProperty(str, notify=preferences_changed)
+    def trace_directory(self) -> str:
+        return str(self._settings.value('preferences/trace_directory', '') or self.default_trace_directory())
+
+    @pyqtSlot(int, str)
+    def set_trace_history(self, frames: int, directory: str) -> None:
+        frames = min(max(int(frames), TRACE_HISTORY_RANGE[0]), TRACE_HISTORY_RANGE[1])
+        self._settings.setValue('preferences/trace_history', frames)
+        directory = directory.strip()
+        self._settings.setValue(
+            'preferences/trace_directory', '' if directory == self.default_trace_directory() else directory
+        )
+        self._settings.sync()
+        self.preferences_changed.emit()
 
     @pyqtSlot(int, int)
     def set_preferences(self, max_trace_rows: int, refresh_interval_ms: int) -> None:

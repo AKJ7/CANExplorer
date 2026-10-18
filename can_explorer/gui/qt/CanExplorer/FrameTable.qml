@@ -14,6 +14,19 @@ ColumnLayout {
     // Clicking a column header calls model.sort_by(column)
     property bool sortable: false
     readonly property alias selectionModel: selection
+    readonly property int currentRow: selection.hasSelection ? selection.currentIndex.row : -1
+
+    // Right click on a row (selected first, when it was not)
+    signal contextMenuRequested(int row)
+
+    // Select a row and scroll to it, e.g. for a search result or a bookmark
+    function showRow(row) {
+        if (row < 0 || row >= tableView.rows)
+            return
+        const index = root.model.index(row, 0)
+        selection.setCurrentIndex(index, ItemSelectionModel.ClearAndSelect | ItemSelectionModel.Rows)
+        tableView.positionViewAtRow(row, TableView.Contain)
+    }
 
     function copySelection() {
         return root.model.copy_selection(selection)
@@ -93,7 +106,9 @@ ColumnLayout {
             required property int textAlignment
             required property bool richText
             required property bool selected
+            required property bool bookmarked
             required property int row
+            required property int column
             implicitHeight: label.implicitHeight + 4
             color: selected ? Theme.alpha(Theme.accent, 0.35) : row % 2 ? Theme.alpha(Theme.cardAlt, 0.6) : "transparent"
 
@@ -109,6 +124,23 @@ ColumnLayout {
                 leftPadding: 8
                 horizontalAlignment: parent.textAlignment & Qt.AlignHorizontal_Mask
                 verticalAlignment: Text.AlignVCenter
+            }
+
+            // Bookmark marker at the start of the row
+            Rectangle {
+                visible: parent.bookmarked && parent.column === 0
+                width: 4
+                height: parent.height
+                color: Theme.warning
+            }
+
+            TapHandler {
+                acceptedButtons: Qt.RightButton
+                onTapped: {
+                    if (!parent.selected)
+                        root.showRow(parent.row)
+                    root.contextMenuRequested(parent.row)
+                }
             }
         }
     }

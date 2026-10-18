@@ -8,6 +8,23 @@ Only `0.0.1` has been tagged so far. Later development stages are listed by date
 ## [Unreleased]
 
 ### Added
+- Serial CAN adapters (slcan, python-can's serial protocol) work out of the box: `python-can[serial]` installs
+  pyserial.
+- **Jumping within replays**: the playback bar has a position slider and 10 s back/forward buttons; "Replay from
+  here" in the context menu of a trace row continues a replay at that frame. Forward jumps pass the frames in
+  between at once (statistics stay complete), backward jumps read the recording again; replays on the bus skip
+  the frames jumped over.
+- **Trace search** (Ctrl+F, F3/Shift+F3) for text, identifiers, data patterns (`data=01 ?? FF`) and signal
+  conditions (`EngineData.EngineSpeed > 3500`), in the background through millions of frames; **bookmarks**
+  (Ctrl+B) with notes, a bookmark list and markers; a context menu on trace rows.
+- **Recording options**: splitting into numbered files by size and/or time, and **triggered recording** with start
+  and optional stop conditions, time kept before and recorded after the trigger, and re-arming.
+- **Long recordings**: the trace keeps the most recent frames in memory and pages older ones to temporary files
+  on disk (5 million frames by default, in the user's cache directory), so millions of frames can be scrolled,
+  filtered, searched and exported; preferences for both limits and the directory.
+- **Workspaces** (`.cxw`): connections with their bus settings or replayed files, databases, filters, plotted
+  signals, simulation scripts and panels and test scripts, saved in one file with relative paths and reopened
+  with one click (Ctrl+S, Ctrl+Shift+O, recent workspaces on the welcome page).
 - **Movable dialogs**: dragging the title of a dialog moves it, within the window; it opens centred again.
 - **Resizable sidebar**: drag its right edge (180–420 pixels, at most half the window), double-click to restore the
   default; the width is remembered. The top bar's breadcrumb and filter field shrink in narrow windows instead of

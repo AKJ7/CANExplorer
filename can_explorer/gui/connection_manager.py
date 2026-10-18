@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 from collections import deque
 from pathlib import Path
@@ -17,6 +18,7 @@ from can_explorer.core.ldf import LdfDecoder
 from can_explorer.core.lin import DEFAULT_BAUDRATE, LIN_BAUDRATES, MAX_FRAME_ID
 from can_explorer.core.lin_schedule import LinScheduler
 from can_explorer.core.protocols import PROTOCOL_DECODERS, create_protocol_decoder
+from can_explorer.core.recording import Trigger, TriggeredRecorder
 from can_explorer.core.session import BusSession, SessionError, SessionState
 from can_explorer.core.log_formats import file_filters
 from can_explorer.core.sources import BusConfig, FileSource, LiveSource, MessageSource
@@ -26,6 +28,9 @@ from can_explorer.gui.diagnostics import DiagnosticsController
 from can_explorer.gui.playback import BusReplay, ReplayPlayback
 from can_explorer.gui.simulation import SimulationController
 from can_explorer.gui.testing import TestController
+from can_explorer.gui.trace_tools import TraceTools
+from can_explorer.gui.workspace import SUFFIX as WORKSPACE_SUFFIX
+from can_explorer.gui.workspace import WorkspaceError, open_workspace, save_workspace
 from can_explorer.gui.models import OverviewModel, TraceModel
 from can_explorer.sys.log_handler import get_logger
 from can_explorer.util import canutils
@@ -68,6 +73,7 @@ class CanConnection(QObject):
     signals_updated = pyqtSignal()
     schedule_changed = pyqtSignal()
     error_occurred = pyqtSignal(str)
+    recording_event = pyqtSignal(str)  # Trigger events of a triggered recording
 
     def __init__(
         self,
@@ -83,12 +89,15 @@ class CanConnection(QObject):
         self._protocol = protocol
         self.session = session
         describe = session.decoder.full_description
-        self._trace = TraceModel(lambda: self.session.start_time, max_rows, describe, parent=self)
+        self._trace = TraceModel(session.trace, lambda: self.session.start_time, describe, parent=self)
         self._overview = OverviewModel(session.statistics, describe, parent=self)
+        self._trace_tools = TraceTools(self._trace, lambda: session.decoder.database, describe, parent=self)
         self._filter = MessageFilter()
         self._filter_error = ''
         self._paused = False
         self._frame_count = 0
+        self._recording_status = ''
+        self.origin: Dict[str, Any] = {}  # How the connection was created, for workspaces
         self._scheduler: Optional[LinScheduler] = None
         self._history: deque = deque(maxlen=HISTORY_SECONDS)
         self._diagnostics = DiagnosticsController(self, parent=self)
@@ -165,6 +174,16 @@ class CanConnection(QObject):
     @pyqtProperty(str, notify=recording_changed)
     def recording_file(self) -> str:
         return str(self.session.recording_path or '')
+
+    @pyqtProperty(str, notify=recording_changed)
+    def recording_status(self) -> str:
+        """E.g. 'recording to trace_002.blf (2 files)' or 'armed: EngineData.EngineSpeed > 6000'."""
+        recorder = self.session.recorder
+        return recorder.describe() if recorder is not None else ''
+
+    @pyqtProperty(bool, notify=recording_changed)
+    def recording_triggered(self) -> bool:
+        return isinstance(self.session.recorder, TriggeredRecorder)
 
     @pyqtProperty(str, notify=database_changed)
     def database_file(self) -> str:
@@ -327,10 +346,10 @@ class CanConnection(QObject):
         self.recording_changed.emit()
 
     def _refresh(self):
-        frames = self.session.trace.drain()
+        self.session.trace.drain()  # The trace view follows the store itself
         added, changed = self.session.statistics.drain_changes()
         if not self._paused:
-            self._trace.append_frames(frames)
+            self._trace.refresh()
             self._overview.refresh(added, changed)
             if self.session.signals.drain_changed():
                 self.signals_updated.emit()
@@ -339,12 +358,16 @@ class CanConnection(QObject):
             self.statistics_changed.emit()
         self._replay.refresh()
         self._bus_replay.refresh()
+        status = self.recording_status
+        if status != self._recording_status:  # E.g. a split recording started its next file
+            self._recording_status = status
+            self.recording_changed.emit()
 
     @pyqtSlot()
     def clear(self):
         self._history.clear()
         self.session.clear()
-        self._trace.rebuild([])
+        self._trace.rebuild()
         self._overview.rebuild()
         self._frame_count = 0
         self.statistics_changed.emit()
@@ -358,7 +381,7 @@ class CanConnection(QObject):
         self._paused = paused
         if not paused:
             # Catch up with everything received while the view was frozen
-            self._trace.rebuild(self.session.trace)
+            self._trace.refresh()
             self._overview.rebuild()
             self.signals_updated.emit()
         self.paused_changed.emit()
@@ -371,7 +394,7 @@ class CanConnection(QObject):
             self._filter_error = str(e)
         else:
             self._filter, self._filter_error = message_filter, ''
-            self._trace.set_filter(message_filter, self.session.trace)
+            self._trace.set_filter(message_filter)
             self._overview.set_filter(message_filter)
         self.filter_changed.emit()
 
@@ -383,6 +406,38 @@ class CanConnection(QObject):
             self.session.start_recording(_local_path(url))
         except SessionError as e:
             self.error_occurred.emit(str(e))
+        self.recording_changed.emit()
+
+    @pyqtSlot(QUrl, 'QVariantMap', result=str)
+    def record(self, url: QUrl, options: Dict[str, Any]) -> str:
+        """Start recording with options: split_mb, split_minutes, and for a triggered recording trigger (bool),
+        start, stop, pre, post (seconds) and repeat. Returns an error, or ''."""
+        try:
+            split_bytes = int(float(options.get('split_mb') or 0) * 1_000_000)
+            split_seconds = float(options.get('split_minutes') or 0) * 60
+            trigger = None
+            if options.get('trigger'):
+                trigger = Trigger(
+                    start=str(options.get('start', '')),
+                    stop=str(options.get('stop', '')),
+                    pre=max(0.0, float(options.get('pre') or 0)),
+                    post=max(0.0, float(options.get('post') or 0)),
+                    repeat=bool(options.get('repeat')),
+                )
+        except (TypeError, ValueError) as e:
+            return f'Invalid recording options: {e}'
+        try:
+            self.session.start_recording(
+                _local_path(url), split_bytes, split_seconds, trigger, on_event=self._on_recording_event
+            )
+        except SessionError as e:
+            return str(e)
+        finally:
+            self.recording_changed.emit()
+        return ''
+
+    def _on_recording_event(self, text: str) -> None:
+        self.recording_event.emit(text)
         self.recording_changed.emit()
 
     @pyqtSlot()
@@ -553,6 +608,18 @@ class CanConnection(QObject):
         return self._simulation
 
     @pyqtProperty(QObject, constant=True)
+    def trace_tools(self) -> TraceTools:
+        """Search and bookmarks of the trace."""
+        return self._trace_tools
+
+    @pyqtSlot(int)
+    def replay_from_row(self, row: int):
+        """Continue a replay at the frame of a trace row."""
+        frame = self._trace.frame(row)
+        if frame is not None and self.is_replay:
+            self._replay.seek(self._trace.time(frame))
+
+    @pyqtProperty(QObject, constant=True)
     def tests(self) -> TestController:
         """Test scripts, running them and their results."""
         return self._tests
@@ -659,9 +726,76 @@ class ConnectionManager(QObject):
         self._detected_channels: Dict[str, List[str]] = {}
         self._detecting = False
         self._detection: Optional[asyncio.Future] = None
+        self._workspace_file = ''
         self._database_editor = DatabaseEditorController(parent=self)
         self._database_editor.saved.connect(self._reload_database)
         QGuiApplication.instance().aboutToQuit.connect(self.close_all)
+
+    # Workspaces
+
+    workspace_changed = pyqtSignal()
+
+    @pyqtProperty(str, notify=workspace_changed)
+    def workspace_file(self) -> str:
+        return self._workspace_file
+
+    @pyqtProperty(str, notify=workspace_changed)
+    def workspace_name(self) -> str:
+        return Path(self._workspace_file).stem if self._workspace_file else ''
+
+    @pyqtProperty('QStringList', constant=True)
+    def workspace_filters(self) -> List[str]:
+        return [f'CANExplorer workspaces (*{WORKSPACE_SUFFIX})']
+
+    @pyqtSlot(QUrl, int, result=str)
+    def save_workspace(self, url: QUrl, current: int = -1) -> str:
+        """Save the connections and their setup; `current` is the selected connection. Returns an error, or ''."""
+        path = _local_path(url)
+        if not path.suffix:
+            path = path.with_suffix(WORKSPACE_SUFFIX)
+        try:
+            save_workspace(self, path, current)
+        except OSError as e:
+            return f'Could not save the workspace: {e}'
+        self._workspace_file = str(path)
+        self._app_state.add_recent_workspace(str(path))
+        self.workspace_changed.emit()
+        return ''
+
+    @pyqtSlot(int, result=str)
+    def save_current_workspace(self, current: int) -> str:
+        """Save to the workspace file opened or saved last."""
+        if not self._workspace_file:
+            return 'No workspace file yet; use "Save Workspace As"'
+        return self.save_workspace(QUrl.fromLocalFile(self._workspace_file), current)
+
+    @pyqtSlot(QUrl, result=str)
+    def open_workspace(self, url: QUrl) -> str:
+        """Replace the connections with those of a workspace. Returns problems, one per line, or ''."""
+        path = _local_path(url)
+        try:
+            problems = open_workspace(self, path)
+        except WorkspaceError as e:
+            return str(e)
+        self._workspace_file = str(path)
+        self._app_state.add_recent_workspace(str(path))
+        self.workspace_changed.emit()
+        return '\n'.join(problems)
+
+    @pyqtSlot(int, result=str)
+    def open_recent_workspace(self, index: int) -> str:
+        recent = self._app_state.recent_workspaces
+        if not 0 <= index < len(recent):
+            return ''
+        return self.open_workspace(QUrl.fromLocalFile(recent[index]['path']))
+
+    @pyqtSlot(result=int)
+    def workspace_current(self) -> int:
+        """The connection selected when the workspace was saved (read after opening it)."""
+        try:
+            return int(json.loads(Path(self._workspace_file).read_text(encoding='utf-8')).get('current', -1))
+        except (OSError, ValueError):
+            return -1
 
     @pyqtProperty(QObject, constant=True)
     def database_editor(self) -> DatabaseEditorController:
@@ -787,7 +921,13 @@ class ConnectionManager(QObject):
     def _add(self, name: str, source: MessageSource, protocol: str) -> CanConnection:
         decoder = FrameDecoder(protocol=create_protocol_decoder(protocol))
         state = self._app_state
-        session = BusSession(source, decoder, buffer_size=state.max_trace_rows)
+        session = BusSession(
+            source,
+            decoder,
+            buffer_size=state.max_trace_rows,
+            history_size=state.trace_history,
+            history_directory=Path(state.trace_directory),
+        )
         connection = CanConnection(
             name, session, protocol, state.max_trace_rows, state.refresh_interval_ms, parent=self
         )
@@ -824,21 +964,21 @@ class ConnectionManager(QObject):
             return
         name = options.get('name') or f'Connection {len(self._connections) + 1}'
         logger.info(f'Adding new connection {name!r}: {config=}')
-        self._add(name, LiveSource(config), protocol)
-        self._app_state.add_recent_connection(
-            {
-                'name': name,
-                'interface': options['interface'],
-                'channel': config.channel,
-                'bus': bus_type,
-                'bitrate': config.bitrate,
-                'data_bitrate': config.data_bitrate or '',
-                'lin_baudrate': config.lin_baudrate,
-                'protocol': protocol,
-                'fd': config.fd,
-                'receive_own_messages': config.receive_own_messages,
-            }
-        )
+        settings = {
+            'name': name,
+            'interface': options['interface'],
+            'channel': config.channel,
+            'bus': bus_type,
+            'bitrate': config.bitrate,
+            'data_bitrate': config.data_bitrate or '',
+            'lin_baudrate': config.lin_baudrate,
+            'protocol': protocol,
+            'fd': config.fd,
+            'receive_own_messages': config.receive_own_messages,
+        }
+        connection = self._add(name, LiveSource(config), protocol)
+        connection.origin = {'kind': 'bus', 'settings': settings}
+        self._app_state.add_recent_connection(settings)
 
     @pyqtSlot(int)
     def open_recent_connection(self, index: int):
@@ -851,6 +991,7 @@ class ConnectionManager(QObject):
         """Replay a log file into a new connection at `speed` times the recorded timing (0: as fast as possible)."""
         path = _local_path(url)
         connection = self._add(path.name, FileSource(path, speed=speed), protocol)
+        connection.origin = {'kind': 'replay', 'path': str(path), 'protocol': protocol, 'speed': speed}
         self._app_state.add_recent_log_file(str(path), protocol, speed)
         connection.open()
 

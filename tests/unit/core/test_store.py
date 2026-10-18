@@ -9,7 +9,7 @@ def frame(can_id, data, timestamp=0.0, rx=True):
 
 
 def test_trace_buffer_is_bounded_and_drains():
-    buffer = TraceBuffer(maxlen=3)
+    buffer = TraceBuffer(3)
     for i in range(5):
         buffer.append(frame(i, b''))
     assert [f.message.arbitration_id for f in buffer] == [2, 3, 4]

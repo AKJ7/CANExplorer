@@ -29,4 +29,6 @@ BusReplayDialog 1.0 BusReplayDialog.qml
 DatabaseEditorView 1.0 DatabaseEditorView.qml
 TestsView 1.0 TestsView.qml
 GlassPanel 1.0 GlassPanel.qml
+TraceFindBar 1.0 TraceFindBar.qml
+RecordDialog 1.0 RecordDialog.qml
 singleton Theme 1.0 Theme.qml

@@ -1,5 +1,6 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
+import QtQuick.Dialogs 6.2
 import QtQuick.Layouts 1.15
 import QtQuick.Window 2.15
 import CanExplorer 1.0
@@ -11,7 +12,7 @@ ApplicationWindow {
     width: 1200
     height: 750
     id: mainWindow
-    title: metadata.name
+    title: connectionManager.workspace_name ? `${connectionManager.workspace_name} — ${metadata.name}` : metadata.name
 
     readonly property int currentIndex: Math.min(selectedIndex, connectionManager.connections.length - 1)
     property int selectedIndex: -1
@@ -88,6 +89,104 @@ ApplicationWindow {
     Shortcut { sequences: [StandardKey.SelectAll]; enabled: Actions.selectAll.enabled; onActivated: Actions.selectAll.trigger() }
     Shortcut { sequences: [StandardKey.Preferences]; onActivated: Actions.preferences.trigger() }
     Shortcut { sequences: [StandardKey.Quit]; onActivated: Actions.exit.trigger() }
+    Shortcut { sequence: "Ctrl+Shift+O"; onActivated: Actions.openWorkspace.trigger() }
+    Shortcut { sequences: [StandardKey.Save]; enabled: Actions.saveWorkspace.enabled; onActivated: Actions.saveWorkspace.trigger() }
+    Shortcut { sequences: [StandardKey.SaveAs]; enabled: Actions.saveWorkspaceAs.enabled; onActivated: Actions.saveWorkspaceAs.trigger() }
+
+    // Workspaces
+    property var pendingWorkspace: null  // Opening it replaces the connections: confirmed first
+
+    function openWorkspace(open) {
+        if (connectionManager.connections.length === 0) {
+            finishOpeningWorkspace(open())
+            return
+        }
+        pendingWorkspace = open
+        replaceDialog.open()
+    }
+
+    function finishOpeningWorkspace(problems) {
+        if (problems)
+            for (const problem of problems.split("\n"))
+                mainWindow.notify(problem)
+        mainWindow.tool = ""
+        mainWindow.selectedIndex = connectionManager.workspace_current()
+    }
+
+    function saveWorkspace(url) {
+        const error = connectionManager.save_workspace(url, mainWindow.currentIndex)
+        if (error)
+            mainWindow.notify(error)
+    }
+
+    FileDialog {
+        id: openWorkspaceDialog
+        title: qsTr("Open workspace")
+        fileMode: FileDialog.OpenFile
+        nameFilters: connectionManager.workspace_filters
+        onAccepted: mainWindow.openWorkspace(() => connectionManager.open_workspace(selectedFile))
+    }
+
+    FileDialog {
+        id: saveWorkspaceDialog
+        title: qsTr("Save workspace")
+        fileMode: FileDialog.SaveFile
+        nameFilters: connectionManager.workspace_filters
+        defaultSuffix: "cxw"
+        onAccepted: mainWindow.saveWorkspace(selectedFile)
+    }
+
+    Dialog {
+        id: replaceDialog
+        title: qsTr("Open workspace")
+        modal: true
+        anchors.centerIn: Overlay.overlay
+        standardButtons: Dialog.Open | Dialog.Cancel
+        Label {
+            text: qsTr("The open connections are closed and replaced by those of the workspace.")
+        }
+        onAccepted: {
+            const open = mainWindow.pendingWorkspace
+            mainWindow.pendingWorkspace = null
+            if (open)
+                mainWindow.finishOpeningWorkspace(open())
+        }
+        onRejected: mainWindow.pendingWorkspace = null
+    }
+
+    Connections {
+        target: Actions.openWorkspace
+        function onTriggered() {
+            openWorkspaceDialog.open()
+        }
+    }
+
+    Connections {
+        target: Actions.saveWorkspace
+        function onTriggered() {
+            if (connectionManager.workspace_file) {
+                const error = connectionManager.save_current_workspace(mainWindow.currentIndex)
+                if (error)
+                    mainWindow.notify(error)
+            } else {
+                saveWorkspaceDialog.open()
+            }
+        }
+    }
+
+    Connections {
+        target: Actions.saveWorkspaceAs
+        function onTriggered() {
+            saveWorkspaceDialog.open()
+        }
+    }
+
+    Connections {
+        target: Actions
+        function onOpenRecentWorkspace(index) {
+            mainWindow.openWorkspace(() => connectionManager.open_recent_workspace(index))
+        }
+    }
 
     RowLayout {
         anchors.fill: parent

@@ -229,6 +229,115 @@ def test_sidebar_resizing_and_dialog_dragging(window, qtbot):
     assert warnings == []
 
 
+async def test_trace_tools_and_record_dialog_render(window, qapp, tmp_path):
+    import asyncio
+
+    import can
+    from PyQt6 import sip
+    from PyQt6.QtCore import QObject, QPoint, Qt, QUrl
+    from PyQt6.QtQuick import QQuickWindow
+    from PyQt6.QtTest import QTest
+
+    engine, manager, warnings = window
+    view = sip.cast(engine.rootObjects()[0], QQuickWindow)
+    view.resize(1300, 850)
+    view.show()
+
+    async def settle(steps=10):
+        for _ in range(steps):
+            await asyncio.sleep(0.01)
+            qapp.processEvents()
+
+    path = tmp_path / 'trace.asc'
+    with can.Logger(path) as logger:
+        for i in range(200):
+            logger.on_message_received(
+                can.Message(arbitration_id=0x100 + i % 4, data=bytes([i % 256]), timestamp=i * 0.01)
+            )
+    manager.open_log_file(QUrl.fromLocalFile(str(path)), 'Raw', 0.0)
+    connection = manager.connections[-1]
+    await settle(30)
+    connection_view = next(i for i in _visual_items(view) if i.metaObject().className().startswith('ConnectionView'))
+    connection_view.setProperty('page', 'trace')
+    await settle()
+
+    # Find with the keyboard, bookmark the result, show the bookmarks
+    QTest.keyClick(view, Qt.Key.Key_F, Qt.KeyboardModifier.ControlModifier)
+    for character in '103 data=0B':
+        QTest.keyClick(view, character)
+    QTest.keyClick(view, Qt.Key.Key_Return)
+    await settle(20)
+    assert connection.trace_tools.status.startswith('Row 12 ')
+    QTest.keyClick(view, Qt.Key.Key_B, Qt.KeyboardModifier.ControlModifier)
+    await settle()
+    assert connection.trace_tools.bookmark_count == 1
+    find_bar = next(i for i in _visual_items(view) if i.metaObject().className().startswith('TraceFindBar'))
+    popup = next(o for o in find_bar.findChildren(QObject) if o.metaObject().className().startswith('QQuickPopup'))
+    popup.setProperty('visible', True)
+    await settle()
+    popup.setProperty('visible', False)
+
+    # Context menu with a right click on a row
+    table = next(i for i in _visual_items(view) if i.metaObject().className() == 'QQuickTableView' and i.isVisible())
+    from PyQt6.QtCore import QPointF
+
+    point = table.mapToScene(QPointF(table.width() / 2, 40)).toPoint()
+    QTest.mouseClick(view, Qt.MouseButton.RightButton, Qt.KeyboardModifier.NoModifier, QPoint(point.x(), point.y()))
+    await settle()
+    QTest.keyClick(view, Qt.Key.Key_Escape)
+
+    # The record dialog with its trigger section
+    dialog = next(
+        o for o in connection_view.findChildren(QObject) if o.metaObject().className().startswith('RecordDialog')
+    )
+    dialog.open()
+    await settle(20)
+    dialog.close()
+    await settle()
+    assert warnings == []
+
+
+def test_workspace_flow_in_the_window(window, qtbot, tmp_path):
+    import json
+
+    from PyQt6 import sip
+    from PyQt6.QtCore import QObject, QUrl
+    from PyQt6.QtQuick import QQuickWindow
+
+    engine, manager, warnings = window
+    view = sip.cast(engine.rootObjects()[0], QQuickWindow)
+    view.show()
+    channel = f'qml-{uuid.uuid4().hex}'
+    for name in ('First', 'Second'):
+        manager.add_connection({'name': name, 'interface': 'VirtualBus', 'channel': f'{channel}-{name}'})
+    workspace = tmp_path / 'bench.cxw'
+    assert manager.save_workspace(QUrl.fromLocalFile(str(workspace)), 1) == ''
+    qtbot.wait(50)
+    assert view.title().startswith('bench')
+
+    # Opening a recent workspace while connections are open asks first
+    actions = engine.singletonInstance('CanExplorer', 'Actions')
+    actions.openRecentWorkspace.emit(0)
+    qtbot.wait(100)
+    dialog = next(
+        o
+        for o in view.findChildren(QObject)
+        if o.property('title') == 'Open workspace' and o.metaObject().className().startswith('Dialog')
+    )
+    assert dialog.property('visible')
+    dialog.accept()
+    qtbot.wait(100)
+    assert [connection.name for connection in manager.connections] == ['First', 'Second']
+    assert view.property('currentIndex') == 1  # The connection selected when it was saved
+
+    # Save Workspace (Ctrl+S) saves to the same file
+    view.setProperty('selectedIndex', 0)
+    actions.property('saveWorkspace').trigger()
+    qtbot.wait(50)
+    assert json.loads(workspace.read_text())['current'] == 0
+    assert warnings == []
+
+
 def test_lin_connection_views_render_without_warnings(window, qtbot, data_dir):
     from PyQt6.QtCore import QUrl
 

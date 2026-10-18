@@ -16,9 +16,14 @@ Item {
     property alias preferences: preferencesAction
     property alias convertDatabase: convertDatabaseAction
     property alias editDatabase: editDatabaseAction
+    property alias openWorkspace: openWorkspaceAction
+    property alias saveWorkspace: saveWorkspaceAction
+    property alias saveWorkspaceAs: saveWorkspaceAsAction
 
     // Open a database file in the editor (e.g. the one of a connection)
     signal editDatabaseFile(string path)
+    // Open the workspace at this index of the recent workspaces
+    signal openRecentWorkspace(int index)
 
     Action {
         id: exitAction
@@ -75,6 +80,29 @@ Item {
         id: convertDatabaseAction
         text: qsTr("Con&vert Signal Database...")
         icon.name: "document-save-as"
+    }
+
+    Action {
+        id: openWorkspaceAction
+        text: qsTr("Open &Workspace...")
+        icon.name: "document-open"
+        shortcut: "Ctrl+Shift+O"
+    }
+
+    Action {
+        id: saveWorkspaceAction
+        text: qsTr("&Save Workspace")
+        icon.name: "document-save"
+        shortcut: StandardKey.Save
+        enabled: connectionManager.connections.length > 0
+    }
+
+    Action {
+        id: saveWorkspaceAsAction
+        text: qsTr("Save Workspace &As...")
+        icon.name: "document-save-as"
+        shortcut: StandardKey.SaveAs
+        enabled: connectionManager.connections.length > 0
     }
 
     Action {

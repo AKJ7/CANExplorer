@@ -55,6 +55,7 @@ nav:
       - LIN: user-guide/lin.md
       - Simulation and scripting: user-guide/simulation.md
       - Test automation: user-guide/test-automation.md
+      - Workspaces: user-guide/workspaces.md
       - Preferences and settings: user-guide/preferences.md
   - Reference:
       - reference/index.md

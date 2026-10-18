@@ -20,9 +20,32 @@ The file dialogs list each format; when no extension is typed, the one of the ch
 
 ## Recording
 
-**Record…** asks for a file and records every frame of the connection from then on, independent of the display
-filter and of **Pause view**. The status line shows the file while recording. **Stop recording**, disconnecting or
-closing the connection ends the recording.
+**Record…** opens the recording dialog. A recording contains every frame of the connection from its start on,
+independent of the display filter and of **Pause view**; a **● REC** pill in the toolbar and the status line show
+it. **Stop recording**, disconnecting or closing the connection ends it.
+
+![Record dialog](../assets/screenshots/record-dialog.png)
+
+### Splitting into several files
+
+With **Split into numbered files**, a new file is started every given number of megabytes and/or minutes:
+`trace.blf` becomes `trace_001.blf`, `trace_002.blf`, … The duration counts in frame time, so a replay is split
+the same way as the live recording was. Long recordings stay in files of a manageable size.
+
+### Triggered recording
+
+**Record only around a trigger condition** records only what happens around an event:
+
+| Option | Description |
+|---|---|
+| Start when | The trigger [condition](filters.md#conditions), e.g. `EngineData.EngineSpeed > 6000` or `7E8 data=03 7F` (a negative diagnostic response) |
+| Stop when | Optional second condition that ends the recording |
+| Keep before (s) | The frames of this time before the trigger are written too |
+| Record after (s) | Recording continues this long after the stop condition, or after the trigger without one |
+| Arm again | After each recording, wait for the next trigger and write the next numbered file |
+
+While waiting, the toolbar shows **armed:** and the condition; trigger events appear in the status line. The
+frames before the trigger are kept in memory only for the given time.
 
 If writing fails, e.g. because the disk is full, the recording stops and an error is shown; the connection
 keeps running.
@@ -41,7 +64,13 @@ length of the recording and the number of frames, and controls the replay while 
 | Control | Action |
 |---|---|
 | ▶ / ❚❚ | Pause and resume the replay (unlike **Pause view**, no frames are read while paused); ▶ plays a finished replay again |
+| Position slider | Drag to another point of the recording; the replay continues there when the slider is released |
+| ⏪ / ⏩ | 10 seconds back or forward |
 | Speed | Change the speed at any time |
+
+Jumping forward passes the frames in between at once, so the trace, overview and statistics stay complete. Jumping
+back clears the views and reads the recording again from its beginning up to the new position. **Replay from
+here** in the context menu of a trace row jumps to that frame; jumping in a finished replay starts it again.
 
 **Stop** in the top bar ends the replay and **Replay** starts it again. Replays can be filtered, plotted, decoded
 with databases and exported like live connections, but nothing can be transmitted. **⋮ → Recent Log Files**
@@ -62,8 +91,9 @@ recorded timing, e.g. to reproduce a situation for an ECU on the bench:
 | Repeat until stopped | Start over at the end of the file |
 
 Error frames are not sent. The transmitted frames appear as Tx frames in the trace, overview and statistics, and
-can be recorded. A playback bar shows the progress (and the pass when repeating); pause, resume and change the
-speed there, **■** stops and **✕** closes the bar. Disconnecting stops the replay; if transmitting fails, it
+can be recorded. A playback bar shows the progress (and the pass when repeating); pause, resume, change the
+speed and jump within the recording there — the frames jumped over are not sent —, **■** stops and **✕** closes
+the bar. Disconnecting stops the replay; if transmitting fails, it
 stops with a notification.
 
 ![Log file replayed on the bus](../assets/screenshots/bus-replay.png)

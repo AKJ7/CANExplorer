@@ -9,7 +9,7 @@ keywords = ['canbus', 'can', 'gui', 'analyze']
 requires-python = ">=3.10"
 dependencies = [
     "PyQt6~=6.9.0",
-    "python-can",
+    "python-can[serial]",
     "cantools",
     "qasync",
     "pydantic",

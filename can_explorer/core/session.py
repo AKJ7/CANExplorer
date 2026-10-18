@@ -8,11 +8,14 @@ import can
 
 from can_explorer.core.busstats import BusSnapshot, BusStatistics
 from can_explorer.core.decoding import FrameDecoder
+from can_explorer.core.conditions import ConditionError
 from can_explorer.core.frames import Frame, clone_message
+from can_explorer.core.recording import Recorder, Trigger, TriggeredRecorder
 from can_explorer.core.signals import SignalTracker
 from can_explorer.core.log_formats import is_log_file, unsupported_message
 from can_explorer.core.sources import MessageSource, SourceError
-from can_explorer.core.store import IdStatistics, TraceBuffer
+from can_explorer.core.store import IdStatistics
+from can_explorer.core.trace_store import TraceStore
 from can_explorer.sys.log_handler import get_logger
 
 logger = get_logger(__name__)
@@ -108,10 +111,14 @@ class BusSession:
         source: MessageSource,
         decoder: Optional[FrameDecoder] = None,
         buffer_size: int = 100_000,
+        history_size: int = 0,
+        history_directory: Optional[Path] = None,
     ):
+        """`buffer_size` frames of the trace are kept in memory, up to `history_size` in total (older ones in
+        temporary files in `history_directory`)."""
         self.source = source
         self.decoder = decoder or FrameDecoder()
-        self.trace = TraceBuffer(buffer_size)
+        self.trace = TraceStore(buffer_size, history_size, history_directory, on_error=self._report_error)
         self.statistics = IdStatistics()
         self.signals = SignalTracker()
         self.bus_statistics = BusStatistics(source.bitrates, getattr(source, 'lin_baudrate', None))
@@ -311,16 +318,40 @@ class BusSession:
         if not is_log_file(path):
             raise SessionError(unsupported_message(path))
 
-    def start_recording(self, path: str | Path) -> None:
+    def start_recording(
+        self,
+        path: str | Path,
+        split_bytes: int = 0,
+        split_seconds: float = 0.0,
+        trigger: Optional[Trigger] = None,
+        on_event: Optional[Callable[[str], None]] = None,
+    ) -> None:
+        """Record every frame from now on, optionally split into numbered files (`split_bytes`, `split_seconds`),
+        or around the events of a `trigger`. `on_event` is told about trigger events."""
         path = Path(path)
         self._check_log_format(path)
         self.stop_recording()
         try:
-            self._recorder = can.Logger(path)
+            if trigger is not None:
+                if not path.parent.is_dir():
+                    raise FileNotFoundError(f'No directory {path.parent}')
+                self._recorder = TriggeredRecorder(
+                    path, trigger, lambda: self.decoder.database, split_bytes, split_seconds, on_event
+                )
+            else:
+                recorder = Recorder(path, split_bytes, split_seconds)
+                recorder._open()  # At once, so that a bad path is reported now
+                self._recorder = recorder
+        except ConditionError as e:
+            raise SessionError(f'Invalid trigger condition: {e}') from e
         except Exception as e:
             raise SessionError(f'Could not record to {path}: {e}') from e
         self.recording_path = path
         logger.info(f'Recording to {path}')
+
+    @property
+    def recorder(self) -> Optional['Recorder | TriggeredRecorder']:
+        return self._recorder
 
     def stop_recording(self) -> None:
         if self._recorder is not None:

@@ -9,10 +9,15 @@
 | Setting | Default | Range | Description |
 |---|---|---|---|
 | Theme | Dark | Dark, Purple, Nord, Ocean, Forest, Light | Colours of the user interface; applies immediately |
-| Trace buffer (frames) | 100 000 | 1 000 – 2 000 000 | Frames kept per connection for the trace; applies to connections created afterwards |
+| Trace in memory (frames) | 100 000 | 1 000 – 2 000 000 | The most recent frames of the trace, kept in memory |
+| Trace history (frames) | 5 000 000 | 0 – 50 000 000 | Frames of the trace kept in total, the older ones on disk (about 160 bytes each); 0 keeps only those in memory. See [long recordings](trace-and-overview.md#long-recordings) |
+| Trace history directory | the cache directory | | Where the temporary files of the history go, e.g. `~/.cache/AKJ7/CANExplorer/trace` on Linux |
 | View refresh interval (ms) | 33 | 16 – 1 000 | How often new frames are shown; longer intervals reduce the CPU load on busy buses |
 
-**Clear recent connections and files** empties the recent lists of the **⋮** menu and the welcome page.
+The trace settings apply to connections opened afterwards.
+
+**Clear recent connections and files** empties the recent lists (connections, log files, workspaces) of the **⋮**
+menu and the welcome page.
 
 ## Stored state
 

@@ -87,17 +87,41 @@ Card {
             }
         }
 
+        ToolButton {
+            text: "⏪"
+            enabled: root.playback.can_seek
+            ToolTip.visible: hovered
+            ToolTip.text: qsTr("10 s back")
+            onClicked: root.playback.seek(root.playback.position - 10)
+        }
         Label {
-            text: root.formatTime(root.playback.position)
+            text: root.formatTime(positionSlider.pressed ? positionSlider.value : root.playback.position)
             color: Theme.text
             font.family: "monospace"
         }
-        ProgressBar {
+        // Drag to jump within the recording; the jump happens on release
+        Slider {
+            id: positionSlider
             from: 0
             to: Math.max(root.playback.duration, 0.001)
-            value: root.playback.position
-            indeterminate: root.running && root.playback.duration < 0
+            enabled: root.playback.can_seek
             Layout.fillWidth: true
+            onPressedChanged: if (!pressed) root.playback.seek(value)
+            // Follows the playback, except while dragged (dragging would otherwise end a plain binding)
+            Binding on value {
+                value: root.playback.position
+                when: !positionSlider.pressed
+                restoreMode: Binding.RestoreNone
+            }
+            ToolTip.visible: hovered && !enabled && root.running
+            ToolTip.text: qsTr("The length of the recording is being determined")
+        }
+        ToolButton {
+            text: "⏩"
+            enabled: root.playback.can_seek
+            ToolTip.visible: hovered
+            ToolTip.text: qsTr("10 s forward")
+            onClicked: root.playback.seek(root.playback.position + 10)
         }
         Label {
             text: root.formatTime(root.playback.duration)

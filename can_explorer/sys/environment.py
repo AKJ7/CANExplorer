@@ -14,6 +14,7 @@ SNAP_RUNTIME_VARIABLES = (
     'LOCPATH',
 )
 SNAP_PATH_LIST_VARIABLES = ('XDG_DATA_DIRS', 'XDG_CONFIG_DIRS')
+XDG_SEPARATOR = ':'  # Defined by the XDG Base Directory specification, also where os.pathsep differs
 VSCODE_SNAP_SUFFIX = '_VSCODE_SNAP_ORIG'
 
 
@@ -53,9 +54,9 @@ def sanitize_snap_environment(
     for name in SNAP_PATH_LIST_VARIABLES:
         if name not in environ:
             continue
-        entries = environ[name].split(os.pathsep)
+        entries = environ[name].split(XDG_SEPARATOR)
         kept = [entry for entry in entries if not in_snap(entry)]
         if kept != entries:
-            environ[name] = os.pathsep.join(kept)
+            environ[name] = XDG_SEPARATOR.join(kept)
             changed.append(name)
     return sorted(set(changed))

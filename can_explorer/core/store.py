@@ -1,45 +1,12 @@
-from collections import deque
 from dataclasses import dataclass
-from typing import Dict, Iterator, List, Optional, Set, Tuple
+from typing import Dict, Optional, Set, Tuple
 
 from can_explorer.core.frames import Frame
+from can_explorer.core.trace_store import TraceStore
+
+TraceBuffer = TraceStore  # The former memory-only trace buffer; TraceStore without a history limit behaves the same
 
 IdKey = Tuple[int, bool, bool]  # (arbitration_id, is_extended_id, is_rx)
-
-
-class TraceBuffer:
-    """Ring buffer of the most recent frames, plus the frames added since the last drain()."""
-
-    def __init__(self, maxlen: int = 100_000):
-        self._frames: deque[Frame] = deque(maxlen=maxlen)
-        self._pending: List[Frame] = []
-        self.total = 0
-
-    @property
-    def maxlen(self) -> int:
-        return self._frames.maxlen
-
-    def append(self, frame: Frame) -> None:
-        self._frames.append(frame)
-        self._pending.append(frame)
-        self.total += 1
-        if len(self._pending) > 2 * self.maxlen:
-            del self._pending[: -self.maxlen]
-
-    def drain(self) -> List[Frame]:
-        pending, self._pending = self._pending[-self.maxlen :], []
-        return pending
-
-    def clear(self) -> None:
-        self._frames.clear()
-        self._pending.clear()
-        self.total = 0
-
-    def __iter__(self) -> Iterator[Frame]:
-        return iter(self._frames)
-
-    def __len__(self) -> int:
-        return len(self._frames)
 
 
 @dataclass(slots=True)

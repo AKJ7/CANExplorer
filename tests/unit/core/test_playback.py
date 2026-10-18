@@ -134,3 +134,60 @@ async def test_log_player_reports_errors(tmp_path):
     session.stop()  # Sending fails from now on
     await wait_for(lambda: not player.running)
     assert player.state == LogPlayer.ERROR and 'not open' in player.error
+
+
+async def test_file_source_seeking(tmp_path):
+    path = write_log(tmp_path / 'long.asc', 100, 0.1)  # 9.9 s
+    source = FileSource(path, speed=1.0)
+    session = BusSession(source)
+    session.start()
+    await wait_for(lambda: session.trace.total >= 1)
+
+    # Forward: the frames in between are delivered at once
+    assert source.seek(9.0) is False
+    await wait_for(lambda: session.trace.total >= 91, timeout=1.0)
+    assert source.clock.position == pytest.approx(9.0, abs=0.1)
+
+    # Backward: the file is read again; frames up to the position at once, the rest in time
+    session.clear()
+    assert source.seek(2.0) is True
+    await wait_for(lambda: session.trace.total >= 21, timeout=1.0)
+    await asyncio.sleep(0.25)
+    assert 21 <= session.trace.total <= 25
+    ids = [frame.message.arbitration_id for frame in session.trace]
+    assert ids[:21] == [0x100 + i for i in range(21)]  # In order, from the beginning, without duplicates
+
+    # While paused, seeking delivers the frames up to the position and stays paused
+    source.clock.pause()
+    count = session.trace.total
+    source.seek(5.0)
+    await wait_for(lambda: session.trace.total >= 51, timeout=1.0)
+    await asyncio.sleep(0.2)
+    assert session.trace.total == 51 > count and source.clock.paused
+    session.stop()
+
+
+async def test_log_player_seeking_skips_frames(tmp_path):
+    channel = f'player-{uuid.uuid4().hex}'
+    path = write_log(tmp_path / 'log.asc', 50, 0.1)  # 4.9 s
+    session = BusSession(LiveSource(BusConfig('virtual', channel)))
+    session.start()
+    peer = can.Bus(interface='virtual', channel=channel)
+    player = LogPlayer(session, path, speed=1.0)
+    player.start()
+    await wait_for(lambda: player.sent >= 2)
+    player.seek(4.0)  # Frames 0x102..0x127 are skipped, not sent
+    await wait_for(lambda: player.sent >= 4)
+    player.seek(0.0)  # Back to the beginning: sent again
+    await wait_for(lambda: player.sent >= 6)
+    player.stop()
+    await wait_for(lambda: not player.running)
+    received = []
+    while (msg := peer.recv(timeout=0)) is not None:
+        received.append(msg.arbitration_id - 0x100)
+    peer.shutdown()
+    session.stop()
+    assert received[:2] == [0, 1]
+    assert received[2] >= 40  # After the forward jump
+    assert 0 in received[3:]  # Started again after jumping back
+    assert not any(10 <= frame < 40 for frame in received)  # Never sent: skipped by the jump

@@ -19,6 +19,20 @@ Terms are separated by spaces or commas. An empty filter shows everything.
 
 Several identifiers and ranges are combined with *or*; keywords and exclusions further restrict the result.
 
+## Conditions
+
+Searching the trace and triggered recordings use *conditions*, which extend the filter syntax:
+
+| Condition | Matches |
+|---|---|
+| `7E8`, `100-1FF !123 ext rx` | Frames matching these filter terms |
+| `data=01 ?? FF` | Frames whose data starts with 01, any byte, FF |
+| `7E8 data=03 7F` | Filter terms and a data pattern together |
+| `EngineData.EngineSpeed > 6000` | Frames of a database message whose signal compares as given: `==`, `!=`, `<`, `<=`, `>`, `>=` with physical values |
+| `EngineData.GearPosition == Second` | Comparing the value table text of a signal (`==` and `!=` only) |
+
+The message of a signal comparison can also be a contained PDU of an AUTOSAR container frame.
+
 ## Examples
 
 | Filter | Shows |

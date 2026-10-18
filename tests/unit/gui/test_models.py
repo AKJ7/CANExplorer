@@ -5,7 +5,8 @@ from PyQt6.QtGui import QGuiApplication
 from can_explorer.core.filters import MessageFilter
 from can_explorer.core.frames import Frame
 from can_explorer.core.store import IdStatistics
-from can_explorer.gui.models import RICH_TEXT_ROLE, OverviewModel, TraceModel
+from can_explorer.core.trace_store import TraceStore
+from can_explorer.gui.models import BOOKMARK_ROLE, RICH_TEXT_ROLE, OverviewModel, TraceModel
 
 
 def frame(can_id, data=b'', timestamp=10.0, info=''):
@@ -16,23 +17,88 @@ def cell(model, row, column, role=Qt.ItemDataRole.DisplayRole):
     return model.data(model.index(row, column), role)
 
 
-def test_trace_model_is_bounded(qapp):
-    model = TraceModel(lambda: 10.0, max_rows=5)
-    model.append_frames([frame(i, timestamp=10.0 + i) for i in range(4)])
-    model.append_frames([frame(i) for i in range(4, 8)])
-    assert model.rowCount() == 5
+def store_with(frames, memory=100, history=0, directory=None):
+    store = TraceStore(memory, history, directory)
+    for frame_ in frames:
+        store.append(frame_)
+    return store
+
+
+def test_trace_model_follows_the_store(qapp):
+    store = store_with([frame(i, timestamp=10.0 + i) for i in range(4)], memory=5)
+    model = TraceModel(store, lambda: 10.0)
+    model.rebuild()
+    assert model.rowCount() == 4 and cell(model, 0, 0) == '0.000000'
+    removed = []
+    model.rowsRemoved.connect(lambda parent, first, last: removed.append((first, last)))
+    for i in range(4, 8):
+        store.append(frame(i, timestamp=10.0 + i))
+    model.refresh()
+    assert model.rowCount() == 5 and removed == [(0, 2)]
     assert [cell(model, row, 3) for row in range(5)] == ['003', '004', '005', '006', '007']
-    assert cell(model, 0, 0) == '3.000000'
+    store.clear()
+    model.refresh()
+    assert model.rowCount() == 0
 
 
 def test_trace_model_filter(qapp):
-    model = TraceModel(lambda: None, max_rows=100)
-    frames = [frame(0x100, info='a'), frame(0x200, info='b')]
-    model.append_frames(frames)
-    model.set_filter(MessageFilter.parse('200'), frames)
+    store = store_with([frame(0x100, info='a'), frame(0x200, info='b')])
+    model = TraceModel(store, lambda: None)
+    model.set_filter(MessageFilter.parse('200'))
     assert model.rowCount() == 1 and cell(model, 0, 6) == 'b'
-    model.append_frames([frame(0x100), frame(0x200)])
-    assert model.rowCount() == 2
+    store.append(frame(0x100))
+    store.append(frame(0x200))
+    model.refresh()
+    assert model.rowCount() == 2 and model.absolute_index(1) == 3 and model.row_of(3) == 1
+
+
+def test_trace_model_pages_through_frames_on_disk(qapp, tmp_path):
+    from can_explorer.core.trace_store import SPILL_CHUNK
+
+    count = 3 * SPILL_CHUNK
+    store = store_with(
+        [frame(i % 0x800, bytes([i % 256]), timestamp=float(i), info=f'#{i}') for i in range(count)],
+        memory=1000,
+        history=count,
+        directory=tmp_path,
+    )
+    assert store.uses_disk and store.disk_frames > 0 and any(tmp_path.iterdir()) is False  # Anonymous files
+    model = TraceModel(store, lambda: 0.0)
+    model.rebuild()
+    assert model.rowCount() == count
+    assert cell(model, 5, 6) == '#5' and cell(model, count - 1, 6) == f'#{count - 1}'
+    assert cell(model, 5, 0) == '5.000000' and cell(model, 5, 5) == '05'
+    model.set_filter(MessageFilter.parse('3'))
+    assert [model.absolute_index(row) for row in range(model.rowCount())] == list(range(3, count, 0x800))
+
+
+def test_paused_view_keeps_its_rows(qapp):
+    store = store_with([frame(i) for i in range(3)], memory=3)
+    model = TraceModel(store, lambda: None)
+    model.rebuild()
+    for i in range(3, 5):
+        store.append(frame(i))  # Not refreshed: the view is paused
+    assert model.rowCount() == 3 and cell(model, 0, 3) == ''  # Frame 0 is no longer in the store
+    assert cell(model, 2, 3) == '002'
+    model.refresh()
+    assert [cell(model, row, 3) for row in range(3)] == ['002', '003', '004']
+
+
+def test_bookmarks(qapp):
+    store = store_with([frame(i) for i in range(5)])
+    model = TraceModel(store, lambda: None)
+    model.rebuild()
+    selection = QItemSelectionModel(model)
+    for row in (1, 3):
+        selection.select(
+            model.index(row, 0), QItemSelectionModel.SelectionFlag.Select | QItemSelectionModel.SelectionFlag.Rows
+        )
+    assert model.toggle_bookmarks(selection) == 2
+    assert cell(model, 1, 0, BOOKMARK_ROLE) is True and cell(model, 2, 0, BOOKMARK_ROLE) is False
+    assert [index for index, _, _ in model.bookmarks] == [1, 3]
+    model.set_bookmark_note(3, 'interesting')
+    assert model.bookmarks[1][1] == 'interesting'
+    assert model.toggle_bookmarks(selection) == 2 and model.bookmarks == []  # All were bookmarked: removed
 
 
 def test_overview_model_highlights_changes(qapp):
@@ -52,8 +118,9 @@ def test_overview_model_highlights_changes(qapp):
 
 
 def test_copy_and_select_all(qapp):
-    model = TraceModel(lambda: 10.0, max_rows=100, describe=lambda frame: f'info {frame.message.arbitration_id:X}')
-    model.append_frames([frame(i, bytes([i])) for i in range(3)])
+    store = store_with([frame(i, bytes([i])) for i in range(3)])
+    model = TraceModel(store, lambda: 10.0, describe=lambda frame: f'info {frame.message.arbitration_id:X}')
+    model.rebuild()
     selection = QItemSelectionModel(model)
     assert model.copy_selection(selection) == 0
     model.select_all(selection)
@@ -67,7 +134,7 @@ def test_copy_and_select_all(qapp):
         model.index(1, 0), QItemSelectionModel.SelectionFlag.Select | QItemSelectionModel.SelectionFlag.Rows
     )
     assert [f.message.arbitration_id for f in model.selected_frames(selection)] == [1]
-    assert len(model.selected_frames(None)) == 3
+    assert len(list(model.selected_frames(None))) == 3
 
 
 def test_overview_refreshes_only_changed_rows(qapp):
