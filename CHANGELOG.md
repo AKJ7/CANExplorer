@@ -8,6 +8,11 @@ development stages are listed by date and commit, newest first.
 
 ## [Unreleased]
 
+### Changed
+
+- Builds of `master` published to GitHub Packages are packaged with PyInstaller again instead of Nuitka;
+  Nuitka stays selectable when starting the `release` workflow manually.
+
 ## [1.0.0] – 2026-10-18
 
 The first stable release. Highlights since 0.0.1:
