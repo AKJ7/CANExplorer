@@ -33,12 +33,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  # The builds of master published to GitHub Packages are compiled with Nuitka (faster start, no Python sources in the
-  # bundle); tags and pull requests use PyInstaller; manual runs use the backend chosen when starting the workflow
-  BACKEND: >-
-    ${{ inputs.backend
-        || (github.event_name == 'push' && github.ref == 'refs/heads/master' && 'nuitka')
-        || 'pyinstaller' }}
+  # Pushes, tags and pull requests use PyInstaller; Nuitka can be chosen when starting the workflow manually
+  BACKEND: ${{ inputs.backend || 'pyinstaller' }}
   NUITKA_CACHE_DIR: ${{ github.workspace }}/.nuitka-cache
 
 jobs:

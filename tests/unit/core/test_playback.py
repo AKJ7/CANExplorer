@@ -176,10 +176,13 @@ async def test_log_player_seeking_skips_frames(tmp_path):
     player = LogPlayer(session, path, speed=1.0)
     player.start()
     await wait_for(lambda: player.sent >= 2)
-    player.seek(4.0)  # Frames 0x102..0x127 are skipped, not sent
-    await wait_for(lambda: player.sent >= 4)
+    # Slow runners may send a further frame before the test gets to seek: count what was sent at each jump
+    before_forward = player.sent
+    player.seek(4.0)  # The frames up to 0x127 are skipped, not sent
+    await wait_for(lambda: player.sent >= before_forward + 2)
+    before_back = player.sent
     player.seek(0.0)  # Back to the beginning: sent again
-    await wait_for(lambda: player.sent >= 6)
+    await wait_for(lambda: player.sent >= before_back + 2)
     player.stop()
     await wait_for(lambda: not player.running)
     received = []
@@ -187,7 +190,7 @@ async def test_log_player_seeking_skips_frames(tmp_path):
         received.append(msg.arbitration_id - 0x100)
     peer.shutdown()
     session.stop()
-    assert received[:2] == [0, 1]
-    assert received[2] >= 40  # After the forward jump
-    assert 0 in received[3:]  # Started again after jumping back
-    assert not any(10 <= frame < 40 for frame in received)  # Never sent: skipped by the jump
+    assert received[:before_forward] == list(range(before_forward))
+    assert all(frame >= 40 for frame in received[before_forward:before_back])  # After the forward jump
+    assert received[before_back] == 0  # Started again after jumping back
+    assert not any(before_forward <= frame < 40 for frame in received[:before_back])  # Skipped by the jump
