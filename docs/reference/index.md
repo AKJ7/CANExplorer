@@ -3,6 +3,7 @@
 - [Scripting API](scripting-api.md): the Python API of simulation scripts.
 - [Test API](test-api.md): the Python API of test scripts.
 - [QML panel API](panel-api.md): the `panel` object of QML panels.
+- [Supported interfaces](interfaces.md): every CAN interface with its hardware, platforms, driver and CAN FD support.
 - [Command line](command-line.md): options and settings of `canexplorer`, `can-test`, `can-server` and the
   `can-db-convert` converter.
 - [File formats](file-formats.md): supported log files and databases and their details.

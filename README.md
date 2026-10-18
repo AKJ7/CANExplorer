@@ -93,10 +93,39 @@ On Linux, `uv run canexplorer --install-desktop-entry` adds CANExplorer with its
 
 ### Interfaces
 
-Install the driver of your adapter; CANExplorer talks to it through python-can. On Linux most adapters are
-SocketCAN interfaces, configured with `ip link`; serial adapters (slcan, python-can's serial protocol) need no
-driver. The *virtual* interface works everywhere without hardware. The
-[installation guide](https://akj7.github.io/CANExplorer/getting-started/installation/) has the details.
+CANExplorer supports every interface of [python-can](https://python-can.readthedocs.io/en/stable/interfaces.html)
+4.6. Install the vendor's driver for your adapter; the
+[supported interfaces](https://akj7.github.io/CANExplorer/reference/interfaces/) page lists the drivers, CAN FD
+support and the Linux kernel drivers.
+
+| Interface | Hardware | Platforms |
+|---|---|---|
+| SocketCAN (`socketcan`) | Any adapter with a Linux kernel driver: PEAK, Kvaser, candleLight/gs_usb (CANable), ETAS ES58x, 8devices, EMS, esd, MCP2515/MCP251xFD (Raspberry Pi hats), virtual `vcan`; LIN through sllin | Linux |
+| PEAK PCAN (`pcan`) | PCAN-USB, PCAN-USB FD, PCAN-PCI(e), PCAN-LAN | Windows, Linux, macOS |
+| Vector (`vector`) | VN16xx, VN56xx and other XL Driver Library devices, Vector virtual channels | Windows |
+| Kvaser (`kvaser`) | Leaf, U100, Memorator, USBcan | Windows, Linux |
+| IXXAT (`ixxat`) | HMS IXXAT USB-to-CAN, CAN-IB | Windows |
+| ETAS (`etas`) | ES581, ES582, ES584, ES891 (BOA) | Windows |
+| Intrepid neoVI (`neovi`) ¹ | neoVI, ValueCAN, RAD-Galaxy | Windows, Linux, macOS |
+| NI-XNET (`nixnet`) ¹ | National Instruments NI-XNET devices | Windows |
+| NI-CAN (`nican`) | National Instruments NI-CAN devices | Windows |
+| SYS TEC (`systec`) | USB-CANmodul | Windows |
+| 8devices USB2CAN (`usb2can`) | USB2CAN (Korlan) | Windows |
+| Thorsis isCAN (`iscan`) | isCAN | Windows |
+| Neousys (`neousys`) | CAN ports of Neousys industrial computers | Windows, Linux |
+| CANalyst-II (`canalystii`) ¹ | Chuangxin CANalyst-II | Windows, Linux, macOS |
+| CANtact (`cantact`) ¹ | CANtact, CANable | Windows, Linux, macOS |
+| gs_usb (`gs_usb`) ¹ | candleLight/gs_usb firmware adapters through libusb | Windows, Linux, macOS |
+| slcan (`slcan`) | Lawicel CANUSB, CANable (slcan firmware), USBtin and other serial slcan adapters | Windows, Linux, macOS |
+| python-can serial (`serial`) | Adapters with python-can's serial protocol | Windows, Linux, macOS |
+| Robotell (`robotell`) | Robotell USB-CAN | Windows, Linux, macOS |
+| Seeed Studio (`seeedstudio`) | USB-CAN Analyzer | Windows, Linux, macOS |
+| socketcand (`socketcand`) | SocketCAN buses of another Linux computer, over the network | Windows, Linux, macOS |
+| CANExplorer remote (`canexplorer_remote`) | Buses shared by `can-server` on another computer, e.g. a Raspberry Pi | Windows, Linux, macOS |
+| UDP multicast (`udp_multicast`) ¹ | A software bus between computers over UDP multicast | Windows, Linux, macOS |
+| Virtual (`virtual`) | A software bus inside CANExplorer, no hardware needed | Windows, Linux, macOS |
+
+¹ Needs Python packages that the installers do not include: run from source with `uv sync --extra drivers`.
 
 ## Try it without hardware
 

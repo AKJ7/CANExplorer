@@ -160,6 +160,9 @@ def frozen() -> bool:
 
 
 def executable() -> Path:
+    """The application's program file. PyInstaller sets sys.frozen and sys.executable to it. Nuitka sets neither:
+    its sys.executable names a 'python3' next to the program that does not exist, but sys.argv[0] is the program's
+    absolute path (also when started with a relative path)."""
     return Path(sys.executable if getattr(sys, 'frozen', False) else sys.argv[0]).resolve()
 
 

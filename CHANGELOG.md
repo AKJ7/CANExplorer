@@ -3,9 +3,12 @@
 All notable changes to CANExplorer are documented in this file. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-Only `0.0.1` has been tagged so far. Later development stages are listed by date and commit, newest first.
+CANExplorer follows [semantic versioning](https://semver.org/) from 1.0.0 on. Between `0.0.1` and `1.0.0`, the
+development stages are listed by date and commit, newest first.
 
 ## [Unreleased]
+
+## [1.0.0] – 2026-10-18
 
 The first stable release. Highlights since 0.0.1:
 
@@ -27,6 +30,12 @@ From 1.0.0 on, CANExplorer follows semantic versioning; the public interfaces ar
 
 #### Connections and buses
 
+- **All CAN interfaces of python-can 4.6** (SocketCAN, PEAK, Vector, Kvaser, IXXAT, ETAS, neoVI, NI-XNET, NI-CAN,
+  SYS TEC, USB2CAN, isCAN, Neousys, CANalyst-II, CANtact, gs_usb, slcan, serial, Robotell, Seeed Studio,
+  socketcand, UDP multicast, virtual) and the new remote bus, listed with their hardware, platforms, drivers and
+  CAN FD support in the *Supported interfaces* reference and the README. The `drivers` extra
+  (`uv sync --extra drivers`) installs the Python packages the neoVI, NI-XNET, CANalyst-II, CANtact, gs_usb and
+  UDP multicast interfaces need.
 - Serial CAN adapters (slcan, python-can's serial protocol) work out of the box: `python-can[serial]` installs
   pyserial.
 - CAN FD data bitrate setting.
@@ -208,7 +217,8 @@ From 1.0.0 on, CANExplorer follows semantic versioning; the public interfaces ar
   package and a macOS disk image from the bundle. The new `release` workflow (replacing `installer`) builds them
   on the three platforms, installs each to check it starts, stores them as artifacts and publishes them with
   checksums as a GitHub release for `v*` tags, after checking the tag matches the project version.
-  Builds of `master` are published to GitHub Packages (`ghcr.io/akj7/canexplorer-installers`, via ORAS).
+  Builds of `master` are compiled with Nuitka and published to GitHub Packages
+  (`ghcr.io/akj7/canexplorer-installers`, via ORAS).
 - Nuitka as an alternative packaging backend (`packaging/build.py --backend nuitka [--onefile]`), selectable
   in the installer workflow.
 - **Documentation site** built with MkDocs and Material for MkDocs (`docs/`, `mkdocs.yml`): installation, quick start,
@@ -371,5 +381,6 @@ Called "Milestone 0.1.0" in the commit message and the README roadmap.
 - Qt Widgets user interface: main window, new connection dialog, about dialog and a raw CAN frame table.
 - Pipenv based project setup, VS Code development container, Dockerfile and a CI workflow skeleton.
 
-[Unreleased]: https://github.com/AKJ7/CANExplorer/compare/0.0.1...HEAD
+[Unreleased]: https://github.com/AKJ7/CANExplorer/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/AKJ7/CANExplorer/releases/tag/v1.0.0
 [0.0.1]: https://github.com/AKJ7/CANExplorer/releases/tag/0.0.1

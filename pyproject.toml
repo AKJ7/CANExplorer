@@ -1,6 +1,6 @@
 [project]
 name = "can-explorer"
-version = "0.0.1"
+version = "1.0.0"
 description = "Monitor, analyse, diagnose, simulate and test CAN, CAN FD and LIN buses"
 authors = [{ name = "AKJ7", email = "akj123429@gmail.com" }]
 license = "MIT"
@@ -60,6 +60,10 @@ canexplorer_remote = "can_explorer.core.remote:RemoteBus"
 [project.optional-dependencies]
 mf4 = [
     "asammdf>=7",
+]
+# python-can interfaces that need packages of their own (neoVI, NI-XNET, CANalyst-II, CANtact, gs_usb, UDP multicast)
+drivers = [
+    "python-can[neovi,nixnet,canalystii,cantact,gs-usb,multicast]",
 ]
 
 [dependency-groups]

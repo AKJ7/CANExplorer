@@ -68,12 +68,12 @@ It writes `packaging/icons/`, `can_explorer/gui/qt/CanExplorer/images/logo.png`,
 | Workflow | Runs | Does |
 |---|---|---|
 | `build.yaml` | Pushes and pull requests to `develop` | ruff and black; tests on Linux, Windows and macOS with Python 3.10 and 3.14 |
-| `release.yaml` | Pushes and merges to `master`; `v*` tags; manually; pull requests changing the packaging | Builds the bundles and installers for Windows, Linux and macOS (PyInstaller, or Nuitka when started manually), installs each one to check that it starts, and stores them as workflow artifacts for 90 days. For `master` it publishes them to GitHub Packages (see below); for tags it publishes a GitHub release with the installers, the zip archives and `SHA256SUMS.txt` (a pre-release for tags such as `v1.0.0-rc1`) |
+| `release.yaml` | Pushes and merges to `master`; `v*` tags; manually; pull requests changing the packaging | Builds the bundles and installers for Windows, Linux and macOS (PyInstaller, or Nuitka when started manually), installs each one to check that it starts, and stores them as workflow artifacts for 90 days. For `master` it builds with Nuitka and publishes them to GitHub Packages (see below); for tags it publishes a GitHub release with the installers, the zip archives and `SHA256SUMS.txt` (a pre-release for tags such as `v1.0.0-rc1`) |
 | `docs.yaml` | Pushes and pull requests to `develop` | Builds the documentation strictly; publishes it to GitHub Pages from `develop` |
 
 ### Installers in GitHub Packages
 
-Every push or merge to `master` publishes the installers, the zip archives and `SHA256SUMS.txt` to GitHub Packages,
+Every push or merge to `master` compiles the application with Nuitka and publishes the installers, the zip archives and `SHA256SUMS.txt` to GitHub Packages,
 as the OCI artifact `ghcr.io/akj7/canexplorer-installers` (GitHub Packages has no registry for plain files; the
 container registry stores them, and they are listed under the repository's *Packages*). Its tags:
 

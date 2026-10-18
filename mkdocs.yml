@@ -70,6 +70,7 @@ nav:
       - Scripting API: reference/scripting-api.md
       - Test API: reference/test-api.md
       - QML panel API: reference/panel-api.md
+      - Supported interfaces: reference/interfaces.md
       - Command line: reference/command-line.md
       - File formats: reference/file-formats.md
       - Keyboard shortcuts: reference/keyboard-shortcuts.md
