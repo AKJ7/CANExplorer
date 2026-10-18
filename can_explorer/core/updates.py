@@ -346,7 +346,9 @@ def install_macos(dmg: Path) -> None:
             f'rm -rf {q(str(bundle))}.old && mv {q(str(bundle))} {q(str(bundle))}.old',
             f'ditto {q(str(mount / bundle.name))} {q(str(bundle))} && rm -rf {q(str(bundle))}.old '
             f'|| mv {q(str(bundle))}.old {q(str(bundle))}',
-            f'hdiutil detach {q(str(mount))} -quiet',
+            # The volume can be busy for a moment (Spotlight): retry, then force; the update is in place anyway
+            f'for i in 1 2 3; do hdiutil detach {q(str(mount))} -quiet && break; sleep 2; done; '
+            f'[ -d {q(str(mount / bundle.name))} ] && hdiutil detach {q(str(mount))} -force -quiet',
             f'open {q(str(bundle))}',
         ]
     )
