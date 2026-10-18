@@ -4,8 +4,9 @@
 
 - Linux, Windows or macOS.
 - For running from source: Python 3.10 or newer and [uv](https://docs.astral.sh/uv/getting-started/installation/).
-- A CAN interface supported by [python-can](https://python-can.readthedocs.io/en/stable/interfaces.html) with
-  its driver, or none at all: the `virtual` interface simulates a bus inside the application.
+- A CAN interface supported by python-can with its driver (all of them are listed under
+  [Supported interfaces](../reference/interfaces.md)), or none at all: the `virtual` interface simulates a bus
+  inside the application.
 
 ## Installers
 
@@ -66,9 +67,9 @@ for the running window. `--uninstall-desktop-entry` removes them again.
 
 ## Setting up interfaces
 
-CANExplorer opens interfaces through python-can, so the driver of your adapter must be installed. The
-python-can documentation lists the [supported interfaces](https://python-can.readthedocs.io/en/stable/interfaces.html)
-and their configuration. A few common cases:
+CANExplorer opens interfaces through python-can, so the driver of your adapter must be installed.
+[Supported interfaces](../reference/interfaces.md) lists every interface with its hardware, platforms, driver and
+CAN FD support. A few common cases:
 
 === "SocketCAN (Linux)"
 

@@ -224,6 +224,10 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: CHANGELOG.md
+          sparse-checkout-cone-mode: false
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -233,21 +237,38 @@ jobs:
         run: |
           sha256sum * > SHA256SUMS.txt
           cat SHA256SUMS.txt
+      - name: Release notes
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          # The version's section of CHANGELOG.md (also shown by the update dialog of the application)
+          awk -v heading="## [$VERSION]" '
+            /^## / { if (found) exit; if (index($0, heading) == 1) { found = 1; next } }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+          if ! grep -q '[^[:space:]]' release-notes.md; then
+            echo "::warning::CHANGELOG.md has no section for $VERSION"
+          fi
+          cat >> release-notes.md <<'NOTES'
+
+          ## Downloads
+
+          | Platform | Installer | Portable |
+          |---|---|---|
+          | Windows 10/11 (x64) | `CANExplorer-VERSION-windows-x86_64-setup.exe` | `CANExplorer-VERSION-windows-x86_64.zip` |
+          | Linux (x86-64, glibc 2.35+) | `CANExplorer-VERSION-linux-x86_64.AppImage` (any distribution), `CANExplorer-VERSION-linux-x86_64.deb` (Debian, Ubuntu) | `CANExplorer-VERSION-linux-x86_64.zip` |
+          | macOS (Apple silicon) | `CANExplorer-VERSION-macos-arm64.dmg` | `CANExplorer-VERSION-macos-arm64.zip` |
+
+          Installed copies of CANExplorer 1.0.0 and later offer this update themselves (⋮ → Check for Updates…).
+          The installers are not code signed yet: on Windows choose *More info → Run anyway* in the SmartScreen
+          dialog, on macOS open the app with a right click → *Open* the first time. `SHA256SUMS.txt` lists the
+          checksums of all files.
+          NOTES
+          sed -i "s/VERSION/$VERSION/g" release-notes.md
+          cat release-notes.md
       - uses: softprops/action-gh-release@v2
         with:
           name: CANExplorer ${{ needs.version.outputs.version }}
           files: dist/*
           prerelease: ${{ contains(github.ref_name, '-') }}
-          generate_release_notes: true
-          body: |
-            ## Downloads
-
-            | Platform | Installer | Portable |
-            |---|---|---|
-            | Windows 10/11 (x64) | `CANExplorer-${{ needs.version.outputs.version }}-windows-x86_64-setup.exe` | `…-windows-x86_64.zip` |
-            | Linux (x86-64, glibc 2.35+) | `….AppImage` (any distribution), `….deb` (Debian, Ubuntu) | `…-linux-x86_64.zip` |
-            | macOS (Apple silicon) | `CANExplorer-${{ needs.version.outputs.version }}-macos-arm64.dmg` | `…-macos-arm64.zip` |
-
-            The installers are not code signed yet: on Windows choose *More info → Run anyway* in the SmartScreen
-            dialog, on macOS open the app with a right click → *Open* the first time. `SHA256SUMS.txt` lists the
-            checksums of all files.
+          body_path: release-notes.md
