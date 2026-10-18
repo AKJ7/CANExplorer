@@ -24,9 +24,9 @@ class SemanticVersion:
         return cls(major=major, minor=minor, patch=patch)
 
     def validate(self) -> bool:
-        is_byte = lambda x:  0x00 <= x <= 0xFF
+        is_byte = lambda x: 0x00 <= x <= 0xFF
         try:
-            for part, name in zip([self.major, self.minor, self.patch], ['major', 'minor', 'patch']):
+            for part, name in zip([self.major, self.minor, self.patch], ['major', 'minor', 'patch'], strict=True):
                 assert is_byte(part), f'Semantic version part: "{name}" is not a byte. Got: {part}'
         except AssertionError as e:
             logger.error(e)

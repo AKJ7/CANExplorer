@@ -1,12 +1,12 @@
 # TODO: Add script to fetch version, build_info and build_date at app creation
 
 import sys
-from PyQt6.QtCore import QObject, pyqtProperty, QT_VERSION_STR, PYQT_VERSION, PYQT_VERSION_STR
+from PyQt6.QtCore import QObject, pyqtProperty, pyqtSlot, QT_VERSION_STR, PYQT_VERSION_STR
+from PyQt6.QtGui import QGuiApplication
 from can_explorer.sys.log_handler import get_logger
 from can_explorer import settings
 from can_explorer.__version__ import __version__
 from datetime import datetime
-import json
 
 logger = get_logger(__name__)
 
@@ -25,10 +25,6 @@ class ApplicationMetadata(QObject):
     @pyqtProperty(str, final=True, constant=True)
     def version(self) -> str:
         return str(__version__)
-
-    @pyqtProperty(str, final=True, constant=True)
-    def build_info(self):
-        return ''
 
     @pyqtProperty(str, final=True, constant=True)
     def build_date(self) -> str:
@@ -77,3 +73,9 @@ class ApplicationMetadata(QObject):
             'Copyright': f'@ {self.creation_year}-{self.actual_year} {self.author}',
         }
         return '\n'.join([f'{key}: {value}' for key, value in info.items()])
+
+    @pyqtSlot()
+    def copy_app_info_to_clipboard(self) -> None:
+        app_info = f'{self.name} (v{self.version})\n{self.app_info}'
+        logger.info(f'Copied to clipboard: {app_info=}')
+        QGuiApplication.clipboard().setText(app_info)

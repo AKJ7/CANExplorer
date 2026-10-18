@@ -1,12 +1,9 @@
 import logging
 import can
 import enum
-from typing import Optional
 from dataclasses import dataclass
-from can_explorer.util.validator import Bitfield
 from can_explorer.transport.j1939.addressing import AddressInfo
 from can_explorer.transport.frame_info import LengthType, ArbitrationType
-
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +52,7 @@ class PDU:
         )
 
     def export(self, force_normal_addressing=False) -> can.Message:
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def validate(self) -> bool:
         if not self.address_info.validate():

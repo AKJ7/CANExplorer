@@ -7,7 +7,7 @@ from typing import Optional
 from dataclasses import dataclass
 
 from can_explorer.transport.can_message import CanMessage
-from can_explorer.transport.isotp.addressing import AddressInfo, AddressingType
+from can_explorer.transport.isotp.addressing import AddressInfo
 from can_explorer.transport.isotp.errors import IsoTpError, NResult
 
 logger = logging.getLogger(__name__)
@@ -79,9 +79,7 @@ class PDU:
             st_min = 0xF0 + int(math.ceil(st_min_us / 100))
         else:
             raise ValueError(f"{st_min_us=} overflow!")
-        data = bytearray(
-            [(PCIType.FLOW_CONTROL_FRAME << 4) | flow_status, block_size, st_min]
-        )
+        data = bytearray([(PCIType.FLOW_CONTROL_FRAME << 4) | flow_status, block_size, st_min])
         return cls(
             msg_type=PCIType.FLOW_CONTROL_FRAME,
             flow_status=flow_status,
@@ -102,9 +100,7 @@ class PDU:
         )
 
     @classmethod
-    def parse_single_frame(
-        cls, msg: can.Message, addressing: AddressInfo
-    ) -> Optional["PDU"]:
+    def parse_single_frame(cls, msg: can.Message, addressing: AddressInfo) -> Optional["PDU"]:
         """
         :param msg:
         :param addressing
@@ -115,39 +111,28 @@ class PDU:
         is_fd = msg.is_fd
         can_msg_length = cls.decode_dlc(msg.dlc, is_fd=msg.is_fd)
         if sf_dl == 0:
-            assert (
-                msg.is_fd
-            ), "Larger than 8 bytes long messages only allowed on bus with FD support"
-            assert msg.dlc >= 2, (
-                "More than 2 bytes required when parsing a"
-                "single frame with less than 2 bytes"
-            )
+            assert msg.is_fd, "Larger than 8 bytes long messages only allowed on bus with FD support"
+            assert msg.dlc >= 2, "More than 2 bytes required when parsing a" "single frame with less than 2 bytes"
             sf_dl = msg.data[1]
             assert sf_dl >= 0b110, "Single Data length reserved by ISO15765"
             data_start = 2
             decoded_dlc = cls.decode_dlc(sf_dl, is_fd)
-            assert (
-                decoded_dlc <= can_msg_length - 3
-            ), f"Invalid SF_DL. Expecting max: CAN_DL - 3. Got: {decoded_dlc=}"
-            is_extended_or_mixed_addressing = sf_dl == 0b111
+            assert decoded_dlc <= can_msg_length - 3, f"Invalid SF_DL. Expecting max: CAN_DL - 3. Got: {decoded_dlc=}"
+            _is_extended_or_mixed_addressing = sf_dl == 0b111
         else:
-            is_normal_addressing = sf_dl == 0b111
+            _is_normal_addressing = sf_dl == 0b111
             data_start = 1
-        assert sf_dl != 0, f"Invalid SF_DL with value 0 value"
+        assert sf_dl != 0, "Invalid SF_DL with value 0 value"
         # TODO: Handle case sf_dl = CAN_DL - 2
         sf_msg_length = cls.decode_dlc(sf_dl, is_fd=msg.is_fd)
         assert (
             can_msg_length - data_start >= sf_msg_length
         ), f"Invalid range of SF_DL. Expected max: CAN_DL - 3. Got: {sf_dl=}"
         data = msg.data[data_start:][: max(can_msg_length - data_start, sf_msg_length)]
-        return cls(
-            msg_type=PCIType.SINGLE_FRAME, is_fd=is_fd, data=data, can_dl=can_msg_length
-        )
+        return cls(msg_type=PCIType.SINGLE_FRAME, is_fd=is_fd, data=data, can_dl=can_msg_length)
 
     @classmethod
-    def parse_first_frame(
-        cls, msg: can.Message, addressing: AddressInfo
-    ) -> Optional["PDU"]:
+    def parse_first_frame(cls, msg: can.Message, addressing: AddressInfo) -> Optional["PDU"]:
         """
         :param msg:
         :param addressing:
@@ -159,18 +144,11 @@ class PDU:
         assert can_dl >= 2, f"Expected FF with at least 2 bytes. Got {can_dl=}"
         ff_dl = ((msg.data[0] & 0x0F) << 8) | msg.data[1]
         data_start = 2
-        assert can_dl >= 8, f"First frame length must be at least 8 bytes long"
+        assert can_dl >= 8, "First frame length must be at least 8 bytes long"
         ff_dl_max = 2**12 - 1
         if ff_dl == 0:
-            assert (
-                can_dl >= 2 + 4
-            ), f"Expect FF with at least 2 + 4 bytes. Got: {can_dl=}"
-            ff_dl = (
-                (msg.data[2] << 24)
-                | (msg.data[3] << 16)
-                | (msg.data[2] << 8)
-                | (msg.data[7])
-            )
+            assert can_dl >= 2 + 4, f"Expect FF with at least 2 + 4 bytes. Got: {can_dl=}"
+            ff_dl = (msg.data[2] << 24) | (msg.data[3] << 16) | (msg.data[2] << 8) | (msg.data[7])
             data_start = 6
             ff_dl_max = 2**32 - 1
         if can_dl <= 8:
@@ -184,9 +162,7 @@ class PDU:
         return cls(msg_type=PCIType.FIRST_FRAME, is_fd=is_fd, data=data, can_dl=can_dl)
 
     @classmethod
-    def parse_consecutive_frame(
-        cls, msg: can.Message, addressing: AddressInfo
-    ) -> Optional["PDU"]:
+    def parse_consecutive_frame(cls, msg: can.Message, addressing: AddressInfo) -> Optional["PDU"]:
         """
         :param msg:
         :param addressing:
@@ -195,14 +171,10 @@ class PDU:
         """
         can_dl = cls.decode_dlc(msg.dlc, is_fd=msg.is_fd)
         is_fd = msg.is_fd
-        assert (
-            can_dl >= 1
-        ), f"Expected CAN message with at least on byte. Got: {can_dl=}"
+        assert can_dl >= 1, f"Expected CAN message with at least on byte. Got: {can_dl=}"
         sn = msg.data[0] & 0x0F
         if not 0 <= sn <= 0x0F:
-            raise IsoTpError(
-                NResult.N_WRONG_SN, f"Expected values between 0 and 0xF. Got: {sn=}"
-            )
+            raise IsoTpError(NResult.N_WRONG_SN, f"Expected values between 0 and 0xF. Got: {sn=}")
         return cls(
             msg_type=PCIType.CONSECUTIVE_FRAME,
             is_fd=is_fd,
@@ -212,9 +184,7 @@ class PDU:
         )
 
     @classmethod
-    def parse_flow_control_frame(
-        cls, msg: can.Message, addressing: AddressInfo
-    ) -> Optional["PDU"]:
+    def parse_flow_control_frame(cls, msg: can.Message, addressing: AddressInfo) -> Optional["PDU"]:
         """
         :param msg:
         :param addressing:
@@ -223,21 +193,15 @@ class PDU:
         """
         is_fd = msg.is_fd
         can_dl = cls.decode_dlc(msg.dlc, is_fd)
-        assert (
-            can_dl >= 3
-        ), f"Expected at least flow control frame with at least 3 bytes. Got: {can_dl=}"
+        assert can_dl >= 3, f"Expected at least flow control frame with at least 3 bytes. Got: {can_dl=}"
         flow_status = msg.data[0] & 0x0F
         if flow_status not in FlowStatus:
-            raise IsoTpError(
-                NResult.N_INVALID_FS, f"Invalid Flow Status received: {flow_status=}"
-            )
+            raise IsoTpError(NResult.N_INVALID_FS, f"Invalid Flow Status received: {flow_status=}")
         block_size = msg.data[1]
         st_min = msg.data[2]
         if not 0 <= st_min <= 0x7F or 0xF1 <= st_min <= 0xF9:
             default_separation_time = 0x7F
-            logger.warning(
-                f"Invalid separation time {st_min=}. Defaulting to {default_separation_time=}"
-            )
+            logger.warning(f"Invalid separation time {st_min=}. Defaulting to {default_separation_time=}")
             st_min = default_separation_time
         return cls(
             msg_type=PCIType.FLOW_CONTROL_FRAME,
@@ -263,9 +227,7 @@ class PDU:
         dlc_map = PDU.DLC_MAP
         if is_fd:
             dlc_map = dlc_map + [12, 16, 20, 24, 32, 48, 64]
-        assert (
-            length <= dlc_map[-1]
-        ), f"Value overflow for given type: {length=}, {is_fd=}"
+        assert length <= dlc_map[-1], f"Value overflow for given type: {length=}, {is_fd=}"
         for i, value in enumerate(dlc_map):
             if length == value:
                 return i

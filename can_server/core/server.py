@@ -22,7 +22,5 @@ async def ws_handle(request):
 
 async def create_server():
     app = web.Application()
-    app.add_routes(
-        [web.get('/', handle), web.get('/echo', ws_handle), web.get('/{name}', handle)]
-    )
+    app.add_routes([web.get('/', handle), web.get('/echo', ws_handle), web.get('/{name}', handle)])
     return app

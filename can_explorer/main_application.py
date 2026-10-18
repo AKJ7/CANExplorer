@@ -3,16 +3,9 @@ import logging
 from PyQt6.QtQml import (
     QQmlApplicationEngine,
     QQmlError,
-    qmlRegisterType,
-    qmlRegisterModule,
-    QQmlComponent,
-    QQmlEngine,
-    qmlRegisterSingletonType,
 )
 from PyQt6.QtCore import (
     pyqtSignal,
-    pyqtProperty,
-    QCoreApplication,
     QObject,
     qInstallMessageHandler,
     QtMsgType,
@@ -21,13 +14,28 @@ from PyQt6.QtCore import (
 from can_explorer.sys.log_handler import get_logger
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QGuiApplication
-from typing import List
+from typing import Callable, Dict, List
 import signal
 import sys
 from can_explorer.util.gui import get_res_path
 from can_explorer.gui.application_metadata import ApplicationMetadata
+from can_explorer.gui.connection_manager import ConnectionManager
 
 logger = get_logger(__name__)
+
+
+def create_qml_engine(
+    context: Dict[str, QObject], on_warnings: Callable[[List[QQmlError]], None]
+) -> QQmlApplicationEngine:
+    """Load the main window with the given context properties (e.g. {'metadata': ...})."""
+    engine = QQmlApplicationEngine()
+    engine.setOutputWarningsToStandardError(False)
+    engine.warnings.connect(on_warnings)
+    engine.addImportPath(str(get_res_path('.')))
+    for name, value in context.items():
+        engine.rootContext().setContextProperty(name, value)
+    engine.load(str(get_res_path('main_window.qml')))
+    return engine
 
 
 class MainApplication(QApplication, QGuiApplication):
@@ -38,6 +46,7 @@ class MainApplication(QApplication, QGuiApplication):
     def __init__(self, *args, **kwargs):
         super().__init__(sys.argv)
         self.metadata = ApplicationMetadata(parent=self)
+        self.connection_manager = ConnectionManager(parent=self)
         qInstallMessageHandler(self._message_handler)
         self._qml_engine = self._initialize_engine()
         self._configure()
@@ -47,19 +56,10 @@ class MainApplication(QApplication, QGuiApplication):
         signal.signal(signal.SIGINT, signal.SIG_DFL)
 
     def _initialize_engine(self) -> QQmlApplicationEngine:
-        engine = QQmlApplicationEngine()
-        engine.setOutputWarningsToStandardError(False)
-        engine.warnings.connect(self._on_qml_warnings)
-        qml_dir = get_res_path('.')
-        engine.addImportPath(str(qml_dir))
-        main_window_path = get_res_path('main_window.qml')
-        # qmlRegisterSingletonType(
-        #     MainApplication, str(main_window_path), 1, 0, lambda eng, val: self, 'MainApplicationWindow'
-        # )
-        # qmlRegisterType(MainApplication, str(main_window_path), 1, 0, 'MainApplication')
-        engine.rootContext().setContextProperty('metadata', self.metadata)
-        engine.load(str(main_window_path))
-        return engine
+        return create_qml_engine(
+            {'metadata': self.metadata, 'connectionManager': self.connection_manager},
+            self._on_qml_warnings,
+        )
 
     def _register_components(self):
         # engine =  QQmlEngine()
@@ -78,16 +78,8 @@ class MainApplication(QApplication, QGuiApplication):
         # TODO: Implement
         return False
 
-    def run(self) -> int:
-        exec_result = super().exec()
-        return exec_result
-
     def excepthook(self, hook_type, value, traceback):
-        # TODO:
-        from can_explorer.crash_handler import CrashHandler
-        from can_explorer.main_application import MainApplication
-
-        app_created = MainApplication.created()
+        # TODO: Show a crash dialog when the application is running
         logger.exception(f'An error occurred {traceback}')
         sys.exit(0)
 

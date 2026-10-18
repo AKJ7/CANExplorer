@@ -1,8 +1,14 @@
+import asyncio
 import enum
+import logging
 import urllib
 import urllib.parse
-from can_explorer.transport.isocan.isocan import *
-from can_explorer.transport.isotp.old_transport import *
+from typing import Optional
+
+import can
+
+from can_explorer.transport.isocan.isocan import IsoCanTransport
+from can_explorer.transport.isotp.old_transport import IsoTpTransport
 from can_explorer.transport.j1939.j1939 import J1939Transport
 from can_explorer.transport.canopen.canopen import CanOpenTransport
 
@@ -38,7 +44,7 @@ def connection_for_can(
     **kwargs,
 ):
     original_protocol = protocol_factory()
-    transport = can_type.transport()(loop=loop, protocol=original_protocol, bus=can_bus, *args, **kwargs)
+    transport = can_type.transport()(*args, loop=loop, protocol=original_protocol, bus=can_bus, **kwargs)
     protocol = transport.get_protocol()
     return protocol, transport
 

@@ -12,7 +12,6 @@ class CanTransport(asyncio.Transport):
         """Return True if the transport is receiving."""
         raise NotImplementedError
 
-
     def pause_reading(self):
         """Pause the receiving end.
 
@@ -28,7 +27,6 @@ class CanTransport(asyncio.Transport):
         data_received() method.
         """
         raise NotImplementedError
-
 
     def is_closing(self):
         """Return True if the transport is closing or closed."""

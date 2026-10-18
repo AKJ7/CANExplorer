@@ -2,7 +2,6 @@ import can
 import logging
 import enum
 from typing import List, Tuple, Dict, Optional
-from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
@@ -41,17 +40,7 @@ def load_config():
 
 
 def get_interface_name(target_class_name: str) -> Optional[str]:
-    for interface_name, (module_name, class_name) in can.interfaces.BACKENDS.items():
+    for interface_name, (_module_name, class_name) in can.interfaces.BACKENDS.items():
         if class_name == target_class_name:
             return interface_name
     return None
-
-
-@dataclass(frozen=True)
-class CanConfiguration:
-    interface: str
-    connection_name: str
-    bitrate: int
-    channel: str
-    protocol: str
-    fd: bool

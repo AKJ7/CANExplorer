@@ -4,13 +4,17 @@ import CanExplorer 1.0
 
 Menu {
     title: qsTr("&File")
-    Action { text: qsTr("&New...") }
-    Action { text: qsTr("&Open...") }
-    Action { text: qsTr("&Save...") }
-    Action { text: qsTr("Save &As...") }
+    MenuItem {
+        action: Actions.newConnection
+    }
+    MenuItem {
+        action: Actions.openLogFile
+    }
+    MenuItem {
+        action: Actions.closeConnection
+    }
     MenuSeparator {}
     MenuItem {
         action: Actions.exit
     }
 }
-

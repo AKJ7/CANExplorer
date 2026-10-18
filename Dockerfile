@@ -16,7 +16,7 @@ ENV TZ="Europe/Berlin"
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 RUN apt -y update
-RUN apt -y install sudo git vim curl python3 python3-pip python3-poetry iproute2 can-utils
+RUN apt -y install sudo git vim curl python3 python3-pip iproute2 can-utils
 
 RUN apt -y update
 RUN apt -y install libglib2.0-0 libglu1-mesa-dev libxkbcommon-x11-0 build-essential libgl1-mesa-dev libdbus-1-dev libxcb-*
@@ -24,8 +24,10 @@ RUN apt -y install libglib2.0-0 libglu1-mesa-dev libxkbcommon-x11-0 build-essent
 # CAN stuffs
 RUN apt -y install can-utils
 
+COPY --from=ghcr.io/astral-sh/uv:0.11.26 /uv /uvx /usr/local/bin/
+
 RUN useradd -ms /bin/bash $DOCKER_USER
 RUN usermod -aG sudo $DOCKER_USER && echo "${DOCKER_USER} ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/${DOCKER_USER}
 RUN chmod 0440 /etc/sudoers.d/${DOCKER_USER}
 USER $DOCKER_USER
-ENTRYPOINT bash -c "poetry lock && poetry install"
+ENTRYPOINT bash -c "uv sync --locked"

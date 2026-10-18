@@ -10,7 +10,7 @@ class Worker(ABC):
         self._loop = loop
         self._task: asyncio.Task = self._loop.create_task(self.__run(), name=name)
         self._task.add_done_callback(self._on_done)
-        self._exception : Exception | None = None
+        self._exception: Exception | None = None
 
     async def __run(self):
         try:

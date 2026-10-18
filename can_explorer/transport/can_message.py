@@ -1,7 +1,5 @@
 import logging
-import asyncio
 from dataclasses import dataclass
-from can_explorer.transport.isotp.addressing import AddressInfo
 import can
 
 logger = logging.getLogger(__name__)
@@ -18,12 +16,11 @@ class CanMessage:
 
     @classmethod
     def from_can(cls, msg: can.Message) -> 'CanMessage':
-        address_info = AddressInfo()
         return cls(
             arbitration_id=msg.arbitration_id,
             dlc=msg.dlc,
             data=msg.data,
-            is_extended_id=msg.is_fd,
+            is_extended_id=msg.is_extended_id,
             is_fd=msg.is_fd,
         )
 

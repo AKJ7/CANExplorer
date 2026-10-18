@@ -6,5 +6,5 @@ logger = get_logger(__name__)
 
 
 def get_res_path(path: PathLike | str) -> Path:
-    path = Path(".").absolute() / "gui" / "qt" / path
+    path = Path(__file__).resolve().parent.parent / "gui" / "qt" / path
     return path

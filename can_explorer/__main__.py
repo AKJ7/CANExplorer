@@ -1,53 +1,37 @@
-import sys
 import asyncio
-from can_explorer.sys.log_handler import get_logger, setup_logging
+import sys
+
+import qasync
+
+from can_explorer import settings
 from can_explorer.main_application import MainApplication
+from can_explorer.sys.environment import sanitize_snap_environment
+from can_explorer.sys.log_handler import get_logger, setup_logging
 
 logger = get_logger(__name__)
 
 
-async def run_app() -> int:
+def run_app() -> int:
+    settings.apply_cli_args()
     setup_logging()
     logger.info('Starting application')
-    main_application = MainApplication()
-    result = main_application.run()
+    if restored := sanitize_snap_environment():
+        logger.info(f'Removed snap runtime from environment: {", ".join(restored)}')
+    app = MainApplication()
+    # Qt and asyncio share a single event loop, so coroutines and Qt signals run on the GUI thread
+    loop = qasync.QEventLoop(app)
+    asyncio.set_event_loop(loop)
+    app_closed = asyncio.Event()
+    app.aboutToQuit.connect(app_closed.set)
+    with loop:
+        loop.run_until_complete(app_closed.wait())
     logger.info('Exiting app. Have a nice day!')
-    return result
+    return 0
 
 
 def main():
-    result = asyncio.run(main=run_app())
-    sys.exit(result)
+    sys.exit(run_app())
 
-
-# async def main() -> None:
-#     loop = asyncio.get_running_loop()
-#     transport, protocol = await create_can_connection(
-#         loop=loop,
-#         protocol_factory=None,
-#         url=None,
-#         channel="vcan0",
-#         interface="socketcan",
-#         fd=True,
-#     )
-#     # protocol.write(bytearray([1, 2, 3]), arbitration_id=232)
-#     logger.info(f"{transport=}, {protocol=}")
-#     await asyncio.Future()
-
-
-# def run_app() -> int:
-#     app = QApplication(sys.argv)
-#     event_loop = QEventLoop(app)
-#     asyncio.set_event_loop(event_loop)
-#
-#     async def show_window():
-#         window = MainWindow(app)
-#         window.show()
-#         result = app.exec()
-#         return result
-#
-#     result = asyncio.run(show_window())
-#     return result
 
 if __name__ == '__main__':
     main()

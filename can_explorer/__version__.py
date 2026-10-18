@@ -1,4 +1,6 @@
-import asyncio
-from can_explorer.sys.version import get_version
+from importlib.metadata import PackageNotFoundError, version
 
-__version__ = get_version(asyncio.get_event_loop())
+try:
+    __version__ = version('can-explorer')
+except PackageNotFoundError:  # Running from a source tree that was never installed
+    __version__ = '0.0.0'

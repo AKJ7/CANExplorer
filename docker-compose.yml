@@ -12,7 +12,7 @@ services:
 #            timeout: 1m
 #            retries: 2
 #            start_period: 1m
-        entrypoint: bash -c "poetry install && poetry show -v"
+        entrypoint: bash -c "uv sync --locked && uv tree"
         command: >
             bash -c "echo Hallo world"
 

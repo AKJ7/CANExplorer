@@ -1,0 +1,20 @@
+VERSION ""
+
+
+NS_ :
+
+BS_:
+
+BU_: ECU
+
+
+BO_ 256 EngineData: 8 ECU
+ SG_ EngineSpeed : 0|16@1+ (0.25,0) [0|16383.75] "rpm" Vector__XXX
+ SG_ CoolantTemp : 16|8@1+ (1,-40) [-40|215] "degC" Vector__XXX
+ SG_ GearPosition : 24|4@1+ (1,0) [0|15] "" Vector__XXX
+
+BO_ 2566844926 VehicleSpeed: 8 ECU
+ SG_ WheelSpeed : 8|16@1+ (0.00390625,0) [0|250.996] "km/h" Vector__XXX
+
+
+VAL_ 256 GearPosition 0 "Neutral" 1 "First" 2 "Second" ;

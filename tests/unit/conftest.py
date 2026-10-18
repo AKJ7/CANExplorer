@@ -1,3 +1,6 @@
+import os
+from pathlib import Path
+
 import pytest
 import logging
 import can
@@ -11,7 +14,12 @@ import signal
 # qt_api.set_qt_api(None)
 
 
+# Qt must not need a display in tests or CI
+os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
+
 logger = logging.getLogger(__name__)
+
+DATA_DIR = Path(__file__).resolve().parent.parent / 'data'
 
 
 def pytest_addoption(parser):
@@ -54,3 +62,7 @@ def qloop(qapp):
         yield loop
         # loop.close()
 
+
+@pytest.fixture(scope='session')
+def data_dir() -> Path:
+    return DATA_DIR

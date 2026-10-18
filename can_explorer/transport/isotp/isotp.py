@@ -5,7 +5,6 @@ import logging
 import enum
 from typing import Tuple, Optional
 from can_explorer.transport.isotp.addressing import AddressInfo, TargetAddressingType
-from can_explorer.transport.can_message import CanMessage
 from can_explorer.transport.isotp.errors import NResult
 from can_explorer.transport.isotp.pdu import PDU, FlowStatus, PCIType
 
@@ -213,7 +212,7 @@ class IsoTpTransport(asyncio.Transport):
     def _process_rx_data(self, msg: can.Message):
         logger.info(f'Processing Rx data: {msg}')
         if not self._should_read:
-            logger.debug(f'Skipping data')
+            logger.debug('Skipping data')
             return
         try:
             pdu = PDU.from_can(msg, self._addressing)

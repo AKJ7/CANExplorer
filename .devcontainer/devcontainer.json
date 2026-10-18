@@ -39,7 +39,6 @@
 				"vscodevim.vim",
 				"njpwerner.autodocstring",
 				"ms-python.black-formatter",
-				"zeshuaro.vscode-python-poetry",
 				"oderwat.indent-rainbow",
 				"tamasfe.even-better-toml",
 				"skellock.just",

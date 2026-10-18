@@ -1,9 +1,6 @@
-import sys
-import asyncio
 import logging
 from can_server import PROJECT_NAME
-from can_server.cli.cli import cli
-from can_explorer import LOG_FORMAT, LOG_LEVEL
+from can_explorer import LOG_FORMAT
 from can_server.core.heart import Heart
 from can_server.core.server import create_server
 from aiohttp import web

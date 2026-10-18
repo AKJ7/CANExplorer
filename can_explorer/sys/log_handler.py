@@ -2,9 +2,10 @@ import sys
 import logging
 from can_explorer import settings
 
+
 class ColoredFormatter(logging.Formatter):
     COLORS = {
-        'DEBUG': '\033[36m', # Cyan
+        'DEBUG': '\033[36m',  # Cyan
         'INFO': '\033[32m',  # Green
         'WARNING': '\033[33m',  # Yellow
         'ERROR': '\033[31m',  # Red

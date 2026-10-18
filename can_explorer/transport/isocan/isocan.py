@@ -51,7 +51,6 @@ class IsoCanProtocol(asyncio.DatagramProtocol, QWidget):
         self.close()
 
 
-
 class IsoCanTransport(Worker, asyncio.DatagramTransport):
     __slot__ = ("_bus", "_protocol", "_loop", "_parsing_task")
 
@@ -74,10 +73,10 @@ class IsoCanTransport(Worker, asyncio.DatagramTransport):
             self._parsing_task.cancel()
             self._parsing_task = None
         else:
-            logger.warning(f"Parsing task not present!")
+            logger.warning("Parsing task not present!")
 
     def connect(self, start_listening=True):
-        logger.debug(f'Connecting')
+        logger.debug('Connecting')
         self._notifier.add_bus(self._bus)
         if start_listening:
             self._notifier.add_listener(self._reader)
@@ -111,4 +110,4 @@ class IsoCanTransport(Worker, asyncio.DatagramTransport):
         async for message in self._reader:
             data = message.data
             address = message.arbitration_id
-            self._protocol.datagram_received(data, ('',address))
+            self._protocol.datagram_received(data, ('', address))

@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import enum
 from can_explorer.transport.j1939.addressing import AddressInfo

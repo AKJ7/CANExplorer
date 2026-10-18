@@ -1,17 +1,14 @@
 import asyncio
-from dataclasses import dataclass
 import can
 import logging
-import enum
 
 # from can_explorer.gui.base_worker import Worker
 from can_explorer.transport.j1939.controller_application import ControllerApp
 from can_explorer.transport.j1939.addressing import AddressInfo, PGN
 from can_explorer.transport.j1939.pdu import PDU
-from typing import Optional, List
+from typing import List
 from can_explorer.transport.can_transport import CanTransport
 from can_explorer.util.worker import Worker
-from can_explorer.transport.can_protocol import CanProtocol
 
 logger = logging.getLogger(__name__)
 

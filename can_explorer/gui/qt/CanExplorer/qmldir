@@ -2,6 +2,11 @@ module CanExplorer
 
 CustomComponent 1.0 CustomComponent.qml
 AboutDialog 1.0 AboutDialog.qml
+NewConnectionDialog 1.0 NewConnectionDialog.qml
+ReplayDialog 1.0 ReplayDialog.qml
+ConnectionView 1.0 ConnectionView.qml
+FrameTable 1.0 FrameTable.qml
+TransmitPanel 1.0 TransmitPanel.qml
 EditMenu 1.0 EditMenu.qml
 FileMenu 1.0 FileMenu.qml
 HelpMenu 1.0 HelpMenu.qml

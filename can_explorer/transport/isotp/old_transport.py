@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 class Timer:
     start: Optional[int] = 0
     timeout: Optional[int] = 0
-    timeout_event = asyncio.Future()
+    timeout_event: Optional[asyncio.Future] = None
 
     @staticmethod
     def now() -> int:
@@ -22,7 +22,7 @@ class Timer:
         self.start = start or self.now()
 
     async def process(self):
-        async with asyncio.Timeout(self.timeout / 1_000_000) as tm:
+        async with asyncio.Timeout(self.timeout / 1_000_000):
             await asyncio.sleep(self.timeout / 1e6)
 
     def stop(self):
@@ -76,14 +76,14 @@ class IsoTpTransport(asyncio.Transport):
             self._parsing_task.cancel()
             self._parsing_task = None
         else:
-            logger.warning(f'Parsing task not present!')
+            logger.warning('Parsing task not present!')
 
     def close(self) -> None:
         self._bus.shutdown()
         return super().close()
 
     async def _parse_can_frames(self) -> None:
-        logger.info(f'Waiting for CAN messages')
+        logger.info('Waiting for CAN messages')
         while True:
             message = self._bus.recv()
             self._protocol.data_received(message)

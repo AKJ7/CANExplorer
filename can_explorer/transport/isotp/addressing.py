@@ -1,5 +1,4 @@
 import logging
-import asyncio
 import enum
 
 from can_explorer.util.validator import is_byte
