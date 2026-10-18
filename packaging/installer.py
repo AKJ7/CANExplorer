@@ -89,6 +89,9 @@ OutputDir={output}
 OutputBaseFilename={base_name('windows')}-setup
 SetupIconFile={ICONS / 'canexplorer.ico'}
 UninstallDisplayIcon={{app}}\\{NAME}.exe
+; Updates run while the application is open: close it (Restart Manager), it restarts itself after the update
+CloseApplications=force
+RestartApplications=no
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
@@ -109,6 +112,14 @@ Name: "{{autodesktop}}\\{NAME}"; Filename: "{{app}}\\{NAME}.exe"; Tasks: desktop
 
 [Run]
 Filename: "{{app}}\\{NAME}.exe"; Description: "{{cm:LaunchProgram,{NAME}}}"; Flags: nowait postinstall skipifsilent
+; Updates from the application run the setup silently with /UPDATE=1: start the new version afterwards
+Filename: "{{app}}\\{NAME}.exe"; Flags: nowait runasoriginaluser; Check: IsUpdate
+
+[Code]
+function IsUpdate: Boolean;
+begin
+  Result := ExpandConstant('{{param:update|0}}') = '1';
+end;
 '''
 
 

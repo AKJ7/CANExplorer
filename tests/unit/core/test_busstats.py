@@ -41,3 +41,16 @@ def test_unknown_bitrate_has_no_load():
     statistics.sample(0.0)
     statistics.update(can.Message(arbitration_id=1))
     assert statistics.sample(1.0).load is None
+
+
+def test_samples_without_elapsed_time_keep_totals_current():
+    """Two samples within one tick of a coarse clock (e.g. 15.6 ms on Windows) must not lose or repeat frames."""
+    stats = BusStatistics(bitrates=(500_000, None))
+    stats.sample(10.0)
+    stats.update(can.Message(arbitration_id=1, data=bytes(8)))
+    snapshot = stats.sample(10.0)  # No time has passed
+    assert (snapshot.rx_total, snapshot.rx_rate) == (1, 0.0)
+    stats.update(can.Message(arbitration_id=1, data=bytes(8)))
+    snapshot = stats.sample(11.0)
+    assert (snapshot.rx_total, snapshot.rx_rate) == (2, 2.0)  # Both frames in the rate, counted once
+    assert stats.sample(12.0).rx_total == 2

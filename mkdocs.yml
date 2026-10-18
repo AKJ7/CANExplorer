@@ -64,6 +64,7 @@ nav:
       - Test automation: user-guide/test-automation.md
       - Workspaces: user-guide/workspaces.md
       - Preferences and settings: user-guide/preferences.md
+      - Updates: user-guide/updates.md
   - Reference:
       - reference/index.md
       - Scripting API: reference/scripting-api.md

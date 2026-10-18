@@ -41,7 +41,7 @@ ApplicationWindow {
             [Actions.openWorkspace, "Ctrl+Shift+O"], [Actions.saveWorkspace, "Ctrl+S"],
             [Actions.saveWorkspaceAs, "Ctrl+Shift+S"], [Actions.editDatabase, ""], [Actions.convertDatabase, ""],
             [Actions.copy, "Ctrl+C"], [Actions.selectAll, "Ctrl+A"], [Actions.preferences, ""],
-            [Actions.about, ""], [Actions.exit, "Ctrl+Q"],
+            [Actions.checkForUpdates, ""], [Actions.about, ""], [Actions.exit, "Ctrl+Q"],
         ]
         for (const [action, shortcut] of actions)
             add(qsTr("Command"), label(action), () => action.trigger(), shortcut, action.enabled)
@@ -595,6 +595,29 @@ ApplicationWindow {
         target: Actions.preferences
         function onTriggered() {
             preferencesDialog.open()
+        }
+    }
+
+    UpdateDialog {
+        id: updateDialog
+        parent: Overlay.overlay
+    }
+
+    Connections {
+        target: Actions.checkForUpdates
+        function onTriggered() {
+            // An update found already is shown at once; otherwise check now
+            if (connectionManager.updates.state === "available")
+                updateDialog.open()
+            else
+                updateDialog.checkNow()
+        }
+    }
+
+    Connections {
+        target: connectionManager.updates
+        function onUpdate_available(version) {
+            mainWindow.notify(qsTr("CANExplorer %1 is available: ⋮ → Check for Updates…").arg(version))
         }
     }
 

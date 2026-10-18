@@ -26,6 +26,7 @@ from can_explorer.core.log_formats import file_filters
 from can_explorer.core.sources import BusConfig, FileSource, LiveSource, MessageSource
 from can_explorer.gui.app_state import AppState
 from can_explorer.gui.compare import CompareController
+from can_explorer.gui.updates import UpdateController
 from can_explorer.gui.multibus import MultiBusController
 from can_explorer.gui.database_editor import DatabaseEditorController
 from can_explorer.gui.canopen import CanOpenController
@@ -773,6 +774,7 @@ class ConnectionManager(QObject):
         self._database_editor = DatabaseEditorController(parent=self)
         self._compare = CompareController(parent=self)
         self._multi_bus = MultiBusController(self, parent=self)
+        self._updates = UpdateController(self._app_state.settings, parent=self)
         self._database_editor.saved.connect(self._reload_database)
         QGuiApplication.instance().aboutToQuit.connect(self.close_all)
 
@@ -845,6 +847,11 @@ class ConnectionManager(QObject):
     @pyqtProperty(QObject, constant=True)
     def database_editor(self) -> DatabaseEditorController:
         return self._database_editor
+
+    @pyqtProperty(QObject, constant=True)
+    def updates(self) -> UpdateController:
+        """New releases on GitHub."""
+        return self._updates
 
     @pyqtProperty(QObject, constant=True)
     def multi_bus(self) -> MultiBusController:

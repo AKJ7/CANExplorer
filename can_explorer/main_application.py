@@ -67,6 +67,7 @@ class MainApplication(QApplication):
             self._on_qml_warnings,
         )
         self._qml_engine.quit.connect(self.quit)
+        self.connection_manager.updates.check_at_startup()
         signal.signal(signal.SIGINT, signal.SIG_DFL)
 
     def _language_changed(self) -> None:

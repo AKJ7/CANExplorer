@@ -262,7 +262,7 @@ class BusSession:
         self.start_time = None
 
     def sample_bus_statistics(self) -> BusSnapshot:
-        return self.bus_statistics.sample(time.monotonic())
+        return self.bus_statistics.sample(time.perf_counter())
 
     # Transmission
 

@@ -20,6 +20,7 @@ Item {
     property alias saveWorkspace: saveWorkspaceAction
     property alias saveWorkspaceAs: saveWorkspaceAsAction
     property alias commandPalette: commandPaletteAction
+    property alias checkForUpdates: checkForUpdatesAction
 
     // Open a database file in the editor (e.g. the one of a connection)
     signal editDatabaseFile(string path)
@@ -117,6 +118,12 @@ Item {
         text: qsTr("Command &Palette...")
         icon.name: "system-search"
         shortcut: "Ctrl+K"
+    }
+
+    Action {
+        id: checkForUpdatesAction
+        text: qsTr("Check for &Updates...")
+        icon.name: "system-software-update"
     }
 
     Action {

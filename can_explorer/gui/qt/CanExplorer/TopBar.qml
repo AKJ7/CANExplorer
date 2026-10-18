@@ -134,6 +134,16 @@ Rectangle {
             Layout.preferredWidth: Math.max(120, implicitWidth)
         }
 
+        // A new release, found by the automatic check
+        Button {
+            visible: connectionManager.updates.state === "available"
+            text: qsTr("⬆ Update %1").arg(connectionManager.updates.version)
+            highlighted: true
+            ToolTip.visible: hovered
+            ToolTip.text: qsTr("CANExplorer %1 is available").arg(connectionManager.updates.version)
+            onClicked: Actions.checkForUpdates.trigger()
+        }
+
         // Notifications
         ToolButton {
             id: bell

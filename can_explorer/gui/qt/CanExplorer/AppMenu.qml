@@ -69,6 +69,7 @@ Menu {
     MenuItem { action: Actions.convertDatabase }
     MenuItem { action: Actions.preferences }
     MenuSeparator {}
+    MenuItem { action: Actions.checkForUpdates }
     MenuItem { action: Actions.about }
     MenuItem { action: Actions.exit }
 }

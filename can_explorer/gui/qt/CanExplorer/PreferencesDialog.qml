@@ -1,6 +1,7 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
+import CanExplorer 1.0
 
 
 Dialog {
@@ -91,6 +92,31 @@ Dialog {
             stepSize: 10
             editable: true
             Layout.preferredWidth: 180
+        }
+
+        Label { text: qsTr("Updates") }
+        RowLayout {
+            CheckBox {
+                text: qsTr("Check at start")
+                checked: connectionManager.updates.check_at_start
+                onToggled: connectionManager.updates.set_check_at_start(checked)
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Look for new releases on GitHub at most once a day")
+            }
+            CheckBox {
+                text: qsTr("Pre-releases")
+                checked: connectionManager.updates.include_prereleases
+                onToggled: connectionManager.updates.set_include_prereleases(checked)
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Also offer release candidates and other pre-releases")
+            }
+            Button {
+                text: qsTr("Check now")
+                onClicked: {
+                    dialog.close()
+                    Actions.checkForUpdates.trigger()
+                }
+            }
         }
 
         Button {

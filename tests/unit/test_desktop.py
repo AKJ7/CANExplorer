@@ -1,4 +1,5 @@
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -13,7 +14,11 @@ def test_desktop_entry_quotes_the_command():
 
 def test_launch_command_of_the_environment():
     command = desktop.launch_command()
-    assert command[0].endswith('canexplorer') or command == [sys.executable, '-m', 'can_explorer']
+    assert Path(command[0]).stem == 'canexplorer' or command == [
+        sys.executable,
+        '-m',
+        'can_explorer',
+    ]  # .exe on Windows
 
 
 def test_install_and_uninstall(tmp_path):

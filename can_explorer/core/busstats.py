@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Optional, Tuple
 
 import can
@@ -66,14 +66,25 @@ class BusStatistics:
             self._busy_time += frame_duration(msg, *self._bitrates)
 
     def sample(self, now: float) -> BusSnapshot:
-        """Rates over the time since the previous sample. `now` is a monotonic time in seconds."""
-        self.rx_total += self._rx
-        self.tx_total += self._tx
+        """Rates over the time since the previous sample. `now` is a time in seconds from a precise monotonic clock
+        (time.perf_counter: time.monotonic only ticks every 15.6 ms on Windows).
+
+        Without measurable time since the previous sample the rates stay as they were; the totals are always current.
+        """
+        rx_total, tx_total = self.rx_total + self._rx, self.tx_total + self._tx
         elapsed = None if self._last_sample is None else now - self._last_sample
-        if elapsed and elapsed > 0:
+        if elapsed is not None and elapsed <= 0:
+            self.last = replace(self.last, error_frames=self.error_frames, rx_total=rx_total, tx_total=tx_total)
+            return self.last  # The frames since the previous sample still count towards the next rates
+        self.rx_total, self.tx_total = rx_total, tx_total
+        if elapsed:
             load = None if self._timing_unknown else min(1.0, self._busy_time / elapsed)
             self.last = BusSnapshot(
                 self._rx / elapsed, self._tx / elapsed, load, self.error_frames, self.rx_total, self.tx_total
+            )
+        else:
+            self.last = replace(
+                self.last, error_frames=self.error_frames, rx_total=self.rx_total, tx_total=self.tx_total
             )
         self._rx = self._tx = 0
         self._busy_time = 0.0

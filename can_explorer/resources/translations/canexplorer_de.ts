@@ -22,72 +22,77 @@
     <context>
         <name>Actions</name>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="31" />
+            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="32" />
             <source>&amp;Exit</source>
             <translation>&amp;Beenden</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="38" />
+            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="39" />
             <source>&amp;About</source>
             <translation>&amp;Über</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="44" />
+            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="45" />
             <source>&amp;New Connection...</source>
             <translation>&amp;Neue Verbindung...</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="51" />
+            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="52" />
             <source>&amp;Replay Log File...</source>
             <translation>Log-Datei &amp;abspielen...</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="58" />
+            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="59" />
             <source>&amp;Close Connection</source>
             <translation>Verbindung &amp;schließen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="66" />
+            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="67" />
             <source>&amp;Copy Selected Rows</source>
             <translation>Ausgewählte Zeilen &amp;kopieren</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="74" />
+            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="75" />
             <source>Select &amp;All</source>
             <translation>&amp;Alles auswählen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="82" />
+            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="83" />
             <source>Con&amp;vert Signal Database...</source>
             <translation>Signaldatenbank &amp;konvertieren...</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="88" />
+            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="89" />
             <source>Open &amp;Workspace...</source>
             <translation>&amp;Arbeitsbereich öffnen...</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="95" />
+            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="96" />
             <source>&amp;Save Workspace</source>
             <translation>Arbeitsbereich &amp;speichern</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="103" />
+            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="104" />
             <source>Save Workspace &amp;As...</source>
             <translation>Arbeitsbereich speichern &amp;unter...</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="111" />
+            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="112" />
             <source>&amp;Edit Signal Database...</source>
             <translation>Signaldatenbank &amp;bearbeiten...</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="117" />
+            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="118" />
             <source>Command &amp;Palette...</source>
             <translation>&amp;Befehlspalette...</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="124" />
+            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="125" />
+            <source>Check for &amp;Updates...</source>
+            <translation>Nach &amp;Updates suchen...</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="131" />
             <source>&amp;Preferences...</source>
             <translation>&amp;Einstellungen...</translation>
         </message>
@@ -1883,7 +1888,7 @@ B: %3</source>
         <message>
             <location filename="../../gui/qt/CanExplorer/FlashView.qml" line="168" />
             <source>Cancel</source>
-            <translation type="unfinished" />
+            <translation>Abbrechen</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/FlashView.qml" line="190" />
@@ -2349,67 +2354,97 @@ B: %3</source>
     <context>
         <name>PreferencesDialog</name>
         <message>
-            <location filename="../../gui/qt/CanExplorer/PreferencesDialog.qml" line="8" />
+            <location filename="../../gui/qt/CanExplorer/PreferencesDialog.qml" line="9" />
             <source>Preferences</source>
             <translation>Einstellungen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/PreferencesDialog.qml" line="32" />
+            <location filename="../../gui/qt/CanExplorer/PreferencesDialog.qml" line="33" />
             <source>Theme</source>
             <translation>Farbschema</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/PreferencesDialog.qml" line="39" />
+            <location filename="../../gui/qt/CanExplorer/PreferencesDialog.qml" line="40" />
             <source>Language</source>
-            <translation type="unfinished" />
+            <translation>Sprache</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/PreferencesDialog.qml" line="42" />
+            <location filename="../../gui/qt/CanExplorer/PreferencesDialog.qml" line="43" />
             <source>System language</source>
-            <translation type="unfinished" />
+            <translation>Systemsprache</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/PreferencesDialog.qml" line="47" />
+            <location filename="../../gui/qt/CanExplorer/PreferencesDialog.qml" line="48" />
             <source>Applies at once to the whole interface; texts without a translation stay in English</source>
-            <translation type="unfinished" />
+            <translation>Gilt sofort für die ganze Oberfläche; Texte ohne Übersetzung bleiben englisch</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/PreferencesDialog.qml" line="50" />
+            <location filename="../../gui/qt/CanExplorer/PreferencesDialog.qml" line="51" />
             <source>Trace in memory (frames)</source>
             <translation>Trace im Speicher (Frames)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/PreferencesDialog.qml" line="59" />
+            <location filename="../../gui/qt/CanExplorer/PreferencesDialog.qml" line="60" />
             <source>Trace history (frames)</source>
             <translation>Trace-Verlauf (Frames)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/PreferencesDialog.qml" line="68" />
+            <location filename="../../gui/qt/CanExplorer/PreferencesDialog.qml" line="69" />
             <source>Frames kept in total; those beyond the memory limit go to temporary files on disk. 0: memory only.</source>
             <translation>Insgesamt behaltene Frames; was über die Speichergrenze hinausgeht, kommt in temporäre Dateien auf der Festplatte. 0: nur Speicher.</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/PreferencesDialog.qml" line="70" />
+            <location filename="../../gui/qt/CanExplorer/PreferencesDialog.qml" line="71" />
             <source>Trace history directory</source>
             <translation>Verzeichnis des Trace-Verlaufs</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/PreferencesDialog.qml" line="75" />
+            <location filename="../../gui/qt/CanExplorer/PreferencesDialog.qml" line="76" />
             <source>Where the temporary files go; a directory on disk, not in memory (often /tmp)</source>
             <translation>Wohin die temporären Dateien kommen; ein Verzeichnis auf der Festplatte, nicht im Speicher (oft /tmp)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/PreferencesDialog.qml" line="78" />
+            <location filename="../../gui/qt/CanExplorer/PreferencesDialog.qml" line="79" />
             <source>About %1 GB of disk at most. Trace settings apply to connections opened afterwards.</source>
             <translation>Höchstens etwa %1 GB Festplatte. Trace-Einstellungen gelten für danach geöffnete Verbindungen.</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/PreferencesDialog.qml" line="84" />
+            <location filename="../../gui/qt/CanExplorer/PreferencesDialog.qml" line="87" />
             <source>View refresh interval (ms)</source>
             <translation>Aktualisierungsintervall der Ansicht (ms)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/PreferencesDialog.qml" line="95" />
+            <location filename="../../gui/qt/CanExplorer/PreferencesDialog.qml" line="97" />
+            <source>Updates</source>
+            <translation>Updates</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PreferencesDialog.qml" line="100" />
+            <source>Check at start</source>
+            <translation>Beim Start prüfen</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PreferencesDialog.qml" line="104" />
+            <source>Look for new releases on GitHub at most once a day</source>
+            <translation>Höchstens einmal am Tag auf GitHub nach neuen Versionen suchen</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PreferencesDialog.qml" line="107" />
+            <source>Pre-releases</source>
+            <translation>Vorabversionen</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PreferencesDialog.qml" line="111" />
+            <source>Also offer release candidates and other pre-releases</source>
+            <translation>Auch Release Candidates und andere Vorabversionen anbieten</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PreferencesDialog.qml" line="114" />
+            <source>Check now</source>
+            <translation>Jetzt prüfen</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PreferencesDialog.qml" line="123" />
             <source>Clear recent connections and files</source>
             <translation>Letzte Verbindungen und Dateien löschen</translation>
         </message>
@@ -3055,37 +3090,47 @@ B: %3</source>
             <translation>Verbinden</translation>
         </message>
         <message>
+            <location filename="../../gui/qt/CanExplorer/TopBar.qml" line="140" />
+            <source>⬆ Update %1</source>
+            <translation>⬆ Update %1</translation>
+        </message>
+        <message>
             <location filename="../../gui/qt/CanExplorer/TopBar.qml" line="143" />
+            <source>CANExplorer %1 is available</source>
+            <translation>CANExplorer %1 ist verfügbar</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/TopBar.qml" line="153" />
             <source>Notifications</source>
             <translation>Benachrichtigungen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/TopBar.qml" line="182" />
+            <location filename="../../gui/qt/CanExplorer/TopBar.qml" line="192" />
             <source>Clear</source>
             <translation>Leeren</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/TopBar.qml" line="190" />
+            <location filename="../../gui/qt/CanExplorer/TopBar.qml" line="200" />
             <source>No notifications</source>
             <translation>Keine Benachrichtigungen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/TopBar.qml" line="240" />
+            <location filename="../../gui/qt/CanExplorer/TopBar.qml" line="250" />
             <source>Minimize</source>
             <translation>Minimieren</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/TopBar.qml" line="246" />
+            <location filename="../../gui/qt/CanExplorer/TopBar.qml" line="256" />
             <source>Restore</source>
             <translation>Wiederherstellen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/TopBar.qml" line="246" />
+            <location filename="../../gui/qt/CanExplorer/TopBar.qml" line="256" />
             <source>Maximize</source>
             <translation>Maximieren</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/TopBar.qml" line="253" />
+            <location filename="../../gui/qt/CanExplorer/TopBar.qml" line="263" />
             <source>Close</source>
             <translation>Schließen</translation>
         </message>
@@ -3239,6 +3284,89 @@ B: %3</source>
             <location filename="../../gui/qt/CanExplorer/TransmitPanel.qml" line="80" />
             <source>Stop all (%1)</source>
             <translation>Alle stoppen (%1)</translation>
+        </message>
+    </context>
+    <context>
+        <name>UpdateDialog</name>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="14" />
+            <source>CANExplorer %1 is available</source>
+            <translation>CANExplorer %1 ist verfügbar</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="14" />
+            <source>Updates</source>
+            <translation>Updates</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="41" />
+            <source>Looking for new releases…</source>
+            <translation>Suche nach neuen Versionen…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="42" />
+            <source>CANExplorer %1 is up to date.</source>
+            <translation>CANExplorer %1 ist aktuell.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="55" />
+            <source>You have %1. Version %2 was released on %3%4.</source>
+            <translation>Installiert ist %1. Version %2 wurde am %3 veröffentlicht%4.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="57" />
+            <source> (pre-release)</source>
+            <translation> (Vorabversion)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="71" />
+            <source>No release notes.</source>
+            <translation>Keine Versionshinweise.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="94" />
+            <source>Installing; CANExplorer restarts in a moment…</source>
+            <translation>Wird installiert; CANExplorer startet gleich neu…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="95" />
+            <source>Downloading %1</source>
+            <translation>Lade herunter: %1</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="115" />
+            <source>Skip this version</source>
+            <translation>Diese Version überspringen</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="124" />
+            <source>Release page</source>
+            <translation>Release-Seite</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="131" />
+            <source>Check again</source>
+            <translation>Erneut prüfen</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="136" />
+            <source>Cancel</source>
+            <translation>Abbrechen</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="141" />
+            <source>Later</source>
+            <translation>Später</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="141" />
+            <source>Close</source>
+            <translation>Schließen</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="146" />
+            <source>Install and restart</source>
+            <translation>Installieren und neu starten</translation>
         </message>
     </context>
     <context>
@@ -3465,6 +3593,11 @@ B: %3</source>
             <location filename="../../gui/qt/main_window.qml" line="571" />
             <source>Use "Save as" in the database editor first</source>
             <translation>Zuerst „Speichern unter“ im Datenbank-Editor verwenden</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/main_window.qml" line="620" />
+            <source>CANExplorer %1 is available: ⋮ → Check for Updates…</source>
+            <translation>CANExplorer %1 ist verfügbar: ⋮ → Nach Updates suchen…</translation>
         </message>
     </context>
 </TS>

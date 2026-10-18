@@ -64,6 +64,7 @@ computer.
 | `core/canopen_tools.py` | EDS/DCF object dictionaries, SDO client, NMT, PDO mappings, network tracking, simulated node |
 | `core/compare.py` | Comparing two recordings |
 | `core/bushealth.py` | Error frame decoding, error states and the bus health history |
+| `core/updates.py`, `gui/updates.py` | Finding, downloading, verifying and installing new releases from GitHub |
 | `core/remote.py` | `RemoteBus`, the python-can interface for buses shared by `can-server` |
 | `core/diagnostic_description.py` | CANdelaStudio CDD reader |
 | `core/trace_store.py` | Trace frames in memory and in temporary files on disk, by absolute index |

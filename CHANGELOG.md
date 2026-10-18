@@ -200,6 +200,10 @@ From 1.0.0 on, CANExplorer follows semantic versioning; the public interfaces ar
 
 #### Packaging, documentation and development
 
+- **Updates**: CANExplorer looks for new GitHub releases at start (at most daily, can be turned off, optionally
+  including pre-releases) or on request (⋮ → Check for Updates…), shows the release notes, and downloads,
+  verifies (`SHA256SUMS.txt`) and installs the update for the way it was installed: Windows setup, AppImage,
+  Debian package or macOS app; it then restarts. Versions can be skipped.
 - **Installers**: `packaging/installer.py` creates a Windows setup (Inno Setup), a Linux AppImage and `.deb`
   package and a macOS disk image from the bundle. The new `release` workflow (replacing `installer`) builds them
   on the three platforms, installs each to check it starts, stores them as artifacts and publishes them with

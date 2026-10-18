@@ -726,3 +726,37 @@ def test_table_columns_can_be_resized(window, qtbot):
         qtbot.wait(50)
         assert width(0) == before  # A double click restores the configured width
     assert warnings == []
+
+
+def test_update_dialog_renders_without_warnings(window, qtbot):
+    from PyQt6 import sip
+    from PyQt6.QtQuick import QQuickWindow
+
+    from can_explorer.core import updates
+
+    engine, manager, warnings = window
+    controller = manager.updates
+    root = sip.cast(engine.rootObjects()[0], QQuickWindow)
+    dialog = next(
+        item for item in root.findChildren(QObject) if item.metaObject().className().startswith('UpdateDialog')
+    )
+    controller._release = updates.Release(
+        '9.0.0',
+        'v9.0.0',
+        'CANExplorer 9.0.0',
+        '## Added\n\n- **Everything**',
+        'https://github.com',
+        False,
+        '2030-01-01',
+    )
+    for state in ('checking', 'current', 'available', 'downloading', 'installing', 'error'):
+        controller._done, controller._total = 5_000_000, 10_000_000
+        controller._set_state(state, 'Download failed' if state == 'error' else '')
+        controller.progress_changed.emit()
+        dialog.open()
+        qtbot.wait(60)
+        assert dialog.property('title') and dialog.property('visible')
+    controller._set_state('available')
+    dialog.close()
+    qtbot.wait(50)  # The top bar shows the update button
+    assert warnings == []

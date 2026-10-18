@@ -34,6 +34,7 @@ os.environ.setdefault('QSG_RHI_BACKEND', 'opengl')
 QSettings.setPath(QSettings.Format.NativeFormat, QSettings.Scope.UserScope, tempfile.mkdtemp())
 
 from can_explorer.core.bushealth import ERR_BUSOFF, ERR_CNT, ERR_CRTL, ERR_PROT, ERR_RESTARTED  # noqa: E402
+from can_explorer.core import updates  # noqa: E402
 from can_explorer.core.canopen_tools import CanOpenNodeSimulator, ObjectDictionary  # noqa: E402
 from can_explorer.core.j1939_tools import (  # noqa: E402
     PGN_ADDRESS_CLAIMED,
@@ -395,6 +396,28 @@ async def scenario():
     field.setProperty('text', 'con')
     await shot('command-palette', 0.5)
     QMetaObject.invokeMethod(palette, 'close')
+
+    # The update dialog, with a sample release (the screenshots cannot wait for a real one)
+    update_controller = manager.updates
+    update_controller._release = updates.Release(
+        '1.1.0',
+        'v1.1.0',
+        'CANExplorer 1.1.0',
+        '## Added\n\n- **Signal plots**: markers for trace bookmarks\n- **J1939**: DM4 freeze frames\n\n'
+        '## Fixed\n\n- Replays of BLF files with CAN FD frames on Windows',
+        'https://github.com/AKJ7/CANExplorer/releases/tag/v1.1.0',
+        False,
+        '2026-11-02',
+        {f'CANExplorer-1.1.0-linux-{updates.machine()}.AppImage': '', 'SHA256SUMS.txt': ''},
+    )
+    update_controller._kind = updates.APPIMAGE  # As installed from the AppImage, which can update itself
+    update_controller._set_state('available')
+    update_dialog = items('UpdateDialog')[0]
+    update_dialog.open()
+    await shot('update', 0.6)
+    update_dialog.close()
+    update_controller._release = None
+    update_controller._set_state('idle')
 
     for name, dialog_name in (('convert-database', 'ConvertDatabaseDialog'), ('preferences', 'PreferencesDialog')):
         dialog = items(dialog_name)[0]

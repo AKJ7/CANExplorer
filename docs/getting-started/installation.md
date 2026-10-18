@@ -18,6 +18,9 @@ Every [release](https://github.com/AKJ7/CANExplorer/releases) has installers; no
 | Debian, Ubuntu (x86-64) | `CANExplorer-<version>-linux-x86_64.deb` | `sudo apt install ./CANExplorer-*.deb`; starts from the menu or with `canexplorer` |
 | macOS (Apple silicon) | `CANExplorer-<version>-macos-arm64.dmg` | Open it and drag CANExplorer to *Applications* |
 
+Installed copies update themselves: CANExplorer announces new releases and installs them on request, see
+[Updates](../user-guide/updates.md).
+
 The zip archives of the same release contain the application without installer: unpack and start `CANExplorer`
 (`CANExplorer.app` on macOS). `SHA256SUMS.txt` lists the checksums of all files.
 

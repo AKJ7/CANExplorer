@@ -26,6 +26,7 @@ Sidebar 1.0 Sidebar.qml
 TopBar 1.0 TopBar.qml
 AppMenu 1.0 AppMenu.qml
 CommandPalette 1.0 CommandPalette.qml
+UpdateDialog 1.0 UpdateDialog.qml
 DashboardView 1.0 DashboardView.qml
 BusHealthView 1.0 BusHealthView.qml
 WelcomeView 1.0 WelcomeView.qml

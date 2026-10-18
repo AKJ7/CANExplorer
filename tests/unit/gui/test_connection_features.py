@@ -1,4 +1,5 @@
 import asyncio
+import time
 import uuid
 
 import can
@@ -627,22 +628,28 @@ async def test_multi_bus_trace(manager):
     manager.add_connection({'name': 'Body', 'interface': 'VirtualBus', 'channel': channels[1]})
     for connection in manager.connections:
         connection.open()
-    peers = [can.Bus(interface='virtual', channel=channel) for channel in channels]
+    # Explicit timestamps: the virtual bus would otherwise stamp frames with time.time(), which only ticks every
+    # 15.6 ms on Windows (before Python 3.13), so frames of the two buses could share a timestamp
+    peers = [can.Bus(interface='virtual', channel=channel, preserve_timestamps=True) for channel in channels]
     multi = manager.multi_bus
     trace = multi.trace
+    base = time.time()
+
+    def message(can_id, data, offset):
+        return can.Message(arbitration_id=can_id, is_extended_id=False, data=data, timestamp=base + offset)
+
     try:
-        peers[0].send(can.Message(arbitration_id=0x100, is_extended_id=False, data=[1]))  # Before selecting
+        peers[0].send(message(0x100, [1], 0.0))  # Before selecting
         await wait_until(lambda: manager.connections[0].session.trace.total == 1)
         assert [entry['name'] for entry in multi.connections] == ['Powertrain', 'Body']
         multi.set_selected('Powertrain', True)
         multi.set_selected('Body', True)
         assert multi.selected == ['Powertrain', 'Body'] and trace.rowCount() == 1
         for i in range(3):
-            peers[1].send(can.Message(arbitration_id=0x200 + i, is_extended_id=False, data=[i]))
-            await asyncio.sleep(0.01)
-            peers[0].send(can.Message(arbitration_id=0x100, is_extended_id=False, data=[i]))
-            await asyncio.sleep(0.01)
-        await wait_until(lambda: all(connection.session.trace.total >= 3 for connection in manager.connections))
+            peers[1].send(message(0x200 + i, [i], 0.1 + i * 0.2))
+            peers[0].send(message(0x100, [i], 0.2 + i * 0.2))
+        # Powertrain: the frame before selecting and three more; Body: three
+        await wait_until(lambda: [c.session.trace.total for c in manager.connections] == [4, 3])
         multi.poll()
         rows = [(trace.display(row, 1), trace.display(row, 4)) for row in range(trace.rowCount())]
         assert rows == [('Powertrain', '100')] + [
@@ -657,7 +664,7 @@ async def test_multi_bus_trace(manager):
         assert multi.filter_error and trace.rowCount() == 3
         multi.set_filter('')
         multi.set_paused(True)
-        peers[0].send(can.Message(arbitration_id=0x101, is_extended_id=False, data=[9]))
+        peers[0].send(message(0x101, [9], 1.0))
         await wait_until(lambda: manager.connections[0].session.trace.total == 5)
         multi.poll()
         assert trace.rowCount() == 7

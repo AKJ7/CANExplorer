@@ -83,9 +83,11 @@ async def test_session_recording_options(tmp_path):
         session.start_recording(tmp_path / 'missing' / 'a.asc', trigger=Trigger(start='100'))
     events = []
     session.start_recording(tmp_path / 'b.asc', trigger=Trigger(start='123', pre=1, post=0), on_event=events.append)
-    peer = can.Bus(interface='virtual', channel=channel)
-    for can_id in (0x100, 0x101, 0x123, 0x102):
-        peer.send(message(can_id, 0))
+    # Explicit timestamps: the virtual bus would otherwise stamp them with time.time(), which only ticks every
+    # 15.6 ms on Windows (before Python 3.13), so frames sent close together could share a timestamp
+    peer = can.Bus(interface='virtual', channel=channel, preserve_timestamps=True)
+    for index, can_id in enumerate((0x100, 0x101, 0x123, 0x102)):
+        peer.send(message(can_id, 1000.0 + index * 0.1))
         await asyncio.sleep(0.01)
     await asyncio.sleep(0.1)
     peer.shutdown()

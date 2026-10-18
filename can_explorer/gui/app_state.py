@@ -51,6 +51,11 @@ class AppState(QObject):
         self._settings.setValue(key, json.dumps(entries))
         self._settings.sync()
 
+    @property
+    def settings(self) -> QSettings:
+        """The settings storage, for controllers keeping their own settings (e.g. updates)."""
+        return self._settings
+
     @staticmethod
     def _push(entries: List[Dict[str, Any]], entry: Dict[str, Any], identity: str) -> List[Dict[str, Any]]:
         entries = [existing for existing in entries if existing.get(identity) != entry[identity]]
