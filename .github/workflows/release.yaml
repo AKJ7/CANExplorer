@@ -145,13 +145,19 @@ jobs:
           done
           hdiutil detach /Volumes/CANExplorer -force -quiet
 
+      # One flat folder: artifacts keep the paths below the common parent, so files from dist/installers and dist
+      # would arrive in different folders, and the jobs below expect all files side by side
+      - name: Collect the files
+        shell: bash
+        run: |
+          mkdir -p dist/upload
+          cp dist/installers/* dist/CANExplorer-*.zip dist/upload/
+          ls -l dist/upload
       - name: Store the installers
         uses: actions/upload-artifact@v4
         with:
           name: CANExplorer-${{ needs.version.outputs.version }}-${{ matrix.platform }}-${{ env.BACKEND }}
-          path: |
-            dist/installers/*
-            dist/CANExplorer-*.zip
+          path: dist/upload/
           if-no-files-found: error
           retention-days: 90
           compression-level: 0  # The installers are compressed already
