@@ -2,6 +2,7 @@ import functools
 import hashlib
 import importlib.util
 import json
+import os
 import threading
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -124,7 +125,9 @@ def test_download_verify_and_install_appimage(release_server, tmp_path, monkeypa
     current.parent.mkdir()
     current.write_bytes(b'old version')
     assert updates.install_appimage(path, {'APPIMAGE': str(current)}) == current
-    assert current.read_bytes() == path.read_bytes() and current.stat().st_mode & 0o111
+    assert current.read_bytes() == path.read_bytes()
+    if os.name != 'nt':  # Windows has no execute permission bits
+        assert current.stat().st_mode & 0o111
     assert updates.restart_command(updates.APPIMAGE, {'APPIMAGE': str(current)}) == [str(current)]
 
     with pytest.raises(updates.UpdateError, match='Cancelled'):

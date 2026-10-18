@@ -175,7 +175,7 @@ def installation_kind(environ: Optional[Dict[str, str]] = None, platform_name: O
         return WINDOWS_SETUP
     if platform_name == 'darwin' and app_bundle(path) is not None:
         return MACOS_APP
-    if platform_name.startswith('linux') and str(path).startswith('/opt/canexplorer/'):
+    if platform_name.startswith('linux') and path.as_posix().startswith('/opt/canexplorer/'):
         return DEB
     return PORTABLE
 

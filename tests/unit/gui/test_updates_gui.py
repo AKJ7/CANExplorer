@@ -64,6 +64,8 @@ async def test_check_skip_and_install(qapp, server, settings, tmp_path, monkeypa
     current.write_bytes(b'old')
     monkeypatch.setenv('APPIMAGE', str(current))
     monkeypatch.setattr(updates, 'machine', lambda: 'x86_64')
+    # An AppImage installation, also when the tests run on Windows or macOS (AppImages only exist on Linux)
+    monkeypatch.setattr(updates, 'installation_kind', lambda *args, **kwargs: updates.APPIMAGE)
     controller = UpdateController(settings, current='1.0.0')
     assert controller.installation == 'AppImage' and controller.check_at_start
 
