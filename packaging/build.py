@@ -42,6 +42,14 @@ DATA_PACKAGES = ('ldfparser', 'lark')
 # python-can imports its interface backends by name at runtime, and pyserial its URL handlers (socket:// etc.), so
 # they are not found by import analysis
 DYNAMIC_PACKAGES = ('can.interfaces', 'serial.urlhandler')
+# python-can backends that load their vendor driver when imported, so --collect-submodules skips them on a build machine
+# without that driver; named explicitly, they are bundled and load the driver on the user's machine
+DRIVER_MODULES = (
+    'can.interfaces.etas',
+    'can.interfaces.etas.boa',
+    'can.interfaces.ixxat',
+    'can.interfaces.usb2can',
+)
 # CANExplorer's own python-can interfaces, registered as entry points (pyproject.toml) and imported by name only
 # The J2534 bridge, a 32-bit program for 32-bit J2534 drivers (standard library only)
 J2534_BRIDGE = ROOT / 'can_explorer' / 'core' / 'j2534_bridge.py'
@@ -89,7 +97,7 @@ def build_pyinstaller() -> Path:
     ]
     for package in DYNAMIC_PACKAGES:
         arguments += ['--collect-submodules', package]
-    for module in INTERFACE_MODULES:
+    for module in INTERFACE_MODULES + DRIVER_MODULES:
         arguments += ['--hidden-import', module]
     for package in DATA_PACKAGES:
         arguments += ['--collect-data', package]
