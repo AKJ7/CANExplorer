@@ -5,7 +5,8 @@
 #   docker compose run --rm test         The test suite, headless
 #   CAN_SERVER_TOKEN=secret docker compose up can-server
 #                                        Shares the host's can0 with CANExplorer on other computers (port 8765);
-#                                        other buses with e.g. CAN_SERVER_BUS="body=socketcan:can1:125000"
+#                                        other buses with e.g. CAN_SERVER_BUS="body=socketcan:can1:125000";
+#                                        CAN_SERVER_MQTT=mqtt://broker also publishes them over MQTT
 #
 # Set UID to your user id (`id -u`) if it is not 1000, so files created in the source belong to you.
 
@@ -31,7 +32,7 @@ services:
 
   test:
     <<: *common
-    command: bash -c "uv sync --locked && uv run pytest -o log_cli=false"
+    command: bash -c "uv sync --locked --extra mqtt && uv run pytest -o log_cli=false"
 
   can-server:
     <<: *common
@@ -40,9 +41,10 @@ services:
     restart: unless-stopped
     environment:
       CAN_SERVER_TOKEN: ${CAN_SERVER_TOKEN:-}
+      CAN_SERVER_MQTT: ${CAN_SERVER_MQTT:-}
     command: >
       bash -c "test -n \"$$CAN_SERVER_TOKEN\" || { echo 'Set CAN_SERVER_TOKEN to the token clients must present'; exit 1; } &&
-               uv sync --locked --no-default-groups &&
+               uv sync --locked --no-default-groups --extra mqtt &&
                exec uv run --no-sync can-server --bus '${CAN_SERVER_BUS:-vehicle=socketcan:can0:500000}' --port ${CAN_SERVER_PORT:-8765}"
 
 volumes:

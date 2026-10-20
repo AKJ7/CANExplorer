@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=CANExplorer
+GenericName=CAN Bus Monitor
+Comment=Monitor, analyse, diagnose and simulate CAN, CAN FD and LIN buses
+Exec=canexplorer
+Icon=${SNAP}/meta/gui/icon.png
+Terminal=false
+Categories=Development;Electronics;Engineering;
+Keywords=CAN;CAN FD;LIN;bus;automotive;UDS;DBC;
+StartupWMClass=io.github.akj7.CANExplorer

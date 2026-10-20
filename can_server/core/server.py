@@ -11,20 +11,28 @@ Messages are JSON text frames:
 - client → server: `{"type": "send", "frame": FRAME}`
 
 FRAME is `[timestamp, arbitration_id, flags, data_hex, dlc]` (see `encode_frame`).
+
+With MQTT configured, every bus is opened when the server starts and kept open, and an MQTT bridge publishes its
+signals (decoded with the bus's database) and optionally its frames, and sends the frames requested over MQTT
+(see can_explorer.core.mqtt).
 """
 
 import asyncio
+import functools
 import hmac
 import json
 import logging
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Set
 
 import can
 from aiohttp import WSMsgType, web
 
+from can_explorer.core.decoding import open_signal_database
+from can_explorer.core.mqtt import MqttBridge, MqttSettings
 from can_explorer.core.remote import PROTOCOL_VERSION, RX, decode_frame, encode_frame
 
 logger = logging.getLogger(__name__)
@@ -93,6 +101,9 @@ class BusHub:
     _reader: Optional[can.AsyncBufferedReader] = None
     _tasks: List[asyncio.Task] = field(default_factory=list)
     state: str = ''
+    listeners: List[Callable[[can.Message], None]] = field(default_factory=list)  # Called with every frame
+    keep_open: bool = False  # Open without clients (for MQTT)
+    database: Any = None  # Signal database for MQTT
 
     def open(self) -> None:
         spec = self.spec
@@ -135,6 +146,9 @@ class BusHub:
             while len(batch) < MAX_BATCH and not reader.buffer.empty():
                 batch.append(reader.buffer.get_nowait())
             self._broadcast([encode_frame(msg) for msg in batch])
+            for listener in self.listeners:
+                for msg in batch:
+                    listener(msg)
 
     async def _watch_state(self) -> None:
         while True:
@@ -150,24 +164,40 @@ class BusHub:
                         client.queue.put_nowait(payload)
             await asyncio.sleep(STATE_INTERVAL)
 
-    def send(self, msg: can.Message, origin: _Client) -> None:
+    def send(self, msg: can.Message, origin: Optional[_Client] = None) -> None:
+        """Send a frame of a client (or of MQTT, without origin); the other clients receive it."""
+        if self.bus is None:
+            raise can.CanOperationError(f'Bus {self.spec.name} is not open')
         self.bus.send(msg, timeout=0.1)
         msg.timestamp = msg.timestamp or time.time()
         frame = encode_frame(msg)
         self._broadcast([frame[:2] + [frame[2] | RX] + frame[3:]], exclude=origin)  # Other clients receive it
-        if origin.receive_own:  # Echoed to the sender as transmitted
+        if origin is not None and origin.receive_own:  # Echoed to the sender as transmitted
             origin.queue.put_nowait(
                 json.dumps({'type': 'frames', 'frames': [frame[:2] + [frame[2] & ~RX] + frame[3:]]})
             )
 
 
 class CanServer:
-    def __init__(self, buses: List[BusSpec], token: Optional[str] = None):
+    def __init__(
+        self,
+        buses: List[BusSpec],
+        token: Optional[str] = None,
+        mqtt: Optional[MqttSettings] = None,
+        databases: Optional[Dict[str, Path]] = None,
+    ):
+        """`databases` maps bus names to signal databases, for publishing signals over MQTT."""
         names = [spec.name for spec in buses]
         if len(set(names)) != len(names):
             raise ValueError('Bus names must be unique')
         self.hubs: Dict[str, BusHub] = {spec.name: BusHub(spec) for spec in buses}
         self.token = token
+        self.mqtt = mqtt
+        self.bridges: Dict[str, MqttBridge] = {}
+        for name, path in (databases or {}).items():
+            if name not in self.hubs:
+                raise ValueError(f'Database for unknown bus {name!r}; buses: {", ".join(self.hubs)}')
+            self.hubs[name].database = open_signal_database(path)
 
     def _authorised(self, request: web.Request) -> bool:
         if not self.token:
@@ -178,10 +208,31 @@ class CanServer:
     def application(self) -> web.Application:
         app = web.Application()
         app.add_routes([web.get('/', self.index), web.get('/buses', self.buses), web.get('/bus/{name}', self.connect)])
+        app.on_startup.append(self._start_mqtt)
         app.on_shutdown.append(self._shutdown)
         return app
 
+    async def _start_mqtt(self, app: web.Application) -> None:
+        """Open every bus and publish it over MQTT."""
+        if self.mqtt is None:
+            return
+        for name, hub in self.hubs.items():
+            hub.keep_open = True
+            try:
+                hub.open()
+            except Exception as e:
+                logger.error(f'Could not open bus {name} for MQTT: {e}')
+                continue
+            if hub.database is None and self.mqtt.signals:
+                logger.warning(f'No database for bus {name}: its signals are not published (--database {name}=FILE)')
+            bridge = MqttBridge(self.mqtt, name, functools.partial(getattr, hub, 'database'), send=hub.send)
+            hub.listeners.append(bridge.on_message)
+            bridge.start()
+            self.bridges[name] = bridge
+
     async def _shutdown(self, app: web.Application) -> None:
+        for bridge in self.bridges.values():
+            bridge.stop()
         for hub in self.hubs.values():
             for client in list(hub.clients):
                 if client.ws is not None:
@@ -248,7 +299,7 @@ class CanServer:
             if client.dropped:
                 logger.warning(f'{client.dropped} frames to {peer} were dropped (slow connection)')
             logger.info(f'Client {peer} left {hub.spec.name} ({len(hub.clients)} connected)')
-            if not hub.clients:
+            if not hub.clients and not hub.keep_open:
                 hub.close()
         return ws
 
@@ -266,8 +317,16 @@ async def create_server(buses: Optional[List[BusSpec]] = None, token: Optional[s
 class ServerThread:
     """Runs a server on a thread with its own event loop (for tests and embedding)."""
 
-    def __init__(self, buses: List[BusSpec], token: Optional[str] = None, host: str = '127.0.0.1', port: int = 0):
-        self.server = CanServer(buses, token)
+    def __init__(
+        self,
+        buses: List[BusSpec],
+        token: Optional[str] = None,
+        host: str = '127.0.0.1',
+        port: int = 0,
+        mqtt: Optional[MqttSettings] = None,
+        databases: Optional[Dict[str, Path]] = None,
+    ):
+        self.server = CanServer(buses, token, mqtt, databases)
         self.host, self.port = host, port
         self._loop = asyncio.new_event_loop()
         self._runner: Optional[web.AppRunner] = None

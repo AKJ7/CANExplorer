@@ -864,86 +864,101 @@ B: %3</source>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="102" />
+            <source>● MQTT</source>
+            <translation>● MQTT</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="102" />
+            <source>MQTT…</source>
+            <translation>MQTT…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="107" />
+            <source>Publish the signals and frames to an MQTT broker</source>
+            <translation>Signale und Frames an einen MQTT-Broker senden</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="111" />
             <source>Export…</source>
             <translation>Exportieren…</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="104" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="113" />
             <source>Save the selected trace rows, or all displayed rows, to a log file</source>
             <translation>Die ausgewählten oder alle angezeigten Trace-Zeilen in einer Log-Datei speichern</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="108" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="117" />
             <source>Unload database</source>
             <translation>Datenbank entladen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="108" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="117" />
             <source>Load database…</source>
             <translation>Datenbank laden…</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="113" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="122" />
             <source>Edit database</source>
             <translation>Datenbank bearbeiten</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="115" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="124" />
             <source>Open the database in the editor; saving it updates the decoding</source>
             <translation>Die Datenbank im Editor öffnen; Speichern aktualisiert die Dekodierung</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="121" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="130" />
             <source>All buses</source>
             <translation>Alle Busse</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="125" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="134" />
             <source>The database describes several buses; decode with the messages of this one</source>
             <translation>Die Datenbank beschreibt mehrere Busse; mit den Botschaften dieses Busses dekodieren</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="130" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="139" />
             <source>Auto-scroll</source>
             <translation>Automatisch scrollen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="138" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="147" />
             <source>● REC</source>
             <translation>● REC</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="153" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="162" />
             <source>%1 frames</source>
             <translation>%1 Frames</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="317" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="331" />
             <source>Bookmark / remove bookmark	Ctrl+B</source>
             <translation>Lesezeichen setzen / entfernen	Ctrl+B</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="321" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="335" />
             <source>Copy selected rows	Ctrl+C</source>
             <translation>Ausgewählte Zeilen kopieren	Ctrl+C</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="327" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="341" />
             <source>Replay from here</source>
             <translation>Ab hier abspielen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="331" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="345" />
             <source>Find…	Ctrl+F</source>
             <translation>Suchen…	Ctrl+F</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="360" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="374" />
             <source>Export trace</source>
             <translation>Trace exportieren</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="373" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="387" />
             <source>Load signal database</source>
             <translation>Signaldatenbank laden</translation>
         </message>
@@ -1794,6 +1809,224 @@ B: %3</source>
         </message>
     </context>
     <context>
+        <name>EtherCatView</name>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="34" />
+            <source>Adapter</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="49" />
+            <source>List the network adapters again</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="53" />
+            <source>Close</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="53" />
+            <source>Open</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="59" />
+            <source>Scan</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="62" />
+            <source>Find the slaves again and bring them to Pre-Op</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="75" />
+            <source>To slave</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="80" />
+            <source>To all</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="94" />
+            <source>Only the simulated network is available: real EtherCAT adapters need the pysoem package (the "ethercat" extra).</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="121" />
+            <source>Open a network adapter to find its slaves</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="122" />
+            <source>Slaves</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="122" />
+            <source>No slaves found</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="143" />
+            <source>Vendor %1, product %2, revision %3</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="146" />
+            <source>No CoE mailbox</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="165" />
+            <source>%1 EMCY</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="176" />
+            <source>Emergencies of slave %1</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="197" />
+            <source>Error register %1, data %2</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="216" />
+            <source>Object dictionary</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="217" />
+            <source>PDOs</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="232" />
+            <source>Object dictionary of slave %1 from %2</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="233" />
+            <source>Read the object dictionary from the slave, load its EDS file, or enter an index and sub-index below.</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="239" />
+            <source>Read from slave</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="242" />
+            <source>Read the objects with the SDO information service</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="246" />
+            <source>Unload</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="246" />
+            <source>EDS file…</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="254" />
+            <source>Filter objects by index or name</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="313" />
+            <source>Index</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="319" />
+            <source>Sub</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="326" />
+            <source>Read</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="332" />
+            <source>value</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="332" />
+            <source>value, hex bytes</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="338" />
+            <source>Write</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="346" />
+            <source>Log</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="349" />
+            <source>Clear</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="382" />
+            <source>PDOs assigned to the sync managers of slave %1</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="383" />
+            <source>Read the PDO assignment (0x1C12, 0x1C13) and mapping from the slave.</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="392" />
+            <source>Read the assigned PDOs, their mapping and the mapped objects' values over SDO</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="417" />
+            <source>outputs</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="417" />
+            <source>inputs</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="422" />
+            <source>%1 bit</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="428" />
+            <source>Nothing mapped</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="470" />
+            <source>CANopen device descriptions (*.eds *.dcf)</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EtherCatView.qml" line="470" />
+            <source>All files (*)</source>
+            <translation type="unfinished" />
+        </message>
+    </context>
+    <context>
         <name>FlashView</name>
         <message>
             <location filename="../../gui/qt/CanExplorer/FlashView.qml" line="36" />
@@ -2168,6 +2401,119 @@ B: %3</source>
         </message>
     </context>
     <context>
+        <name>MqttDialog</name>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/MqttDialog.qml" line="13" />
+            <source>MQTT</source>
+            <translation>MQTT</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/MqttDialog.qml" line="65" />
+            <source>Broker</source>
+            <translation>Broker</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/MqttDialog.qml" line="71" />
+            <source>mqtt://HOST[:PORT], or mqtts:// for TLS (port 8883)</source>
+            <translation>mqtt://HOST[:PORT], oder mqtts:// für TLS (Port 8883)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/MqttDialog.qml" line="73" />
+            <source>User</source>
+            <translation>Benutzer</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/MqttDialog.qml" line="78" />
+            <source>optional</source>
+            <translation>optional</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/MqttDialog.qml" line="83" />
+            <source>password</source>
+            <translation>Passwort</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/MqttDialog.qml" line="87" />
+            <source>Not stored: enter it again after restarting CANExplorer</source>
+            <translation>Wird nicht gespeichert: nach einem Neustart von CANExplorer erneut eingeben</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/MqttDialog.qml" line="90" />
+            <source>Topic prefix</source>
+            <translation>Topic-Präfix</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/MqttDialog.qml" line="99" />
+            <source>Topics: %1/%2/…</source>
+            <translation>Topics: %1/%2/…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/MqttDialog.qml" line="105" />
+            <source>Publish</source>
+            <translation>Veröffentlichen</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/MqttDialog.qml" line="112" />
+            <source>Signals (…/signals/MESSAGE/SIGNAL), when they change; needs a signal database</source>
+            <translation>Signale (…/signals/NACHRICHT/SIGNAL), wenn sie sich ändern; benötigt eine Signaldatenbank</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/MqttDialog.qml" line="116" />
+            <source>Frames (…/frames, a JSON list per interval)</source>
+            <translation>Frames (…/frames, eine JSON-Liste pro Intervall)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/MqttDialog.qml" line="120" />
+            <source>Retain signal values on the broker</source>
+            <translation>Signalwerte auf dem Broker behalten (retain)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/MqttDialog.qml" line="123" />
+            <source>At most every</source>
+            <translation>Höchstens alle</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/MqttDialog.qml" line="130" />
+            <source>s per signal</source>
+            <translation>s pro Signal</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/MqttDialog.qml" line="136" />
+            <source>Send</source>
+            <translation>Senden</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/MqttDialog.qml" line="143" />
+            <source>Send frames published to …/send</source>
+            <translation>An …/send veröffentlichte Frames senden</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/MqttDialog.qml" line="148" />
+            <source>Allowed messages or hex identifiers, e.g. EngineControl 7DF (* for all)</source>
+            <translation>Erlaubte Nachrichten oder Hex-Identifier, z. B. EngineControl 7DF (* für alle)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/MqttDialog.qml" line="153" />
+            <source>Anyone who can publish to the broker can then send these frames on the bus.</source>
+            <translation>Wer auf dem Broker veröffentlichen kann, kann diese Frames dann auf dem Bus senden.</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/MqttDialog.qml" line="165" />
+            <source>Stop</source>
+            <translation>Stopp</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/MqttDialog.qml" line="165" />
+            <source>Start</source>
+            <translation>Start</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/MqttDialog.qml" line="173" />
+            <source>Not publishing</source>
+            <translation>Keine Veröffentlichung</translation>
+        </message>
+    </context>
+    <context>
         <name>MultiBusView</name>
         <message>
             <location filename="../../gui/qt/CanExplorer/MultiBusView.qml" line="33" />
@@ -2296,6 +2642,159 @@ B: %3</source>
             <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="160" />
             <source>Self-Reception</source>
             <translation>Eigenempfang</translation>
+        </message>
+    </context>
+    <context>
+        <name>PhysicalIoView</name>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PhysicalIoView.qml" line="24" />
+            <source>Device</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PhysicalIoView.qml" line="37" />
+            <source>Look for devices again</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PhysicalIoView.qml" line="41" />
+            <source>Close</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PhysicalIoView.qml" line="41" />
+            <source>Open</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PhysicalIoView.qml" line="52" />
+            <source>Identify</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PhysicalIoView.qml" line="55" />
+            <source>Make the device show itself, e.g. by blinking its LED</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PhysicalIoView.qml" line="64" />
+            <source>Poll every</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PhysicalIoView.qml" line="74" />
+            <source>ms</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PhysicalIoView.qml" line="85" />
+            <source>Only the simulated device is available: USB I/O adapters need the pyusb package (the "io" extra).</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PhysicalIoView.qml" line="103" />
+            <source>Open an I/O device to switch its outputs and watch its inputs and analogue values.</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PhysicalIoView.qml" line="123" />
+            <source>Digital lines</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PhysicalIoView.qml" line="126" />
+            <source>All outputs low</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PhysicalIoView.qml" line="131" />
+            <source>All outputs high</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PhysicalIoView.qml" line="163" />
+            <source>Line %1</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PhysicalIoView.qml" line="176" />
+            <source>High</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PhysicalIoView.qml" line="176" />
+            <source>Low</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PhysicalIoView.qml" line="184" />
+            <source>Input</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PhysicalIoView.qml" line="184" />
+            <source>Output</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PhysicalIoView.qml" line="194" />
+            <source>No pull</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PhysicalIoView.qml" line="195" />
+            <source>Pull-up</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PhysicalIoView.qml" line="195" />
+            <source>Pull-down</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PhysicalIoView.qml" line="203" />
+            <source>Active low</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PhysicalIoView.qml" line="228" />
+            <source>Analogue inputs</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PhysicalIoView.qml" line="228" />
+            <source>No analogue inputs</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PhysicalIoView.qml" line="233" />
+            <source>Reference</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PhysicalIoView.qml" line="239" />
+            <source>Voltage of the full ADC scale, to show the values in volts</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PhysicalIoView.qml" line="268" />
+            <source>AIN %1</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PhysicalIoView.qml" line="277" />
+            <source>raw %1</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PhysicalIoView.qml" line="293" />
+            <source>Log</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PhysicalIoView.qml" line="296" />
+            <source>Clear</source>
+            <translation type="unfinished" />
         </message>
     </context>
     <context>
@@ -2653,12 +3152,22 @@ B: %3</source>
             <translation>Aufzeichnungen vergleichen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="209" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="199" />
+            <source>EtherCAT (CoE)</source>
+            <translation>EtherCAT (CoE)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="207" />
+            <source>Physical I/O</source>
+            <translation>Physische E/A</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="225" />
             <source>Settings</source>
             <translation>Einstellungen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="237" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="253" />
             <source>Version %1</source>
             <translation>Version %1</translation>
         </message>
@@ -3510,92 +4019,102 @@ B: %3</source>
             <translation>Aufzeichnungen vergleichen</translation>
         </message>
         <message>
+            <location filename="../../gui/qt/main_window.qml" line="63" />
+            <source>EtherCAT (CoE)</source>
+            <translation>EtherCAT (CoE)</translation>
+        </message>
+        <message>
             <location filename="../../gui/qt/main_window.qml" line="64" />
+            <source>Physical I/O</source>
+            <translation>Physische E/A</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/main_window.qml" line="65" />
             <source>Tool</source>
             <translation>Werkzeug</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="66" />
+            <location filename="../../gui/qt/main_window.qml" line="67" />
             <source>Theme</source>
             <translation>Farbschema</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="68" />
+            <location filename="../../gui/qt/main_window.qml" line="69" />
             <source>Language</source>
             <translation>Sprache</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="164" />
+            <location filename="../../gui/qt/main_window.qml" line="165" />
             <source>Open workspace</source>
             <translation>Arbeitsbereich öffnen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="172" />
+            <location filename="../../gui/qt/main_window.qml" line="173" />
             <source>Save workspace</source>
             <translation>Arbeitsbereich speichern</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="186" />
+            <location filename="../../gui/qt/main_window.qml" line="187" />
             <source>The open connections are closed and replaced by those of the workspace.</source>
             <translation>Die offenen Verbindungen werden geschlossen und durch die des Arbeitsbereichs ersetzt.</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="339" />
+            <location filename="../../gui/qt/main_window.qml" line="360" />
             <source>%1 frames</source>
             <translation>%1 Frames</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="341" />
+            <location filename="../../gui/qt/main_window.qml" line="362" />
             <source>Rx %1/s  Tx %2/s</source>
             <translation>Rx %1/s  Tx %2/s</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="343" />
+            <location filename="../../gui/qt/main_window.qml" line="364" />
             <source>load %1%</source>
             <translation>Last %1%</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="345" />
+            <location filename="../../gui/qt/main_window.qml" line="366" />
             <source>bus %1</source>
             <translation>Bus %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="348" />
+            <location filename="../../gui/qt/main_window.qml" line="369" />
             <source>%1 error frames</source>
             <translation>%1 Error-Frames</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="352" />
+            <location filename="../../gui/qt/main_window.qml" line="373" />
             <source>DB: %1</source>
             <translation>DB: %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="354" />
+            <location filename="../../gui/qt/main_window.qml" line="375" />
             <source>● recording to %1</source>
             <translation>● Aufzeichnung nach %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="406" />
+            <location filename="../../gui/qt/main_window.qml" line="427" />
             <source>Drag to resize, double-click to reset</source>
             <translation>Ziehen zum Ändern der Breite, Doppelklick zum Zurücksetzen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="562" />
+            <location filename="../../gui/qt/main_window.qml" line="583" />
             <source>Unsaved database changes</source>
             <translation>Ungespeicherte Datenbankänderungen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="567" />
+            <location filename="../../gui/qt/main_window.qml" line="588" />
             <source>Save the changes to %1 before quitting?</source>
             <translation>Änderungen an %1 vor dem Beenden speichern?</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="571" />
+            <location filename="../../gui/qt/main_window.qml" line="592" />
             <source>Use "Save as" in the database editor first</source>
             <translation>Zuerst „Speichern unter“ im Datenbank-Editor verwenden</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="620" />
+            <location filename="../../gui/qt/main_window.qml" line="641" />
             <source>CANExplorer %1 is available: ⋮ → Check for Updates…</source>
             <translation>CANExplorer %1 ist verfügbar: ⋮ → Nach Updates suchen…</translation>
         </message>

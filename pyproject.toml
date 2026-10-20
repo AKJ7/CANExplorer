@@ -1,11 +1,11 @@
 [project]
 name = "can-explorer"
-version = "1.0.0"
+version = "1.1.0"
 description = "Monitor, analyse, diagnose, simulate and test CAN, CAN FD and LIN buses"
 authors = [{ name = "AKJ7", email = "akj123429@gmail.com" }]
 license = "MIT"
 readme = "README.md"
-keywords = ["can", "can-fd", "lin", "canbus", "automotive", "uds", "j1939", "canopen", "dbc", "python-can"]
+keywords = ["can", "can-fd", "lin", "canbus", "automotive", "uds", "j1939", "canopen", "ethercat", "gvret", "elm327", "obdlink", "j2534", "dbc", "python-can"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Environment :: X11 Applications :: Qt",
@@ -56,14 +56,33 @@ can-server = "can_server.__main__:main"
 [project.entry-points."can.interface"]
 # Remote buses shared with can-server, usable as python-can interface "canexplorer_remote" (class RemoteBus)
 canexplorer_remote = "can_explorer.core.remote:RemoteBus"
+# GVRET devices (SavvyCAN protocol: ESP32RET, Macchina M2, CANDue), usable as python-can interface "gvret"
+gvret = "can_explorer.core.gvret:GvretBus"
+# ELM327 and OBDLink OBD adapters (USB, Bluetooth, WiFi), usable as python-can interface "elm327"
+elm327 = "can_explorer.core.elm327:Elm327Bus"
+# J2534 pass-thru devices (SAE J2534-1 04.04 drivers), usable as python-can interface "j2534"
+j2534 = "can_explorer.core.j2534:J2534Bus"
 
 [project.optional-dependencies]
 mf4 = [
     "asammdf>=7",
 ]
+# Real EtherCAT adapters for the EtherCAT (CoE) tool, through SOEM. Not bundled in the installers: SOEM is GPLv2 with
+# a linking exception, and its license asks distributors of an EtherCAT master to obtain Beckhoff's master license
+ethercat = [
+    "pysoem>=1.1.13",
+]
+# USB I/O adapters (aio_usb) for the Physical I/O tool: pyusb, and libusb for Windows and macOS
+io = [
+    "pyusb>=1.3",
+    "libusb-package>=1.0.26",
+]
 # python-can interfaces that need packages of their own (neoVI, NI-XNET, CANalyst-II, CANtact, gs_usb, UDP multicast)
 drivers = [
     "python-can[neovi,nixnet,canalystii,cantact,gs-usb,multicast]",
+]
+mqtt = [
+    "aiomqtt>=2.3",
 ]
 
 [dependency-groups]

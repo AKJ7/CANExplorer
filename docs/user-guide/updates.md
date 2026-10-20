@@ -27,6 +27,7 @@ release candidates and other pre-releases (versions such as `1.1.0-rc1`).
 |---|---|
 | Windows setup (`setup.exe`) | The new setup runs silently into the same folder, for the current user or for all users as before (all users asks for administrator rights), closes CANExplorer and starts the new version |
 | AppImage | The AppImage file is replaced by the new one and started |
+| Snap | Not installed by CANExplorer: snapd updates snaps itself (or now with `sudo snap refresh canexplorer`) |
 | Debian package (`.deb`) | The new package is installed with `pkexec apt-get install`, which asks for your password, and the new version is started |
 | macOS disk image (`.dmg`) | After CANExplorer quit, the app in its folder (usually *Applications*) is replaced by the one of the new disk image and started |
 | Zip archive, or from source | Not installed automatically: the dialog offers the release page (from source: `git pull` and `uv sync`) |

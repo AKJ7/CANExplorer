@@ -1,6 +1,6 @@
 """Build a standalone CANExplorer bundle for the current platform.
 
-Usage: uv run python packaging/build.py [--backend pyinstaller|nuitka] [--onefile] [--archive]
+Usage: uv run python packaging/build.py [--backend pyinstaller|nuitka] [--onefile] [--archive] [--j2534-bridge PYTHON]
 
 Backends:
 - pyinstaller (default): bundles the Python bytecode with an interpreter. Fast to build.
@@ -11,6 +11,10 @@ Backends:
 The bundle is written to dist/CANExplorer (dist/CANExplorer.app on macOS). With --onefile (Nuitka only)
 it is a single executable instead. With --archive it is also zipped to
 dist/CANExplorer-<version>-<platform>-<arch>[-<backend>].zip.
+
+With --j2534-bridge (Windows), the 32-bit J2534 bridge (can_explorer/core/j2534_bridge.py) is built with the given
+32-bit Python, which needs PyInstaller, and added to the bundle as j2534-bridge32/j2534-bridge32.exe. It runs the
+32-bit J2534 drivers that the 64-bit application cannot load.
 """
 
 import argparse
@@ -35,8 +39,19 @@ DISTRIBUTION = 'can-explorer'
 VERSION_MODULE = ROOT / 'can_explorer' / '_build_version.py'
 # Packages whose data files are read at runtime: the LDF grammar and the lark grammars it imports
 DATA_PACKAGES = ('ldfparser', 'lark')
-# python-can imports its interface backends by name at runtime, so they are not found by import analysis
-DYNAMIC_PACKAGES = ('can.interfaces',)
+# python-can imports its interface backends by name at runtime, and pyserial its URL handlers (socket:// etc.), so
+# they are not found by import analysis
+DYNAMIC_PACKAGES = ('can.interfaces', 'serial.urlhandler')
+# CANExplorer's own python-can interfaces, registered as entry points (pyproject.toml) and imported by name only
+# The J2534 bridge, a 32-bit program for 32-bit J2534 drivers (standard library only)
+J2534_BRIDGE = ROOT / 'can_explorer' / 'core' / 'j2534_bridge.py'
+J2534_BRIDGE_NAME = 'j2534-bridge32'
+INTERFACE_MODULES = (
+    'can_explorer.core.remote',
+    'can_explorer.core.gvret',
+    'can_explorer.core.elm327',
+    'can_explorer.core.j2534',
+)
 
 
 def _clean(path: Path) -> None:
@@ -74,6 +89,8 @@ def build_pyinstaller() -> Path:
     ]
     for package in DYNAMIC_PACKAGES:
         arguments += ['--collect-submodules', package]
+    for module in INTERFACE_MODULES:
+        arguments += ['--hidden-import', module]
     for package in DATA_PACKAGES:
         arguments += ['--collect-data', package]
     PyInstaller.__main__.run(arguments)
@@ -81,6 +98,50 @@ def build_pyinstaller() -> Path:
     if not bundle.exists():
         raise SystemExit(f'Expected bundle not found: {bundle}')
     return bundle
+
+
+def build_j2534_bridge(python: str, bundle: Path) -> Path:
+    """Build the J2534 bridge with a 32-bit Python and copy it into the bundle."""
+    bits = subprocess.run(
+        [python, '-c', 'import struct; print(struct.calcsize("P") * 8)'], check=True, capture_output=True, text=True
+    ).stdout.strip()
+    if bits != '32':
+        raise SystemExit(f'The J2534 bridge needs a 32-bit Python; {python} is {bits}-bit')
+    work = BUILD / 'j2534-bridge'
+    subprocess.run(
+        [
+            python,
+            '-m',
+            'PyInstaller',
+            str(J2534_BRIDGE),
+            '--name',
+            J2534_BRIDGE_NAME,
+            '--onedir',
+            '--console',  # Talks over stdin and stdout; CANExplorer starts it without a window
+            # The bridge imports j2534_driver from its own folder, which import analysis does not follow
+            '--paths',
+            str(J2534_BRIDGE.parent),
+            '--hidden-import',
+            'j2534_driver',
+            '--noconfirm',
+            '--clean',
+            '--distpath',
+            str(work / 'dist'),
+            '--workpath',
+            str(work / 'build'),
+            '--specpath',
+            str(work),
+        ],
+        check=True,
+        cwd=ROOT,
+    )
+    if bundle.suffix == '.exe':  # Nuitka onefile: the bridge goes next to the executable
+        target = bundle.parent / J2534_BRIDGE_NAME
+    else:
+        target = bundle / J2534_BRIDGE_NAME
+    _clean(target)
+    shutil.copytree(work / 'dist' / J2534_BRIDGE_NAME, target)
+    return target
 
 
 def _numeric_version() -> str:
@@ -111,6 +172,7 @@ def build_nuitka(onefile: bool) -> Path:
         f'--include-data-dir={RESOURCES_DIR}=can_explorer/resources',
         '--include-module=can_explorer._build_version',
         *(f'--include-package={package}' for package in DYNAMIC_PACKAGES),
+        *(f'--include-module={module}' for module in INTERFACE_MODULES),
         # Nuitka's own package configuration already includes the lark grammars
         *(f'--include-package-data={package}' for package in DATA_PACKAGES if package != 'lark'),
         '--assume-yes-for-downloads',
@@ -163,11 +225,16 @@ def main():
     parser.add_argument('--backend', choices=['pyinstaller', 'nuitka'], default='pyinstaller')
     parser.add_argument('--onefile', action='store_true', help='Nuitka: build a single executable (not on macOS)')
     parser.add_argument('--archive', action='store_true', help='also create a zip archive of the bundle')
+    parser.add_argument(
+        '--j2534-bridge', metavar='PYTHON', help='Windows: build the J2534 bridge with this 32-bit Python'
+    )
     args = parser.parse_args()
     if args.onefile and args.backend != 'nuitka':
         parser.error('--onefile is only supported with --backend nuitka')
     bundle = build_nuitka(args.onefile) if args.backend == 'nuitka' else build_pyinstaller()
     print(f'Bundle: {bundle}')
+    if args.j2534_bridge:
+        print(f'J2534 bridge: {build_j2534_bridge(args.j2534_bridge, bundle)}')
     if args.archive:
         print(f'Archive: {archive(bundle, args.backend)}')
 

@@ -42,6 +42,8 @@ DATA_TYPES: Dict[int, Tuple[str, int, str]] = {
     0x19: ('UNSIGNED48', 6, 'uint'),
     0x1A: ('UNSIGNED56', 7, 'uint'),
     0x1B: ('UNSIGNED64', 8, 'uint'),
+    # Bit strings of EtherCAT slaves (ETG.1000.6), in PDO mappings and SDO information
+    **{0x30 + bits - 1: (f'BIT{bits}', 1, 'uint') for bits in range(1, 9)},
 }
 
 SDO_ABORT_CODES = {

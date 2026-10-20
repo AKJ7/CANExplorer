@@ -34,9 +34,12 @@ PlaybackBar 1.0 PlaybackBar.qml
 BusReplayDialog 1.0 BusReplayDialog.qml
 DatabaseEditorView 1.0 DatabaseEditorView.qml
 CompareView 1.0 CompareView.qml
+EtherCatView 1.0 EtherCatView.qml
+PhysicalIoView 1.0 PhysicalIoView.qml
 MultiBusView 1.0 MultiBusView.qml
 TestsView 1.0 TestsView.qml
 GlassPanel 1.0 GlassPanel.qml
 TraceFindBar 1.0 TraceFindBar.qml
 RecordDialog 1.0 RecordDialog.qml
+MqttDialog 1.0 MqttDialog.qml
 singleton Theme 1.0 Theme.qml

@@ -50,6 +50,7 @@ nav:
       - Comparing recordings: user-guide/compare-recordings.md
       - Several buses: user-guide/multi-bus.md
       - Remote buses: user-guide/remote-buses.md
+      - MQTT: user-guide/mqtt.md
       - Signal databases: user-guide/signal-databases.md
       - Database editor: user-guide/database-editor.md
       - Signal plots: user-guide/signal-plots.md
@@ -59,6 +60,8 @@ nav:
       - Flashing: user-guide/flashing.md
       - J1939: user-guide/j1939.md
       - CANopen: user-guide/canopen.md
+      - EtherCAT (CoE): user-guide/ethercat.md
+      - Physical I/O: user-guide/physical-io.md
       - LIN: user-guide/lin.md
       - Simulation and scripting: user-guide/simulation.md
       - Test automation: user-guide/test-automation.md

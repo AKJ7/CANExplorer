@@ -19,6 +19,8 @@ Every [release](https://github.com/AKJ7/CANExplorer/releases) has installers; no
 | Debian, Ubuntu (x86-64) | `CANExplorer-<version>-linux-x86_64.deb` | `sudo apt install ./CANExplorer-*.deb`; starts from the menu or with `canexplorer` |
 | macOS (Apple silicon) | `CANExplorer-<version>-macos-arm64.dmg` | Open it and drag CANExplorer to *Applications* |
 
+On Linux distributions with snapd, CANExplorer is also in the Snap Store; see [Snap](#snap).
+
 Installed copies update themselves: CANExplorer announces new releases and installs them on request, see
 [Updates](../user-guide/updates.md).
 
@@ -27,6 +29,23 @@ The zip archives of the same release contain the application without installer: 
 
 The Linux builds need glibc 2.35 or newer (Ubuntu 22.04, Debian 12, Fedora 36 and later). Intel Macs can use the
 installation from source.
+
+## Snap
+
+```bash
+sudo snap install canexplorer
+sudo snap connect canexplorer:can-bus   # SocketCAN adapters: can0, vcan0 …
+sudo snap connect canexplorer:raw-usb   # USB adapters: candleLight/gs_usb, slcan, ELM327, GVRET …
+```
+
+snapd updates the snap itself. Pre-releases are in the `candidate` (release candidates) and `beta` channels:
+`sudo snap install canexplorer --candidate`.
+
+The snap is confined: it reaches the hardware only through the interfaces connected above, and files only in
+your home folder and on removable media. It cannot use driver libraries installed on the computer (PCAN-Basic,
+Kvaser CANlib), so these adapters work through SocketCAN, and not Bluetooth serial ports (`/dev/rfcomm*`). Set up
+SocketCAN interfaces (`ip link`) outside the snap, as described [below](#setting-up-interfaces). Use the AppImage or
+the `.deb` when you need these.
 
 !!! note "Unsigned installers"
     The installers are not code signed yet. Windows SmartScreen warns about an unknown publisher: choose *More info →

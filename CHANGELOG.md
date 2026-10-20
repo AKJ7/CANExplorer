@@ -8,6 +8,58 @@ development stages are listed by date and commit, newest first.
 
 ## [Unreleased]
 
+## [1.1.0] – 2026-10-20
+
+### Added
+
+- **Snap** (`snap/snapcraft.yaml`): the release workflow builds a strictly confined snap from the Linux bundle and
+  publishes it to the Snap Store for release tags (stable; candidate for `-rc` tags, beta for other pre-releases).
+  SocketCAN and USB adapters work after `snap connect canexplorer:can-bus` and `canexplorer:raw-usb`. The update
+  dialog leaves snaps to snapd.
+- **MQTT**: publishes the decoded signals of a connection (`PREFIX/CONNECTION/signals/MESSAGE/SIGNAL`, when they
+  change, at most once per interval) and optionally its frames to an MQTT broker, with an online/offline status
+  and automatic reconnection (**MQTT…** in the connection's toolbar). Optionally sends the frames that other
+  programs publish to `…/send`, limited to an allow list. `can-server` publishes its buses the same way
+  (`--mqtt`, `--database`, `--mqtt-frames`, `--mqtt-send`). Needs the `mqtt` extra (aiomqtt), which the installers
+  contain.
+- **EtherCAT (CoE) tool**: an EtherCAT master for configuring slaves through CANopen over EtherCAT. It finds the
+  slaves of a network adapter, brings them to Init, Pre-Op or Safe-Op (reporting the AL status of slaves that
+  refuse), reads and writes their objects over SDO with the object dictionary read from the slave (SDO
+  information) or an EDS file, reads the PDO assignment and mapping with the mapped objects' values, and collects
+  emergency messages. Real adapters need the new `ethercat` extra (pysoem); the installers do not include it and
+  offer the simulated network, which works without hardware. Cyclic process data (Op) is not exchanged.
+- `BIT1` to `BIT8` data types in object dictionaries.
+- **Physical I/O tool**: switches the digital outputs of a USB I/O adapter and shows its digital inputs and
+  analogue values (in volts with a configurable reference, with a short chart). Lines are made inputs (no pull,
+  pull-up, pull-down, active low) or outputs. Supports aio_usb adapters (the I/O interface of STM32 CAN/LIN/I/O
+  adapter firmware) through the new `io` extra (pyusb, libusb), and a simulated device that works without hardware.
+  Test scripts use the same devices through `can_explorer.core.physical_io`.
+- **GVRET interface** (`gvret`, class `GvretBus`) for devices with SavvyCAN's GVRET protocol: ESP32RET boards,
+  the Macchina M2 (M2RET) and the CANDue. The channel is the serial port, with `@1` for the device's second bus,
+  or `socket://IP:23` for ESP32RET on WiFi; the bitrate (and listen only mode) of the bus is set when it opens,
+  leaving the other bus as it is. Classic CAN only.
+- **J2534 interface** (`j2534`, class `J2534Bus`) for vehicle interfaces with an SAE J2534 04.04 driver, such as
+  the Drew Technologies Mongoose and CarDAQ and the Tactrix OpenPort 2.0 (Windows). The channel is the registered
+  device name or the driver's path; detection lists the registered drivers with CAN. 32-bit drivers, which the
+  64-bit application cannot load, run in the J2534 bridge, a 32-bit helper program in the Windows installer (or a
+  32-bit Python when run from source, or the program set in `CANEXPLORER_J2534_BRIDGE`).
+- **ELM327 interface** (`elm327`, class `Elm327Bus`) for OBD adapters with the ELM327 command set, such as the
+  OBDLink MX+, LX, SX and EX, over USB, Bluetooth (the paired adapter's serial port) or WiFi (`socket://IP:35000`).
+  Made for diagnostics: it monitors the bus and sends frames between monitoring, at 500 kbit/s divided by a whole
+  number, and loses frames on busy buses. Detection lists the USB and Bluetooth serial ports.
+
+### Fixed
+
+- Loading a signal database while a simulation runs restarts the simulation. The nodes look up their messages when
+  they start, so a simulation started before the database stayed broken (*Load a signal database to send message
+  'VehicleSpeed' by name*) until it was restarted by hand. `can-test` warns when `--simulation` is used without
+  `--database`.
+- The installers contain the `canexplorer_remote` interface (remote buses of `can-server`) and pyserial's URL
+  handlers such as `socket://`; python-can imports them by name, so the bundles left them out.
+- Channel detection probes each interface on its own: an error in one driver (python-can lets it end the whole
+  detection) no longer hides the channels of all others, and slow drivers such as ETAS BOA get 15 seconds instead
+  of 5, so ETAS devices are listed on Windows.
+
 ### Changed
 
 - Builds of `master` published to GitHub Packages are packaged with PyInstaller again instead of Nuitka;
@@ -386,6 +438,7 @@ Called "Milestone 0.1.0" in the commit message and the README roadmap.
 - Qt Widgets user interface: main window, new connection dialog, about dialog and a raw CAN frame table.
 - Pipenv based project setup, VS Code development container, Dockerfile and a CI workflow skeleton.
 
-[Unreleased]: https://github.com/AKJ7/CANExplorer/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/AKJ7/CANExplorer/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/AKJ7/CANExplorer/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/AKJ7/CANExplorer/releases/tag/v1.0.0
 [0.0.1]: https://github.com/AKJ7/CANExplorer/releases/tag/0.0.1

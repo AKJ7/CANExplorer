@@ -195,6 +195,22 @@ Rectangle {
             onClicked: root.toolSelected("compare")
         }
 
+        NavItem {
+            text: qsTr("EtherCAT (CoE)")
+            glyph: "⇶"
+            active: root.currentTool === "ethercat"
+            dotColor: connectionManager.ethercat.is_open ? Theme.success : "transparent"
+            onClicked: root.toolSelected("ethercat")
+        }
+
+        NavItem {
+            text: qsTr("Physical I/O")
+            glyph: "⇅"
+            active: root.currentTool === "physical-io"
+            dotColor: connectionManager.physical_io.is_open ? Theme.success : "transparent"
+            onClicked: root.toolSelected("physical-io")
+        }
+
         Item { Layout.fillHeight: true }
 
         Rectangle {

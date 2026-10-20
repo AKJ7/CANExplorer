@@ -79,6 +79,8 @@ def test_releases_and_selection(release_server):
 def test_installation_kinds_and_assets(monkeypatch, tmp_path):
     monkeypatch.setattr(updates, 'machine', lambda: 'x86_64')
     assert updates.installation_kind({'APPIMAGE': '/x/CANExplorer.AppImage'}, 'linux') == updates.APPIMAGE
+    snap = {'SNAP': '/snap/canexplorer/12', 'SNAP_NAME': 'canexplorer'}
+    assert updates.installation_kind(snap, 'linux') == updates.SNAP
     assert updates.installation_kind({}, 'linux') == updates.SOURCE  # Not frozen
     monkeypatch.setattr(updates, 'frozen', lambda: True)
     monkeypatch.setattr(updates, 'executable', lambda: Path('/opt/canexplorer/CANExplorer'))
@@ -111,6 +113,7 @@ def test_installation_kinds_and_assets(monkeypatch, tmp_path):
     assert (
         updates.asset_name(release, updates.APPIMAGE) is None and updates.asset_name(release, updates.PORTABLE) is None
     )
+    assert updates.asset_name(release, updates.SNAP) is None  # snapd updates snaps
 
 
 def test_download_verify_and_install_appimage(release_server, tmp_path, monkeypatch):

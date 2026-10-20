@@ -1,0 +1,69 @@
+# Snap of CANExplorer, built from the PyInstaller bundle of packaging/build.py (dist/CANExplorer), which must exist
+# before snapcraft runs (the release workflow builds it on Ubuntu 22.04, the release of the core22 base):
+#
+#   uv run python packaging/build.py && snapcraft
+#
+# Strict confinement: hardware is reached through interfaces the user connects once (see the description).
+name: canexplorer
+title: CANExplorer
+summary: Monitor, analyse, diagnose and simulate CAN, CAN FD and LIN buses
+description: |
+  CANExplorer monitors, analyses, diagnoses and simulates CAN, CAN FD and LIN buses: a live trace with decoded
+  signals (DBC, DBF, ARXML, KCD, SYM, LDF), signal plots, recording and replay, bus health, UDS diagnostics and
+  flashing, J1939 and CANopen tools, simulated nodes with control panels, test automation, remote buses and MQTT.
+
+  Connect the interfaces for your hardware once after installing:
+
+      sudo snap connect canexplorer:can-bus   # SocketCAN adapters: can0, vcan0 …
+      sudo snap connect canexplorer:raw-usb   # USB adapters: candleLight/gs_usb, slcan, ELM327, GVRET …
+
+  Vendor driver libraries installed on the computer (PCAN-Basic, Kvaser CANlib) cannot be used from the snap; on
+  Linux these adapters work through SocketCAN.
+license: MIT
+website: https://akj7.github.io/CANExplorer/
+source-code: https://github.com/AKJ7/CANExplorer
+issues: https://github.com/AKJ7/CANExplorer/issues
+icon: can_explorer/resources/icons/256.png
+base: core22
+grade: stable
+confinement: strict
+adopt-info: canexplorer
+architectures:
+  - build-on: amd64
+
+apps:
+  canexplorer:
+    command: opt/canexplorer/CANExplorer
+    extensions: [gnome]
+    common-id: io.github.akj7.CANExplorer
+    plugs:
+      - home
+      - removable-media
+      - network
+      - network-bind
+      - can-bus # SocketCAN
+      - raw-usb # libusb adapters and USB serial adapters (/dev/ttyUSB*, /dev/ttyACM*)
+      - hardware-observe # Listing serial ports and USB devices
+
+parts:
+  canexplorer:
+    plugin: nil
+    source: dist/CANExplorer
+    override-pull: |
+      craftctl default
+      craftctl set version="$(sed -n 's/^version = "\(.*\)"$/\1/p' "$CRAFT_PROJECT_DIR/pyproject.toml" | head -n 1)"
+    override-build: |
+      mkdir -p "$CRAFT_PART_INSTALL/opt/canexplorer"
+      cp -a "$CRAFT_PART_SRC/." "$CRAFT_PART_INSTALL/opt/canexplorer/"
+    # Libraries of Qt's xcb platform plugin and of the bundled Python that the gnome extension's runtime lacks
+    stage-packages:
+      - libxcb-cursor0
+      - libxcb-icccm4
+      - libxcb-image0
+      - libxcb-keysyms1
+      - libxcb-render-util0
+      - libxcb-shape0
+      - libxcb-util1
+      - libxcb-xkb1
+      - libxkbcommon-x11-0
+      - libgssapi-krb5-2

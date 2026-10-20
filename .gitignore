@@ -153,3 +153,6 @@ site/
 /*.mf4
 /*.csv
 /*.db
+
+# snapcraft
+*.snap

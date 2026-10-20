@@ -563,6 +563,87 @@ def test_multi_bus_tool_renders_without_warnings(window, qtbot):
     assert warnings == []
 
 
+async def test_ethercat_tool_renders_without_warnings(window, qapp):
+    import asyncio
+
+    from PyQt6 import sip
+    from PyQt6.QtQuick import QQuickWindow
+
+    engine, manager, warnings = window
+    ethercat = manager.ethercat
+    window_item = sip.cast(engine.rootObjects()[0], QQuickWindow)
+    window_item.setProperty('tool', 'ethercat')
+
+    async def settle():
+        for _ in range(10):
+            await asyncio.sleep(0.01)
+            qapp.processEvents()
+        while ethercat.busy:
+            await asyncio.sleep(0.01)
+        qapp.processEvents()
+
+    await settle()  # Closed: no slaves
+    assert ethercat.open_network('simulated') == ''
+    await settle()
+    ethercat.select(3)
+    assert ethercat.read_dictionary() == ''
+    await settle()
+    assert ethercat.read_pdo_configuration() == ''
+    await settle()
+    assert ethercat.sdo_write('8000', '02', '5000') == ''  # An emergency
+    await settle()
+    await ethercat._poll_states(ethercat._master)
+    stack = [window_item.contentItem()]
+    while not (stack[-1].metaObject().className().startswith('TabBar') and stack[-1].isVisible()):
+        item = stack.pop()
+        stack.extend(item.childItems())
+    stack[-1].setProperty('currentIndex', 1)  # PDOs
+    await settle()
+    assert window_item.property('title') and ethercat.pdos and ethercat.emergencies
+    ethercat.close_network()
+    await settle()
+    window_item.setProperty('tool', '')
+    await settle()
+    ethercat.shutdown()
+    assert warnings == []
+
+
+async def test_physical_io_tool_renders_without_warnings(window, qapp):
+    import asyncio
+
+    from PyQt6 import sip
+    from PyQt6.QtQuick import QQuickWindow
+
+    engine, manager, warnings = window
+    io = manager.physical_io
+    window_item = sip.cast(engine.rootObjects()[0], QQuickWindow)
+    window_item.setProperty('tool', 'physical-io')
+
+    async def settle():
+        for _ in range(10):
+            await asyncio.sleep(0.01)
+            qapp.processEvents()
+
+    await settle()  # Closed
+    assert io.open_device('simulated') == ''
+    while not io.is_open:
+        await asyncio.sleep(0.01)
+    for line, output in ((0, True), (1, True), (4, False)):
+        assert io.configure_line(line, output, 'up' if not output else 'none', False) == ''
+        await settle()
+    assert io.set_output(0, True) == ''
+    for _ in range(5):
+        await io._poll_once(io._io)
+    await settle()
+    assert io.lines[4]['level'] and len(io.analog) == 4
+    io.close_device()
+    await settle()
+    window_item.setProperty('tool', '')
+    await settle()
+    io.shutdown()
+    assert warnings == []
+
+
 def test_bus_health_page_renders_without_warnings(window, qtbot):
     import time
 

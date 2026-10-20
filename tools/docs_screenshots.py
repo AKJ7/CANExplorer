@@ -91,6 +91,104 @@ async def wait_idle(diagnostics):
         await asyncio.sleep(0.02)
 
 
+async def mqtt_scenario(connection, view):
+    """The MQTT dialog while publishing to a local broker (the one of the tests), on a tidy port if one is free
+    (never to a broker running on this computer)."""
+    sys.path.insert(0, str(ROOT / 'tests' / 'unit'))
+    from mqtt_broker import MqttBroker
+
+    for port in (1883, 1884, 1885, 0):
+        broker = MqttBroker(port=port)
+        try:
+            broker.start()
+            break
+        except OSError:
+            continue
+    mqtt = connection.mqtt
+    error = mqtt.start(
+        {
+            'broker': f'mqtt://localhost:{broker.port}',
+            'username': 'dashboard',
+            'prefix': 'canexplorer',
+            'signals': True,
+            'frames': False,
+            'retain': True,
+            'interval': 0.5,
+            'allow_send': True,
+            'allowlist': 'EngineControl 7DF',
+        }
+    )
+    assert not error, error
+    while mqtt.state != 'connected':
+        await asyncio.sleep(0.05)
+    await asyncio.sleep(2.2)  # Some values published, and the statistics updated
+    dialog = [o for o in view.findChildren(QObject) if o.metaObject().className().startswith('MqttDialog')][0]
+    dialog.open()
+    await shot('mqtt')
+    dialog.close()
+    mqtt.stop()
+    broker.stop()
+
+
+async def ethercat_scenario():
+    """The EtherCAT tool on the simulated network: an output terminal's objects, SDO transfers and an emergency."""
+    ethercat = manager.ethercat
+
+    async def done():
+        await asyncio.sleep(0.05)
+        while ethercat.busy:
+            await asyncio.sleep(0.02)
+
+    window.setProperty('tool', 'ethercat')
+    ethercat.open_network('simulated')
+    await done()
+    ethercat.request_state(0x04, False)  # The input terminal to Safe-Op
+    await done()
+    ethercat.select(3)
+    for operation in (
+        ethercat.read_dictionary,
+        lambda: ethercat.sdo_read('1018', '02'),
+        lambda: ethercat.sdo_write('7000', '01', '-1200'),
+        lambda: ethercat.sdo_write('8000', '02', '5000'),  # Out of range: the terminal sends an emergency
+        lambda: ethercat.sdo_write('1008', '00', 'Renamed'),
+        ethercat.read_pdo_configuration,
+    ):
+        operation()
+        await done()
+    await ethercat._poll_states(ethercat._master)
+    await shot('ethercat')
+    tabs = [tab for tab in items('TabBar') if hasattr(tab, 'isVisible') and tab.isVisible()][0]
+    tabs.setProperty('currentIndex', 1)
+    await shot('ethercat-pdos')
+    tabs.setProperty('currentIndex', 0)
+    ethercat.close_network()
+    await done()
+    window.setProperty('tool', '')
+
+
+async def physical_io_scenario():
+    """The Physical I/O tool on the simulated device: two outputs switched, inputs wired back to them."""
+    io = manager.physical_io
+    window.setProperty('tool', 'physical-io')
+    io.open_device('simulated')
+    while not io.is_open:
+        await asyncio.sleep(0.02)
+    for operation in (
+        lambda: io.configure_line(0, True, 'none', False),
+        lambda: io.configure_line(1, True, 'none', False),
+        lambda: io.configure_line(4, False, 'none', False),
+        lambda: io.configure_line(5, False, 'down', False),
+        lambda: io.configure_line(6, False, 'up', True),
+        lambda: io.set_output(0, True),
+    ):
+        operation()
+        await asyncio.sleep(0.05)
+    await asyncio.sleep(3)  # History for the sparklines
+    await shot('physical-io')
+    io.close_device()
+    window.setProperty('tool', '')
+
+
 async def scenario():
     OUT.mkdir(parents=True, exist_ok=True)
     await shot('welcome', 0.5)
@@ -151,6 +249,7 @@ async def scenario():
     record_dialog.open()
     await shot('record-dialog')
     record_dialog.close()
+    await mqtt_scenario(connection, view)
     connection.set_paused(False)
     show_page('overview')
     connection.overview.sort_by(3)
@@ -361,6 +460,9 @@ async def scenario():
     compare_tabs.setProperty('currentIndex', 1)
     await shot('compare-signals')
     window.setProperty('tool', '')
+
+    await ethercat_scenario()
+    await physical_io_scenario()
 
     # Bus health: ten minutes of a bus with rising error counters, an error passive period and a bus off
     health = connection.health

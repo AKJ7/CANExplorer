@@ -70,3 +70,30 @@ uv run can-test tests/ecu_tests.py --interface canexplorer_remote --channel "ras
 ```
 
 `GET http://HOST:PORT/buses` (with `?token=…`) lists the buses of a server with their bitrates and clients.
+
+## MQTT
+
+`can-server` can also publish its buses to an MQTT broker, for dashboards and home automation, the same way as
+the application does for a connection (topics and payloads: see [MQTT](mqtt.md#topics)). The buses are then opened
+when the server starts and stay open without clients. Give each bus its signal database to publish its signals:
+
+```bash
+can-server --bus vehicle=socketcan:can0:500000 --database vehicle=/home/pi/vehicle.dbc \
+    --mqtt mqtt://user:password@broker.local/garage --token change-me
+```
+
+| Option | Description |
+|---|---|
+| `--mqtt mqtt[s]://[USER[:PASSWORD]@]HOST[:PORT][/PREFIX]` | The broker; `mqtts://` for TLS. The path is the topic prefix (default `canexplorer`). Also `CAN_SERVER_MQTT` |
+| `--database NAME=FILE` | The signal database of a bus (repeatable); buses without one only publish frames |
+| `--mqtt-frames` | Also publish the frames |
+| `--mqtt-retain` | Retain the signal values on the broker |
+| `--mqtt-interval SECONDS` | At most one value per signal per interval; default 0.1 |
+| `--mqtt-send MESSAGE\|ID\|*` | Send the frames published to `PREFIX/BUS/send` for this message name or hex identifier (repeatable). Off by default |
+
+With the example above, the engine speed is published to `garage/vehicle/signals/EngineData/EngineSpeed`.
+Frames sent over MQTT are received by the WebSocket clients of the bus too.
+
+!!! warning
+    `--mqtt-send` lets anyone who can publish to the broker send these frames on the bus. Use it only with a
+    broker that controls who may publish to the `send` topic.

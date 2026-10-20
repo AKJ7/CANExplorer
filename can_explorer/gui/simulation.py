@@ -280,6 +280,19 @@ class SimulationController(QObject):
         self.runtime.stop()
         self.state_changed.emit()
 
+    def database_changed(self) -> None:
+        """Restart a running simulation with the new database: nodes look up their messages when they start (a
+        database loaded after starting would otherwise leave them without, or with the old definitions)."""
+        if not self.runtime.running:
+            return
+        self.runtime.stop()
+        self.log_line('info', 'simulation', 'Signal database changed: restarting')
+        try:
+            self.runtime.start()
+        except ScriptError as e:
+            self.log_line('error', 'simulation', str(e))
+        self.state_changed.emit()
+
     def _on_session_state(self, session) -> None:
         if not session.is_open and self.runtime.running:
             self.stop()

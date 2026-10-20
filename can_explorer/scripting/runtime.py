@@ -60,6 +60,23 @@ class LoadedScript:
     error: str = ''
 
 
+def message_buffer(database, name: str) -> MessageBuffer:
+    """The signal values of a database message, to send it by name."""
+    if database is None:
+        raise ScriptError(f'Load a signal database to send message {name!r} by name')
+    if hasattr(database, 'messages'):  # cantools based databases (DBC, DBF, ARXML, KCD, SYM)
+        definition = next((message for message in database.messages() if message.name == name), None)
+        if definition is not None:
+            if definition.is_container:
+                raise ScriptError(f'Container message {name!r} cannot be sent by name')
+            return MessageBuffer(definition, definition.frame_id, definition.is_extended_frame, definition.is_fd)
+    elif hasattr(database, 'frame'):  # LDF
+        definition = database.frame(name)
+        if definition is not None:
+            return MessageBuffer(definition, definition.frame_id, False, False)
+    raise ScriptError(f'Unknown message {name!r} in {database.path.name}')
+
+
 class ScriptRuntime:
     """Loads simulation scripts, starts and stops their nodes and dispatches bus events to them.
 
@@ -265,20 +282,7 @@ class ScriptRuntime:
             return None
 
     def message(self, name: str, bus: Optional[str] = None) -> MessageBuffer:
-        database = self._bus(bus)[1]()
-        if database is None:
-            raise ScriptError(f'Load a signal database to send message {name!r} by name')
-        if hasattr(database, 'messages'):  # cantools based databases (DBC, DBF, ARXML, KCD, SYM)
-            definition = next((message for message in database.messages() if message.name == name), None)
-            if definition is not None:
-                if definition.is_container:
-                    raise ScriptError(f'Container message {name!r} cannot be sent by name')
-                return MessageBuffer(definition, definition.frame_id, definition.is_extended_frame, definition.is_fd)
-        elif hasattr(database, 'frame'):  # LDF
-            definition = database.frame(name)
-            if definition is not None:
-                return MessageBuffer(definition, definition.frame_id, False, False)
-        raise ScriptError(f'Unknown message {name!r} in {database.path.name}')
+        return message_buffer(self._bus(bus)[1](), name)
 
     # Events
 
