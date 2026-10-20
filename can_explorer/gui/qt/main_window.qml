@@ -19,7 +19,7 @@ ApplicationWindow {
     readonly property var currentConnection: currentIndex >= 0 ? connectionManager.connections[currentIndex] : null
     readonly property var currentConnectionView: currentIndex >= 0 ? connectionViews.itemAt(currentIndex) : null
     property var notifications: []
-    // A tool shown instead of the connections: "", "database-editor", "multi-bus" or "compare"
+    // A tool shown instead of the connections: "", "database-editor", "multi-bus", "compare", "ethercat" or "physical-io"
     property string tool: ""
     property bool closeConfirmed: false
     // Dragged with the handle on the right edge of the sidebar
@@ -60,7 +60,8 @@ ApplicationWindow {
         connectionManager.connections.forEach((item, index) =>
             add(qsTr("Go to"), qsTr("Connection %1").arg(item.name), () => { mainWindow.selectedIndex = index; mainWindow.tool = "" }))
         for (const [key, title] of [["database-editor", qsTr("Database editor")], ["multi-bus", qsTr("Multi-bus trace")],
-                                    ["compare", qsTr("Compare recordings")]])
+                                    ["compare", qsTr("Compare recordings")], ["ethercat", qsTr("EtherCAT (CoE)")],
+                                    ["physical-io", qsTr("Physical I/O")]])
             add(qsTr("Tool"), title, () => mainWindow.tool = key)
         for (const theme of connectionManager.app_state.themes)
             add(qsTr("Theme"), theme, () => connectionManager.app_state.set_theme(theme))
@@ -262,9 +263,13 @@ ApplicationWindow {
                 connection: mainWindow.tool === "" ? mainWindow.currentConnection : null
                 title: mainWindow.tool === "database-editor" ? qsTr("Database editor")
                     : mainWindow.tool === "compare" ? qsTr("Compare recordings")
+                    : mainWindow.tool === "ethercat" ? qsTr("EtherCAT (CoE)")
+                    : mainWindow.tool === "physical-io" ? qsTr("Physical I/O")
                     : mainWindow.tool === "multi-bus" ? qsTr("Multi-bus trace") : ""
                 pageTitle: mainWindow.tool === "database-editor" ? connectionManager.database_editor.file_name
                     : mainWindow.tool === "compare" ? compareView.pageTitle
+                    : mainWindow.tool === "ethercat" ? etherCatView.pageTitle
+                    : mainWindow.tool === "physical-io" ? physicalIoView.pageTitle
                     : mainWindow.tool === "multi-bus" ? multiBusView.pageTitle
                     : mainWindow.currentConnectionView ? mainWindow.currentConnectionView.pageTitle : ""
                 notifications: mainWindow.notifications
@@ -291,6 +296,22 @@ ApplicationWindow {
             CompareView {
                 id: compareView
                 visible: mainWindow.tool === "compare"
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.margins: 24
+            }
+
+            EtherCatView {
+                id: etherCatView
+                visible: mainWindow.tool === "ethercat"
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.margins: 24
+            }
+
+            PhysicalIoView {
+                id: physicalIoView
+                visible: mainWindow.tool === "physical-io"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.margins: 24

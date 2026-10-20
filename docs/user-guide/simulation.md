@@ -12,7 +12,8 @@ nodes and panels. Everything runs in the **Simulation** view of a live connectio
 
 1. Connect (e.g. on a *VirtualBus* channel to work without hardware).
 2. Optionally [load a signal database](signal-databases.md) (DBC, DBF, ARXML, KCD, SYM or LDF) to send and receive
-   messages by name.
+   messages by name. Loading or changing the database while the simulation runs restarts it, so that the nodes
+   start with the new messages.
 3. **Load script…** one or more Python files. The list shows the nodes of each script, or the error if it could not
    be loaded; **Reload** reads a script again after editing it, **✕** removes it.
 4. **Start simulation**: the nodes start and react to the bus until **Stop simulation** or disconnecting.

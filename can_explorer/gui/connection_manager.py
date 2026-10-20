@@ -1,4 +1,5 @@
 import asyncio
+import concurrent.futures
 import json
 import logging
 import time
@@ -29,12 +30,15 @@ from can_explorer.gui.compare import CompareController
 from can_explorer.gui.updates import UpdateController
 from can_explorer.gui.multibus import MultiBusController
 from can_explorer.gui.database_editor import DatabaseEditorController
+from can_explorer.gui.ethercat import EtherCatController
+from can_explorer.gui.physical_io import PhysicalIoController
 from can_explorer.gui.canopen import CanOpenController
 from can_explorer.gui.bushealth import BusHealthController
 from can_explorer.gui.diagnostics import DiagnosticsController
 from can_explorer.gui.flashing import FlashController
 from can_explorer.gui.j1939 import J1939Controller
 from can_explorer.gui.playback import BusReplay, ReplayPlayback
+from can_explorer.gui.mqtt import MqttController
 from can_explorer.gui.simulation import SimulationController
 from can_explorer.gui.plot_view import PlotView
 from can_explorer.gui.testing import TestController
@@ -46,6 +50,9 @@ from can_explorer.sys.log_handler import get_logger
 from can_explorer.util import canutils
 
 logger = get_logger(__name__)
+
+# Seconds each interface may take to list its channels; driver libraries such as ETAS BOA can take several
+DETECTION_TIMEOUT = 15.0
 
 STATISTICS_INTERVAL_MS = 1_000
 HISTORY_SECONDS = 60
@@ -119,6 +126,7 @@ class CanConnection(QObject):
         self._flashing = FlashController(self, parent=self)
         self._bus_health = BusHealthController(self, parent=self)
         self._simulation = SimulationController(self, parent=self)
+        self._mqtt = MqttController(self, parent=self)
         self._tests = TestController(self, parent=self)
         self._replay = ReplayPlayback(self, parent=self)
         self._bus_replay = BusReplay(self, parent=self)
@@ -540,6 +548,7 @@ class CanConnection(QObject):
         self._database_changed()
 
     def _database_changed(self):
+        self._simulation.database_changed()
         self._trace.refresh_descriptions()
         self._overview.refresh_descriptions()
         self.database_changed.emit()
@@ -645,6 +654,11 @@ class CanConnection(QObject):
     @pyqtProperty(QObject, constant=True)
     def simulation(self) -> SimulationController:
         return self._simulation
+
+    @pyqtProperty(QObject, constant=True)
+    def mqtt(self) -> MqttController:
+        """Publishing the connection to an MQTT broker."""
+        return self._mqtt
 
     @pyqtProperty(QObject, constant=True)
     def plot_view(self) -> PlotView:
@@ -774,6 +788,8 @@ class ConnectionManager(QObject):
         self._database_editor = DatabaseEditorController(parent=self)
         self._compare = CompareController(parent=self)
         self._multi_bus = MultiBusController(self, parent=self)
+        self._ethercat = EtherCatController(parent=self)
+        self._physical_io = PhysicalIoController(parent=self)
         self._updates = UpdateController(self._app_state.settings, parent=self)
         self._database_editor.saved.connect(self._reload_database)
         QGuiApplication.instance().aboutToQuit.connect(self.close_all)
@@ -863,6 +879,16 @@ class ConnectionManager(QObject):
         """Comparing two recordings."""
         return self._compare
 
+    @pyqtProperty(QObject, constant=True)
+    def ethercat(self) -> EtherCatController:
+        """CANopen over EtherCAT: the slaves of a network adapter."""
+        return self._ethercat
+
+    @pyqtProperty(QObject, constant=True)
+    def physical_io(self) -> PhysicalIoController:
+        """Digital lines and analogue inputs of an I/O adapter."""
+        return self._physical_io
+
     def _reload_database(self, path: str) -> None:
         """Connections decoding with a database that was edited and saved use the new version."""
         saved = Path(path).resolve()
@@ -947,14 +973,33 @@ class ConnectionManager(QObject):
         self._detection = asyncio.ensure_future(self._detect_channels())
 
     @staticmethod
+    def _probe_interface(interface: str) -> List[Dict[str, Any]]:
+        try:
+            return list(can.detect_available_configs(interface, timeout=DETECTION_TIMEOUT))
+        except Exception as e:
+            logger.warning(f'Channel detection of {interface} failed: {e!r}')
+            return []
+
+    @staticmethod
     def _probe_interfaces() -> List[Dict[str, Any]]:
+        """Probe each interface on its own thread, so that one backend raising an error or taking long (driver
+        libraries such as ETAS BOA enumerate their devices slowly) does not lose the channels of all others."""
         # Probing every backend logs a warning for each missing driver; that is expected here
         can_logger = logging.getLogger('can')
         level = can_logger.level
         can_logger.setLevel(logging.ERROR)
+        executor = concurrent.futures.ThreadPoolExecutor()
         try:
-            return can.detect_available_configs()
+            futures = {
+                executor.submit(ConnectionManager._probe_interface, interface): interface
+                for interface in sorted(can.interfaces.VALID_INTERFACES)
+            }
+            done, not_done = concurrent.futures.wait(futures, timeout=DETECTION_TIMEOUT + 1)
+            if not_done:
+                logger.warning(f'Channel detection timed out for: {", ".join(sorted(futures[f] for f in not_done))}')
+            return [config for future in done for config in future.result()]
         finally:
+            executor.shutdown(wait=False, cancel_futures=True)
             can_logger.setLevel(level)
 
     async def _detect_channels(self):
@@ -1081,6 +1126,8 @@ class ConnectionManager(QObject):
             self._detection.cancel()
         for connection in self._connections:
             connection.close()
+        self._ethercat.shutdown()
+        self._physical_io.shutdown()
 
     def _apply_preferences(self):
         for connection in self._connections:

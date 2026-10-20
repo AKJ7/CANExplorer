@@ -29,6 +29,8 @@
 - Millions of frames per session: older frames are paged to disk
 - Bus health: error state timeline, error frames, TEC/REC and bus load over up to an hour
 - Remote buses: `can-server` shares the interfaces of e.g. a Raspberry Pi in a vehicle over the network
+- MQTT: publish decoded signals (and frames) to a broker for dashboards and home automation, from the application or
+  `can-server`, and optionally send frames requested over MQTT
 - Signal plots with zoom and pan over the whole buffer, two cursors with values and statistics, several signals per
   chart and CSV export
 
@@ -55,6 +57,10 @@
   parameter groups by name with BAM or RTS/CTS
 - CANopen master: NMT, SDO access to object dictionaries from EDS/DCF files, PDO mappings with live values,
   emergency messages
+- CANopen over EtherCAT (CoE): EtherCAT slaves with their states, object dictionaries (SDO information or EDS),
+  PDO assignment and emergencies; real adapters need the `ethercat` extra, a simulated network works without
+- Physical I/O: switch the digital outputs of a USB I/O adapter (aio_usb) and watch its inputs and analogue values,
+  from the tool or test scripts; needs the `io` extra, a simulated device works without
 - Decoding of ISO-TP, UDS, J1939, CANopen and LIN diagnostic frames in the trace
 - LIN master schedule tables
 
@@ -78,6 +84,9 @@ Download the installer for your platform from the [releases](https://github.com/
 `setup.exe` for Windows, an AppImage or `.deb` for Linux and a `.dmg` for macOS (Apple silicon). Portable zip
 archives are attached as well. No Python installation is needed.
 
+On Linux, CANExplorer is also a snap: `sudo snap install canexplorer`, then connect the hardware interfaces with
+`sudo snap connect canexplorer:can-bus` (SocketCAN) and `sudo snap connect canexplorer:raw-usb` (USB adapters).
+
 ### From source
 
 With [uv](https://docs.astral.sh/uv/getting-started/installation/) and Python 3.10 or newer:
@@ -85,7 +94,9 @@ With [uv](https://docs.astral.sh/uv/getting-started/installation/) and Python 3.
 ```bash
 git clone https://github.com/AKJ7/CANExplorer.git
 cd CANExplorer
-uv sync                  # Add --extra mf4 for ASAM MF4 log files (installs asammdf, numpy and pandas)
+uv sync                  # Add --extra mf4 for ASAM MF4 log files (installs asammdf, numpy and pandas),
+                         # --extra ethercat for EtherCAT adapters (installs pysoem),
+                         # --extra io for USB I/O adapters (installs pyusb and libusb)
 uv run canexplorer
 ```
 
@@ -117,6 +128,9 @@ support and the Linux kernel drivers.
 | CANtact (`cantact`) ¹ | CANtact, CANable | Windows, Linux, macOS |
 | gs_usb (`gs_usb`) ¹ | candleLight/gs_usb firmware adapters through libusb | Windows, Linux, macOS |
 | slcan (`slcan`) | Lawicel CANUSB, CANable (slcan firmware), USBtin and other serial slcan adapters | Windows, Linux, macOS |
+| GVRET (`gvret`) | ESP32RET boards, Macchina M2 (M2RET), CANDue: SavvyCAN's GVRET protocol over USB serial or WiFi | Windows, Linux, macOS |
+| J2534 (`j2534`) | J2534 pass-thru devices: Mongoose, CarDAQ, OpenPort 2.0, Bosch, Autel …; 32-bit drivers through a bridge process | Windows |
+| ELM327 / OBDLink (`elm327`) | OBDLink MX+, LX, SX, EX and ELM327 compatible OBD adapters over USB, Bluetooth or WiFi, for diagnostics | Windows, Linux, macOS |
 | python-can serial (`serial`) | Adapters with python-can's serial protocol | Windows, Linux, macOS |
 | Robotell (`robotell`) | Robotell USB-CAN | Windows, Linux, macOS |
 | Seeed Studio (`seeedstudio`) | USB-CAN Analyzer | Windows, Linux, macOS |

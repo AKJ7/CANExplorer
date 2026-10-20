@@ -37,3 +37,15 @@ def isolated_settings(tmp_path_factory):
     for settings_format in (QSettings.Format.NativeFormat, QSettings.Format.IniFormat):
         QSettings.setPath(settings_format, QSettings.Scope.UserScope, path)
     return path
+
+
+@pytest.fixture
+def mqtt_broker():
+    """An MQTT broker on a free local port (see mqtt_broker.py); skips tests without the MQTT client."""
+    pytest.importorskip('aiomqtt')
+    from mqtt_broker import MqttBroker
+
+    broker = MqttBroker()
+    broker.start()
+    yield broker
+    broker.stop()

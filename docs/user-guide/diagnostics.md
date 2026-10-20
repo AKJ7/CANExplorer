@@ -12,6 +12,12 @@ On CAN it uses ISO-TP (ISO 15765-2); on [LIN](lin.md) connections the LIN transp
 - **LIN**: the **NAD** of the slave node (default `01`). Requests are sent in master request frames (0x3C) and the
   response is collected by polling slave response headers (0x3D).
 
+OBD adapters such as the OBDLink MX+ work as
+[ELM327 connections](../reference/interfaces.md#elm327-and-obdlink-adapters) (interface *Elm327Bus*) for diagnostics
+at a vehicle's OBD port, over USB, Bluetooth or WiFi.
+Workshop interfaces with a J2534 driver work as
+[J2534 connections](../reference/interfaces.md#j2534-pass-thru-devices) (interface *J2534Bus*).
+
 ## Services
 
 | Row | Service |

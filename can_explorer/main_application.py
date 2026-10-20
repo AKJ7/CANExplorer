@@ -21,7 +21,7 @@ from can_explorer.util.gui import get_res_path
 from can_explorer.gui.translations import TranslationManager
 from can_explorer.gui.application_metadata import ApplicationMetadata
 from can_explorer.gui.connection_manager import ConnectionManager
-from can_explorer.desktop import APP_ID
+from can_explorer.desktop import desktop_file_name
 from can_explorer.gui.signal_plot import register_qml_types
 
 logger = get_logger(__name__)
@@ -53,7 +53,7 @@ class MainApplication(QApplication):
         self.setOrganizationName('AKJ7')
         self.setApplicationName('CANExplorer')
         self.setWindowIcon(QIcon(str(get_res_path(APP_ICON))))
-        self.setDesktopFileName(APP_ID)  # Lets Linux desktops match the window to the installed desktop entry
+        self.setDesktopFileName(desktop_file_name())  # Lets Linux desktops match the window to its desktop entry
         self.metadata = ApplicationMetadata(parent=self)
         self.connection_manager = ConnectionManager(parent=self)
         qInstallMessageHandler(self._message_handler)

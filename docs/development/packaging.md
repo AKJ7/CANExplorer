@@ -21,9 +21,37 @@ Both builds include the QML files, the Qt QML modules, the grammar files of ldfp
 interface modules (which python-can imports by name at run time). Nuitka cannot relate the package metadata of an
 editable install to the package, so the build writes the version into a generated module instead.
 
+On Windows, `--j2534-bridge PYTHON` also builds the [J2534 bridge](../reference/interfaces.md#32-bit-drivers)
+with a 32-bit Python, which needs PyInstaller, into `j2534-bridge32/` of the bundle. The release workflow creates
+that Python with uv:
+
+```bash
+uv venv build/j2534-bridge-python --python cpython-3.12-windows-x86-none
+uv pip install --python build/j2534-bridge-python pyinstaller
+uv run python packaging/build.py --archive --j2534-bridge build/j2534-bridge-python/Scripts/python.exe
+```
+
+The release bundles contain MQTT (the `mqtt` extra, synced with `--extra mqtt`).
+
 MF4 log files are only supported when asammdf is installed in the build environment. The release bundles are
 built without it to keep them small (it adds numpy and pandas); to include it, sync with `--extra mf4` before
 building.
+
+## Snap
+
+`snap/snapcraft.yaml` packs the PyInstaller bundle (`dist/CANExplorer`, built first) into a snap with the core22
+base and the gnome extension, with strict confinement. The release workflow builds it on Ubuntu 22.04 with
+`snapcore/action-build`, installs it and runs `canexplorer --help`, and for `v*` tags publishes it with
+`snapcore/action-publish`: to `stable`, to `candidate` for `-rc` tags and to `beta` for other pre-releases.
+
+Publishing needs, once:
+
+1. The snap name: `snapcraft register canexplorer` with the Snap Store account of the project.
+2. The repository secret `SNAPCRAFT_STORE_CREDENTIALS`, from
+   `snapcraft export-login --snaps canexplorer --acls package_access,package_push,package_release -`.
+
+The interfaces `can-bus` and `raw-usb` are not connected automatically; users connect them (see
+[Installation](../getting-started/installation.md#snap)), or the Snap Store grants auto-connection on request.
 
 ## Installers
 

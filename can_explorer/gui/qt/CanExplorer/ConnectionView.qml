@@ -99,6 +99,15 @@ ColumnLayout {
             onClicked: busReplayDialog.open()
         }
         Button {
+            text: root.connection.mqtt.enabled ? qsTr("● MQTT") : qsTr("MQTT…")
+            highlighted: root.connection.mqtt.enabled
+            ToolTip.visible: hovered
+            ToolTip.text: root.connection.mqtt.enabled
+                ? root.connection.mqtt.topic + ": " + root.connection.mqtt.state
+                : qsTr("Publish the signals and frames to an MQTT broker")
+            onClicked: mqttDialog.open()
+        }
+        Button {
             text: qsTr("Export…")
             ToolTip.visible: hovered
             ToolTip.text: qsTr("Save the selected trace rows, or all displayed rows, to a log file")
@@ -299,6 +308,11 @@ ColumnLayout {
 
     RecordDialog {
         id: recordDialog
+        connection: root.connection
+    }
+
+    MqttDialog {
+        id: mqttDialog
         connection: root.connection
     }
 

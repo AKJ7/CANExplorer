@@ -291,6 +291,20 @@ async def test_channel_detection(manager, monkeypatch):
     assert manager.detected_channels == {'VirtualBus': ['a']}
 
 
+def test_channel_probe_survives_failing_backend(monkeypatch):
+    etas = [{'interface': 'etas', 'channel': 'ETAS://USB/SuperCAN:3c04469d/CAN:0'}]
+
+    def detect(interface, timeout):
+        if interface == 'etas':
+            return etas
+        if interface == 'vector':
+            raise OSError('driver error')
+        return []
+
+    monkeypatch.setattr(can, 'detect_available_configs', detect)
+    assert ConnectionManager._probe_interfaces() == etas
+
+
 async def test_fd_connection_and_recent_entries(manager, channel):
     connection = open_connection(manager, channel, fd=True, data_bitrate='2000000', protocol='ISO-TP')
     assert connection.fd and 'FD, data 2000000 bit/s' in connection.description
@@ -505,7 +519,7 @@ async def test_canopen_page(manager, channel):
         slave.stop()
 
 
-async def test_flashing(manager, channel, tmp_path):
+async def test_flashing(manager, channel, tmp_path, monkeypatch):
     from pathlib import Path
 
     from can_explorer.core.flashing import load_image
@@ -553,10 +567,18 @@ async def test_flashing(manager, channel, tmp_path):
         assert all(step['status'] == 'done' for step in flashing.steps)
         assert flashing.steps[3]['detail'] == '20480 / 20480 bytes, blocks of 512'
 
-        assert flashing.start(options) == ''  # Cancelled during the download
-        await wait_until(lambda: flashing.progress > 0.1, timeout=10)
-        flashing.cancel()
-        await wait_until(lambda: not flashing.running)
+        # Cancelled during the download: from the progress report itself, as polling for the progress could miss
+        # the download on a fast machine (it finishes between two polls)
+        report = flashing._on_job_change
+
+        def cancel_at_ten_percent(job):
+            report(job)
+            if job.progress > 0.1:
+                flashing.cancel()
+
+        monkeypatch.setattr(flashing, '_on_job_change', cancel_at_ten_percent)
+        assert flashing.start(options) == ''
+        await wait_until(lambda: not flashing.running, timeout=10)
         assert flashing.state == 'cancelled' and 'skipped' in [step['status'] for step in flashing.steps]
     finally:
         ecu.stop()

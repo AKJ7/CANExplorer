@@ -41,6 +41,36 @@ def _parse_hex(text: str, maximum: int, what: str) -> int:
     return value
 
 
+def describe_value(dictionary: Optional[ObjectDictionary], index: int, subindex: int, data: bytes) -> str:
+    """An object's value read or written over SDO: in its data type when the dictionary knows it, else as hex."""
+    entry = dictionary.entry(index, subindex) if dictionary is not None else None
+    if entry is None:
+        text = format_hex(data)
+        if data and all(32 <= byte < 127 for byte in data) and len(data) > 4:
+            text += f' "{data.decode("ascii")}"'
+        return text
+    try:
+        value = decode_value(entry.data_type, data)
+    except ValueError:
+        return format_hex(data)
+    return f'"{value}"' if isinstance(value, str) else format_value(entry.data_type, value)
+
+
+def object_label(dictionary: Optional[ObjectDictionary], index: int, subindex: int) -> str:
+    """'0x1018:01 Identity object.Vendor-ID'; without a dictionary the standard objects are named."""
+    name = (dictionary if dictionary is not None else ObjectDictionary()).name(index, subindex)
+    return f'0x{index:04X}:{subindex:02X}' + (f' {name}' if name and not name.startswith('0x') else '')
+
+
+def encode_for(dictionary: Optional[ObjectDictionary], index: int, subindex: int, value: str) -> bytes:
+    """A value to write: in the object's data type when the dictionary knows it, otherwise as hex bytes."""
+    entry = dictionary.entry(index, subindex) if dictionary is not None else None
+    data = encode_value(entry.data_type, value) if entry is not None else parse_hex_bytes(value)
+    if not data:
+        raise ValueError('Enter the value to write')
+    return data
+
+
 class CanOpenController(QObject):
     """The CANopen page of a connection: NMT, SDO access to a node's object dictionary, and its PDOs."""
 
@@ -295,24 +325,6 @@ class CanOpenController(QObject):
             self.busy_changed.emit()
             self.changed.emit()
 
-    def _describe(self, index: int, subindex: int, data: bytes) -> str:
-        entry = self._dictionary.entry(index, subindex) if self._dictionary is not None else None
-        if entry is None:
-            text = format_hex(data)
-            if data and all(32 <= byte < 127 for byte in data) and len(data) > 4:
-                text += f' "{data.decode("ascii")}"'
-            return text
-        try:
-            value = decode_value(entry.data_type, data)
-        except ValueError:
-            return format_hex(data)
-        return f'"{value}"' if isinstance(value, str) else format_value(entry.data_type, value)
-
-    def _name(self, index: int, subindex: int) -> str:
-        dictionary = self._dictionary if self._dictionary is not None else ObjectDictionary()
-        name = dictionary.name(index, subindex)  # Without one: the standard objects
-        return f'0x{index:04X}:{subindex:02X}' + (f' {name}' if name and not name.startswith('0x') else '')
-
     @pyqtSlot(str, str, result=str)
     def sdo_read(self, index_text: str, subindex_text: str) -> str:
         try:
@@ -323,7 +335,8 @@ class CanOpenController(QObject):
 
         async def operation(client: SdoClient) -> str:
             data = await client.upload(index, subindex)
-            return f'Node {self._node_id} {self._name(index, subindex)} = {self._describe(index, subindex, data)}'
+            label = object_label(self._dictionary, index, subindex)
+            return f'Node {self._node_id} {label} = {describe_value(self._dictionary, index, subindex, data)}'
 
         return self._start(operation)
 
@@ -333,16 +346,14 @@ class CanOpenController(QObject):
         try:
             index = _parse_hex(index_text, 0xFFFF, 'index')
             subindex = _parse_hex(subindex_text, 0xFF, 'sub-index')
-            entry = self._dictionary.entry(index, subindex) if self._dictionary is not None else None
-            data = encode_value(entry.data_type, value) if entry is not None else parse_hex_bytes(value)
-            if not data:
-                raise ValueError('Enter the value to write')
+            data = encode_for(self._dictionary, index, subindex, value)
         except ValueError as e:
             return str(e)
 
         async def operation(client: SdoClient) -> str:
             await client.download(index, subindex, data)
-            return f'Node {self._node_id} {self._name(index, subindex)} ← {self._describe(index, subindex, data)}'
+            label = object_label(self._dictionary, index, subindex)
+            return f'Node {self._node_id} {label} ← {describe_value(self._dictionary, index, subindex, data)}'
 
         return self._start(operation)
 

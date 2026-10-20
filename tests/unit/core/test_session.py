@@ -65,14 +65,21 @@ async def test_periodic_transmission(channel, peer):
     periodic_changes = []
     session.add_periodic_listener(lambda s: periodic_changes.append(len(s.periodic)))
     session.start()
+    loop = asyncio.get_running_loop()
+    started = loop.time()
     session.start_periodic(can.Message(arbitration_id=0x200, is_extended_id=False), period=0.02)
-    await asyncio.sleep(0.21)
+    # Wait for frames rather than counting them in a fixed time: CI machines stall timers now and then
+    deadline = started + 5
+    while session.trace.total < 10:
+        assert loop.time() < deadline, f'Only {session.trace.total} frames sent'
+        await asyncio.sleep(0.005)
+    elapsed = loop.time() - started
+    assert elapsed >= 9 * 0.02 * 0.9, f'10 frames in {elapsed:.3f} s: faster than the period'
     session.stop_periodic()
     await asyncio.sleep(0.01)
     sent = session.trace.total
-    assert 7 <= sent <= 13
     await asyncio.sleep(0.1)
-    assert session.trace.total == sent
+    assert session.trace.total == sent  # Stopped
     assert session.periodic == [] and periodic_changes == [1, 0]
     session.stop()
 

@@ -62,6 +62,12 @@ computer.
 | `core/flashing.py` | Intel HEX, S-record and binary images; UDS download sequence |
 | `core/j1939_tools.py` | J1939 NAME, DM1/DM2, transport reassembly, network tracking and sending with BAM or RTS/CTS |
 | `core/canopen_tools.py` | EDS/DCF object dictionaries, SDO client, NMT, PDO mappings, network tracking, simulated node |
+| `core/physical_io.py` | Digital lines and analogue inputs: aio_usb (pyusb) and simulated devices, polled on a worker thread |
+| `core/gvret.py` | `GvretBus`, the python-can interface for GVRET devices (SavvyCAN protocol) |
+| `core/j2534.py`, `core/j2534_driver.py`, `core/j2534_bridge.py` | `J2534Bus`, the python-can interface for J2534 pass-thru drivers: registry lookup and DLL architecture check; the ctypes driver calls (standard library only); the 32-bit bridge process that runs them for 32-bit drivers, over JSON lines on stdin/stdout |
+| `core/elm327.py` | `Elm327Bus`, the python-can interface for ELM327 and OBDLink OBD adapters (text commands, monitoring on a worker thread) |
+| `core/ethercat.py` | EtherCAT master for CoE: SOEM (pysoem) and simulated backends on a worker thread, states, SDO, SDO information, PDO assignment |
+| `core/mqtt.py`, `gui/mqtt.py` | MQTT bridge of a bus (aiomqtt on a thread of its own): signals, frames and status out, allow-listed send requests in; the connection's MQTT controller |
 | `core/compare.py` | Comparing two recordings |
 | `core/bushealth.py` | Error frame decoding, error states and the bus health history |
 | `core/updates.py`, `gui/updates.py` | Finding, downloading, verifying and installing new releases from GitHub |
@@ -76,7 +82,7 @@ computer.
 | `gui/trace_tools.py`, `gui/workspace.py` | Trace search and bookmarks; workspace files |
 | `gui/diagnostics.py`, `gui/simulation.py` | Diagnostics and simulation controllers, panel bridge |
 | `gui/flashing.py`, `gui/j1939.py`, `gui/canopen.py` | Flashing, J1939 and CANopen controllers of a connection |
-| `gui/database_editor.py`, `gui/compare.py`, `gui/multibus.py` | Database editor, recording comparison and multi-bus trace tools |
+| `gui/database_editor.py`, `gui/compare.py`, `gui/multibus.py`, `gui/ethercat.py`, `gui/physical_io.py` | Database editor, recording comparison, multi-bus trace, EtherCAT and Physical I/O tools |
 | `gui/bushealth.py` | Bus health page of a connection |
 | `gui/translations.py` | Translations from Qt Linguist files |
 | `gui/plot_view.py`, `gui/signal_plot.py` | Time range, cursors and charts of the signal plots; plot item (QQuickPaintedItem) |

@@ -128,3 +128,47 @@ def test_protocol_versions_must_match(server, monkeypatch):
     monkeypatch.setattr(remote, 'PROTOCOL_VERSION', remote.PROTOCOL_VERSION + 1)  # A newer client
     with pytest.raises(can.CanInitializationError, match='another protocol version'):
         RemoteBus(f'127.0.0.1:{port}/vehicle?token=secret')
+
+
+def test_server_publishes_to_mqtt(mqtt_broker):
+    from pathlib import Path
+
+    from can_explorer.core.mqtt import MqttSettings
+
+    database = Path(__file__).resolve().parents[3] / 'examples' / 'simulation' / 'vehicle.dbc'
+    channel = f'mqtt-{uuid.uuid4().hex}'
+    settings = MqttSettings(
+        host='127.0.0.1', port=mqtt_broker.port, frames=True, interval=0.05, allow_send=True, send_allowlist=['7DF']
+    )
+    server = ServerThread([BusSpec('vehicle', 'virtual', channel)], mqtt=settings, databases={'vehicle': database})
+    server.start()
+    peer = can.Bus(interface='virtual', channel=channel)
+    try:
+        hub = server.server.hubs['vehicle']
+        assert hub.bus is not None and hub.keep_open  # Open without WebSocket clients
+        mqtt_broker.wait_for('canexplorer/vehicle/status')
+        time.sleep(0.2)  # Subscribed to the send topic
+        peer.send(can.Message(arbitration_id=0x100, is_extended_id=False, data=bytes([0x10, 0x27, 0, 0, 80, 1, 0, 0])))
+        topic, payload = mqtt_broker.wait_for('canexplorer/vehicle/signals/EngineData/EngineSpeed')[0]
+        assert json.loads(payload) == 2500  # 0x2710 × 0.25 rpm
+        assert json.loads(mqtt_broker.wait_for('canexplorer/vehicle/frames')[0][1])[0][1] == 0x100
+        mqtt_broker.publish('canexplorer/vehicle/send', '{"id": "7DF", "data": "02 01 0D"}')
+        received = receive(peer)
+        assert received.arbitration_id == 0x7DF and received.data == b'\x02\x01\x0d'
+    finally:
+        peer.shutdown()
+        server.stop()
+
+
+def test_cli_mqtt_options(tmp_path):
+    runner = CliRunner()
+    result = runner.invoke(cli, ['--bus', 'a=virtual:x', '--mqtt-frames'])
+    assert result.exit_code != 0 and 'need --mqtt' in result.output
+    result = runner.invoke(cli, ['--bus', 'a=virtual:x', '--mqtt', 'http://broker'])
+    assert result.exit_code != 0 and 'Invalid MQTT broker' in result.output
+    result = runner.invoke(cli, ['--bus', 'a=virtual:x', '--mqtt', 'broker', '--database', f'b={tmp_path}'])
+    assert result.exit_code != 0 and 'No such file' in result.output
+    dbc = tmp_path / 'x.dbc'
+    dbc.write_text('VERSION ""\n')
+    result = runner.invoke(cli, ['--bus', 'a=virtual:x', '--mqtt', 'broker', '--database', f'b={dbc}'])
+    assert result.exit_code != 0 and "unknown bus 'b'" in result.output

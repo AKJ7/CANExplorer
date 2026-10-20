@@ -4,6 +4,7 @@ for the way this copy was installed, and installing it.
 | Installation | Detected by | Update |
 |---|---|---|
 | Windows setup | Frozen build next to an Inno Setup uninstaller (`unins000.exe`) | Runs the new setup silently over it; the setup restarts the application |
+| Linux snap | `$SNAP` | Not installed by the application: snapd updates snaps itself |
 | Linux AppImage | `$APPIMAGE` | Replaces the AppImage file and restarts |
 | Linux package | Frozen build in `/opt/canexplorer` | `pkexec apt-get install` of the new `.deb` (asks for the administrator password) |
 | macOS app | Frozen build inside `CANExplorer.app` | Replaces the app with the one of the new disk image and restarts |
@@ -34,10 +35,11 @@ CHECKSUMS = 'SHA256SUMS.txt'
 TIMEOUT = 15.0
 CHUNK = 256 * 1024
 
-WINDOWS_SETUP, APPIMAGE, DEB, MACOS_APP, PORTABLE, SOURCE = (
+WINDOWS_SETUP, APPIMAGE, DEB, SNAP, MACOS_APP, PORTABLE, SOURCE = (
     'windows-setup',
     'appimage',
     'deb',
+    'snap',
     'macos-app',
     'portable',
     'source',
@@ -46,6 +48,7 @@ INSTALL_DESCRIPTIONS = {
     WINDOWS_SETUP: 'Windows installation',
     APPIMAGE: 'AppImage',
     DEB: 'Debian package',
+    SNAP: 'snap',
     MACOS_APP: 'macOS app',
     PORTABLE: 'portable archive',
     SOURCE: 'source installation',
@@ -169,6 +172,8 @@ def executable() -> Path:
 def installation_kind(environ: Optional[Dict[str, str]] = None, platform_name: Optional[str] = None) -> str:
     environ = os.environ if environ is None else environ
     platform_name = platform_name or sys.platform
+    if platform_name.startswith('linux') and environ.get('SNAP') and environ.get('SNAP_NAME'):
+        return SNAP
     if platform_name.startswith('linux') and environ.get('APPIMAGE'):
         return APPIMAGE
     if not frozen():

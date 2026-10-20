@@ -227,6 +227,20 @@ class AppState(QObject):
         self._settings.setValue('window/sidebar_width', max(low, min(high, int(width))))
         self._settings.sync()
 
+    # MQTT
+
+    def mqtt_options(self) -> Dict[str, Any]:
+        """The MQTT options last used (broker, user, topic prefix, what to publish …; never the password)."""
+        try:
+            options = json.loads(self._settings.value('mqtt/options', '{}'))
+        except (TypeError, ValueError):
+            return {}
+        return options if isinstance(options, dict) else {}
+
+    def set_mqtt_options(self, options: Dict[str, Any]) -> None:
+        self._settings.setValue('mqtt/options', json.dumps({k: v for k, v in options.items() if k != 'password'}))
+        self._settings.sync()
+
     # Window geometry
 
     @pyqtSlot(result='QVariantList')

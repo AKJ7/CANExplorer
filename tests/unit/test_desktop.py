@@ -41,3 +41,15 @@ def test_command_line_option(tmp_path, monkeypatch, capsys):
     assert (tmp_path / 'applications' / f'{desktop.APP_ID}.desktop').exists()
     assert desktop.run('--uninstall-desktop-entry') == 0
     assert 'Removed' in capsys.readouterr().out
+
+
+def test_snap_desktop_entry_and_file_name():
+    from can_explorer.desktop import APP_ID, desktop_entry, desktop_file_name
+
+    root = Path(__file__).resolve().parents[2]
+    expected = desktop_entry(['canexplorer']).replace(f'Icon={APP_ID}', 'Icon=${SNAP}/meta/gui/icon.png')
+    assert (root / 'snap' / 'gui' / 'canexplorer.desktop').read_text() == expected  # Same entry as the packages
+    assert desktop_file_name({}) == APP_ID
+    assert desktop_file_name({'SNAP': '/snap/canexplorer/3', 'SNAP_NAME': 'canexplorer'}) == 'canexplorer_canexplorer'
+    parallel = {'SNAP': '/snap/x', 'SNAP_NAME': 'canexplorer', 'SNAP_INSTANCE_NAME': 'canexplorer_test'}
+    assert desktop_file_name(parallel) == 'canexplorer_test_canexplorer'

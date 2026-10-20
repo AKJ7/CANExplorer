@@ -117,6 +117,8 @@ class UpdateController(QObject):
             return 'Running from source: update with git pull and uv sync.'
         if self._kind == updates.PORTABLE:
             return 'This copy was unpacked from an archive: download the new version from the release page.'
+        if self._kind == updates.SNAP:
+            return 'Installed as a snap: snapd installs updates automatically (or run: snap refresh canexplorer).'
         if self._kind == updates.DEB:
             return 'The package is installed with administrator rights; you will be asked for your password.'
         if self._release is not None and not self.can_install:

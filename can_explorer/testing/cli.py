@@ -94,6 +94,11 @@ async def run(args: argparse.Namespace) -> int:
     for path in args.simulation:
         if simulation.load(path).error:
             return 2
+    if args.simulation and not args.database:
+        print(
+            'warning: no --database: simulation nodes cannot use messages by name (self.message, send by name)',
+            file=sys.stderr,
+        )
     printed = set()
 
     def progress() -> None:

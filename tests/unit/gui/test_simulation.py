@@ -76,6 +76,28 @@ async def test_example_simulation(connection):
     assert not simulation.running
 
 
+async def test_database_loaded_while_running_restarts_the_simulation(connection):
+    connection, _ = connection
+    simulation = connection.simulation
+    simulation.load_script(QUrl.fromLocalFile(str(EXAMPLES / 'engine_simulation.py')))
+    connection.open()
+    assert simulation.start() == ''
+    await asyncio.sleep(0.15)
+    assert any('Load a signal database' in line['text'] for line in simulation.console)
+    connection.load_database(QUrl.fromLocalFile(str(EXAMPLES / 'vehicle.dbc')))
+    assert simulation.running
+    assert any('Signal database changed: restarting' in line['text'] for line in simulation.console)
+    simulation.clear_console()
+    simulation.set_variable('ignition', 'true')
+    simulation.set_variable('target_speed', '3000')
+    await wait_until(lambda: simulation.runtime.variables.get('gear') == 'Second')
+    assert not any(line['level'] == 'error' for line in simulation.console)
+    connection.unload_database()  # Restarted again: the nodes now report the missing database
+    await asyncio.sleep(0.15)
+    assert simulation.running and any(line['level'] == 'error' for line in simulation.console)
+    simulation.stop()
+
+
 async def test_scripts_and_panels_management(connection, tmp_path):
     connection, _ = connection
     simulation = connection.simulation

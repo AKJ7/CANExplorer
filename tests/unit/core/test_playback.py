@@ -33,9 +33,11 @@ def test_speed_label():
 
 async def test_clock_speed_and_pause():
     clock = PlaybackClock(speed=2.0)
+    before = time.monotonic()
     clock.start()
     await asyncio.sleep(0.1)
-    assert 0.15 < clock.position < 0.35
+    # At twice the speed of the time that passed (measured: CI machines stall timers now and then)
+    assert 0.18 <= clock.position <= 2 * (time.monotonic() - before) + 0.01
     clock.pause()
     paused_at = clock.position
     await asyncio.sleep(0.05)
@@ -150,10 +152,12 @@ async def test_file_source_seeking(tmp_path):
 
     # Backward: the file is read again; frames up to the position at once, the rest in time
     session.clear()
+    seeked = time.monotonic()
     assert source.seek(2.0) is True
     await wait_for(lambda: session.trace.total >= 21, timeout=1.0)
     await asyncio.sleep(0.25)
-    assert 21 <= session.trace.total <= 25
+    # One frame per 0.1 s after the position, in the time that passed (measured, as CI machines stall timers)
+    assert 21 <= session.trace.total <= 21 + int((time.monotonic() - seeked) / 0.1) + 1
     ids = [frame.message.arbitration_id for frame in session.trace]
     assert ids[:21] == [0x100 + i for i in range(21)]  # In order, from the beginning, without duplicates
 
