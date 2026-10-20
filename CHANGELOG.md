@@ -8,6 +8,15 @@ development stages are listed by date and commit, newest first.
 
 ## [Unreleased]
 
+## [1.1.1] – 2026-10-20
+
+### Fixed
+
+- The installers contain the ETAS BOA (`etas`), IXXAT (`ixxat`) and USB2CAN (`usb2can`) interfaces. These
+  backends load their vendor driver when imported, so a build machine without the driver left them out, and their
+  devices were neither detected nor usable although the interfaces were listed.
+- The Physical I/O tool was shown in the middle of the window, header included, until a device was opened.
+
 ## [1.1.0] – 2026-10-20
 
 ### Added
@@ -438,7 +447,8 @@ Called "Milestone 0.1.0" in the commit message and the README roadmap.
 - Qt Widgets user interface: main window, new connection dialog, about dialog and a raw CAN frame table.
 - Pipenv based project setup, VS Code development container, Dockerfile and a CI workflow skeleton.
 
-[Unreleased]: https://github.com/AKJ7/CANExplorer/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/AKJ7/CANExplorer/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/AKJ7/CANExplorer/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/AKJ7/CANExplorer/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/AKJ7/CANExplorer/releases/tag/v1.0.0
 [0.0.1]: https://github.com/AKJ7/CANExplorer/releases/tag/0.0.1
