@@ -60,6 +60,7 @@ computer.
 | `core/lin.py`, `core/lin_tp.py`, `core/lin_schedule.py` | LIN frames and decoder, LIN transport client, LIN master |
 | `core/isotp_client.py`, `core/uds.py` | Active ISO-TP client and UDS client and decoder |
 | `core/flashing.py` | Intel HEX, S-record and binary images; UDS download sequence |
+| `core/uds_scan.py` | Interactive UDS discovery: service, DID, subfunction and routine scans and a one-byte sweep over a UDS transport, with the answers classified |
 | `core/doip.py` | Diagnostics over IP (ISO 13400-2): vehicle discovery, entity status and power mode over UDP; the tester's TCP connection with routing activation and alive checks; the UDS transport per target address; the simulated DoIP entity |
 | `core/j1939_tools.py` | J1939 NAME, DM1/DM2, transport reassembly, network tracking and sending with BAM or RTS/CTS |
 | `core/canopen_tools.py` | EDS/DCF object dictionaries, SDO client, NMT, PDO mappings, network tracking, simulated node |
@@ -83,7 +84,7 @@ computer.
 | `gui/models.py` | Trace (a paged view of the trace store) and overview table models |
 | `gui/trace_tools.py`, `gui/workspace.py` | Trace search and bookmarks; workspace files |
 | `gui/diagnostics.py`, `gui/simulation.py` | Diagnostics and simulation controllers, panel bridge |
-| `gui/flashing.py`, `gui/j1939.py`, `gui/canopen.py` | Flashing, J1939 and CANopen controllers of a connection |
+| `gui/flashing.py`, `gui/j1939.py`, `gui/canopen.py`, `gui/uds_scan.py` | Flashing, J1939, CANopen and UDS discovery controllers of a connection |
 | `gui/database_editor.py`, `gui/compare.py`, `gui/multibus.py`, `gui/ethercat.py`, `gui/physical_io.py`, `gui/doip.py` | Database editor, recording comparison, multi-bus trace, EtherCAT, Physical I/O and DoIP tools (the DoIP tool reuses the diagnostics and flashing controllers with its own transport) |
 | `gui/bushealth.py` | Bus health page of a connection |
 | `gui/reverse.py`, `gui/reverse_tools.py` | Reverse engineering page of a connection; its analysis, reference and marker tools (run in a worker thread) |

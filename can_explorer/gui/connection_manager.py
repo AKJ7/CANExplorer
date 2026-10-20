@@ -44,6 +44,7 @@ from can_explorer.gui.mqtt import MqttController
 from can_explorer.gui.simulation import SimulationController
 from can_explorer.gui.plot_view import PlotView
 from can_explorer.gui.reverse import ReverseController
+from can_explorer.gui.uds_scan import UdsScanController
 from can_explorer.gui.testing import TestController
 from can_explorer.gui.trace_tools import TraceTools
 from can_explorer.gui.workspace import SUFFIX as WORKSPACE_SUFFIX
@@ -130,6 +131,7 @@ class CanConnection(QObject):
         self._j1939 = J1939Controller(self, parent=self)
         self._canopen = CanOpenController(self, parent=self)
         self._flashing = FlashController(self._diagnostics, parent=self)
+        self._uds_scan = UdsScanController(self, parent=self)
         self._bus_health = BusHealthController(self, parent=self)
         self._reverse = ReverseController(self, parent=self)
         self._simulation = SimulationController(self, parent=self)
@@ -347,6 +349,7 @@ class CanConnection(QObject):
         self.stop_schedule()
         self._bus_replay.stop()
         self._tests.shutdown()
+        self._uds_scan.shutdown()
         self._flashing.shutdown()
         self._diagnostics.shutdown()
         self._simulation.shutdown()
@@ -676,6 +679,11 @@ class CanConnection(QObject):
     def flashing(self) -> FlashController:
         """Programming ECUs over UDS."""
         return self._flashing
+
+    @pyqtProperty(QObject, constant=True)
+    def uds_scan(self) -> UdsScanController:
+        """Interactive UDS discovery: services, DIDs, subfunctions, routines and byte sweeps."""
+        return self._uds_scan
 
     @pyqtProperty(QObject, constant=True)
     def canopen(self) -> CanOpenController:

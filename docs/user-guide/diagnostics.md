@@ -14,6 +14,9 @@ On CAN it uses ISO-TP (ISO 15765-2); on [LIN](lin.md) connections the LIN transp
 - **Ethernet**: vehicles with an Ethernet diagnostic port are diagnosed with the [DoIP](doip.md) tool, which offers
   this view with the ECU's logical **Target address**.
 
+To find the services, data identifiers, subfunctions and routines an undocumented ECU exposes, use the
+[UDS discovery](uds-discovery.md) page, which scans them over this same transport.
+
 OBD adapters such as the OBDLink MX+ work as
 [ELM327 connections](../reference/interfaces.md#elm327-and-obdlink-adapters) (interface *Elm327Bus*) for diagnostics
 at a vehicle's OBD port, over USB, Bluetooth or WiFi.

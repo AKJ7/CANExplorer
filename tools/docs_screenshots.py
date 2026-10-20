@@ -396,6 +396,13 @@ async def scenario():
         await wait_idle(diagnostics)
     show_page('diagnostics')
     await shot('diagnostics')
+    # UDS discovery: scanning a range of data identifiers on the simulated ECU
+    scan = connection.uds_scan
+    scan.start({'kind': 'dids', 'start': 'F180', 'end': 'F1A0', 'timeout_ms': 150})
+    while scan.running:
+        await asyncio.sleep(0.05)
+    show_page('uds-scan')
+    await shot('uds-scan')
     # Flashing the example firmware into the simulated ECU
     flashing = connection.flashing
     flashing.load_file(QUrl.fromLocalFile(str(ROOT / 'examples' / 'flashing' / 'firmware.hex')), '')

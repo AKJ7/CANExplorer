@@ -20,12 +20,13 @@ ColumnLayout {
         { key: "reverse", title: qsTr("Reverse engineering"), icon: "⌕" },
     ].concat(connection.can_transmit ? [{ key: "diagnostics", title: qsTr("Diagnostics"), icon: "✚" }] : [])
      .concat(connection.can_transmit ? [{ key: "flash", title: qsTr("Flashing"), icon: "⇪" }] : [])
+     .concat(connection.can_transmit ? [{ key: "uds-scan", title: qsTr("UDS discovery"), icon: "⊚" }] : [])
      .concat(connection.protocol === "J1939" ? [{ key: "j1939", title: qsTr("J1939"), icon: "⛟" }] : [])
      .concat(connection.protocol === "CANopen" ? [{ key: "canopen", title: qsTr("CANopen"), icon: "⚙" }] : [])
      .concat(connection.is_lin ? [{ key: "lin", title: qsTr("LIN Schedule"), icon: "⏱" }] : [])
      .concat(connection.can_transmit ? [{ key: "simulation", title: qsTr("Simulation"), icon: "▶" }] : [])
      .concat(connection.can_transmit ? [{ key: "tests", title: qsTr("Tests"), icon: "✓" }] : [])
-    readonly property var pageKeys: ["dashboard", "trace", "overview", "signals", "health", "reverse", "diagnostics", "flash", "j1939", "canopen", "lin", "simulation", "tests"]
+    readonly property var pageKeys: ["dashboard", "trace", "overview", "signals", "health", "reverse", "diagnostics", "flash", "uds-scan", "j1939", "canopen", "lin", "simulation", "tests"]
     property string page: "dashboard"
     readonly property string pageTitle: (pages.find(item => item.key === page) || pages[0]).title
     readonly property bool tablePage: page === "trace" || page === "overview"
@@ -240,6 +241,15 @@ ColumnLayout {
                     flashing: root.connection.flashing
                     diagnostics: root.connection.diagnostics
                     connected: root.connection.connected
+                }
+            }
+        }
+        Card {
+            Loader {
+                anchors.fill: parent
+                active: root.connection.can_transmit
+                sourceComponent: UdsScanView {
+                    connection: root.connection
                 }
             }
         }

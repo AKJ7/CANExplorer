@@ -59,6 +59,7 @@ nav:
       - Protocol decoding: user-guide/protocols.md
       - Diagnostics (UDS): user-guide/diagnostics.md
       - Flashing: user-guide/flashing.md
+      - UDS discovery: user-guide/uds-discovery.md
       - DoIP: user-guide/doip.md
       - J1939: user-guide/j1939.md
       - CANopen: user-guide/canopen.md

@@ -15,6 +15,13 @@ development stages are listed by date and commit, newest first.
   decode ReadDataByIdentifier responses. Fixed-length data object properties with IDENTICAL, LINEAR or TEXTTABLE
   compu methods are decoded (unsigned, signed, float, ASCII and UTF-8, in both byte orders); other data is shown
   in hex. Load one with **Description…** in the Diagnostics view or with **Load database…**.
+- **UDS discovery** page of a connection: an interactive UDS scanner for reverse engineering, finding the
+  services, data identifiers (ReadDataByIdentifier), subfunctions and routines an ECU exposes, and a byte sweep of
+  a request template. It sends a probe for every value in a range over the Diagnostics transport (ISO-TP, LIN or
+  DoIP) and lists the ones the ECU answers, classified as supported, locked (security access), wrong state/session
+  or rejected; a found request can be opened in the Diagnostics view. Read-only by default; the byte sweep and
+  starting routines need an explicit opt-in. Scripts use `can_explorer.core.uds_scan` (`scan_services`,
+  `scan_data_identifiers`, `scan_subfunctions`, `scan_routines`, `sweep`).
 - **DoIP tool** (Diagnostics over IP, ISO 13400-2): UDS diagnostics and flashing of vehicles with an Ethernet
   diagnostic port. **Discover** sends a vehicle identification request and lists the DoIP entities answering
   (address, logical address, VIN, EID); **Connect** opens the TCP connection with routing activation (tester

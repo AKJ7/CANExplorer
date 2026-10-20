@@ -7,6 +7,9 @@ to a database.
 
 ![Reverse engineering: after a notch only the door switch of 500 stands out; the vehicle speed as a Motorola bit field](../assets/screenshots/reverse-engineering.png)
 
+For diagnostics instead of broadcast traffic, the [UDS discovery](uds-discovery.md) page finds the services and
+data identifiers an ECU answers to.
+
 Its tabs:
 
 | Tab | Purpose |

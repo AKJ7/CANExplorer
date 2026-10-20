@@ -69,6 +69,7 @@ def test_dashboard_pages_and_themes_render_without_warnings(window, qtbot):
         'reverse',
         'diagnostics',
         'flash',
+        'uds-scan',
         'simulation',
         'tests',
     ]
