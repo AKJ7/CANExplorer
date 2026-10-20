@@ -52,7 +52,7 @@ computer.
 | `core/filters.py` | Display filter syntax |
 | `core/store.py` | Trace ring buffer and per-identifier statistics |
 | `core/busstats.py` | Frame rates and bus load |
-| `core/signals.py` | Time series of tracked signals |
+| `core/signals.py` | Time series of tracked signals and bit fields |
 | `core/database_io.py`, `core/dbf.py` | Loading, saving and converting signal databases; BUSMASTER DBF |
 | `core/database_editor.py`, `core/ldf_editor.py`, `core/ldf_writer.py` | Editing CAN databases and LDF files; writing LDF files |
 | `core/decoding.py`, `core/ldf.py` | Signal decoding with cantools databases and LDF files |
@@ -69,6 +69,7 @@ computer.
 | `core/ethercat.py` | EtherCAT master for CoE: SOEM (pysoem) and simulated backends on a worker thread, states, SDO, SDO information, PDO assignment |
 | `core/mqtt.py`, `gui/mqtt.py` | MQTT bridge of a bus (aiomqtt on a thread of its own): signals, frames and status out, allow-listed send requests in; the connection's MQTT controller |
 | `core/compare.py` | Comparing two recordings |
+| `core/reverse/` | Reverse engineering: bit fields (`fields.py`), bit and byte statistics with the notch (`bitstats.py`), checksum detection (`checksums.py`), the automatic analysis of fields, their kinds and multiplexers (`analysis.py`), correlation with reference signals (`reference.py`) and OBD-II polling (`obd.py`), event markers (`markers.py`), synthetic traffic with known signals and scoring of found fields (`synthetic.py`) |
 | `core/bushealth.py` | Error frame decoding, error states and the bus health history |
 | `core/updates.py`, `gui/updates.py` | Finding, downloading, verifying and installing new releases from GitHub |
 | `core/remote.py` | `RemoteBus`, the python-can interface for buses shared by `can-server` |
@@ -84,6 +85,7 @@ computer.
 | `gui/flashing.py`, `gui/j1939.py`, `gui/canopen.py` | Flashing, J1939 and CANopen controllers of a connection |
 | `gui/database_editor.py`, `gui/compare.py`, `gui/multibus.py`, `gui/ethercat.py`, `gui/physical_io.py` | Database editor, recording comparison, multi-bus trace, EtherCAT and Physical I/O tools |
 | `gui/bushealth.py` | Bus health page of a connection |
+| `gui/reverse.py`, `gui/reverse_tools.py` | Reverse engineering page of a connection; its analysis, reference and marker tools (run in a worker thread) |
 | `gui/translations.py` | Translations from Qt Linguist files |
 | `gui/plot_view.py`, `gui/signal_plot.py` | Time range, cursors and charts of the signal plots; plot item (QQuickPaintedItem) |
 | `gui/app_state.py` | Persistent settings (QSettings) |

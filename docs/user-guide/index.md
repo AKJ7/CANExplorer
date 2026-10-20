@@ -31,8 +31,9 @@ database or reopen a recent connection.
 | **Dashboard** | Frame rates, bus load, error frames, bus activity chart, traffic breakdown and the busiest identifiers |
 | **Trace** | Every frame in arrival order |
 | **Overview** | One row per identifier with the latest data |
-| **Signals** | Live plots of database signals |
+| **Signals** | Live plots of database signals and bit fields |
 | **Bus health** | Error state, error frames, error counters and bus load over up to an hour ([Bus health](bus-health.md)) |
+| **Reverse engineering** | Bit and byte statistics, automatic analysis, reference signals and markers to find signals, and bit fields to plot or add to a database ([Reverse engineering](reverse-engineering.md)) |
 | **Diagnostics** | UDS requests to an ECU (not for log replays) |
 | **J1939** | Nodes with their address claims and trouble codes, requests and sending parameter groups ([J1939 connections](j1939.md)) |
 | **CANopen** | NMT, SDO access to object dictionaries (EDS/DCF), PDOs and emergencies ([CANopen connections](canopen.md)) |

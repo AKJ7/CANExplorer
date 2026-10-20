@@ -22,6 +22,7 @@ from can_explorer.core.lin import DEFAULT_BAUDRATE, LIN_BAUDRATES, MAX_FRAME_ID
 from can_explorer.core.lin_schedule import LinScheduler
 from can_explorer.core.protocols import PROTOCOL_DECODERS, create_protocol_decoder
 from can_explorer.core.recording import Trigger, TriggeredRecorder
+from can_explorer.core.reverse.fields import BitField
 from can_explorer.core.session import BusSession, SessionError, SessionState
 from can_explorer.core.log_formats import file_filters
 from can_explorer.core.sources import BusConfig, FileSource, LiveSource, MessageSource
@@ -41,6 +42,7 @@ from can_explorer.gui.playback import BusReplay, ReplayPlayback
 from can_explorer.gui.mqtt import MqttController
 from can_explorer.gui.simulation import SimulationController
 from can_explorer.gui.plot_view import PlotView
+from can_explorer.gui.reverse import ReverseController
 from can_explorer.gui.testing import TestController
 from can_explorer.gui.trace_tools import TraceTools
 from can_explorer.gui.workspace import SUFFIX as WORKSPACE_SUFFIX
@@ -125,6 +127,7 @@ class CanConnection(QObject):
         self._canopen = CanOpenController(self, parent=self)
         self._flashing = FlashController(self, parent=self)
         self._bus_health = BusHealthController(self, parent=self)
+        self._reverse = ReverseController(self, parent=self)
         self._simulation = SimulationController(self, parent=self)
         self._mqtt = MqttController(self, parent=self)
         self._tests = TestController(self, parent=self)
@@ -343,6 +346,7 @@ class CanConnection(QObject):
         self._flashing.shutdown()
         self._diagnostics.shutdown()
         self._simulation.shutdown()
+        self._reverse.shutdown()
         self.session.stop()
 
     def set_refresh_interval(self, interval_ms: int):
@@ -394,6 +398,7 @@ class CanConnection(QObject):
     def clear(self):
         self._history.clear()
         self.session.clear()
+        self._reverse.clear()
         self._trace.rebuild()
         self._overview.rebuild()
         self._frame_count = 0
@@ -544,7 +549,7 @@ class CanConnection(QObject):
         self.stop_schedule()
         self._scheduler = None
         self.session.decoder.database = None
-        self.session.signals.untrack_all()
+        self.session.signals.untrack_all(fields=False)  # Bit fields do not need the database
         self._database_changed()
 
     def _database_changed(self):
@@ -580,6 +585,23 @@ class CanConnection(QObject):
     def untrack_signal(self, message: str, signal: str):
         self.session.signals.untrack(message, signal)
         self.tracked_signals_changed.emit()
+
+    @pyqtSlot(str)
+    def untrack_key(self, key: str):
+        """Stop plotting a database signal ('Message.Signal') or a bit field ('1A0[16|8@1+]')."""
+        self.session.signals.untrack_key(key)
+        self.tracked_signals_changed.emit()
+
+    def track_field(
+        self, field: BitField, unit: str = '', multiplexer: Optional[BitField] = None, mux_value: Optional[int] = None
+    ) -> str:
+        """Plot a bit field (of the frames with multiplexer == mux_value), with its values in the trace so far."""
+        signals = self.session.signals
+        key = signals.track_field(field, unit, multiplexer, mux_value)
+        signals.backfill(key, (frame.message for frame in self.session.trace))
+        self.tracked_signals_changed.emit()
+        self.signals_updated.emit()
+        return key
 
     # Transmission
 
@@ -640,6 +662,11 @@ class CanConnection(QObject):
     def bus_health(self) -> BusHealthController:
         """Error frames, error states and the load over time."""
         return self._bus_health
+
+    @pyqtProperty(QObject, constant=True)
+    def reverse(self) -> ReverseController:
+        """Bit and byte statistics and bit fields, for finding unknown signals."""
+        return self._reverse
 
     @pyqtProperty(QObject, constant=True)
     def flashing(self) -> FlashController:

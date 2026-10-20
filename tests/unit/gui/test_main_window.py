@@ -66,6 +66,7 @@ def test_dashboard_pages_and_themes_render_without_warnings(window, qtbot):
         'overview',
         'signals',
         'health',
+        'reverse',
         'diagnostics',
         'flash',
         'simulation',
@@ -80,6 +81,79 @@ def test_dashboard_pages_and_themes_render_without_warnings(window, qtbot):
     manager.app_state.set_theme('Dark')
     manager.error_occurred.emit('Something failed')
     qtbot.wait(50)
+    assert warnings == []
+
+
+async def test_reverse_engineering_page_renders_without_warnings(window, qapp, qtbot, tmp_path, data_dir):
+    """The bit grid, byte table and bit field form with traffic, a notch, a plotted field and a field added to the
+    database editor, and the tabs of the analysis tools with results."""
+    import asyncio
+
+    from PyQt6 import sip
+    from PyQt6.QtCore import QObject, QUrl
+    from PyQt6.QtQuick import QQuickWindow
+
+    from can_explorer.core.decoding import open_signal_database
+    from can_explorer.core.reverse.synthetic import generate
+
+    engine, manager, warnings = window
+    path = tmp_path / 'synthetic.asc'
+    generate(open_signal_database(data_dir / 'complex.dbc'), duration=2.0).write(path)
+    manager.open_log_file(QUrl.fromLocalFile(str(path)), 'Raw', 0.0)
+    connection = manager.connections[-1]
+    for _ in range(50):
+        await asyncio.sleep(0.01)
+        qapp.processEvents()
+    stack = [sip.cast(engine.rootObjects()[0], QQuickWindow).contentItem()]
+    while not stack[-1].metaObject().className().startswith('ConnectionView'):
+        item = stack.pop()
+        stack.extend(item.childItems())
+    view = stack[-1]
+    view.setProperty('page', 'reverse')
+    qtbot.wait(300)
+    tools = connection.reverse
+    assert tools.active and tools.identifiers
+    tools.select('100')
+    tools.notch()
+    tools.select_bits(0, 15)
+    qtbot.wait(300)
+    assert tools.plot_field() == ''
+    view.setProperty('page', 'signals')
+    qtbot.wait(100)
+    editor = manager.database_editor
+    assert editor.add_found_signal(tools.signal_definition, '') == ''
+    assert editor.current_message == 'Message_100' and editor.current_signal == 'Signal_0'
+    qtbot.wait(100)
+
+    # The tabs of the automatic analysis, reference signals and markers, with results
+    async def finished(tool):
+        for _ in range(500):
+            if not tool.running:
+                return
+            await asyncio.sleep(0.01)
+            qapp.processEvents()
+        raise AssertionError('The tool did not finish')
+
+    view.setProperty('page', 'reverse')
+    tabs = view.findChild(QObject, 'reverseTabs')
+    tools.analysis.run(False)
+    await finished(tools.analysis)
+    assert tools.analysis.results
+    tabs.setProperty('currentIndex', 1)
+    qtbot.wait(100)
+    connection.load_database(QUrl.fromLocalFile(str(data_dir / 'complex.dbc')))
+    tools.reference.find('signal:VehicleSpeed.WheelSpeed', 0.2)
+    await finished(tools.reference)
+    tabs.setProperty('currentIndex', 2)
+    qtbot.wait(100)
+    assert tools.markers.add('door') == ''
+    tools.markers.find('', 0.5, 1.5)
+    await finished(tools.markers)
+    tabs.setProperty('currentIndex', 3)
+    qtbot.wait(100)
+    tools.analysis.use(0)
+    tabs.setProperty('currentIndex', 0)
+    qtbot.wait(100)
     assert warnings == []
 
 

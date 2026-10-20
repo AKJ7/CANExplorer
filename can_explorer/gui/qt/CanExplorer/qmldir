@@ -29,6 +29,11 @@ CommandPalette 1.0 CommandPalette.qml
 UpdateDialog 1.0 UpdateDialog.qml
 DashboardView 1.0 DashboardView.qml
 BusHealthView 1.0 BusHealthView.qml
+ReverseView 1.0 ReverseView.qml
+ReverseResults 1.0 ReverseResults.qml
+ReverseAnalysisPanel 1.0 ReverseAnalysisPanel.qml
+ReverseReferencePanel 1.0 ReverseReferencePanel.qml
+ReverseMarkersPanel 1.0 ReverseMarkersPanel.qml
 WelcomeView 1.0 WelcomeView.qml
 PlaybackBar 1.0 PlaybackBar.qml
 BusReplayDialog 1.0 BusReplayDialog.qml

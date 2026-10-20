@@ -45,6 +45,7 @@ from can_explorer.core.j1939_tools import (  # noqa: E402
     J1939Sender,
     encode_dm,
 )
+from can_explorer.core.reverse.markers import Marker  # noqa: E402
 from can_explorer.core.session import BusSession  # noqa: E402
 from can_explorer.core.simulation import LinSlaveSimulator, UdsEcuSimulator, UdsServer  # noqa: E402
 from can_explorer.core.sources import BusConfig, LiveSource  # noqa: E402
@@ -187,6 +188,95 @@ async def physical_io_scenario():
     await shot('physical-io')
     io.close_device()
     window.setProperty('tool', '')
+
+
+async def reverse_engineering_scenario():
+    """A minute of traffic of an unknown vehicle (synthetic, from tests/data/reverse.dbc): the door switch toggles
+    after a notch and is marked each time, a GPS log gives the vehicle speed."""
+    from can_explorer.core.decoding import open_signal_database
+    from can_explorer.core.reverse.synthetic import Behaviour, generate
+
+    def full(period):
+        return Behaviour('sine', period=period, amplitude=0.95)
+
+    behaviours = {
+        'Powertrain.Checksum': Behaviour('checksum'),
+        'Powertrain.Counter': Behaviour('counter'),
+        'Powertrain.EngineSpeed': full(20),
+        'Powertrain.Torque': full(23),
+        'Powertrain.Throttle': Behaviour('ramp', period=15, amplitude=0.95),
+        'Body.VehicleSpeed': full(27),
+        'Body.SteeringAngle': full(31),
+        'Body.DoorOpen': Behaviour('constant'),
+        'Battery.Temperature': Behaviour('sine', period=40, amplitude=0.95),
+    }
+    for group in range(3):
+        behaviours[f'Battery.CellA{group}'] = full(7 + 2 * group)
+        behaviours[f'Battery.CellB{group}'] = full(9 + 2 * group)
+    start = time.time() - 60
+    traffic = generate(open_signal_database(DATA / 'reverse.dbc'), 60, behaviours, seed=1, start=start)
+    door_toggles = [start + seconds for seconds in (32, 38, 44, 50, 56)]
+
+    manager.add_connection(
+        {'name': 'Test vehicle', 'interface': 'VirtualBus', 'channel': f'docs-{uuid.uuid4().hex[:6]}'}
+    )
+    connection = manager.connections[-1]
+    connection.open()
+    window.setProperty('selectedIndex', len(manager.connections) - 1)
+    show_page('reverse')
+    await asyncio.sleep(0.3)
+    reverse = connection.reverse
+    view = [view for view in items('ConnectionView') if view.isVisible()][0]
+    tabs = view.findChild(QObject, 'reverseTabs')
+
+    # The traffic arrives (the door switch, byte 4 bit 0 of 500, toggling at the marked moments)
+    door = 0
+    for msg in traffic.messages:
+        if msg.timestamp >= start + 30 and not reverse.notched:
+            reverse.notch()
+        while door_toggles and msg.timestamp >= door_toggles[0]:
+            door ^= 1
+            door_toggles.pop(0)
+            reverse.markers._markers.append(Marker(msg.timestamp + 0.3, 'door opened' if door else 'door closed'))
+        if msg.arbitration_id == 0x500:
+            msg.data[4] = (msg.data[4] & 0xFE) | door
+        connection.session._dispatch(msg)
+    connection._refresh()
+    connection.session.bus_statistics.reset()  # The frames arrived all at once
+    connection._sample_bus_statistics()
+    # After the notch only the door switch stands out; the vehicle speed (Motorola, bytes 0-1) as bit field
+    reverse.select('500')
+    reverse.set_field({'byte_order': 'big_endian'})
+    reverse.select_bits(7, 8)
+    reverse.set_field({'scale': 0.01, 'unit': 'km/h', 'name': 'VehicleSpeed'})
+    await shot('reverse-engineering', 0.6)
+
+    reverse.analysis.run(False)
+    while reverse.analysis.running:
+        await asyncio.sleep(0.05)
+    tabs.setProperty('currentIndex', 1)
+    await shot('reverse-analysis')
+
+    gps = Path(tempfile.mkdtemp()) / 'gps.csv'
+    rows = [f'{stamp - start:.3f},{raw * 0.01:.1f}' for stamp, raw in traffic.raw['Body.VehicleSpeed'][::50]]
+    gps.write_text('time_s,speed [km/h]\n' + '\n'.join(rows))
+    reverse.reference.open_csv(QUrl.fromLocalFile(str(gps)))
+    reverse.reference.find('csv:0', 1.0)
+    while reverse.reference.running:
+        await asyncio.sleep(0.05)
+    tabs.setProperty('currentIndex', 2)
+    await shot('reverse-reference')
+
+    reverse.markers.find('', 0.5, 1.0)
+    while reverse.markers.running:
+        await asyncio.sleep(0.05)
+    tabs.setProperty('currentIndex', 3)
+    await shot('reverse-markers')
+
+    tabs.setProperty('currentIndex', 0)
+    manager.remove_connection(len(manager.connections) - 1)
+    window.setProperty('selectedIndex', 0)
+    await asyncio.sleep(0.2)
 
 
 async def scenario():
@@ -463,6 +553,8 @@ async def scenario():
 
     await ethercat_scenario()
     await physical_io_scenario()
+
+    await reverse_engineering_scenario()
 
     # Bus health: ten minutes of a bus with rising error counters, an error passive period and a bus off
     health = connection.health

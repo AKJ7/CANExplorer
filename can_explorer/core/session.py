@@ -211,9 +211,7 @@ class BusSession:
         self.trace.append(frame)
         self.statistics.update(frame)
         self.bus_statistics.update(msg)
-        database = self.decoder.database
-        if database is not None:
-            self.signals.update(msg, database)
+        self.signals.update(msg, self.decoder.database)
         if self._recorder is not None:
             self._record(msg)
         for callback in self._message_listeners:

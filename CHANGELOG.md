@@ -8,6 +8,30 @@ development stages are listed by date and commit, newest first.
 
 ## [Unreleased]
 
+### Added
+
+- **Reverse engineering** view of a connection, for finding signals without a database: a bit grid per identifier
+  showing how often each bit changes and flashing changed bits; a **Notch** that hides the bits changed so far,
+  so the bits of an action (pressing a button, opening a door) stand out, with the identifiers having such bits
+  and those appearing only after the notch; per byte the distinct values, range, entropy and a histogram.
+- **Bit fields**: select bits in the grid (Intel or Motorola, signed, factor, offset, unit) and **Plot** them on
+  the Signals page, from the first frame in the trace on, without a database; plotted fields are saved in
+  workspaces. **Add to database** adds the field as a signal, and its message if needed, in the database editor.
+- **Automatic analysis** of the reverse engineering view: finds the fields of every identifier and their kind:
+  checksums (CRC-8 variants with any start value or data ID, AUTOSAR E2E profile 2 style data IDs, XOR and sums),
+  alive counters, multiplexers (with the fields per multiplexer value), physical values (Intel or Motorola,
+  signed when they cross zero), states, flags and constant bits.
+- **Reference signals**: ranks the fields of the trace by their correlation with a database signal, a column of a
+  CSV file (e.g. a GPS log) or OBD-II values polled while recording (engine speed, vehicle speed, temperatures,
+  …), with the factor, offset and time lag of the best match.
+- **Markers**: mark the moments an action happens (++ctrl+m++); the fields changing around most markers but
+  rarely otherwise are listed with their values before and after.
+- Multiplexed bit fields can be plotted (taking only the frames with their multiplexer value) and are saved in
+  workspaces.
+- `tools/synthetic_traffic.py` writes log files with synthetic traffic from a signal database (smooth, constant,
+  counting, toggling, noisy signals, CRC checksums and steps at given times), for trying the reverse engineering
+  tools; the tests use it to check them against known signals.
+
 ## [1.1.1] – 2026-10-20
 
 ### Fixed

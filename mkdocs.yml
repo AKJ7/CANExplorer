@@ -46,6 +46,7 @@ nav:
       - Trace and overview: user-guide/trace-and-overview.md
       - Filters: user-guide/filters.md
       - Bus health: user-guide/bus-health.md
+      - Reverse engineering: user-guide/reverse-engineering.md
       - Recording, replay and export: user-guide/recording-and-replay.md
       - Comparing recordings: user-guide/compare-recordings.md
       - Several buses: user-guide/multi-bus.md

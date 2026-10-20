@@ -33,6 +33,9 @@
   `can-server`, and optionally send frames requested over MQTT
 - Signal plots with zoom and pan over the whole buffer, two cursors with values and statistics, several signals per
   chart and CSV export
+- Reverse engineering: bit and byte statistics per identifier and a notch; automatic detection of checksums,
+  counters, multiplexers and values; matching fields to database signals, CSV/GPS logs or polled OBD-II values;
+  event markers; and bit fields to plot without a database or add to one
 
 **Recording and replay**
 - ASC, BLF, CSV, candump LOG, PEAK TRC, SQLite, ASAM MF4 and gzip compressed text logs

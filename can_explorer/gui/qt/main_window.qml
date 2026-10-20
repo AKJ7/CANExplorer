@@ -576,6 +576,9 @@ ApplicationWindow {
             mainWindow.tool = "database-editor"
             databaseEditorView.openPath(path)
         }
+        function onShowTool(tool) {
+            mainWindow.tool = tool
+        }
     }
 
     Dialog {
