@@ -322,6 +322,7 @@ ColumnLayout {
 
     // The log also shows errors while closed (e.g. a device that could not be opened)
     ListView {
+        id: closedLog
         visible: !root.io.is_open && count > 0
         clip: true
         Layout.fillWidth: true
@@ -334,5 +335,11 @@ ColumnLayout {
             font.pixelSize: 12
             color: modelData.error ? Theme.danger : Theme.text
         }
+    }
+
+    // Takes the remaining height while closed with an empty log, so the view still fills the page and stays at the top
+    Item {
+        visible: !root.io.is_open && closedLog.count === 0
+        Layout.fillHeight: true
     }
 }
