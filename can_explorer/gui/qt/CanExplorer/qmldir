@@ -41,6 +41,7 @@ DatabaseEditorView 1.0 DatabaseEditorView.qml
 CompareView 1.0 CompareView.qml
 EtherCatView 1.0 EtherCatView.qml
 PhysicalIoView 1.0 PhysicalIoView.qml
+DoipView 1.0 DoipView.qml
 MultiBusView 1.0 MultiBusView.qml
 TestsView 1.0 TestsView.qml
 GlassPanel 1.0 GlassPanel.qml

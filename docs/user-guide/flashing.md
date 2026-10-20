@@ -3,7 +3,8 @@
 The **Flashing** view programs an ECU over UDS (ISO 14229) with a firmware file: it downloads each segment with
 *RequestDownload* (0x34), *TransferData* (0x36) and *RequestTransferExit* (0x37) and shows the progress. It uses
 the transport and addressing of the [Diagnostics](diagnostics.md) view: ISO-TP with the request and response
-identifiers set there on CAN, the LIN transport layer with the NAD on LIN.
+identifiers set there on CAN, the LIN transport layer with the NAD on LIN. Over Ethernet, the [DoIP](doip.md)
+tool has a Flashing tab that programs the ECU at its target address.
 
 ![Flashing view after programming two segments](../assets/screenshots/flashing.png)
 

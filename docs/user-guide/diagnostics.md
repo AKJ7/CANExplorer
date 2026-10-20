@@ -11,6 +11,8 @@ On CAN it uses ISO-TP (ISO 15765-2); on [LIN](lin.md) connections the LIN transp
   Classic CAN and CAN FD frames (on CAN FD connections) are supported, with normal addressing.
 - **LIN**: the **NAD** of the slave node (default `01`). Requests are sent in master request frames (0x3C) and the
   response is collected by polling slave response headers (0x3D).
+- **Ethernet**: vehicles with an Ethernet diagnostic port are diagnosed with the [DoIP](doip.md) tool, which offers
+  this view with the ECU's logical **Target address**.
 
 OBD adapters such as the OBDLink MX+ work as
 [ELM327 connections](../reference/interfaces.md#elm327-and-obdlink-adapters) (interface *Elm327Bus*) for diagnostics
@@ -59,19 +61,22 @@ Choose it with **Key file…**, select the (odd) level and press **Unlock**: CAN
 !!! warning
     The key file is executed. Only use files you trust.
 
-## Diagnostic descriptions (CDD)
+## Diagnostic descriptions (CDD, ODX/PDX)
 
-A Vector CANdelaStudio description (`.cdd`) of the ECU names its data identifiers and describes their data. Load it
-with **Description…** in the Diagnostics view (or with **Load database…**):
+A diagnostic description of the ECU names its data identifiers and describes their data. CANExplorer reads Vector
+CANdelaStudio files (`.cdd`), ASAM ODX files (`.odx`, `.odx-d`) and packaged ODX archives (`.pdx`). Load one with
+**Description…** in the Diagnostics view (or with **Load database…**):
 
 - The data identifier list starts with the identifiers of the ECU.
 - ReadDataByIdentifier responses are decoded into fields with units and value texts:
   `EngineStatus: EngineSpeed=1000 rpm, CoolantTemperature=50 degC, DrivingMode=Sport`.
 - The UDS and LIN protocol decoders of the trace use the description too.
 
-Supported are the simple data types of CDD files (unsigned, signed, float and text values in both byte orders, with
-linear scaling and text tables, including value ranges) and DIDs built from structures, unions (shown as all
-alternatives) and shared DID structures. Data of other types is shown in hex.
+Supported are the simple data types (unsigned, signed, float, ASCII and UTF-8 text in both byte orders, with linear
+scaling and value texts). From CDD files, DIDs built from structures, unions (shown as all alternatives) and shared
+DID structures are read too. From ODX, the ReadDataByIdentifier services with fixed-length data object properties
+(IDENTICAL, LINEAR and TEXTTABLE compu methods) are read; a `.pdx` archive's ODX documents are all read and their
+identifiers combined. Data of other types (structures, variable-length or multiplexed fields) is shown in hex.
 
 ## Simulated ECU
 

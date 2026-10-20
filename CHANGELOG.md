@@ -10,6 +10,22 @@ development stages are listed by date and commit, newest first.
 
 ### Added
 
+- **ODX/PDX diagnostic descriptions**: ECU descriptions in the ASAM MCD-2 D / ISO 22901 ODX format (`.odx`,
+  `.odx-d`) and packaged ODX archives (`.pdx`) are read alongside CANdelaStudio CDD, to name data identifiers and
+  decode ReadDataByIdentifier responses. Fixed-length data object properties with IDENTICAL, LINEAR or TEXTTABLE
+  compu methods are decoded (unsigned, signed, float, ASCII and UTF-8, in both byte orders); other data is shown
+  in hex. Load one with **Description…** in the Diagnostics view or with **Load database…**.
+- **DoIP tool** (Diagnostics over IP, ISO 13400-2): UDS diagnostics and flashing of vehicles with an Ethernet
+  diagnostic port. **Discover** sends a vehicle identification request and lists the DoIP entities answering
+  (address, logical address, VIN, EID); **Connect** opens the TCP connection with routing activation (tester
+  address, activation type, protocol version 2012 or 2019, optionally TLS on port 3496) and answers the entity's
+  alive checks. The Diagnostics and Flashing tabs work as for CAN, with the ECU's logical target address.
+  **Status** shows the entity status and diagnostic power mode. A simulated entity (a gateway with a simulated
+  ECU) works without a vehicle. Test scripts use `can_explorer.core.doip` (`discover`, `DoipClient` with a UDS
+  transport per target address, `DoipEntitySimulator`).
+
+### Added
+
 - **Reverse engineering** view of a connection, for finding signals without a database: a bit grid per identifier
   showing how often each bit changes and flashing changed bits; a **Notch** that hides the bits changed so far,
   so the bits of an action (pressing a button, opening a door) stand out, with the identifiers having such bits

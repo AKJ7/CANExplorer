@@ -26,7 +26,7 @@ SDO response node 5: read response 0x1018:01 = 78 56 34 12
 Heartbeat node 5: Operational
 ```
 
-With a [diagnostic description](diagnostics.md#diagnostic-descriptions-cdd), UDS (and LIN diagnostics) decode
+With a [diagnostic description](diagnostics.md#diagnostic-descriptions-cdd-odxpdx), UDS (and LIN diagnostics) decode
 ReadDataByIdentifier data into fields.
 
 ## Limits

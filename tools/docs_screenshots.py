@@ -190,6 +190,30 @@ async def physical_io_scenario():
     window.setProperty('tool', '')
 
 
+async def doip_scenario():
+    """The DoIP tool connected to the simulated entity: VIN, session, DTCs and the entity status."""
+    doip = manager.doip
+    diagnostics = doip.diagnostics
+    window.setProperty('tool', 'doip')
+    doip.connect_entity({'host': 'simulated'})
+    while doip.busy or not doip.is_open:
+        await asyncio.sleep(0.02)
+    for operation in (
+        lambda: diagnostics.read_did('F190'),
+        lambda: diagnostics.session_control(0x03),
+        lambda: diagnostics.read_did('F18C'),
+        lambda: diagnostics.read_dtcs('FF'),
+    ):
+        operation()
+        while diagnostics.busy:
+            await asyncio.sleep(0.02)
+    doip.query_status()
+    await shot('doip', 0.6)
+    doip.disconnect_entity()
+    await asyncio.sleep(0.2)
+    window.setProperty('tool', '')
+
+
 async def reverse_engineering_scenario():
     """A minute of traffic of an unknown vehicle (synthetic, from tests/data/reverse.dbc): the door switch toggles
     after a notch and is marked each time, a GPS log gives the vehicle speed."""
@@ -553,6 +577,7 @@ async def scenario():
 
     await ethercat_scenario()
     await physical_io_scenario()
+    await doip_scenario()
 
     await reverse_engineering_scenario()
 

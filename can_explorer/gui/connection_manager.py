@@ -31,6 +31,7 @@ from can_explorer.gui.compare import CompareController
 from can_explorer.gui.updates import UpdateController
 from can_explorer.gui.multibus import MultiBusController
 from can_explorer.gui.database_editor import DatabaseEditorController
+from can_explorer.gui.doip import DoipController
 from can_explorer.gui.ethercat import EtherCatController
 from can_explorer.gui.physical_io import PhysicalIoController
 from can_explorer.gui.canopen import CanOpenController
@@ -67,6 +68,9 @@ DATABASE_FORMAT_NAMES = {
     '.sym': 'PCAN Symbol',
     '.ldf': 'LIN description LDF',
     '.cdd': 'CANdelaStudio CDD',
+    '.odx': 'ODX diagnostic description',
+    '.odx-d': 'ODX diagnostic description',
+    '.pdx': 'Packaged ODX',
 }
 FD_DATA_BITRATES = (1_000_000, 2_000_000, 4_000_000, 5_000_000, 8_000_000)
 
@@ -125,7 +129,7 @@ class CanConnection(QObject):
         self._diagnostics = DiagnosticsController(self, parent=self)
         self._j1939 = J1939Controller(self, parent=self)
         self._canopen = CanOpenController(self, parent=self)
-        self._flashing = FlashController(self, parent=self)
+        self._flashing = FlashController(self._diagnostics, parent=self)
         self._bus_health = BusHealthController(self, parent=self)
         self._reverse = ReverseController(self, parent=self)
         self._simulation = SimulationController(self, parent=self)
@@ -817,6 +821,7 @@ class ConnectionManager(QObject):
         self._multi_bus = MultiBusController(self, parent=self)
         self._ethercat = EtherCatController(parent=self)
         self._physical_io = PhysicalIoController(parent=self)
+        self._doip = DoipController(parent=self)
         self._updates = UpdateController(self._app_state.settings, parent=self)
         self._database_editor.saved.connect(self._reload_database)
         QGuiApplication.instance().aboutToQuit.connect(self.close_all)
@@ -915,6 +920,11 @@ class ConnectionManager(QObject):
     def physical_io(self) -> PhysicalIoController:
         """Digital lines and analogue inputs of an I/O adapter."""
         return self._physical_io
+
+    @pyqtProperty(QObject, constant=True)
+    def doip(self) -> DoipController:
+        """Diagnostics over IP: DoIP entities, routing activation and UDS over it."""
+        return self._doip
 
     def _reload_database(self, path: str) -> None:
         """Connections decoding with a database that was edited and saved use the new version."""
@@ -1155,6 +1165,7 @@ class ConnectionManager(QObject):
             connection.close()
         self._ethercat.shutdown()
         self._physical_io.shutdown()
+        self._doip.shutdown()
 
     def _apply_preferences(self):
         for connection in self._connections:

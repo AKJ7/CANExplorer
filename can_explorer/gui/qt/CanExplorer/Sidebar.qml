@@ -211,6 +211,14 @@ Rectangle {
             onClicked: root.toolSelected("physical-io")
         }
 
+        NavItem {
+            text: qsTr("DoIP")
+            glyph: "⇌"
+            active: root.currentTool === "doip"
+            dotColor: connectionManager.doip.is_open ? Theme.success : "transparent"
+            onClicked: root.toolSelected("doip")
+        }
+
         Item { Layout.fillHeight: true }
 
         Rectangle {

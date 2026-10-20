@@ -39,6 +39,8 @@ Without it, MF4 is not offered in the file dialogs and opening an `.mf4` file ex
 | `.sym` | PEAK PCAN Symbol 6.0 | ✓ | ✓ | cantools |
 | `.ldf` | LIN description file 1.3–2.2A | ✓ | | ldfparser |
 | `.cdd` | Vector CANdelaStudio diagnostic description | ✓ | | CANExplorer |
+| `.odx`, `.odx-d` | ASAM ODX diagnostic description | ✓ | | CANExplorer |
+| `.pdx` | Packaged ODX (ZIP of ODX documents) | ✓ | | CANExplorer |
 
 ### BUSMASTER DBF
 
@@ -75,6 +77,23 @@ CANExplorer reads the data identifiers (DIAGINST with STATICVALUE) of the ECU an
   located by their most significant bit.
 
 Services, diagnostic trouble code descriptions and structured data types without a coded value are not read.
+
+### ASAM ODX and PDX
+
+CANExplorer reads the ReadDataByIdentifier services (request service id `0x22`) of an ODX document, and from a
+`.pdx` archive every ODX document it contains (their identifiers combined):
+
+- The service's name (`LONG-NAME`, otherwise `SHORT-NAME`) names the data identifier; the identifier is the
+  constant (`CODED-CONST`) parameter following the service id in the request.
+- Each positive-response parameter referencing a data object property (`DOP-REF`) becomes a field, at its
+  `BYTE-POSITION`/`BIT-POSITION` relative to the start of the identifier's data.
+- Data object properties with a fixed-length `DIAG-CODED-TYPE` (`STANDARD-LENGTH-TYPE`) are decoded: base types
+  `A_UINT32`, `A_INT32`, `A_FLOAT32`/`A_FLOAT64`, `A_ASCIISTRING` and `A_UTF8STRING`, high-low (big endian) or
+  low-high (little endian) byte order, and `IDENTICAL`, `LINEAR` (single rational scaling) or `TEXTTABLE`
+  (value texts) compu methods, with the unit from `UNIT-REF`.
+
+Other services, variable-length types, structures, multiplexers and inheritance across diagnostic layers are not
+read; a listed identifier whose data cannot be decoded is shown in hex.
 
 ## LIN frames on SocketCAN
 

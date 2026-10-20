@@ -227,7 +227,8 @@ ColumnLayout {
                 anchors.fill: parent
                 active: root.connection.can_transmit
                 sourceComponent: DiagnosticsView {
-                    connection: root.connection
+                    diagnostics: root.connection.diagnostics
+                    connected: root.connection.connected
                 }
             }
         }
@@ -236,7 +237,9 @@ ColumnLayout {
                 anchors.fill: parent
                 active: root.connection.can_transmit
                 sourceComponent: FlashView {
-                    connection: root.connection
+                    flashing: root.connection.flashing
+                    diagnostics: root.connection.diagnostics
+                    connected: root.connection.connected
                 }
             }
         }

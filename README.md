@@ -54,8 +54,10 @@
 
 **Diagnostics and protocols**
 - UDS over ISO-TP and the LIN transport layer: sessions, reset, data identifiers, security access with your own
-  seed/key algorithm, DTCs, routines; CANdelaStudio CDD descriptions for named and decoded identifiers
+  seed/key algorithm, DTCs, routines; CANdelaStudio CDD and ASAM ODX/PDX descriptions for named and decoded identifiers
 - ECU flashing over UDS (RequestDownload/TransferData) from Intel HEX, S-record or binary files, with progress
+- DoIP (Diagnostics over IP, ISO 13400-2): finds DoIP entities, connects with routing activation (optionally over
+  TLS) and runs diagnostics and flashing over Ethernet; a simulated entity works without a vehicle
 - J1939: nodes with their address claims, DM1/DM2 trouble codes and lamps, clearing codes, requests and sending
   parameter groups by name with BAM or RTS/CTS
 - CANopen master: NMT, SDO access to object dictionaries from EDS/DCF files, PDO mappings with live values,

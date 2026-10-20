@@ -13,8 +13,9 @@ The window is laid out as a dashboard:
   maximize or restore it, and use the buttons at the top right to minimize, maximize or close it. The window can
   be resized from its edges.
 - *Tools* in the sidebar opens the [database editor](database-editor.md), the [multi-bus trace](multi-bus.md),
-  [compares recordings](compare-recordings.md), the [EtherCAT master](ethercat.md) (CANopen over EtherCAT) and
-  [Physical I/O](physical-io.md) (digital lines and analogue inputs of a USB I/O adapter).
+  [compares recordings](compare-recordings.md), the [EtherCAT master](ethercat.md) (CANopen over EtherCAT),
+  [Physical I/O](physical-io.md) (digital lines and analogue inputs of a USB I/O adapter) and [DoIP](doip.md)
+  (UDS diagnostics and flashing over Ethernet).
 - ++ctrl+k++ opens the **command palette**: type a few letters of any command, view, tool, connection, theme or
   language and press ++enter++. Letters may be skipped (`cmp rec` finds *Compare recordings*), so everything is
   reachable from the keyboard.
