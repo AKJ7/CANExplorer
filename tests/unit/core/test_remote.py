@@ -162,13 +162,16 @@ def test_server_publishes_to_mqtt(mqtt_broker):
 
 def test_cli_mqtt_options(tmp_path):
     runner = CliRunner()
-    result = runner.invoke(cli, ['--bus', 'a=virtual:x', '--mqtt-frames'])
+    # With a token the command logs nothing before failing: pytest's live logging would take back stderr from the
+    # runner, so that the error message was not in the output
+    bus = ['--bus', 'a=virtual:x', '--token', 'secret']
+    result = runner.invoke(cli, [*bus, '--mqtt-frames'])
     assert result.exit_code != 0 and 'need --mqtt' in result.output
-    result = runner.invoke(cli, ['--bus', 'a=virtual:x', '--mqtt', 'http://broker'])
+    result = runner.invoke(cli, [*bus, '--mqtt', 'http://broker'])
     assert result.exit_code != 0 and 'Invalid MQTT broker' in result.output
-    result = runner.invoke(cli, ['--bus', 'a=virtual:x', '--mqtt', 'broker', '--database', f'b={tmp_path}'])
+    result = runner.invoke(cli, [*bus, '--mqtt', 'broker', '--database', f'b={tmp_path}'])
     assert result.exit_code != 0 and 'No such file' in result.output
     dbc = tmp_path / 'x.dbc'
     dbc.write_text('VERSION ""\n')
-    result = runner.invoke(cli, ['--bus', 'a=virtual:x', '--mqtt', 'broker', '--database', f'b={dbc}'])
+    result = runner.invoke(cli, [*bus, '--mqtt', 'broker', '--database', f'b={dbc}'])
     assert result.exit_code != 0 and "unknown bus 'b'" in result.output
