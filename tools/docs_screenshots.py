@@ -316,8 +316,9 @@ async def gateway_scenario():
     peer = can.Bus(interface='virtual', channel=channel_a)
     gateway = manager.gateway
     gateway.add_rule({'name': 'Engine data', 'source': 'Powertrain', 'destination': 'Body', 'filter': '100-2FF'})
-    gateway.add_rule({'source': 'Powertrain', 'destination': 'Body', 'filter': '7DF', 'new_id': '600',
-                      'min_interval_ms': 100})
+    gateway.add_rule(
+        {'source': 'Powertrain', 'destination': 'Body', 'filter': '7DF', 'new_id': '600', 'min_interval_ms': 100}
+    )
     gateway.set_enabled(True)
     window.setProperty('tool', 'gateway')
     for i in range(60):

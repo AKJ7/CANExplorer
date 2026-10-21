@@ -8,33 +8,7 @@ development stages are listed by date and commit, newest first.
 
 ## [Unreleased]
 
-### Added
-
-- **ODX/PDX diagnostic descriptions**: ECU descriptions in the ASAM MCD-2 D / ISO 22901 ODX format (`.odx`,
-  `.odx-d`) and packaged ODX archives (`.pdx`) are read alongside CANdelaStudio CDD, to name data identifiers and
-  decode ReadDataByIdentifier responses. Fixed-length data object properties with IDENTICAL, LINEAR or TEXTTABLE
-  compu methods are decoded (unsigned, signed, float, ASCII and UTF-8, in both byte orders); other data is shown
-  in hex. Load one with **Description…** in the Diagnostics view or with **Load database…**.
-- **Bus gateway** tool: forwards frames received on one connection onto another, with a filter, optional
-  identifier rewriting (a new identifier or a signed offset) and a per-identifier rate limit, with live
-  forwarded/dropped counters per rule. Only received frames are forwarded and an echo guard prevents loops between
-  mirror rules. Works between any open connections, including the simulated interface. Scripts use
-  `can_explorer.core.gateway` (`Gateway`, `GatewayRule`).
-- **UDS discovery** page of a connection: an interactive UDS scanner for reverse engineering, finding the
-  services, data identifiers (ReadDataByIdentifier), subfunctions and routines an ECU exposes, and a byte sweep of
-  a request template. It sends a probe for every value in a range over the Diagnostics transport (ISO-TP, LIN or
-  DoIP) and lists the ones the ECU answers, classified as supported, locked (security access), wrong state/session
-  or rejected; a found request can be opened in the Diagnostics view. Read-only by default; the byte sweep and
-  starting routines need an explicit opt-in. Scripts use `can_explorer.core.uds_scan` (`scan_services`,
-  `scan_data_identifiers`, `scan_subfunctions`, `scan_routines`, `sweep`).
-- **DoIP tool** (Diagnostics over IP, ISO 13400-2): UDS diagnostics and flashing of vehicles with an Ethernet
-  diagnostic port. **Discover** sends a vehicle identification request and lists the DoIP entities answering
-  (address, logical address, VIN, EID); **Connect** opens the TCP connection with routing activation (tester
-  address, activation type, protocol version 2012 or 2019, optionally TLS on port 3496) and answers the entity's
-  alive checks. The Diagnostics and Flashing tabs work as for CAN, with the ECU's logical target address.
-  **Status** shows the entity status and diagnostic power mode. A simulated entity (a gateway with a simulated
-  ECU) works without a vehicle. Test scripts use `can_explorer.core.doip` (`discover`, `DoipClient` with a UDS
-  transport per target address, `DoipEntitySimulator`).
+## [1.2.0] – 2026-10-21
 
 ### Added
 
@@ -59,6 +33,43 @@ development stages are listed by date and commit, newest first.
 - `tools/synthetic_traffic.py` writes log files with synthetic traffic from a signal database (smooth, constant,
   counting, toggling, noisy signals, CRC checksums and steps at given times), for trying the reverse engineering
   tools; the tests use it to check them against known signals.
+- **ODX/PDX diagnostic descriptions**: ECU descriptions in the ASAM MCD-2 D / ISO 22901 ODX format (`.odx`,
+  `.odx-d`) and packaged ODX archives (`.pdx`) are read alongside CANdelaStudio CDD, to name data identifiers and
+  decode ReadDataByIdentifier responses. Fixed-length data object properties with IDENTICAL, LINEAR or TEXTTABLE
+  compu methods are decoded (unsigned, signed, float, ASCII and UTF-8, in both byte orders); other data is shown
+  in hex. Load one with **Description…** in the Diagnostics view or with **Load database…**.
+- **DoIP tool** (Diagnostics over IP, ISO 13400-2): UDS diagnostics and flashing of vehicles with an Ethernet
+  diagnostic port. **Discover** sends a vehicle identification request and lists the DoIP entities answering
+  (address, logical address, VIN, EID); **Connect** opens the TCP connection with routing activation (tester
+  address, activation type, protocol version 2012 or 2019, optionally TLS on port 3496) and answers the entity's
+  alive checks. The Diagnostics and Flashing tabs work as for CAN, with the ECU's logical target address.
+  **Status** shows the entity status and diagnostic power mode. A simulated entity (a gateway with a simulated
+  ECU) works without a vehicle. Test scripts use `can_explorer.core.doip` (`discover`, `DoipClient` with a UDS
+  transport per target address, `DoipEntitySimulator`).
+- **UDS discovery** page of a connection: an interactive UDS scanner for reverse engineering, finding the
+  services, data identifiers (ReadDataByIdentifier), subfunctions and routines an ECU exposes, and a byte sweep of
+  a request template. It sends a probe for every value in a range over the Diagnostics transport (ISO-TP, LIN or
+  DoIP) and lists the ones the ECU answers, classified as supported, locked (security access), wrong state/session
+  or rejected; a found request can be opened in the Diagnostics view. Read-only by default; the byte sweep and
+  starting routines need an explicit opt-in. Scripts use `can_explorer.core.uds_scan` (`scan_services`,
+  `scan_data_identifiers`, `scan_subfunctions`, `scan_routines`, `sweep`).
+- **Bus gateway** tool: forwards frames received on one connection onto another, with a filter, optional
+  identifier rewriting (a new identifier or a signed offset) and a per-identifier rate limit, with live
+  forwarded/dropped counters per rule. Only received frames are forwarded and an echo guard prevents loops between
+  mirror rules. Works between any open connections, including the simulated interface. Scripts use
+  `can_explorer.core.gateway` (`Gateway`, `GatewayRule`).
+
+### Changed
+
+- The simulated UDS ECU (`UdsServer`) answers truncated or malformed requests with
+  *incorrectMessageLengthOrInvalidFormat* instead of stopping, as a real ECU does, so it can be scanned.
+
+### Fixed
+
+- MQTT: the retained `offline` status is now published when the bridge is stopped right after connecting (e.g. the
+  connection closed again at once), where a cancellation while still subscribing could skip it.
+- `tools/benchmark.py` measures the trace model as it works now (following the trace store) instead of
+  failing.
 
 ## [1.1.1] – 2026-10-20
 
@@ -499,7 +510,8 @@ Called "Milestone 0.1.0" in the commit message and the README roadmap.
 - Qt Widgets user interface: main window, new connection dialog, about dialog and a raw CAN frame table.
 - Pipenv based project setup, VS Code development container, Dockerfile and a CI workflow skeleton.
 
-[Unreleased]: https://github.com/AKJ7/CANExplorer/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/AKJ7/CANExplorer/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/AKJ7/CANExplorer/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/AKJ7/CANExplorer/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/AKJ7/CANExplorer/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/AKJ7/CANExplorer/releases/tag/v1.0.0

@@ -17,6 +17,7 @@ optional package aiomqtt (`uv sync --extra mqtt`).
 """
 
 import asyncio
+import contextlib
 import json
 import logging
 import ssl
@@ -320,16 +321,21 @@ class MqttBridge:
                     await client.publish(f'{self.base}/status', STATUS_ONLINE, qos=1, retain=True)
                     self._set_state('connected')
                     logger.info(f'MQTT: publishing {self.base} to {self.settings.host}:{self.settings.port}')
-                    tasks = [asyncio.ensure_future(self._publish(client))]
-                    if self.settings.allow_send and self._send is not None:
-                        await client.subscribe(f'{self.base}/send', qos=1)
-                        tasks.append(asyncio.ensure_future(self._receive(client)))
+                    tasks: list = []
                     try:
+                        tasks.append(asyncio.ensure_future(self._publish(client)))
+                        if self.settings.allow_send and self._send is not None:
+                            await client.subscribe(f'{self.base}/send', qos=1)
+                            tasks.append(asyncio.ensure_future(self._receive(client)))
                         await asyncio.gather(*tasks)
                     except asyncio.CancelledError:
-                        await asyncio.wait_for(
-                            client.publish(f'{self.base}/status', STATUS_OFFLINE, qos=1, retain=True), 2
-                        )
+                        # Stopping (the connection dropped or MQTT was switched off): announce offline. This covers
+                        # a cancellation anywhere after connecting, e.g. while still subscribing (slow on Windows),
+                        # and tolerates a slow or missing acknowledgement so the thread still ends promptly.
+                        with contextlib.suppress(Exception):
+                            await asyncio.wait_for(
+                                client.publish(f'{self.base}/status', STATUS_OFFLINE, qos=1, retain=True), 2
+                            )
                         raise
                     finally:
                         for task in tasks:

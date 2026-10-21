@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://akj7.github.io/CANExplorer/sitemap.xml
