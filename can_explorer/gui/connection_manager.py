@@ -32,6 +32,7 @@ from can_explorer.gui.updates import UpdateController
 from can_explorer.gui.multibus import MultiBusController
 from can_explorer.gui.database_editor import DatabaseEditorController
 from can_explorer.gui.doip import DoipController
+from can_explorer.gui.gateway import GatewayController
 from can_explorer.gui.ethercat import EtherCatController
 from can_explorer.gui.physical_io import PhysicalIoController
 from can_explorer.gui.canopen import CanOpenController
@@ -830,6 +831,7 @@ class ConnectionManager(QObject):
         self._ethercat = EtherCatController(parent=self)
         self._physical_io = PhysicalIoController(parent=self)
         self._doip = DoipController(parent=self)
+        self._gateway = GatewayController(self, parent=self)
         self._updates = UpdateController(self._app_state.settings, parent=self)
         self._database_editor.saved.connect(self._reload_database)
         QGuiApplication.instance().aboutToQuit.connect(self.close_all)
@@ -928,6 +930,11 @@ class ConnectionManager(QObject):
     def physical_io(self) -> PhysicalIoController:
         """Digital lines and analogue inputs of an I/O adapter."""
         return self._physical_io
+
+    @pyqtProperty(QObject, constant=True)
+    def gateway(self) -> GatewayController:
+        """Forwarding frames between connections."""
+        return self._gateway
 
     @pyqtProperty(QObject, constant=True)
     def doip(self) -> DoipController:
@@ -1174,6 +1181,7 @@ class ConnectionManager(QObject):
         self._ethercat.shutdown()
         self._physical_io.shutdown()
         self._doip.shutdown()
+        self._gateway.shutdown()
 
     def _apply_preferences(self):
         for connection in self._connections:

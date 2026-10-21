@@ -219,6 +219,14 @@ Rectangle {
             onClicked: root.toolSelected("doip")
         }
 
+        NavItem {
+            text: qsTr("Bus gateway")
+            glyph: "⇄"
+            active: root.currentTool === "gateway"
+            dotColor: connectionManager.gateway.running ? Theme.success : "transparent"
+            onClicked: root.toolSelected("gateway")
+        }
+
         Item { Layout.fillHeight: true }
 
         Rectangle {

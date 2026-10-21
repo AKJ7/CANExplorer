@@ -303,6 +303,38 @@ async def reverse_engineering_scenario():
     await asyncio.sleep(0.2)
 
 
+async def gateway_scenario():
+    """The bus gateway forwarding from a Powertrain to a Body virtual connection, with live counters."""
+    import uuid as _uuid
+
+    channel_a, channel_b = f'pt-{_uuid.uuid4().hex}', f'body-{_uuid.uuid4().hex}'
+    manager.add_connection({'name': 'Powertrain', 'interface': 'VirtualBus', 'channel': channel_a})
+    manager.add_connection({'name': 'Body', 'interface': 'VirtualBus', 'channel': channel_b})
+    powertrain, body = manager.connections[-2], manager.connections[-1]
+    powertrain.open()
+    body.open()
+    peer = can.Bus(interface='virtual', channel=channel_a)
+    gateway = manager.gateway
+    gateway.add_rule({'name': 'Engine data', 'source': 'Powertrain', 'destination': 'Body', 'filter': '100-2FF'})
+    gateway.add_rule({'source': 'Powertrain', 'destination': 'Body', 'filter': '7DF', 'new_id': '600',
+                      'min_interval_ms': 100})
+    gateway.set_enabled(True)
+    window.setProperty('tool', 'gateway')
+    for i in range(60):
+        peer.send(can.Message(arbitration_id=0x100 + (i % 0x60), is_extended_id=False, data=bytes([i % 256]) * 8))
+        peer.send(can.Message(arbitration_id=0x7DF, is_extended_id=False, data=b'\x02\x01\x0d'))
+        await asyncio.sleep(0.01)
+    await shot('gateway', 0.4)
+    gateway.set_enabled(False)
+    gateway.clear_rules()
+    peer.shutdown()
+    powertrain.close()
+    body.close()
+    manager.remove_connection(manager.connections.index(body))
+    manager.remove_connection(manager.connections.index(powertrain))
+    window.setProperty('tool', '')
+
+
 async def scenario():
     OUT.mkdir(parents=True, exist_ok=True)
     await shot('welcome', 0.5)
@@ -585,6 +617,7 @@ async def scenario():
     await ethercat_scenario()
     await physical_io_scenario()
     await doip_scenario()
+    await gateway_scenario()
 
     await reverse_engineering_scenario()
 

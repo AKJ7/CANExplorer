@@ -94,13 +94,21 @@ def main():
     frames = session.trace.drain()
 
     print('Trace model (seconds):')
-    model = TraceModel(lambda: 1000.0, 100_000)
-    batch = frames[:3_000]  # ~33 ms of a saturated 1 Mbit/s bus... x3
-    model.rebuild(frames)
-    print(f'  append 3k rows to full model    {best_of(lambda: model.append_frames(batch)):.4f}')
-    print(f'  rebuild 100k, no filter         {best_of(lambda: model.rebuild(frames)):.4f}')
+    trace = session.trace  # Still holds the 100k frames in memory after the drain
+    model = TraceModel(trace, lambda: 1000.0)  # The model follows the store
+    model.rebuild()
+    print(f'  rebuild 100k, no filter         {best_of(model.rebuild):.4f}')
     message_filter = MessageFilter.parse('100-1FF ext')
-    print(f'  set filter on 100k              {best_of(lambda: model.set_filter(message_filter, frames)):.4f}')
+    print(f'  filter 100k (100-1FF ext)       {best_of(lambda: model.set_filter(message_filter)):.4f}')
+    model.set_filter(MessageFilter())  # Back to no filter for the incremental refresh below
+    new_frames = messages[100_000:103_000]  # ~33 ms of a saturated 1 Mbit/s bus... x3
+
+    def grow_and_refresh():
+        for msg in new_frames:
+            session._dispatch(msg)
+        model.refresh()
+
+    print(f'  refresh after 3k new frames     {timeit_once(grow_and_refresh):.4f}')
 
     overview = OverviewModel(session.statistics)
     overview.rebuild()

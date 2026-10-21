@@ -50,6 +50,7 @@ nav:
       - Recording, replay and export: user-guide/recording-and-replay.md
       - Comparing recordings: user-guide/compare-recordings.md
       - Several buses: user-guide/multi-bus.md
+      - Bus gateway: user-guide/bus-gateway.md
       - Remote buses: user-guide/remote-buses.md
       - MQTT: user-guide/mqtt.md
       - Signal databases: user-guide/signal-databases.md

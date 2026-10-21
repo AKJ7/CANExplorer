@@ -2298,6 +2298,174 @@ B: %3</source>
         </message>
     </context>
     <context>
+        <name>GatewayView</name>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/GatewayView.qml" line="16" />
+            <source>forwarding · %1 rule(s)</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/GatewayView.qml" line="48" />
+            <source>Bus gateway</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/GatewayView.qml" line="50" />
+            <source>On</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/GatewayView.qml" line="50" />
+            <source>Off</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/GatewayView.qml" line="55" />
+            <source>Forwards frames received on the source bus onto the destination bus. Enable it once rules are set.</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/GatewayView.qml" line="61" />
+            <source>Reset counters</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/GatewayView.qml" line="66" />
+            <source>Clear rules</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/GatewayView.qml" line="74" />
+            <source>Add a forwarding rule</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/GatewayView.qml" line="85" />
+            <source>From</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/GatewayView.qml" line="97" />
+            <source>Name</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/GatewayView.qml" line="100" />
+            <source>optional</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/GatewayView.qml" line="105" />
+            <source>Filter</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/GatewayView.qml" line="108" />
+            <source>e.g. 100-1FF, !7DF (empty: all)</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/GatewayView.qml" line="111" />
+            <source>Which received frames to forward: identifiers and ranges in hex, ! to exclude, std/ext/fd</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/GatewayView.qml" line="113" />
+            <source>New ID</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/GatewayView.qml" line="116" />
+            <source>hex</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/GatewayView.qml" line="119" />
+            <source>Rewrite the identifier to this value (usually with a single-identifier filter)</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/GatewayView.qml" line="121" />
+            <source>ID offset</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/GatewayView.qml" line="124" />
+            <source>±hex</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/GatewayView.qml" line="127" />
+            <source>Add this (signed, hex) to the identifier instead of rewriting it</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/GatewayView.qml" line="129" />
+            <source>Rate limit</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/GatewayView.qml" line="136" />
+            <source>Minimum milliseconds between forwarded frames of the same identifier (0: no limit)</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/GatewayView.qml" line="138" />
+            <source>ms</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/GatewayView.qml" line="141" />
+            <source>Add rule</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/GatewayView.qml" line="159" />
+            <source>Open at least two connections to forward frames between them.</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/GatewayView.qml" line="180" />
+            <source>Rule</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/GatewayView.qml" line="182" />
+            <source>Rewrite</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/GatewayView.qml" line="183" />
+            <source>Rate</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/GatewayView.qml" line="184" />
+            <source>Forwarded</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/GatewayView.qml" line="185" />
+            <source>Dropped</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/GatewayView.qml" line="231" />
+            <source>(connection missing)</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/GatewayView.qml" line="238" />
+            <source>all</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/GatewayView.qml" line="273" />
+            <source>Remove this rule</source>
+            <translation type="unfinished" />
+        </message>
+    </context>
+    <context>
         <name>J1939View</name>
         <message>
             <location filename="../../gui/qt/CanExplorer/J1939View.qml" line="32" />
@@ -3870,12 +4038,17 @@ B: %3</source>
             <translation type="unfinished" />
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="233" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="223" />
+            <source>Bus gateway</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="241" />
             <source>Settings</source>
             <translation>Einstellungen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="261" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="269" />
             <source>Version %1</source>
             <translation>Version %1</translation>
         </message>
@@ -4931,91 +5104,96 @@ B: %3</source>
         </message>
         <message>
             <location filename="../../gui/qt/main_window.qml" line="66" />
+            <source>Bus gateway</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/main_window.qml" line="67" />
             <source>Tool</source>
             <translation>Werkzeug</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="68" />
+            <location filename="../../gui/qt/main_window.qml" line="69" />
             <source>Theme</source>
             <translation>Farbschema</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="70" />
+            <location filename="../../gui/qt/main_window.qml" line="71" />
             <source>Language</source>
             <translation>Sprache</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="166" />
+            <location filename="../../gui/qt/main_window.qml" line="167" />
             <source>Open workspace</source>
             <translation>Arbeitsbereich öffnen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="174" />
+            <location filename="../../gui/qt/main_window.qml" line="175" />
             <source>Save workspace</source>
             <translation>Arbeitsbereich speichern</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="188" />
+            <location filename="../../gui/qt/main_window.qml" line="189" />
             <source>The open connections are closed and replaced by those of the workspace.</source>
             <translation>Die offenen Verbindungen werden geschlossen und durch die des Arbeitsbereichs ersetzt.</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="371" />
+            <location filename="../../gui/qt/main_window.qml" line="382" />
             <source>%1 frames</source>
             <translation>%1 Frames</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="373" />
+            <location filename="../../gui/qt/main_window.qml" line="384" />
             <source>Rx %1/s  Tx %2/s</source>
             <translation>Rx %1/s  Tx %2/s</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="375" />
+            <location filename="../../gui/qt/main_window.qml" line="386" />
             <source>load %1%</source>
             <translation>Last %1%</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="377" />
+            <location filename="../../gui/qt/main_window.qml" line="388" />
             <source>bus %1</source>
             <translation>Bus %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="380" />
+            <location filename="../../gui/qt/main_window.qml" line="391" />
             <source>%1 error frames</source>
             <translation>%1 Error-Frames</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="384" />
+            <location filename="../../gui/qt/main_window.qml" line="395" />
             <source>DB: %1</source>
             <translation>DB: %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="386" />
+            <location filename="../../gui/qt/main_window.qml" line="397" />
             <source>● recording to %1</source>
             <translation>● Aufzeichnung nach %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="438" />
+            <location filename="../../gui/qt/main_window.qml" line="449" />
             <source>Drag to resize, double-click to reset</source>
             <translation>Ziehen zum Ändern der Breite, Doppelklick zum Zurücksetzen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="597" />
+            <location filename="../../gui/qt/main_window.qml" line="608" />
             <source>Unsaved database changes</source>
             <translation>Ungespeicherte Datenbankänderungen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="602" />
+            <location filename="../../gui/qt/main_window.qml" line="613" />
             <source>Save the changes to %1 before quitting?</source>
             <translation>Änderungen an %1 vor dem Beenden speichern?</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="606" />
+            <location filename="../../gui/qt/main_window.qml" line="617" />
             <source>Use "Save as" in the database editor first</source>
             <translation>Zuerst „Speichern unter“ im Datenbank-Editor verwenden</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="655" />
+            <location filename="../../gui/qt/main_window.qml" line="666" />
             <source>CANExplorer %1 is available: ⋮ → Check for Updates…</source>
             <translation>CANExplorer %1 ist verfügbar: ⋮ → Nach Updates suchen…</translation>
         </message>

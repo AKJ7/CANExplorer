@@ -15,6 +15,11 @@ development stages are listed by date and commit, newest first.
   decode ReadDataByIdentifier responses. Fixed-length data object properties with IDENTICAL, LINEAR or TEXTTABLE
   compu methods are decoded (unsigned, signed, float, ASCII and UTF-8, in both byte orders); other data is shown
   in hex. Load one with **Description…** in the Diagnostics view or with **Load database…**.
+- **Bus gateway** tool: forwards frames received on one connection onto another, with a filter, optional
+  identifier rewriting (a new identifier or a signed offset) and a per-identifier rate limit, with live
+  forwarded/dropped counters per rule. Only received frames are forwarded and an echo guard prevents loops between
+  mirror rules. Works between any open connections, including the simulated interface. Scripts use
+  `can_explorer.core.gateway` (`Gateway`, `GatewayRule`).
 - **UDS discovery** page of a connection: an interactive UDS scanner for reverse engineering, finding the
   services, data identifiers (ReadDataByIdentifier), subfunctions and routines an ECU exposes, and a byte sweep of
   a request template. It sends a probe for every value in a range over the Diagnostics transport (ISO-TP, LIN or

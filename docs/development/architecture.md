@@ -71,6 +71,7 @@ computer.
 | `core/ethercat.py` | EtherCAT master for CoE: SOEM (pysoem) and simulated backends on a worker thread, states, SDO, SDO information, PDO assignment |
 | `core/mqtt.py`, `gui/mqtt.py` | MQTT bridge of a bus (aiomqtt on a thread of its own): signals, frames and status out, allow-listed send requests in; the connection's MQTT controller |
 | `core/compare.py` | Comparing two recordings |
+| `core/gateway.py` | Bus gateway: forwarding rules between sessions, with filtering, identifier rewriting, rate limiting and an echo guard |
 | `core/reverse/` | Reverse engineering: bit fields (`fields.py`), bit and byte statistics with the notch (`bitstats.py`), checksum detection (`checksums.py`), the automatic analysis of fields, their kinds and multiplexers (`analysis.py`), correlation with reference signals (`reference.py`) and OBD-II polling (`obd.py`), event markers (`markers.py`), synthetic traffic with known signals and scoring of found fields (`synthetic.py`) |
 | `core/bushealth.py` | Error frame decoding, error states and the bus health history |
 | `core/updates.py`, `gui/updates.py` | Finding, downloading, verifying and installing new releases from GitHub |
@@ -85,7 +86,7 @@ computer.
 | `gui/trace_tools.py`, `gui/workspace.py` | Trace search and bookmarks; workspace files |
 | `gui/diagnostics.py`, `gui/simulation.py` | Diagnostics and simulation controllers, panel bridge |
 | `gui/flashing.py`, `gui/j1939.py`, `gui/canopen.py`, `gui/uds_scan.py` | Flashing, J1939, CANopen and UDS discovery controllers of a connection |
-| `gui/database_editor.py`, `gui/compare.py`, `gui/multibus.py`, `gui/ethercat.py`, `gui/physical_io.py`, `gui/doip.py` | Database editor, recording comparison, multi-bus trace, EtherCAT, Physical I/O and DoIP tools (the DoIP tool reuses the diagnostics and flashing controllers with its own transport) |
+| `gui/database_editor.py`, `gui/compare.py`, `gui/multibus.py`, `gui/ethercat.py`, `gui/physical_io.py`, `gui/doip.py`, `gui/gateway.py` | Database editor, recording comparison, multi-bus trace, EtherCAT, Physical I/O, DoIP and bus gateway tools (the DoIP tool reuses the diagnostics and flashing controllers with its own transport) |
 | `gui/bushealth.py` | Bus health page of a connection |
 | `gui/reverse.py`, `gui/reverse_tools.py` | Reverse engineering page of a connection; its analysis, reference and marker tools (run in a worker thread) |
 | `gui/translations.py` | Translations from Qt Linguist files |

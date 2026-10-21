@@ -43,6 +43,7 @@ EtherCatView 1.0 EtherCatView.qml
 PhysicalIoView 1.0 PhysicalIoView.qml
 DoipView 1.0 DoipView.qml
 UdsScanView 1.0 UdsScanView.qml
+GatewayView 1.0 GatewayView.qml
 MultiBusView 1.0 MultiBusView.qml
 TestsView 1.0 TestsView.qml
 GlassPanel 1.0 GlassPanel.qml

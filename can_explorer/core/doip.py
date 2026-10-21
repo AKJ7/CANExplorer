@@ -284,8 +284,13 @@ async def _udp_exchange(
 ) -> List[Tuple[str, int, int, bytes]]:
     loop = asyncio.get_running_loop()
     family = socket.AF_INET6 if ':' in host else socket.AF_INET
+    # Bind before anything is sent: Windows' proactor loop starts receiving as soon as the transport exists, and
+    # receiving on a socket that is not bound yet fails there, losing every answer
     transport, protocol = await loop.create_datagram_endpoint(
-        lambda: _UdpCollector(accepted_types), family=family, allow_broadcast=family == socket.AF_INET
+        lambda: _UdpCollector(accepted_types),
+        local_addr=('::' if family == socket.AF_INET6 else '0.0.0.0', 0),
+        family=family,
+        allow_broadcast=family == socket.AF_INET,
     )
     answers = []
     try:
