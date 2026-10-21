@@ -7,16 +7,20 @@ import CanExplorer 1.0
 
 ColumnLayout {
     id: root
-    required property var connection
-    readonly property var diagnostics: connection.diagnostics
-    readonly property bool ready: connection.connected && !diagnostics.busy
+    required property var diagnostics
+    required property bool connected
+    readonly property bool ready: connected && !diagnostics.busy
+    readonly property string addressing: diagnostics.addressing
 
     function report(error) {
         errorLabel.text = error
     }
 
     function applyAddressing() {
-        report(diagnostics.set_addressing(requestIdField.text, responseIdField.text, extendedBox.checked, nadField.text))
+        if (addressing === "doip")
+            report(diagnostics.set_target(targetField.text))
+        else
+            report(diagnostics.set_addressing(requestIdField.text, responseIdField.text, extendedBox.checked, nadField.text))
     }
 
     spacing: 4
@@ -26,34 +30,44 @@ ColumnLayout {
         Layout.margins: 4
 
         Label { text: qsTr("UDS over %1").arg(root.diagnostics.transport_name); font.bold: true }
-        Label { text: qsTr("Request ID"); visible: !root.connection.is_lin }
+        Label { text: qsTr("Request ID"); visible: root.addressing === "can" }
         TextField {
             id: requestIdField
             text: "7E0"
-            visible: !root.connection.is_lin
+            visible: root.addressing === "can"
             Layout.preferredWidth: 90
             onEditingFinished: root.applyAddressing()
         }
-        Label { text: qsTr("Response ID"); visible: !root.connection.is_lin }
+        Label { text: qsTr("Response ID"); visible: root.addressing === "can" }
         TextField {
             id: responseIdField
             text: "7E8"
-            visible: !root.connection.is_lin
+            visible: root.addressing === "can"
             Layout.preferredWidth: 90
             onEditingFinished: root.applyAddressing()
         }
         CheckBox {
             id: extendedBox
             text: qsTr("Ext")
-            visible: !root.connection.is_lin
+            visible: root.addressing === "can"
             onToggled: root.applyAddressing()
         }
-        Label { text: qsTr("NAD"); visible: root.connection.is_lin }
+        Label { text: qsTr("NAD"); visible: root.addressing === "lin" }
         TextField {
             id: nadField
             text: "01"
-            visible: root.connection.is_lin
+            visible: root.addressing === "lin"
             Layout.preferredWidth: 60
+            onEditingFinished: root.applyAddressing()
+        }
+        Label { text: qsTr("Target address"); visible: root.addressing === "doip" }
+        TextField {
+            id: targetField
+            text: root.addressing === "doip" ? root.diagnostics.target : ""
+            visible: root.addressing === "doip"
+            Layout.preferredWidth: 70
+            ToolTip.visible: hovered
+            ToolTip.text: qsTr("Logical address of the ECU (hex), or of the DoIP entity itself")
             onEditingFinished: root.applyAddressing()
         }
         Button {
@@ -71,7 +85,7 @@ ColumnLayout {
         Switch {
             text: qsTr("Tester present")
             checked: root.diagnostics.tester_present
-            enabled: root.connection.connected
+            enabled: root.connected
             onToggled: root.diagnostics.set_tester_present(checked)
         }
         BusyIndicator {

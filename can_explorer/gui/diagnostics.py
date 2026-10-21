@@ -40,7 +40,11 @@ def _parse_int(text: str, maximum: int, what: str) -> int:
 
 
 class DiagnosticsController(QObject):
-    """UDS diagnostics of a connection: over ISO-TP on CAN, or over the LIN transport layer on LIN."""
+    """UDS diagnostics of a connection: over ISO-TP on CAN, or over the LIN transport layer on LIN.
+
+    Other transports (DoIP) subclass it and override _transport(), _transport_error(), _addressing() and
+    _addressing_text().
+    """
 
     changed = pyqtSignal()
 
@@ -88,7 +92,23 @@ class DiagnosticsController(QObject):
 
     @pyqtProperty(str, constant=True)
     def transport_name(self) -> str:
-        return 'LIN transport layer' if self.is_lin else 'ISO-TP'
+        return {'lin': 'LIN transport layer', 'can': 'ISO-TP', 'doip': 'DoIP'}[self._addressing()]
+
+    @pyqtProperty(str, constant=True)
+    def addressing(self) -> str:
+        """'can' (request and response identifiers), 'lin' (NAD) or 'doip' (target address)."""
+        return self._addressing()
+
+    def _addressing(self) -> str:
+        return 'lin' if self.is_lin else 'can'
+
+    @pyqtProperty(str, notify=changed)
+    def target(self) -> str:
+        """DoIP: the target address (hex); '' for the other transports."""
+        return self._target_text()
+
+    def _target_text(self) -> str:
+        return ''
 
     @pyqtProperty('QVariantList', notify=changed)
     def known_dids(self) -> List[Dict[str, str]]:
@@ -112,7 +132,7 @@ class DiagnosticsController(QObject):
 
     @pyqtSlot(QUrl, result=str)
     def load_description(self, url: QUrl) -> str:
-        """Load an ECU diagnostic description (CANdelaStudio .cdd). Returns an error or ''."""
+        """Load an ECU diagnostic description (CANdelaStudio .cdd, ODX .odx/.odx-d or packaged ODX .pdx). Returns an error or ''."""
         path = url.toLocalFile() if url.isLocalFile() else url.toString()
         try:
             description = DiagnosticDescription(path)
@@ -128,11 +148,14 @@ class DiagnosticsController(QObject):
 
     def _set_description(self, description: Optional[DiagnosticDescription]):
         self._description = description
-        # Let the trace decoders (UDS, LIN) name identifiers and decode their data too
+        self._share_description(description)
+        self.changed.emit()
+
+    def _share_description(self, description: Optional[DiagnosticDescription]):
+        """Let the trace decoders (UDS, LIN) name identifiers and decode their data too."""
         protocol = self.session.decoder.protocol
         if protocol is not None and hasattr(protocol, 'description'):
             protocol.description = description
-        self.changed.emit()
 
     @pyqtProperty('QVariantList', constant=True)
     def sessions(self) -> List[Dict[str, Any]]:
@@ -168,6 +191,9 @@ class DiagnosticsController(QObject):
 
     @pyqtProperty(str, notify=changed)
     def addressing_text(self) -> str:
+        return self._addressing_text()
+
+    def _addressing_text(self) -> str:
         if self.is_lin:
             return f'NAD 0x{self._nad:02X}'
         width = 8 if self._extended else 3
@@ -176,6 +202,17 @@ class DiagnosticsController(QObject):
     def create_transport(self):
         """A transport with the current addressing, e.g. for flashing; the caller closes it."""
         return self._transport()
+
+    def transport_error(self) -> str:
+        """Why requests cannot be sent now, or ''."""
+        return self._transport_error()
+
+    def _transport_error(self) -> str:
+        if not self._connection.can_transmit:
+            return 'This connection cannot send'
+        if not self.session.is_open:
+            return 'Connect first'
+        return ''
 
     def _transport(self):
         if self.is_lin:
@@ -200,8 +237,9 @@ class DiagnosticsController(QObject):
     def _start(self, request: bytes, operation: Callable[[UdsClient], Awaitable[tuple]]) -> str:
         if self._busy:
             return 'A request is already in progress'
-        if not self.session.is_open:
-            return 'Connect first'
+        error = self._transport_error()
+        if error:
+            return error
         self._busy = True
         self.changed.emit()
         asyncio.ensure_future(self._run(request, operation))
@@ -344,7 +382,7 @@ class DiagnosticsController(QObject):
 
     @pyqtSlot(bool)
     def set_tester_present(self, enabled: bool):
-        if enabled and not self.tester_present and self.session.is_open:
+        if enabled and not self.tester_present and not self._transport_error():
             self._keep_alive_transport = self._transport()
             self._keep_alive = SessionKeepAlive(self._keep_alive_transport)
             self._keep_alive.start()

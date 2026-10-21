@@ -395,12 +395,33 @@ async def test_diagnostic_description_and_database_buses(manager, channel, data_
     ecu_session.stop()
 
 
+async def test_odx_description(manager, channel, data_dir):
+    """An ODX description loaded as a database goes to the diagnostics, like a CDD."""
+    connection = open_connection(manager, channel, protocol='UDS')
+    ecu_session = BusSession(LiveSource(BusConfig('virtual', channel)))
+    ecu_session.start()
+    server = UdsServer(dids={0x1001: bytes([0x0F, 0xA0]), 0xF190: b'WDB1234567890ABCD'})
+    simulator = UdsEcuSimulator(ecu_session, server=server)
+    simulator.start()
+    diagnostics = connection.diagnostics
+    assert diagnostics.load_description(QUrl.fromLocalFile(str(data_dir / 'example.odx'))) == ''
+    assert diagnostics.description_file.endswith('example.odx')
+    assert {'did': '1001', 'name': 'EngineSpeed'} in diagnostics.known_dids
+    assert diagnostics.read_did('1001') == ''
+    await wait_until(lambda: not diagnostics.busy)
+    assert diagnostics.history[-1]['description'] == 'EngineSpeed: EngineSpeed=1000 rpm'
+    assert diagnostics.history[-1]['request_description'] == 'ReadDataByIdentifier 10 01 (EngineSpeed)'
+    simulator.stop()
+    ecu_session.stop()
+
+
 def test_database_file_filters(manager):
     first = manager.database_file_filters[0]
-    for suffix in ('*.dbc', '*.dbf', '*.arxml', '*.kcd', '*.sym', '*.ldf', '*.cdd'):
+    for suffix in ('*.dbc', '*.dbf', '*.arxml', '*.kcd', '*.sym', '*.ldf', '*.cdd', '*.odx', '*.odx-d', '*.pdx'):
         assert suffix in first
     assert 'AUTOSAR ARXML (*.arxml)' in manager.database_file_filters
     assert 'CANdelaStudio CDD (*.cdd)' in manager.database_file_filters
+    assert 'Packaged ODX (*.pdx)' in manager.database_file_filters
 
 
 async def test_j1939_page(manager, channel, data_dir):

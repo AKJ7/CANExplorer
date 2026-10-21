@@ -8,6 +8,67 @@ development stages are listed by date and commit, newest first.
 
 ## [Unreleased]
 
+## [1.2.0] – 2026-10-21
+
+### Added
+
+- **Reverse engineering** view of a connection, for finding signals without a database: a bit grid per identifier
+  showing how often each bit changes and flashing changed bits; a **Notch** that hides the bits changed so far,
+  so the bits of an action (pressing a button, opening a door) stand out, with the identifiers having such bits
+  and those appearing only after the notch; per byte the distinct values, range, entropy and a histogram.
+- **Bit fields**: select bits in the grid (Intel or Motorola, signed, factor, offset, unit) and **Plot** them on
+  the Signals page, from the first frame in the trace on, without a database; plotted fields are saved in
+  workspaces. **Add to database** adds the field as a signal, and its message if needed, in the database editor.
+- **Automatic analysis** of the reverse engineering view: finds the fields of every identifier and their kind:
+  checksums (CRC-8 variants with any start value or data ID, AUTOSAR E2E profile 2 style data IDs, XOR and sums),
+  alive counters, multiplexers (with the fields per multiplexer value), physical values (Intel or Motorola,
+  signed when they cross zero), states, flags and constant bits.
+- **Reference signals**: ranks the fields of the trace by their correlation with a database signal, a column of a
+  CSV file (e.g. a GPS log) or OBD-II values polled while recording (engine speed, vehicle speed, temperatures,
+  …), with the factor, offset and time lag of the best match.
+- **Markers**: mark the moments an action happens (++ctrl+m++); the fields changing around most markers but
+  rarely otherwise are listed with their values before and after.
+- Multiplexed bit fields can be plotted (taking only the frames with their multiplexer value) and are saved in
+  workspaces.
+- `tools/synthetic_traffic.py` writes log files with synthetic traffic from a signal database (smooth, constant,
+  counting, toggling, noisy signals, CRC checksums and steps at given times), for trying the reverse engineering
+  tools; the tests use it to check them against known signals.
+- **ODX/PDX diagnostic descriptions**: ECU descriptions in the ASAM MCD-2 D / ISO 22901 ODX format (`.odx`,
+  `.odx-d`) and packaged ODX archives (`.pdx`) are read alongside CANdelaStudio CDD, to name data identifiers and
+  decode ReadDataByIdentifier responses. Fixed-length data object properties with IDENTICAL, LINEAR or TEXTTABLE
+  compu methods are decoded (unsigned, signed, float, ASCII and UTF-8, in both byte orders); other data is shown
+  in hex. Load one with **Description…** in the Diagnostics view or with **Load database…**.
+- **DoIP tool** (Diagnostics over IP, ISO 13400-2): UDS diagnostics and flashing of vehicles with an Ethernet
+  diagnostic port. **Discover** sends a vehicle identification request and lists the DoIP entities answering
+  (address, logical address, VIN, EID); **Connect** opens the TCP connection with routing activation (tester
+  address, activation type, protocol version 2012 or 2019, optionally TLS on port 3496) and answers the entity's
+  alive checks. The Diagnostics and Flashing tabs work as for CAN, with the ECU's logical target address.
+  **Status** shows the entity status and diagnostic power mode. A simulated entity (a gateway with a simulated
+  ECU) works without a vehicle. Test scripts use `can_explorer.core.doip` (`discover`, `DoipClient` with a UDS
+  transport per target address, `DoipEntitySimulator`).
+- **UDS discovery** page of a connection: an interactive UDS scanner for reverse engineering, finding the
+  services, data identifiers (ReadDataByIdentifier), subfunctions and routines an ECU exposes, and a byte sweep of
+  a request template. It sends a probe for every value in a range over the Diagnostics transport (ISO-TP, LIN or
+  DoIP) and lists the ones the ECU answers, classified as supported, locked (security access), wrong state/session
+  or rejected; a found request can be opened in the Diagnostics view. Read-only by default; the byte sweep and
+  starting routines need an explicit opt-in. Scripts use `can_explorer.core.uds_scan` (`scan_services`,
+  `scan_data_identifiers`, `scan_subfunctions`, `scan_routines`, `sweep`).
+- **Bus gateway** tool: forwards frames received on one connection onto another, with a filter, optional
+  identifier rewriting (a new identifier or a signed offset) and a per-identifier rate limit, with live
+  forwarded/dropped counters per rule. Only received frames are forwarded and an echo guard prevents loops between
+  mirror rules. Works between any open connections, including the simulated interface. Scripts use
+  `can_explorer.core.gateway` (`Gateway`, `GatewayRule`).
+
+### Changed
+
+- The simulated UDS ECU (`UdsServer`) answers truncated or malformed requests with
+  *incorrectMessageLengthOrInvalidFormat* instead of stopping, as a real ECU does, so it can be scanned.
+
+### Fixed
+
+- `tools/benchmark.py` measures the trace model as it works now (following the trace store) instead of
+  failing.
+
 ## [1.1.1] – 2026-10-20
 
 ### Fixed
@@ -447,7 +508,8 @@ Called "Milestone 0.1.0" in the commit message and the README roadmap.
 - Qt Widgets user interface: main window, new connection dialog, about dialog and a raw CAN frame table.
 - Pipenv based project setup, VS Code development container, Dockerfile and a CI workflow skeleton.
 
-[Unreleased]: https://github.com/AKJ7/CANExplorer/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/AKJ7/CANExplorer/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/AKJ7/CANExplorer/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/AKJ7/CANExplorer/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/AKJ7/CANExplorer/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/AKJ7/CANExplorer/releases/tag/v1.0.0

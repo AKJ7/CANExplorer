@@ -13,8 +13,10 @@ The window is laid out as a dashboard:
   maximize or restore it, and use the buttons at the top right to minimize, maximize or close it. The window can
   be resized from its edges.
 - *Tools* in the sidebar opens the [database editor](database-editor.md), the [multi-bus trace](multi-bus.md),
-  [compares recordings](compare-recordings.md), the [EtherCAT master](ethercat.md) (CANopen over EtherCAT) and
-  [Physical I/O](physical-io.md) (digital lines and analogue inputs of a USB I/O adapter).
+  [compares recordings](compare-recordings.md), the [EtherCAT master](ethercat.md) (CANopen over EtherCAT),
+  [Physical I/O](physical-io.md) (digital lines and analogue inputs of a USB I/O adapter), [DoIP](doip.md)
+  (UDS diagnostics and flashing over Ethernet) and the [bus gateway](bus-gateway.md) (forwarding frames between
+  connections).
 - ++ctrl+k++ opens the **command palette**: type a few letters of any command, view, tool, connection, theme or
   language and press ++enter++. Letters may be skipped (`cmp rec` finds *Compare recordings*), so everything is
   reachable from the keyboard.
@@ -31,8 +33,9 @@ database or reopen a recent connection.
 | **Dashboard** | Frame rates, bus load, error frames, bus activity chart, traffic breakdown and the busiest identifiers |
 | **Trace** | Every frame in arrival order |
 | **Overview** | One row per identifier with the latest data |
-| **Signals** | Live plots of database signals |
+| **Signals** | Live plots of database signals and bit fields |
 | **Bus health** | Error state, error frames, error counters and bus load over up to an hour ([Bus health](bus-health.md)) |
+| **Reverse engineering** | Bit and byte statistics, automatic analysis, reference signals and markers to find signals, and bit fields to plot or add to a database ([Reverse engineering](reverse-engineering.md)) |
 | **Diagnostics** | UDS requests to an ECU (not for log replays) |
 | **J1939** | Nodes with their address claims and trouble codes, requests and sending parameter groups ([J1939 connections](j1939.md)) |
 | **CANopen** | NMT, SDO access to object dictionaries (EDS/DCF), PDOs and emergencies ([CANopen connections](canopen.md)) |

@@ -1,0 +1,41 @@
+VERSION ""
+
+
+NS_ :
+
+BS_:
+
+BU_: ECU Body Battery
+
+
+BO_ 291 Powertrain: 8 ECU
+ SG_ Checksum : 0|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ Counter : 8|4@1+ (1,0) [0|15] "" Vector__XXX
+ SG_ Gear : 12|4@1+ (1,0) [0|15] "" Vector__XXX
+ SG_ EngineSpeed : 16|16@1+ (0.25,0) [0|16383.75] "rpm" Vector__XXX
+ SG_ Torque : 39|12@0- (0.5,0) [-1024|1023.5] "Nm" Vector__XXX
+ SG_ Throttle : 48|8@1+ (0.4,0) [0|102] "%" Vector__XXX
+ SG_ BrakePressed : 56|1@1+ (1,0) [0|1] "" Vector__XXX
+
+BO_ 1280 Body: 8 Body
+ SG_ VehicleSpeed : 7|16@0+ (0.01,0) [0|655.35] "km/h" Vector__XXX
+ SG_ SteeringAngle : 23|16@0- (0.1,0) [-3276.8|3276.7] "deg" Vector__XXX
+ SG_ DoorOpen : 32|1@1+ (1,0) [0|1] "" Vector__XXX
+ SG_ Lights : 33|2@1+ (1,0) [0|3] "" Vector__XXX
+
+BO_ 1536 Battery: 8 Battery
+ SG_ CellGroup M : 0|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ CellA0 m0 : 8|16@1+ (0.001,0) [0|65.535] "V" Vector__XXX
+ SG_ CellB0 m0 : 24|16@1+ (0.001,0) [0|65.535] "V" Vector__XXX
+ SG_ CellA1 m1 : 8|16@1+ (0.001,0) [0|65.535] "V" Vector__XXX
+ SG_ CellB1 m1 : 24|16@1+ (0.001,0) [0|65.535] "V" Vector__XXX
+ SG_ CellA2 m2 : 8|16@1+ (0.001,0) [0|65.535] "V" Vector__XXX
+ SG_ CellB2 m2 : 24|16@1+ (0.001,0) [0|65.535] "V" Vector__XXX
+ SG_ Temperature : 40|8@1- (1,0) [-128|127] "degC" Vector__XXX
+
+
+BA_DEF_ BO_ "GenMsgCycleTime" INT 0 10000;
+BA_DEF_DEF_ "GenMsgCycleTime" 0;
+BA_ "GenMsgCycleTime" BO_ 291 10;
+BA_ "GenMsgCycleTime" BO_ 1280 20;
+BA_ "GenMsgCycleTime" BO_ 1536 50;

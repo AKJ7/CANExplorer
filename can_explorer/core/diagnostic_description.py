@@ -14,7 +14,9 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from xml.etree import ElementTree
 
-DESCRIPTION_SUFFIXES = ('.cdd',)
+CDD_SUFFIXES = ('.cdd',)
+ODX_SUFFIXES = ('.odx', '.odx-d', '.pdx')
+DESCRIPTION_SUFFIXES = CDD_SUFFIXES + ODX_SUFFIXES
 TEXT_ENCODINGS = ('asc', 'utf')
 BIG_ENDIAN, LITTLE_ENDIAN = '21', '12'
 
@@ -207,9 +209,17 @@ def decode_field(data: bytes, bit_offset: int, data_type: DataType):
 class DiagnosticDescription:
     def __init__(self, path: str | Path):
         self.path = Path(path)
-        if self.path.suffix.lower() not in DESCRIPTION_SUFFIXES:
-            raise DescriptionError(f'Unsupported diagnostic description {self.path.suffix!r}, use .cdd')
-        self._dids = {did.identifier: did for did in load_cdd(self.path)}
+        suffix = self.path.suffix.lower()
+        if suffix in CDD_SUFFIXES:
+            dids = load_cdd(self.path)
+        elif suffix in ODX_SUFFIXES:
+            from can_explorer.core.odx import load_odx
+
+            dids = load_odx(self.path)
+        else:
+            allowed = ', '.join(DESCRIPTION_SUFFIXES)
+            raise DescriptionError(f'Unsupported diagnostic description {self.path.suffix!r}, use {allowed}')
+        self._dids = {did.identifier: did for did in dids}
 
     def identifiers(self) -> Dict[int, str]:
         return {identifier: did.name for identifier, did in sorted(self._dids.items())}

@@ -8,9 +8,9 @@ import CanExplorer 1.0
 // Programming an ECU over UDS: RequestDownload, TransferData and RequestTransferExit with progress.
 ColumnLayout {
     id: root
-    required property var connection
-    readonly property var flashing: connection.flashing
-    readonly property var diagnostics: connection.diagnostics
+    required property var flashing
+    required property var diagnostics
+    required property bool connected
     property url lastFile
 
     function report(error) {
@@ -152,7 +152,7 @@ ColumnLayout {
         Button {
             text: qsTr("Flash")
             highlighted: true
-            enabled: !root.flashing.running && root.flashing.file.length > 0 && root.connection.connected
+            enabled: !root.flashing.running && root.flashing.file.length > 0 && root.connected
             onClicked: root.report(root.flashing.start({
                 session: sessionBox.checked,
                 security_level: levelBox.value,

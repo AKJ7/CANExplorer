@@ -29,6 +29,11 @@ CommandPalette 1.0 CommandPalette.qml
 UpdateDialog 1.0 UpdateDialog.qml
 DashboardView 1.0 DashboardView.qml
 BusHealthView 1.0 BusHealthView.qml
+ReverseView 1.0 ReverseView.qml
+ReverseResults 1.0 ReverseResults.qml
+ReverseAnalysisPanel 1.0 ReverseAnalysisPanel.qml
+ReverseReferencePanel 1.0 ReverseReferencePanel.qml
+ReverseMarkersPanel 1.0 ReverseMarkersPanel.qml
 WelcomeView 1.0 WelcomeView.qml
 PlaybackBar 1.0 PlaybackBar.qml
 BusReplayDialog 1.0 BusReplayDialog.qml
@@ -36,6 +41,9 @@ DatabaseEditorView 1.0 DatabaseEditorView.qml
 CompareView 1.0 CompareView.qml
 EtherCatView 1.0 EtherCatView.qml
 PhysicalIoView 1.0 PhysicalIoView.qml
+DoipView 1.0 DoipView.qml
+UdsScanView 1.0 UdsScanView.qml
+GatewayView 1.0 GatewayView.qml
 MultiBusView 1.0 MultiBusView.qml
 TestsView 1.0 TestsView.qml
 GlassPanel 1.0 GlassPanel.qml

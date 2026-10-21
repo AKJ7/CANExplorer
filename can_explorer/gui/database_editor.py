@@ -427,6 +427,67 @@ class DatabaseEditorController(QObject):
 
         return self._apply(edit)
 
+    @pyqtSlot('QVariantMap', str, result=str)
+    def add_found_signal(self, definition: Dict[str, Any], database_file: str = '') -> str:
+        """Add a signal found with the reverse engineering tools (ReverseController.signal_definition), and its
+        message when the database has none with that identifier, and select it.
+
+        Without an open database, the connection's `database_file` is opened (or a new database started)."""
+        if self._editor is None:
+            suffix = Path(database_file).suffix.lower() if database_file else ''
+            if suffix in READ_SUFFIXES:
+                error = self.open_path(database_file)
+                if error:
+                    return error
+            else:
+                self.new_database()
+        if self.lin:
+            return 'The editor has a LIN database open; close it or open a CAN database first'
+        editor = self._editor
+        try:
+            frame_id, extended = int(definition['frame_id']), bool(definition.get('extended', False))
+            needed = int(definition.get('frame_length', 8))
+        except (KeyError, TypeError, ValueError) as e:
+            return f'Invalid signal: {e}'
+
+        def edit():
+            message = next(
+                (
+                    message
+                    for message in editor.messages
+                    if message.frame_id == frame_id and message.is_extended_frame == extended
+                ),
+                None,
+            )
+            if message is None:
+                id_text = f'{frame_id:08X}' if extended else f'{frame_id:03X}'
+                names = {message.name for message in editor.messages}
+                name, index = f'Message_{id_text}', 2
+                while name in names:
+                    name, index = f'Message_{id_text}_{index}', index + 1
+                name = editor.add_message(name, frame_id, extended)
+                current_length = 0
+            else:
+                name, current_length = message.name, message.length
+            if needed > current_length:
+                fd = needed > 8 or (message is not None and message.is_fd)
+                length = min(length for length in (CAN_FD_LENGTHS if fd else CAN_LENGTHS) if length >= min(needed, 64))
+                name = editor.update_message(name, length=length, is_fd=fd)
+            signal = editor.add_signal(name, definition.get('name') or None)
+            fields = {
+                key: definition[key]
+                for key in ('start', 'length', 'byte_order', 'is_signed', 'scale', 'offset', 'unit', 'comment')
+                if key in definition
+            }
+            try:
+                signal = editor.update_signal(name, signal, **fields)
+            except (EditError, ValueError):
+                editor.remove_signal(name, signal)
+                raise
+            self._message, self._signal = name, signal
+
+        return self._apply(edit)
+
     @pyqtSlot(result=str)
     def remove_signal(self) -> str:
         def edit():

@@ -45,6 +45,7 @@ from can_explorer.core.j1939_tools import (  # noqa: E402
     J1939Sender,
     encode_dm,
 )
+from can_explorer.core.reverse.markers import Marker  # noqa: E402
 from can_explorer.core.session import BusSession  # noqa: E402
 from can_explorer.core.simulation import LinSlaveSimulator, UdsEcuSimulator, UdsServer  # noqa: E402
 from can_explorer.core.sources import BusConfig, LiveSource  # noqa: E402
@@ -189,6 +190,151 @@ async def physical_io_scenario():
     window.setProperty('tool', '')
 
 
+async def doip_scenario():
+    """The DoIP tool connected to the simulated entity: VIN, session, DTCs and the entity status."""
+    doip = manager.doip
+    diagnostics = doip.diagnostics
+    window.setProperty('tool', 'doip')
+    doip.connect_entity({'host': 'simulated'})
+    while doip.busy or not doip.is_open:
+        await asyncio.sleep(0.02)
+    for operation in (
+        lambda: diagnostics.read_did('F190'),
+        lambda: diagnostics.session_control(0x03),
+        lambda: diagnostics.read_did('F18C'),
+        lambda: diagnostics.read_dtcs('FF'),
+    ):
+        operation()
+        while diagnostics.busy:
+            await asyncio.sleep(0.02)
+    doip.query_status()
+    await shot('doip', 0.6)
+    doip.disconnect_entity()
+    await asyncio.sleep(0.2)
+    window.setProperty('tool', '')
+
+
+async def reverse_engineering_scenario():
+    """A minute of traffic of an unknown vehicle (synthetic, from tests/data/reverse.dbc): the door switch toggles
+    after a notch and is marked each time, a GPS log gives the vehicle speed."""
+    from can_explorer.core.decoding import open_signal_database
+    from can_explorer.core.reverse.synthetic import Behaviour, generate
+
+    def full(period):
+        return Behaviour('sine', period=period, amplitude=0.95)
+
+    behaviours = {
+        'Powertrain.Checksum': Behaviour('checksum'),
+        'Powertrain.Counter': Behaviour('counter'),
+        'Powertrain.EngineSpeed': full(20),
+        'Powertrain.Torque': full(23),
+        'Powertrain.Throttle': Behaviour('ramp', period=15, amplitude=0.95),
+        'Body.VehicleSpeed': full(27),
+        'Body.SteeringAngle': full(31),
+        'Body.DoorOpen': Behaviour('constant'),
+        'Battery.Temperature': Behaviour('sine', period=40, amplitude=0.95),
+    }
+    for group in range(3):
+        behaviours[f'Battery.CellA{group}'] = full(7 + 2 * group)
+        behaviours[f'Battery.CellB{group}'] = full(9 + 2 * group)
+    start = time.time() - 60
+    traffic = generate(open_signal_database(DATA / 'reverse.dbc'), 60, behaviours, seed=1, start=start)
+    door_toggles = [start + seconds for seconds in (32, 38, 44, 50, 56)]
+
+    manager.add_connection(
+        {'name': 'Test vehicle', 'interface': 'VirtualBus', 'channel': f'docs-{uuid.uuid4().hex[:6]}'}
+    )
+    connection = manager.connections[-1]
+    connection.open()
+    window.setProperty('selectedIndex', len(manager.connections) - 1)
+    show_page('reverse')
+    await asyncio.sleep(0.3)
+    reverse = connection.reverse
+    view = [view for view in items('ConnectionView') if view.isVisible()][0]
+    tabs = view.findChild(QObject, 'reverseTabs')
+
+    # The traffic arrives (the door switch, byte 4 bit 0 of 500, toggling at the marked moments)
+    door = 0
+    for msg in traffic.messages:
+        if msg.timestamp >= start + 30 and not reverse.notched:
+            reverse.notch()
+        while door_toggles and msg.timestamp >= door_toggles[0]:
+            door ^= 1
+            door_toggles.pop(0)
+            reverse.markers._markers.append(Marker(msg.timestamp + 0.3, 'door opened' if door else 'door closed'))
+        if msg.arbitration_id == 0x500:
+            msg.data[4] = (msg.data[4] & 0xFE) | door
+        connection.session._dispatch(msg)
+    connection._refresh()
+    connection.session.bus_statistics.reset()  # The frames arrived all at once
+    connection._sample_bus_statistics()
+    # After the notch only the door switch stands out; the vehicle speed (Motorola, bytes 0-1) as bit field
+    reverse.select('500')
+    reverse.set_field({'byte_order': 'big_endian'})
+    reverse.select_bits(7, 8)
+    reverse.set_field({'scale': 0.01, 'unit': 'km/h', 'name': 'VehicleSpeed'})
+    await shot('reverse-engineering', 0.6)
+
+    reverse.analysis.run(False)
+    while reverse.analysis.running:
+        await asyncio.sleep(0.05)
+    tabs.setProperty('currentIndex', 1)
+    await shot('reverse-analysis')
+
+    gps = Path(tempfile.mkdtemp()) / 'gps.csv'
+    rows = [f'{stamp - start:.3f},{raw * 0.01:.1f}' for stamp, raw in traffic.raw['Body.VehicleSpeed'][::50]]
+    gps.write_text('time_s,speed [km/h]\n' + '\n'.join(rows))
+    reverse.reference.open_csv(QUrl.fromLocalFile(str(gps)))
+    reverse.reference.find('csv:0', 1.0)
+    while reverse.reference.running:
+        await asyncio.sleep(0.05)
+    tabs.setProperty('currentIndex', 2)
+    await shot('reverse-reference')
+
+    reverse.markers.find('', 0.5, 1.0)
+    while reverse.markers.running:
+        await asyncio.sleep(0.05)
+    tabs.setProperty('currentIndex', 3)
+    await shot('reverse-markers')
+
+    tabs.setProperty('currentIndex', 0)
+    manager.remove_connection(len(manager.connections) - 1)
+    window.setProperty('selectedIndex', 0)
+    await asyncio.sleep(0.2)
+
+
+async def gateway_scenario():
+    """The bus gateway forwarding from a Powertrain to a Body virtual connection, with live counters."""
+    import uuid as _uuid
+
+    channel_a, channel_b = f'pt-{_uuid.uuid4().hex}', f'body-{_uuid.uuid4().hex}'
+    manager.add_connection({'name': 'Powertrain', 'interface': 'VirtualBus', 'channel': channel_a})
+    manager.add_connection({'name': 'Body', 'interface': 'VirtualBus', 'channel': channel_b})
+    powertrain, body = manager.connections[-2], manager.connections[-1]
+    powertrain.open()
+    body.open()
+    peer = can.Bus(interface='virtual', channel=channel_a)
+    gateway = manager.gateway
+    gateway.add_rule({'name': 'Engine data', 'source': 'Powertrain', 'destination': 'Body', 'filter': '100-2FF'})
+    gateway.add_rule({'source': 'Powertrain', 'destination': 'Body', 'filter': '7DF', 'new_id': '600',
+                      'min_interval_ms': 100})
+    gateway.set_enabled(True)
+    window.setProperty('tool', 'gateway')
+    for i in range(60):
+        peer.send(can.Message(arbitration_id=0x100 + (i % 0x60), is_extended_id=False, data=bytes([i % 256]) * 8))
+        peer.send(can.Message(arbitration_id=0x7DF, is_extended_id=False, data=b'\x02\x01\x0d'))
+        await asyncio.sleep(0.01)
+    await shot('gateway', 0.4)
+    gateway.set_enabled(False)
+    gateway.clear_rules()
+    peer.shutdown()
+    powertrain.close()
+    body.close()
+    manager.remove_connection(manager.connections.index(body))
+    manager.remove_connection(manager.connections.index(powertrain))
+    window.setProperty('tool', '')
+
+
 async def scenario():
     OUT.mkdir(parents=True, exist_ok=True)
     await shot('welcome', 0.5)
@@ -282,6 +428,13 @@ async def scenario():
         await wait_idle(diagnostics)
     show_page('diagnostics')
     await shot('diagnostics')
+    # UDS discovery: scanning a range of data identifiers on the simulated ECU
+    scan = connection.uds_scan
+    scan.start({'kind': 'dids', 'start': 'F180', 'end': 'F1A0', 'timeout_ms': 150})
+    while scan.running:
+        await asyncio.sleep(0.05)
+    show_page('uds-scan')
+    await shot('uds-scan')
     # Flashing the example firmware into the simulated ECU
     flashing = connection.flashing
     flashing.load_file(QUrl.fromLocalFile(str(ROOT / 'examples' / 'flashing' / 'firmware.hex')), '')
@@ -463,6 +616,10 @@ async def scenario():
 
     await ethercat_scenario()
     await physical_io_scenario()
+    await doip_scenario()
+    await gateway_scenario()
+
+    await reverse_engineering_scenario()
 
     # Bus health: ten minutes of a bus with rising error counters, an error passive period and a bus off
     health = connection.health

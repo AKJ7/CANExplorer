@@ -25,7 +25,7 @@ SplitView {
         Label {
             text: root.connection.database_file
                 ? qsTr("Signals — check to plot")
-                : qsTr("Load a signal database to plot signals")
+                : qsTr("Load a signal database to plot signals, or plot bit fields from the Reverse engineering page")
             padding: 4
             wrapMode: Text.Wrap
             Layout.fillWidth: true
@@ -201,10 +201,7 @@ SplitView {
                                             MenuSeparator {}
                                             MenuItem {
                                                 text: qsTr("Stop plotting")
-                                                onTriggered: {
-                                                    const [message, signal] = chip.modelData.split(".")
-                                                    root.connection.untrack_signal(message, signal)
-                                                }
+                                                onTriggered: root.connection.untrack_key(chip.modelData)
                                             }
                                         }
                                     }

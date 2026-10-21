@@ -13,6 +13,7 @@ Shortcuts follow the conventions of the platform; on macOS use ++cmd++ instead o
 | ++ctrl+f++ | Find in the trace |
 | ++enter++, ++f3++ / ++shift+f3++ | Next / previous match |
 | ++ctrl+b++ | Bookmark the selected trace rows, or remove their bookmarks |
+| ++ctrl+m++ | Reverse engineering, Markers tab: mark this moment |
 | ++ctrl+shift+o++ | Open a workspace |
 | ++ctrl+s++ | Save the workspace |
 | ++ctrl+shift+s++ | Save the workspace as another file |
