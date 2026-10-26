@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ODX MODEL-VERSION="2.2.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <DIAG-LAYER-CONTAINER ID="dlc">
+    <SHORT-NAME>ExampleContainer</SHORT-NAME>
+    <ECU-VARIANTS>
+      <ECU-VARIANT ID="ecu">
+        <SHORT-NAME>ExampleEcu</SHORT-NAME>
+        <DIAG-COMMS>
+          <DIAG-SERVICE ID="svc_speed" SEMANTIC="DATA">
+            <SHORT-NAME>RDBI_EngineSpeed</SHORT-NAME>
+            <LONG-NAME>EngineSpeed</LONG-NAME>
+            <REQUEST-REF ID-REF="req_speed"/>
+            <POS-RESPONSE-REFS><POS-RESPONSE-REF ID-REF="resp_speed"/></POS-RESPONSE-REFS>
+          </DIAG-SERVICE>
+          <DIAG-SERVICE ID="svc_status" SEMANTIC="DATA">
+            <SHORT-NAME>RDBI_EngineStatus</SHORT-NAME>
+            <LONG-NAME>EngineStatus</LONG-NAME>
+            <REQUEST-REF ID-REF="req_status"/>
+            <POS-RESPONSE-REFS><POS-RESPONSE-REF ID-REF="resp_status"/></POS-RESPONSE-REFS>
+          </DIAG-SERVICE>
+          <DIAG-SERVICE ID="svc_vin" SEMANTIC="IDENTIFICATION">
+            <SHORT-NAME>RDBI_VIN</SHORT-NAME>
+            <LONG-NAME>VIN</LONG-NAME>
+            <REQUEST-REF ID-REF="req_vin"/>
+            <POS-RESPONSE-REFS><POS-RESPONSE-REF ID-REF="resp_vin"/></POS-RESPONSE-REFS>
+          </DIAG-SERVICE>
+          <DIAG-SERVICE ID="svc_struct" SEMANTIC="DATA">
+            <SHORT-NAME>RDBI_Calibration</SHORT-NAME>
+            <LONG-NAME>Calibration</LONG-NAME>
+            <REQUEST-REF ID-REF="req_struct"/>
+            <POS-RESPONSE-REFS><POS-RESPONSE-REF ID-REF="resp_struct"/></POS-RESPONSE-REFS>
+          </DIAG-SERVICE>
+          <DIAG-SERVICE ID="svc_session" SEMANTIC="SESSION">
+            <SHORT-NAME>DiagnosticSessionControl</SHORT-NAME>
+            <LONG-NAME>DiagnosticSessionControl</LONG-NAME>
+            <REQUEST-REF ID-REF="req_session"/>
+          </DIAG-SERVICE>
+        </DIAG-COMMS>
+        <REQUESTS>
+          <REQUEST ID="req_speed">
+            <SHORT-NAME>Req_Speed</SHORT-NAME>
+            <PARAMS>
+              <PARAM xsi:type="CODED-CONST" SEMANTIC="SERVICE-ID">
+                <SHORT-NAME>SID</SHORT-NAME><BYTE-POSITION>0</BYTE-POSITION><CODED-VALUE>34</CODED-VALUE>
+                <DIAG-CODED-TYPE xsi:type="STANDARD-LENGTH-TYPE" BASE-DATA-TYPE="A_UINT32"><BIT-LENGTH>8</BIT-LENGTH></DIAG-CODED-TYPE>
+              </PARAM>
+              <PARAM xsi:type="CODED-CONST" SEMANTIC="ID">
+                <SHORT-NAME>DID</SHORT-NAME><BYTE-POSITION>1</BYTE-POSITION><CODED-VALUE>4097</CODED-VALUE>
+                <DIAG-CODED-TYPE xsi:type="STANDARD-LENGTH-TYPE" BASE-DATA-TYPE="A_UINT32"><BIT-LENGTH>16</BIT-LENGTH></DIAG-CODED-TYPE>
+              </PARAM>
+            </PARAMS>
+          </REQUEST>
+          <REQUEST ID="req_status">
+            <SHORT-NAME>Req_Status</SHORT-NAME>
+            <PARAMS>
+              <PARAM xsi:type="CODED-CONST"><SHORT-NAME>SID</SHORT-NAME><BYTE-POSITION>0</BYTE-POSITION><CODED-VALUE>34</CODED-VALUE>
+                <DIAG-CODED-TYPE xsi:type="STANDARD-LENGTH-TYPE" BASE-DATA-TYPE="A_UINT32"><BIT-LENGTH>8</BIT-LENGTH></DIAG-CODED-TYPE></PARAM>
+              <PARAM xsi:type="CODED-CONST"><SHORT-NAME>DID</SHORT-NAME><BYTE-POSITION>1</BYTE-POSITION><CODED-VALUE>61696</CODED-VALUE>
+                <DIAG-CODED-TYPE xsi:type="STANDARD-LENGTH-TYPE" BASE-DATA-TYPE="A_UINT32"><BIT-LENGTH>16</BIT-LENGTH></DIAG-CODED-TYPE></PARAM>
+            </PARAMS>
+          </REQUEST>
+          <REQUEST ID="req_vin">
+            <SHORT-NAME>Req_VIN</SHORT-NAME>
+            <PARAMS>
+              <PARAM xsi:type="CODED-CONST"><SHORT-NAME>SID</SHORT-NAME><BYTE-POSITION>0</BYTE-POSITION><CODED-VALUE>34</CODED-VALUE>
+                <DIAG-CODED-TYPE xsi:type="STANDARD-LENGTH-TYPE" BASE-DATA-TYPE="A_UINT32"><BIT-LENGTH>8</BIT-LENGTH></DIAG-CODED-TYPE></PARAM>
+              <PARAM xsi:type="CODED-CONST"><SHORT-NAME>DID</SHORT-NAME><BYTE-POSITION>1</BYTE-POSITION><CODED-VALUE>61840</CODED-VALUE>
+                <DIAG-CODED-TYPE xsi:type="STANDARD-LENGTH-TYPE" BASE-DATA-TYPE="A_UINT32"><BIT-LENGTH>16</BIT-LENGTH></DIAG-CODED-TYPE></PARAM>
+            </PARAMS>
+          </REQUEST>
+          <REQUEST ID="req_struct">
+            <SHORT-NAME>Req_Calibration</SHORT-NAME>
+            <PARAMS>
+              <PARAM xsi:type="CODED-CONST"><SHORT-NAME>SID</SHORT-NAME><BYTE-POSITION>0</BYTE-POSITION><CODED-VALUE>34</CODED-VALUE>
+                <DIAG-CODED-TYPE xsi:type="STANDARD-LENGTH-TYPE" BASE-DATA-TYPE="A_UINT32"><BIT-LENGTH>8</BIT-LENGTH></DIAG-CODED-TYPE></PARAM>
+              <PARAM xsi:type="CODED-CONST"><SHORT-NAME>DID</SHORT-NAME><BYTE-POSITION>1</BYTE-POSITION><CODED-VALUE>4100</CODED-VALUE>
+                <DIAG-CODED-TYPE xsi:type="STANDARD-LENGTH-TYPE" BASE-DATA-TYPE="A_UINT32"><BIT-LENGTH>16</BIT-LENGTH></DIAG-CODED-TYPE></PARAM>
+            </PARAMS>
+          </REQUEST>
+          <REQUEST ID="req_session">
+            <SHORT-NAME>Req_Session</SHORT-NAME>
+            <PARAMS>
+              <PARAM xsi:type="CODED-CONST"><SHORT-NAME>SID</SHORT-NAME><BYTE-POSITION>0</BYTE-POSITION><CODED-VALUE>16</CODED-VALUE>
+                <DIAG-CODED-TYPE xsi:type="STANDARD-LENGTH-TYPE" BASE-DATA-TYPE="A_UINT32"><BIT-LENGTH>8</BIT-LENGTH></DIAG-CODED-TYPE></PARAM>
+            </PARAMS>
+          </REQUEST>
+        </REQUESTS>
+        <POS-RESPONSES>
+          <POS-RESPONSE ID="resp_speed">
+            <SHORT-NAME>Resp_Speed</SHORT-NAME>
+            <PARAMS>
+              <PARAM xsi:type="CODED-CONST"><SHORT-NAME>SID</SHORT-NAME><BYTE-POSITION>0</BYTE-POSITION><CODED-VALUE>98</CODED-VALUE>
+                <DIAG-CODED-TYPE xsi:type="STANDARD-LENGTH-TYPE" BASE-DATA-TYPE="A_UINT32"><BIT-LENGTH>8</BIT-LENGTH></DIAG-CODED-TYPE></PARAM>
+              <PARAM xsi:type="CODED-CONST"><SHORT-NAME>DID</SHORT-NAME><BYTE-POSITION>1</BYTE-POSITION><CODED-VALUE>4097</CODED-VALUE>
+                <DIAG-CODED-TYPE xsi:type="STANDARD-LENGTH-TYPE" BASE-DATA-TYPE="A_UINT32"><BIT-LENGTH>16</BIT-LENGTH></DIAG-CODED-TYPE></PARAM>
+              <PARAM xsi:type="VALUE"><SHORT-NAME>Speed</SHORT-NAME><LONG-NAME>EngineSpeed</LONG-NAME>
+                <BYTE-POSITION>3</BYTE-POSITION><DOP-REF ID-REF="dop_speed"/></PARAM>
+            </PARAMS>
+          </POS-RESPONSE>
+          <POS-RESPONSE ID="resp_status">
+            <SHORT-NAME>Resp_Status</SHORT-NAME>
+            <PARAMS>
+              <PARAM xsi:type="CODED-CONST"><SHORT-NAME>SID</SHORT-NAME><BYTE-POSITION>0</BYTE-POSITION><CODED-VALUE>98</CODED-VALUE>
+                <DIAG-CODED-TYPE xsi:type="STANDARD-LENGTH-TYPE" BASE-DATA-TYPE="A_UINT32"><BIT-LENGTH>8</BIT-LENGTH></DIAG-CODED-TYPE></PARAM>
+              <PARAM xsi:type="CODED-CONST"><SHORT-NAME>DID</SHORT-NAME><BYTE-POSITION>1</BYTE-POSITION><CODED-VALUE>61696</CODED-VALUE>
+                <DIAG-CODED-TYPE xsi:type="STANDARD-LENGTH-TYPE" BASE-DATA-TYPE="A_UINT32"><BIT-LENGTH>16</BIT-LENGTH></DIAG-CODED-TYPE></PARAM>
+              <PARAM xsi:type="VALUE"><SHORT-NAME>CoolantTemperature</SHORT-NAME>
+                <BYTE-POSITION>3</BYTE-POSITION><DOP-REF ID-REF="dop_temp"/></PARAM>
+              <PARAM xsi:type="VALUE"><SHORT-NAME>DrivingMode</SHORT-NAME>
+                <BYTE-POSITION>4</BYTE-POSITION><DOP-REF ID-REF="dop_mode"/></PARAM>
+              <PARAM xsi:type="VALUE"><SHORT-NAME>BatteryVoltage</SHORT-NAME>
+                <BYTE-POSITION>5</BYTE-POSITION><DOP-REF ID-REF="dop_voltage"/></PARAM>
+            </PARAMS>
+          </POS-RESPONSE>
+          <POS-RESPONSE ID="resp_vin">
+            <SHORT-NAME>Resp_VIN</SHORT-NAME>
+            <PARAMS>
+              <PARAM xsi:type="CODED-CONST"><SHORT-NAME>SID</SHORT-NAME><BYTE-POSITION>0</BYTE-POSITION><CODED-VALUE>98</CODED-VALUE>
+                <DIAG-CODED-TYPE xsi:type="STANDARD-LENGTH-TYPE" BASE-DATA-TYPE="A_UINT32"><BIT-LENGTH>8</BIT-LENGTH></DIAG-CODED-TYPE></PARAM>
+              <PARAM xsi:type="CODED-CONST"><SHORT-NAME>DID</SHORT-NAME><BYTE-POSITION>1</BYTE-POSITION><CODED-VALUE>61840</CODED-VALUE>
+                <DIAG-CODED-TYPE xsi:type="STANDARD-LENGTH-TYPE" BASE-DATA-TYPE="A_UINT32"><BIT-LENGTH>16</BIT-LENGTH></DIAG-CODED-TYPE></PARAM>
+              <PARAM xsi:type="VALUE"><SHORT-NAME>VehicleIdentificationNumber</SHORT-NAME>
+                <BYTE-POSITION>3</BYTE-POSITION><DOP-REF ID-REF="dop_vin"/></PARAM>
+            </PARAMS>
+          </POS-RESPONSE>
+          <POS-RESPONSE ID="resp_struct">
+            <SHORT-NAME>Resp_Calibration</SHORT-NAME>
+            <PARAMS>
+              <PARAM xsi:type="CODED-CONST"><SHORT-NAME>SID</SHORT-NAME><BYTE-POSITION>0</BYTE-POSITION><CODED-VALUE>98</CODED-VALUE>
+                <DIAG-CODED-TYPE xsi:type="STANDARD-LENGTH-TYPE" BASE-DATA-TYPE="A_UINT32"><BIT-LENGTH>8</BIT-LENGTH></DIAG-CODED-TYPE></PARAM>
+              <PARAM xsi:type="CODED-CONST"><SHORT-NAME>DID</SHORT-NAME><BYTE-POSITION>1</BYTE-POSITION><CODED-VALUE>4100</CODED-VALUE>
+                <DIAG-CODED-TYPE xsi:type="STANDARD-LENGTH-TYPE" BASE-DATA-TYPE="A_UINT32"><BIT-LENGTH>16</BIT-LENGTH></DIAG-CODED-TYPE></PARAM>
+              <PARAM xsi:type="VALUE"><SHORT-NAME>Table</SHORT-NAME>
+                <BYTE-POSITION>3</BYTE-POSITION><DOP-REF ID-REF="struct_table"/></PARAM>
+            </PARAMS>
+          </POS-RESPONSE>
+        </POS-RESPONSES>
+        <DIAG-DATA-DICTIONARY-SPEC>
+          <STRUCTURES>
+            <STRUCTURE ID="struct_table">
+              <SHORT-NAME>CalibrationTable</SHORT-NAME>
+              <BYTE-SIZE>4</BYTE-SIZE>
+            </STRUCTURE>
+          </STRUCTURES>
+          <DATA-OBJECT-PROPS>
+            <DATA-OBJECT-PROP ID="dop_speed">
+              <SHORT-NAME>EngineSpeed</SHORT-NAME>
+              <DIAG-CODED-TYPE xsi:type="STANDARD-LENGTH-TYPE" BASE-DATA-TYPE="A_UINT32" IS-HIGHLOW-BYTE-ORDER="true"><BIT-LENGTH>16</BIT-LENGTH></DIAG-CODED-TYPE>
+              <COMPU-METHOD>
+                <CATEGORY>LINEAR</CATEGORY>
+                <COMPU-INTERNAL-TO-PHYS><COMPU-SCALES><COMPU-SCALE>
+                  <COMPU-RATIONAL-COEFFS>
+                    <COMPU-NUMERATOR><V>0</V><V>0.25</V></COMPU-NUMERATOR>
+                    <COMPU-DENOMINATOR><V>1</V></COMPU-DENOMINATOR>
+                  </COMPU-RATIONAL-COEFFS>
+                </COMPU-SCALE></COMPU-SCALES></COMPU-INTERNAL-TO-PHYS>
+              </COMPU-METHOD>
+              <UNIT-REF ID-REF="unit_rpm"/>
+            </DATA-OBJECT-PROP>
+            <DATA-OBJECT-PROP ID="dop_temp">
+              <SHORT-NAME>CoolantTemperature</SHORT-NAME>
+              <DIAG-CODED-TYPE xsi:type="STANDARD-LENGTH-TYPE" BASE-DATA-TYPE="A_UINT32"><BIT-LENGTH>8</BIT-LENGTH></DIAG-CODED-TYPE>
+              <COMPU-METHOD>
+                <CATEGORY>LINEAR</CATEGORY>
+                <COMPU-INTERNAL-TO-PHYS><COMPU-SCALES><COMPU-SCALE>
+                  <COMPU-RATIONAL-COEFFS>
+                    <COMPU-NUMERATOR><V>-40</V><V>1</V></COMPU-NUMERATOR>
+                    <COMPU-DENOMINATOR><V>1</V></COMPU-DENOMINATOR>
+                  </COMPU-RATIONAL-COEFFS>
+                </COMPU-SCALE></COMPU-SCALES></COMPU-INTERNAL-TO-PHYS>
+              </COMPU-METHOD>
+              <UNIT-REF ID-REF="unit_degc"/>
+            </DATA-OBJECT-PROP>
+            <DATA-OBJECT-PROP ID="dop_mode">
+              <SHORT-NAME>DrivingMode</SHORT-NAME>
+              <DIAG-CODED-TYPE xsi:type="STANDARD-LENGTH-TYPE" BASE-DATA-TYPE="A_UINT32"><BIT-LENGTH>8</BIT-LENGTH></DIAG-CODED-TYPE>
+              <COMPU-METHOD>
+                <CATEGORY>TEXTTABLE</CATEGORY>
+                <COMPU-INTERNAL-TO-PHYS><COMPU-SCALES>
+                  <COMPU-SCALE><LOWER-LIMIT>0</LOWER-LIMIT><UPPER-LIMIT>0</UPPER-LIMIT><COMPU-CONST><VT>Eco</VT></COMPU-CONST></COMPU-SCALE>
+                  <COMPU-SCALE><LOWER-LIMIT>1</LOWER-LIMIT><UPPER-LIMIT>1</UPPER-LIMIT><COMPU-CONST><VT>Normal</VT></COMPU-CONST></COMPU-SCALE>
+                  <COMPU-SCALE><LOWER-LIMIT>2</LOWER-LIMIT><UPPER-LIMIT>2</UPPER-LIMIT><COMPU-CONST><VT>Sport</VT></COMPU-CONST></COMPU-SCALE>
+                </COMPU-SCALES></COMPU-INTERNAL-TO-PHYS>
+              </COMPU-METHOD>
+            </DATA-OBJECT-PROP>
+            <DATA-OBJECT-PROP ID="dop_voltage">
+              <SHORT-NAME>BatteryVoltage</SHORT-NAME>
+              <DIAG-CODED-TYPE xsi:type="STANDARD-LENGTH-TYPE" BASE-DATA-TYPE="A_UINT32" IS-HIGHLOW-BYTE-ORDER="false"><BIT-LENGTH>16</BIT-LENGTH></DIAG-CODED-TYPE>
+              <COMPU-METHOD>
+                <CATEGORY>LINEAR</CATEGORY>
+                <COMPU-INTERNAL-TO-PHYS><COMPU-SCALES><COMPU-SCALE>
+                  <COMPU-RATIONAL-COEFFS>
+                    <COMPU-NUMERATOR><V>0</V><V>0.001</V></COMPU-NUMERATOR>
+                    <COMPU-DENOMINATOR><V>1</V></COMPU-DENOMINATOR>
+                  </COMPU-RATIONAL-COEFFS>
+                </COMPU-SCALE></COMPU-SCALES></COMPU-INTERNAL-TO-PHYS>
+              </COMPU-METHOD>
+              <UNIT-REF ID-REF="unit_volt"/>
+            </DATA-OBJECT-PROP>
+            <DATA-OBJECT-PROP ID="dop_vin">
+              <SHORT-NAME>VehicleIdentificationNumber</SHORT-NAME>
+              <DIAG-CODED-TYPE xsi:type="STANDARD-LENGTH-TYPE" BASE-DATA-TYPE="A_ASCIISTRING"><BIT-LENGTH>136</BIT-LENGTH></DIAG-CODED-TYPE>
+              <COMPU-METHOD><CATEGORY>IDENTICAL</CATEGORY></COMPU-METHOD>
+            </DATA-OBJECT-PROP>
+          </DATA-OBJECT-PROPS>
+          <UNIT-SPEC>
+            <UNITS>
+              <UNIT ID="unit_rpm"><SHORT-NAME>rpm</SHORT-NAME><DISPLAY-NAME>rpm</DISPLAY-NAME></UNIT>
+              <UNIT ID="unit_degc"><SHORT-NAME>degC</SHORT-NAME><DISPLAY-NAME>degC</DISPLAY-NAME></UNIT>
+              <UNIT ID="unit_volt"><SHORT-NAME>Volt</SHORT-NAME><DISPLAY-NAME>V</DISPLAY-NAME></UNIT>
+            </UNITS>
+          </UNIT-SPEC>
+        </DIAG-DATA-DICTIONARY-SPEC>
+      </ECU-VARIANT>
+    </ECU-VARIANTS>
+  </DIAG-LAYER-CONTAINER>
+</ODX>

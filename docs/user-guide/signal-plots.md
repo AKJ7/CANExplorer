@@ -1,6 +1,7 @@
 # Signal plots
 
-The **Signals** view plots database signals over time, with cursors, statistics and export.
+The **Signals** view plots database signals over time, with cursors, statistics and export. Bit fields from the
+[Reverse engineering](reverse-engineering.md) view are plotted here too, also without a database.
 
 ![Signal plots: engine and vehicle speed in one chart, cursors and readout](../assets/screenshots/signals.png)
 

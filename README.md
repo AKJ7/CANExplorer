@@ -33,6 +33,9 @@
   `can-server`, and optionally send frames requested over MQTT
 - Signal plots with zoom and pan over the whole buffer, two cursors with values and statistics, several signals per
   chart and CSV export
+- Reverse engineering: bit and byte statistics per identifier and a notch; automatic detection of checksums,
+  counters, multiplexers and values; matching fields to database signals, CSV/GPS logs or polled OBD-II values;
+  event markers; and bit fields to plot without a database or add to one
 
 **Recording and replay**
 - ASC, BLF, CSV, candump LOG, PEAK TRC, SQLite, ASAM MF4 and gzip compressed text logs
@@ -51,8 +54,13 @@
 
 **Diagnostics and protocols**
 - UDS over ISO-TP and the LIN transport layer: sessions, reset, data identifiers, security access with your own
-  seed/key algorithm, DTCs, routines; CANdelaStudio CDD descriptions for named and decoded identifiers
+  seed/key algorithm, DTCs, routines; CANdelaStudio CDD and ASAM ODX/PDX descriptions for named and decoded identifiers
 - ECU flashing over UDS (RequestDownload/TransferData) from Intel HEX, S-record or binary files, with progress
+- DoIP (Diagnostics over IP, ISO 13400-2): finds DoIP entities, connects with routing activation (optionally over
+  TLS) and runs diagnostics and flashing over Ethernet; a simulated entity works without a vehicle
+- UDS discovery: scan an ECU for the services, data identifiers, subfunctions and routines it exposes, classifying
+  the answers, for reverse engineering diagnostics
+- Bus gateway: forward frames between two connections with filtering, identifier rewriting and rate limiting
 - J1939: nodes with their address claims, DM1/DM2 trouble codes and lamps, clearing codes, requests and sending
   parameter groups by name with BAM or RTS/CTS
 - CANopen master: NMT, SDO access to object dictionaries from EDS/DCF files, PDO mappings with live values,

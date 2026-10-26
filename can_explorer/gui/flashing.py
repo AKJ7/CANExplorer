@@ -29,14 +29,14 @@ def _hex_option(options: Dict[str, Any], key: str, default: str, maximum: int, w
 
 
 class FlashController(QObject):
-    """Programming an ECU over UDS with the addressing of the connection's diagnostics."""
+    """Programming an ECU over UDS with the transport and addressing of a DiagnosticsController."""
 
     changed = pyqtSignal()
     image_changed = pyqtSignal()
 
-    def __init__(self, connection, parent: Optional[QObject] = None):
+    def __init__(self, diagnostics, parent: Optional[QObject] = None):
         super().__init__(parent)
-        self._connection = connection
+        self._diagnostics = diagnostics
         self._image: Optional[FlashImage] = None
         self._job: Optional[FlashJob] = None
         self._task: Optional[asyncio.Task] = None
@@ -150,7 +150,7 @@ class FlashController(QObject):
     # Running
 
     def _options(self, options: Dict[str, Any]) -> FlashOptions:
-        diagnostics = self._connection.diagnostics
+        diagnostics = self._diagnostics
         level = int(options.get('security_level', 0) or 0)
         compute_key = None
         if level:
@@ -184,11 +184,10 @@ class FlashController(QObject):
             return 'Flashing is in progress'
         if self._image is None:
             return 'Open a firmware file first'
-        if not self._connection.can_transmit:
-            return 'This connection cannot send'
-        if not self._connection.session.is_open:
-            return 'Connect first'
-        if self._connection.diagnostics.busy:
+        error = self._diagnostics.transport_error()
+        if error:
+            return error
+        if self._diagnostics.busy:
             return 'A diagnostic request is in progress'
         try:
             flash_options = self._options(options)
@@ -205,7 +204,7 @@ class FlashController(QObject):
         return ''
 
     async def _run(self, job: FlashJob):
-        transport = self._connection.diagnostics.create_transport()
+        transport = self._diagnostics.create_transport()
         try:
             await job.run(UdsClient(transport))
             self._state = 'done'

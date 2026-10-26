@@ -19,7 +19,8 @@ ApplicationWindow {
     readonly property var currentConnection: currentIndex >= 0 ? connectionManager.connections[currentIndex] : null
     readonly property var currentConnectionView: currentIndex >= 0 ? connectionViews.itemAt(currentIndex) : null
     property var notifications: []
-    // A tool shown instead of the connections: "", "database-editor", "multi-bus", "compare", "ethercat" or "physical-io"
+    // A tool shown instead of the connections: "", "database-editor", "multi-bus", "compare", "ethercat", "physical-io",
+    // "doip" or "gateway"
     property string tool: ""
     property bool closeConfirmed: false
     // Dragged with the handle on the right edge of the sidebar
@@ -61,7 +62,8 @@ ApplicationWindow {
             add(qsTr("Go to"), qsTr("Connection %1").arg(item.name), () => { mainWindow.selectedIndex = index; mainWindow.tool = "" }))
         for (const [key, title] of [["database-editor", qsTr("Database editor")], ["multi-bus", qsTr("Multi-bus trace")],
                                     ["compare", qsTr("Compare recordings")], ["ethercat", qsTr("EtherCAT (CoE)")],
-                                    ["physical-io", qsTr("Physical I/O")]])
+                                    ["physical-io", qsTr("Physical I/O")], ["doip", qsTr("DoIP")],
+                                    ["gateway", qsTr("Bus gateway")]])
             add(qsTr("Tool"), title, () => mainWindow.tool = key)
         for (const theme of connectionManager.app_state.themes)
             add(qsTr("Theme"), theme, () => connectionManager.app_state.set_theme(theme))
@@ -265,11 +267,15 @@ ApplicationWindow {
                     : mainWindow.tool === "compare" ? qsTr("Compare recordings")
                     : mainWindow.tool === "ethercat" ? qsTr("EtherCAT (CoE)")
                     : mainWindow.tool === "physical-io" ? qsTr("Physical I/O")
+                    : mainWindow.tool === "doip" ? qsTr("DoIP")
+                    : mainWindow.tool === "gateway" ? qsTr("Bus gateway")
                     : mainWindow.tool === "multi-bus" ? qsTr("Multi-bus trace") : ""
                 pageTitle: mainWindow.tool === "database-editor" ? connectionManager.database_editor.file_name
                     : mainWindow.tool === "compare" ? compareView.pageTitle
                     : mainWindow.tool === "ethercat" ? etherCatView.pageTitle
                     : mainWindow.tool === "physical-io" ? physicalIoView.pageTitle
+                    : mainWindow.tool === "doip" ? doipView.pageTitle
+                    : mainWindow.tool === "gateway" ? gatewayView.pageTitle
                     : mainWindow.tool === "multi-bus" ? multiBusView.pageTitle
                     : mainWindow.currentConnectionView ? mainWindow.currentConnectionView.pageTitle : ""
                 notifications: mainWindow.notifications
@@ -312,6 +318,22 @@ ApplicationWindow {
             PhysicalIoView {
                 id: physicalIoView
                 visible: mainWindow.tool === "physical-io"
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.margins: 24
+            }
+
+            DoipView {
+                id: doipView
+                visible: mainWindow.tool === "doip"
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.margins: 24
+            }
+
+            GatewayView {
+                id: gatewayView
+                visible: mainWindow.tool === "gateway"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.margins: 24
@@ -575,6 +597,9 @@ ApplicationWindow {
         function onEditDatabaseFile(path) {
             mainWindow.tool = "database-editor"
             databaseEditorView.openPath(path)
+        }
+        function onShowTool(tool) {
+            mainWindow.tool = tool
         }
     }
 

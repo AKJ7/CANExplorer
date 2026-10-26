@@ -22,6 +22,7 @@ from can_explorer.core.lin import DEFAULT_BAUDRATE, LIN_BAUDRATES, MAX_FRAME_ID
 from can_explorer.core.lin_schedule import LinScheduler
 from can_explorer.core.protocols import PROTOCOL_DECODERS, create_protocol_decoder
 from can_explorer.core.recording import Trigger, TriggeredRecorder
+from can_explorer.core.reverse.fields import BitField
 from can_explorer.core.session import BusSession, SessionError, SessionState
 from can_explorer.core.log_formats import file_filters
 from can_explorer.core.sources import BusConfig, FileSource, LiveSource, MessageSource
@@ -30,6 +31,8 @@ from can_explorer.gui.compare import CompareController
 from can_explorer.gui.updates import UpdateController
 from can_explorer.gui.multibus import MultiBusController
 from can_explorer.gui.database_editor import DatabaseEditorController
+from can_explorer.gui.doip import DoipController
+from can_explorer.gui.gateway import GatewayController
 from can_explorer.gui.ethercat import EtherCatController
 from can_explorer.gui.physical_io import PhysicalIoController
 from can_explorer.gui.canopen import CanOpenController
@@ -41,6 +44,8 @@ from can_explorer.gui.playback import BusReplay, ReplayPlayback
 from can_explorer.gui.mqtt import MqttController
 from can_explorer.gui.simulation import SimulationController
 from can_explorer.gui.plot_view import PlotView
+from can_explorer.gui.reverse import ReverseController
+from can_explorer.gui.uds_scan import UdsScanController
 from can_explorer.gui.testing import TestController
 from can_explorer.gui.trace_tools import TraceTools
 from can_explorer.gui.workspace import SUFFIX as WORKSPACE_SUFFIX
@@ -65,6 +70,9 @@ DATABASE_FORMAT_NAMES = {
     '.sym': 'PCAN Symbol',
     '.ldf': 'LIN description LDF',
     '.cdd': 'CANdelaStudio CDD',
+    '.odx': 'ODX diagnostic description',
+    '.odx-d': 'ODX diagnostic description',
+    '.pdx': 'Packaged ODX',
 }
 FD_DATA_BITRATES = (1_000_000, 2_000_000, 4_000_000, 5_000_000, 8_000_000)
 
@@ -123,8 +131,10 @@ class CanConnection(QObject):
         self._diagnostics = DiagnosticsController(self, parent=self)
         self._j1939 = J1939Controller(self, parent=self)
         self._canopen = CanOpenController(self, parent=self)
-        self._flashing = FlashController(self, parent=self)
+        self._flashing = FlashController(self._diagnostics, parent=self)
+        self._uds_scan = UdsScanController(self, parent=self)
         self._bus_health = BusHealthController(self, parent=self)
+        self._reverse = ReverseController(self, parent=self)
         self._simulation = SimulationController(self, parent=self)
         self._mqtt = MqttController(self, parent=self)
         self._tests = TestController(self, parent=self)
@@ -340,9 +350,11 @@ class CanConnection(QObject):
         self.stop_schedule()
         self._bus_replay.stop()
         self._tests.shutdown()
+        self._uds_scan.shutdown()
         self._flashing.shutdown()
         self._diagnostics.shutdown()
         self._simulation.shutdown()
+        self._reverse.shutdown()
         self.session.stop()
 
     def set_refresh_interval(self, interval_ms: int):
@@ -394,6 +406,7 @@ class CanConnection(QObject):
     def clear(self):
         self._history.clear()
         self.session.clear()
+        self._reverse.clear()
         self._trace.rebuild()
         self._overview.rebuild()
         self._frame_count = 0
@@ -544,7 +557,7 @@ class CanConnection(QObject):
         self.stop_schedule()
         self._scheduler = None
         self.session.decoder.database = None
-        self.session.signals.untrack_all()
+        self.session.signals.untrack_all(fields=False)  # Bit fields do not need the database
         self._database_changed()
 
     def _database_changed(self):
@@ -580,6 +593,23 @@ class CanConnection(QObject):
     def untrack_signal(self, message: str, signal: str):
         self.session.signals.untrack(message, signal)
         self.tracked_signals_changed.emit()
+
+    @pyqtSlot(str)
+    def untrack_key(self, key: str):
+        """Stop plotting a database signal ('Message.Signal') or a bit field ('1A0[16|8@1+]')."""
+        self.session.signals.untrack_key(key)
+        self.tracked_signals_changed.emit()
+
+    def track_field(
+        self, field: BitField, unit: str = '', multiplexer: Optional[BitField] = None, mux_value: Optional[int] = None
+    ) -> str:
+        """Plot a bit field (of the frames with multiplexer == mux_value), with its values in the trace so far."""
+        signals = self.session.signals
+        key = signals.track_field(field, unit, multiplexer, mux_value)
+        signals.backfill(key, (frame.message for frame in self.session.trace))
+        self.tracked_signals_changed.emit()
+        self.signals_updated.emit()
+        return key
 
     # Transmission
 
@@ -642,9 +672,19 @@ class CanConnection(QObject):
         return self._bus_health
 
     @pyqtProperty(QObject, constant=True)
+    def reverse(self) -> ReverseController:
+        """Bit and byte statistics and bit fields, for finding unknown signals."""
+        return self._reverse
+
+    @pyqtProperty(QObject, constant=True)
     def flashing(self) -> FlashController:
         """Programming ECUs over UDS."""
         return self._flashing
+
+    @pyqtProperty(QObject, constant=True)
+    def uds_scan(self) -> UdsScanController:
+        """Interactive UDS discovery: services, DIDs, subfunctions, routines and byte sweeps."""
+        return self._uds_scan
 
     @pyqtProperty(QObject, constant=True)
     def canopen(self) -> CanOpenController:
@@ -790,6 +830,8 @@ class ConnectionManager(QObject):
         self._multi_bus = MultiBusController(self, parent=self)
         self._ethercat = EtherCatController(parent=self)
         self._physical_io = PhysicalIoController(parent=self)
+        self._doip = DoipController(parent=self)
+        self._gateway = GatewayController(self, parent=self)
         self._updates = UpdateController(self._app_state.settings, parent=self)
         self._database_editor.saved.connect(self._reload_database)
         QGuiApplication.instance().aboutToQuit.connect(self.close_all)
@@ -888,6 +930,16 @@ class ConnectionManager(QObject):
     def physical_io(self) -> PhysicalIoController:
         """Digital lines and analogue inputs of an I/O adapter."""
         return self._physical_io
+
+    @pyqtProperty(QObject, constant=True)
+    def gateway(self) -> GatewayController:
+        """Forwarding frames between connections."""
+        return self._gateway
+
+    @pyqtProperty(QObject, constant=True)
+    def doip(self) -> DoipController:
+        """Diagnostics over IP: DoIP entities, routing activation and UDS over it."""
+        return self._doip
 
     def _reload_database(self, path: str) -> None:
         """Connections decoding with a database that was edited and saved use the new version."""
@@ -1128,6 +1180,8 @@ class ConnectionManager(QObject):
             connection.close()
         self._ethercat.shutdown()
         self._physical_io.shutdown()
+        self._doip.shutdown()
+        self._gateway.shutdown()
 
     def _apply_preferences(self):
         for connection in self._connections:

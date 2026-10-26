@@ -78,7 +78,11 @@ class UdsServer:
         }.get(sid)
         if handler is None:
             return self._negative(sid, 0x11)
-        responses = handler(request)
+        try:
+            responses = handler(request)
+        except (IndexError, ValueError):
+            # A truncated or malformed request (e.g. from a fuzzer): a real ECU rejects it, it does not crash
+            return self._negative(sid, 0x13)
         suppress = len(request) >= 2 and sid in (0x10, 0x11, 0x3E) and request[1] & SUPPRESS_POSITIVE_RESPONSE
         positive = responses and responses[-1][0] == sid + 0x40
         return [] if suppress and positive else responses

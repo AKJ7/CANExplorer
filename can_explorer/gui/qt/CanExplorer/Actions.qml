@@ -26,6 +26,8 @@ Item {
     signal editDatabaseFile(string path)
     // Open the workspace at this index of the recent workspaces
     signal openRecentWorkspace(int index)
+    // Show a tool page, e.g. "database-editor"
+    signal showTool(string tool)
 
     Action {
         id: exitAction

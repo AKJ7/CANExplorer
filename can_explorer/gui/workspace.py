@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from PyQt6.QtCore import QUrl
 
+from can_explorer.core.reverse.fields import BitField
+
 if TYPE_CHECKING:
     from can_explorer.gui.connection_manager import CanConnection, ConnectionManager
 
@@ -37,6 +39,13 @@ def _absolute(path: str, base: Path) -> Path:
     return candidate if candidate.is_absolute() else (base / candidate).resolve()
 
 
+def _multiplexer(tracker, key: str) -> Dict[str, Any]:
+    if key not in tracker.multiplexers:
+        return {}
+    multiplexer, value = tracker.multiplexers[key]
+    return {'multiplexer': multiplexer.to_dict(), 'mux_value': value}
+
+
 def describe_connection(connection: 'CanConnection', base: Path) -> Optional[Dict[str, Any]]:
     origin = dict(connection.origin)
     if not origin:
@@ -49,7 +58,14 @@ def describe_connection(connection: 'CanConnection', base: Path) -> Optional[Dic
     entry['database_bus'] = connection.database_bus
     entry['diagnostic_description'] = _relative(connection.diagnostics.description_file, base)
     entry['filter'] = connection.filter_text
-    entry['signals'] = [{'key': key, 'unit': series.unit} for key, series in connection.session.signals.series.items()]
+    tracker = connection.session.signals
+    entry['signals'] = [
+        {'key': key, 'unit': series.unit} for key, series in tracker.series.items() if key not in tracker.fields
+    ]
+    entry['fields'] = [
+        {**field.to_dict(), 'unit': tracker.series[key].unit, **_multiplexer(tracker, key)}
+        for key, field in tracker.fields.items()
+    ]
     simulation = connection.simulation
     entry['simulation'] = {
         'scripts': [_relative(str(script.path), base) for script in simulation.runtime.scripts],
@@ -148,6 +164,19 @@ def _restore(connection: 'CanConnection', entry: Dict[str, Any], base: Path) -> 
             message, _, signal_name = signal.get('key', '').partition('.')
             if message and signal_name:
                 connection.track_signal(message, signal_name, signal.get('unit', ''))
+        for field in entry.get('fields', []):
+            try:
+                multiplexer = field.get('multiplexer')
+                connection.session.signals.track_field(
+                    BitField.from_dict(field),
+                    str(field.get('unit', '')),
+                    BitField.from_dict(multiplexer) if multiplexer else None,
+                    int(field['mux_value']) if multiplexer else None,
+                )
+            except (KeyError, TypeError, ValueError) as e:
+                problems.append(f'{name}: bit field {field}: {e}')
+        if entry.get('fields'):
+            connection.tracked_signals_changed.emit()
 
         simulation = entry.get('simulation', {})
         for relative in simulation.get('scripts', []):

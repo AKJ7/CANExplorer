@@ -14,16 +14,17 @@ receive by name.
 | `.kcd` | Kayak KCD | ✓ | ✓ |
 | `.sym` | PEAK PCAN Symbol | ✓ | ✓ |
 | `.ldf` | LIN description file | ✓ | |
-| `.cdd` | Vector CANdelaStudio diagnostic description | ✓ ([Diagnostics](diagnostics.md#diagnostic-descriptions-cdd)) | |
+| `.cdd` | Vector CANdelaStudio diagnostic description | ✓ ([Diagnostics](diagnostics.md#diagnostic-descriptions-cdd-odxpdx)) | |
+| `.odx`, `.odx-d`, `.pdx` | ASAM ODX / packaged ODX diagnostic description | ✓ ([Diagnostics](diagnostics.md#diagnostic-descriptions-cdd-odxpdx)) | |
 
-DBC, ARXML, KCD and SYM are read with [cantools](https://cantools.readthedocs.io/), DBF and CDD with readers of
-CANExplorer, LDF with [ldfparser](https://pypi.org/project/ldfparser/).
+DBC, ARXML, KCD and SYM are read with [cantools](https://cantools.readthedocs.io/), DBF, CDD and ODX/PDX with
+readers of CANExplorer, LDF with [ldfparser](https://pypi.org/project/ldfparser/).
 
 ## Loading a database
 
 **Load database…** in the toolbar loads a database for the current connection; **Unload database** removes it.
-Each connection has its own database. A `.cdd` file loaded this way becomes the diagnostic description of the
-connection and leaves the signal database unchanged.
+Each connection has its own database. A `.cdd`, `.odx`, `.odx-d` or `.pdx` file loaded this way becomes the diagnostic description of
+the connection and leaves the signal database unchanged.
 
 The *Info* column then shows, for example:
 

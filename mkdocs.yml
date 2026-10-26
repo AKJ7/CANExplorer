@@ -46,9 +46,11 @@ nav:
       - Trace and overview: user-guide/trace-and-overview.md
       - Filters: user-guide/filters.md
       - Bus health: user-guide/bus-health.md
+      - Reverse engineering: user-guide/reverse-engineering.md
       - Recording, replay and export: user-guide/recording-and-replay.md
       - Comparing recordings: user-guide/compare-recordings.md
       - Several buses: user-guide/multi-bus.md
+      - Bus gateway: user-guide/bus-gateway.md
       - Remote buses: user-guide/remote-buses.md
       - MQTT: user-guide/mqtt.md
       - Signal databases: user-guide/signal-databases.md
@@ -58,6 +60,8 @@ nav:
       - Protocol decoding: user-guide/protocols.md
       - Diagnostics (UDS): user-guide/diagnostics.md
       - Flashing: user-guide/flashing.md
+      - UDS discovery: user-guide/uds-discovery.md
+      - DoIP: user-guide/doip.md
       - J1939: user-guide/j1939.md
       - CANopen: user-guide/canopen.md
       - EtherCAT (CoE): user-guide/ethercat.md
