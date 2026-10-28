@@ -599,14 +599,48 @@ ColumnLayout {
                             }
 
                             FieldLabel {
-                                visible: !!(root.signal && root.signal.multiplex)
+                                visible: !root.lin
                                 text: qsTr("Multiplexing")
                             }
-                            Label {
-                                visible: !!(root.signal && root.signal.multiplex)
-                                text: root.signal && root.signal.multiplex ? root.signal.multiplex : ""
-                                color: Theme.text
-                                Layout.columnSpan: 3
+                            ComboBox {
+                                id: muxRole
+                                visible: !root.lin
+                                model: [qsTr("None"), qsTr("Multiplexer"), qsTr("Multiplexed")]
+                                currentIndex: root.signal ? (root.signal.is_multiplexer ? 1 : (root.signal.multiplexer_ids ? 2 : 0)) : 0
+                                Layout.fillWidth: true
+                                onActivated: index => {
+                                    if (index === 1)
+                                        root.apply(root.editor.update_signal({ is_multiplexer: true, multiplexer_ids: "" }))
+                                    else if (index === 2)
+                                        root.apply(root.editor.update_signal({ is_multiplexer: false,
+                                            multiplexer_ids: root.signal && root.signal.multiplexer_ids ? root.signal.multiplexer_ids : "0" }))
+                                    else
+                                        root.apply(root.editor.update_signal({ is_multiplexer: false, multiplexer_ids: "" }))
+                                }
+                            }
+                            RowLayout {
+                                visible: !root.lin && muxRole.currentIndex === 2
+                                Layout.columnSpan: 2
+                                Layout.fillWidth: true
+                                spacing: 8
+                                TextField {
+                                    text: root.signal && root.signal.multiplexer_ids ? root.signal.multiplexer_ids : ""
+                                    placeholderText: qsTr("Switch values, e.g. 0, 1, 3")
+                                    Layout.fillWidth: true
+                                    onEditingFinished: {
+                                        if (!root.signal || text === String(root.signal.multiplexer_ids))
+                                            return
+                                        root.apply(root.editor.update_signal({ multiplexer_ids: text }),
+                                                   () => text = root.signal.multiplexer_ids)
+                                    }
+                                }
+                                ComboBox {
+                                    visible: root.editor.multiplexers.length > 1
+                                    model: root.editor.multiplexers
+                                    currentIndex: root.signal ? Math.max(0, root.editor.multiplexers.indexOf(root.signal.multiplexer_signal)) : 0
+                                    Layout.preferredWidth: 150
+                                    onActivated: index => root.apply(root.editor.update_signal({ multiplexer_signal: currentText }))
+                                }
                             }
                         }
                     }
@@ -653,6 +687,7 @@ ColumnLayout {
                                 Repeater {
                                     model: 8
                                     Rectangle {
+                                        id: bitCell
                                         required property int index
                                         readonly property int bit: byteRow.index * 8 + 7 - index
                                         readonly property int owner: root.editor.layout.length > bit ? root.editor.layout[bit] : -1
@@ -671,9 +706,14 @@ ColumnLayout {
                                         TapHandler {
                                             onTapped: if (parent.owner >= 0) root.editor.select_signal(root.editor.signals[parent.owner].name)
                                         }
-                                        ToolTip.visible: bitHover.hovered && parent.owner !== -1
-                                        ToolTip.text: parent.owner === -2 ? qsTr("Bit %1: several signals").arg(parent.bit)
-                                            : parent.owner >= 0 ? qsTr("Bit %1: %2").arg(parent.bit).arg(root.editor.signals[parent.owner].name) : ""
+                                        // `parent` here is the byte row, not the cell: reference the cell by id
+                                        readonly property string tipText: bitCell.owner === -2
+                                            ? qsTr("Bit %1: several signals").arg(bitCell.bit)
+                                            : (bitCell.owner >= 0 && root.editor.signals[bitCell.owner])
+                                              ? qsTr("Bit %1: %2").arg(bitCell.bit).arg(root.editor.signals[bitCell.owner].name)
+                                              : ""
+                                        ToolTip.visible: bitHover.hovered && bitCell.tipText !== ""
+                                        ToolTip.text: bitCell.tipText
                                         HoverHandler { id: bitHover }
                                     }
                                 }
@@ -1046,8 +1086,11 @@ ColumnLayout {
         title: qsTr("Discard changes?")
         modal: true
         anchors.centerIn: Overlay.overlay
+        width: Math.min(460, Overlay.overlay.width - 48)
         standardButtons: Dialog.Discard | Dialog.Cancel
         Label {
+            width: discardDialog.availableWidth
+            wrapMode: Text.Wrap
             text: qsTr("%1 has unsaved changes.").arg(root.editor.file_name)
         }
         onDiscarded: {

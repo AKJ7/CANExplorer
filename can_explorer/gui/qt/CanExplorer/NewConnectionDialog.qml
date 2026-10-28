@@ -30,6 +30,7 @@ Dialog {
             data_bitrate: fdCheckBox.checked ? dataBitrateBox.currentText : "",
             protocol: dialog.lin ? "LIN" : protocolBox.currentText,
             fd: fdCheckBox.checked,
+            single_wire: singleWireCheckBox.checked,
             receive_own_messages: selfReceptionCheckBox.checked,
         })
     }
@@ -136,8 +137,20 @@ Dialog {
                 CheckBox {
                     id: fdCheckBox
                     visible: !dialog.lin
+                    enabled: !singleWireCheckBox.checked
                     text: qsTr("Flexible Data (CAN FD)")
                     Layout.columnSpan: 3
+                }
+
+                CheckBox {
+                    id: singleWireCheckBox
+                    visible: !dialog.lin
+                    enabled: !fdCheckBox.checked
+                    text: qsTr("Single-wire CAN (GMLAN, 33.3 kbit/s)")
+                    Layout.columnSpan: 3
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("GM single-wire low-speed bus (SWCAN). Sets the bitrate to 33333; needs an interface with a single-wire transceiver.")
+                    onCheckedChanged: if (checked) bitrateBox.currentIndex = Math.max(bitrateBox.currentIndex, bitrateBox.find("33333"))
                 }
 
                 Label {

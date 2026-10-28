@@ -7,8 +7,8 @@ them from within the application.
 
 ## Finding updates
 
-- **At start**, CANExplorer looks for a new release, at most once a day and a few seconds after the window opened.
-  When it finds one, a notification and the **⬆ Update** button in the top bar announce it.
+- **At start**, CANExplorer looks for a new release a few seconds after the window opened. When it finds one, a
+  notification and the **⬆ Update** button in the top bar announce it.
 - **⋮ → Check for Updates…** (or *Check for updates* in the command palette, or **Check now** in the
   preferences) looks at once and shows the result.
 

@@ -100,13 +100,9 @@ Rectangle {
             Layout.topMargin: 24
             Layout.bottomMargin: 12
             spacing: 12
-            Image {
-                source: "images/logo.png"
-                sourceSize: Qt.size(64, 64)
+            Logo {
                 Layout.preferredWidth: 34
                 Layout.preferredHeight: 34
-                smooth: true
-                mipmap: true
             }
             Label {
                 text: metadata.name
@@ -118,116 +114,129 @@ Rectangle {
             }
         }
 
-        RowLayout {
+        // Everything between the title and the settings scrolls when it does not fit
+        ScrollView {
+            id: scroller
             Layout.fillWidth: true
-            Layout.rightMargin: 12
-            SectionLabel { text: qsTr("CONNECTIONS"); Layout.fillWidth: true }
-            ToolButton {
-                text: "+"
-                font.pixelSize: 18
-                Layout.topMargin: 10
-                ToolTip.visible: hovered
-                ToolTip.text: Actions.newConnection.text.replace("&", "")
-                onClicked: Actions.newConnection.trigger()
+            Layout.fillHeight: true
+            clip: true
+            contentWidth: availableWidth  // Only scroll vertically
+            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+
+            ColumnLayout {
+                width: scroller.availableWidth
+                spacing: 2
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.rightMargin: 12
+                    SectionLabel { text: qsTr("CONNECTIONS"); Layout.fillWidth: true }
+                    ToolButton {
+                        text: "+"
+                        font.pixelSize: 18
+                        Layout.topMargin: 10
+                        ToolTip.visible: hovered
+                        ToolTip.text: Actions.newConnection.text.replace("&", "")
+                        onClicked: Actions.newConnection.trigger()
+                    }
+                }
+
+                Repeater {
+                    model: root.connections
+                    NavItem {
+                        required property var modelData
+                        required property int index
+                        text: modelData.name
+                        glyph: modelData.is_lin ? "⇄" : modelData.is_replay ? "⟲" : "⌁"
+                        active: index === root.currentConnection && root.currentTool === ""
+                        dotColor: modelData.state === "open" ? Theme.success
+                            : modelData.state === "error" ? Theme.danger : Theme.alpha(Theme.muted, 0.6)
+                        onClicked: root.connectionSelected(index)
+                        ToolTip.visible: hovered
+                        ToolTip.text: modelData.description
+                    }
+                }
+
+                NavItem {
+                    visible: root.connections.length === 0
+                    text: qsTr("Replay a log file…")
+                    glyph: "⟲"
+                    onClicked: Actions.openLogFile.trigger()
+                }
+
+                SectionLabel {
+                    visible: root.pages.length > 0
+                    text: qsTr("VIEWS")
+                }
+
+                Repeater {
+                    model: root.pages
+                    NavItem {
+                        required property var modelData
+                        text: modelData.title
+                        glyph: modelData.icon
+                        active: modelData.key === root.currentPage && root.currentTool === ""
+                        onClicked: root.pageSelected(modelData.key)
+                    }
+                }
+
+                SectionLabel { text: qsTr("TOOLS") }
+
+                NavItem {
+                    text: qsTr("Database editor")
+                    glyph: "✎"
+                    active: root.currentTool === "database-editor"
+                    dotColor: connectionManager.database_editor.dirty ? Theme.warning : "transparent"
+                    onClicked: root.toolSelected("database-editor")
+                }
+
+                NavItem {
+                    text: qsTr("Multi-bus trace")
+                    glyph: "≣"
+                    active: root.currentTool === "multi-bus"
+                    onClicked: root.toolSelected("multi-bus")
+                }
+
+                NavItem {
+                    text: qsTr("Compare recordings")
+                    glyph: "⇄"
+                    active: root.currentTool === "compare"
+                    onClicked: root.toolSelected("compare")
+                }
+
+                NavItem {
+                    text: qsTr("EtherCAT (CoE)")
+                    glyph: "⇶"
+                    active: root.currentTool === "ethercat"
+                    dotColor: connectionManager.ethercat.is_open ? Theme.success : "transparent"
+                    onClicked: root.toolSelected("ethercat")
+                }
+
+                NavItem {
+                    text: qsTr("Physical I/O")
+                    glyph: "⇅"
+                    active: root.currentTool === "physical-io"
+                    dotColor: connectionManager.physical_io.is_open ? Theme.success : "transparent"
+                    onClicked: root.toolSelected("physical-io")
+                }
+
+                NavItem {
+                    text: qsTr("DoIP")
+                    glyph: "⇌"
+                    active: root.currentTool === "doip"
+                    dotColor: connectionManager.doip.is_open ? Theme.success : "transparent"
+                    onClicked: root.toolSelected("doip")
+                }
+
+                NavItem {
+                    text: qsTr("Bus gateway")
+                    glyph: "⇄"
+                    active: root.currentTool === "gateway"
+                    dotColor: connectionManager.gateway.running ? Theme.success : "transparent"
+                    onClicked: root.toolSelected("gateway")
+                }
             }
         }
-
-        Repeater {
-            model: root.connections
-            NavItem {
-                required property var modelData
-                required property int index
-                text: modelData.name
-                glyph: modelData.is_lin ? "⇄" : modelData.is_replay ? "⟲" : "⌁"
-                active: index === root.currentConnection && root.currentTool === ""
-                dotColor: modelData.state === "open" ? Theme.success
-                    : modelData.state === "error" ? Theme.danger : Theme.alpha(Theme.muted, 0.6)
-                onClicked: root.connectionSelected(index)
-                ToolTip.visible: hovered
-                ToolTip.text: modelData.description
-            }
-        }
-
-        NavItem {
-            visible: root.connections.length === 0
-            text: qsTr("Replay a log file…")
-            glyph: "⟲"
-            onClicked: Actions.openLogFile.trigger()
-        }
-
-        SectionLabel {
-            visible: root.pages.length > 0
-            text: qsTr("VIEWS")
-        }
-
-        Repeater {
-            model: root.pages
-            NavItem {
-                required property var modelData
-                text: modelData.title
-                glyph: modelData.icon
-                active: modelData.key === root.currentPage && root.currentTool === ""
-                onClicked: root.pageSelected(modelData.key)
-            }
-        }
-
-        SectionLabel { text: qsTr("TOOLS") }
-
-        NavItem {
-            text: qsTr("Database editor")
-            glyph: "✎"
-            active: root.currentTool === "database-editor"
-            dotColor: connectionManager.database_editor.dirty ? Theme.warning : "transparent"
-            onClicked: root.toolSelected("database-editor")
-        }
-
-        NavItem {
-            text: qsTr("Multi-bus trace")
-            glyph: "≣"
-            active: root.currentTool === "multi-bus"
-            onClicked: root.toolSelected("multi-bus")
-        }
-
-        NavItem {
-            text: qsTr("Compare recordings")
-            glyph: "⇄"
-            active: root.currentTool === "compare"
-            onClicked: root.toolSelected("compare")
-        }
-
-        NavItem {
-            text: qsTr("EtherCAT (CoE)")
-            glyph: "⇶"
-            active: root.currentTool === "ethercat"
-            dotColor: connectionManager.ethercat.is_open ? Theme.success : "transparent"
-            onClicked: root.toolSelected("ethercat")
-        }
-
-        NavItem {
-            text: qsTr("Physical I/O")
-            glyph: "⇅"
-            active: root.currentTool === "physical-io"
-            dotColor: connectionManager.physical_io.is_open ? Theme.success : "transparent"
-            onClicked: root.toolSelected("physical-io")
-        }
-
-        NavItem {
-            text: qsTr("DoIP")
-            glyph: "⇌"
-            active: root.currentTool === "doip"
-            dotColor: connectionManager.doip.is_open ? Theme.success : "transparent"
-            onClicked: root.toolSelected("doip")
-        }
-
-        NavItem {
-            text: qsTr("Bus gateway")
-            glyph: "⇄"
-            active: root.currentTool === "gateway"
-            dotColor: connectionManager.gateway.running ? Theme.success : "transparent"
-            onClicked: root.toolSelected("gateway")
-        }
-
-        Item { Layout.fillHeight: true }
 
         Rectangle {
             Layout.fillWidth: true

@@ -1,5 +1,4 @@
 import asyncio
-import time
 from pathlib import Path
 from typing import Optional
 
@@ -12,7 +11,6 @@ from can_explorer.sys.log_handler import get_logger
 
 logger = get_logger(__name__)
 
-CHECK_INTERVAL = 24 * 3600  # Automatic checks at most once a day
 STARTUP_DELAY_MS = 5_000  # Let the window open first
 RELEASES_PAGE = f'https://github.com/{updates.REPOSITORY}/releases'
 
@@ -142,10 +140,8 @@ class UpdateController(QObject):
     # Checking
 
     def check_at_startup(self) -> None:
-        """Check after a delay when enabled and not checked within the last day."""
+        """Look for a newer release a few seconds after the window opens, unless the check is turned off."""
         if not self.check_at_start:
-            return
-        if time.time() - self._value('last_check', 0.0) < CHECK_INTERVAL:
             return
         QTimer.singleShot(STARTUP_DELAY_MS, lambda: asyncio.ensure_future(self._check(automatic=True)))
 
@@ -164,7 +160,6 @@ class UpdateController(QObject):
             logger.info(str(e))
             self._set_state('error' if not automatic else 'idle', str(e))
             return
-        self._settings.setValue('updates/last_check', time.time())
         release = updates.newest_release(releases, self._current, self.include_prereleases)
         self._release = release
         if release is None:

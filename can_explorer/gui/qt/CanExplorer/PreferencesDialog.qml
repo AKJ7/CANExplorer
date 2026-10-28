@@ -101,7 +101,7 @@ Dialog {
                 checked: connectionManager.updates.check_at_start
                 onToggled: connectionManager.updates.set_check_at_start(checked)
                 ToolTip.visible: hovered
-                ToolTip.text: qsTr("Look for new releases on GitHub at most once a day")
+                ToolTip.text: qsTr("Look for new releases on GitHub each time CANExplorer starts")
             }
             CheckBox {
                 text: qsTr("Pre-releases")

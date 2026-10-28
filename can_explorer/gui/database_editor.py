@@ -343,18 +343,20 @@ class DatabaseEditorController(QObject):
                 'receivers': ', '.join(signal.receivers),
                 'comment': signal.comment or '',
                 'choices': format_choices(signal.choices),
-                'multiplex': (
-                    'multiplexer'
-                    if signal.is_multiplexer
-                    else (
-                        f'when {signal.multiplexer_signal} = {", ".join(map(str, signal.multiplexer_ids))}'
-                        if signal.multiplexer_ids
-                        else ''
-                    )
-                ),
+                'is_multiplexer': signal.is_multiplexer,
+                'multiplexer_ids': ', '.join(map(str, signal.multiplexer_ids)) if signal.multiplexer_ids else '',
+                'multiplexer_signal': signal.multiplexer_signal or '',
             }
             for signal in message.signals
         ]
+
+    @pyqtProperty('QStringList', notify=selection_changed)
+    def multiplexers(self) -> List[str]:
+        """Names of the multiplexer (switch) signals of the selected message, to say which switch a signal follows."""
+        if self.lin:
+            return []
+        message = self._current_message_object()
+        return [signal.name for signal in message.signals if signal.is_multiplexer] if message else []
 
     @pyqtProperty('QVariantList', notify=selection_changed)
     def layout(self) -> List[int]:
@@ -445,48 +447,95 @@ class DatabaseEditorController(QObject):
             return 'The editor has a LIN database open; close it or open a CAN database first'
         editor = self._editor
         try:
-            frame_id, extended = int(definition['frame_id']), bool(definition.get('extended', False))
-            needed = int(definition.get('frame_length', 8))
+            int(definition['frame_id'])
         except (KeyError, TypeError, ValueError) as e:
             return f'Invalid signal: {e}'
 
         def edit():
-            message = next(
-                (
-                    message
-                    for message in editor.messages
-                    if message.frame_id == frame_id and message.is_extended_frame == extended
-                ),
-                None,
-            )
-            if message is None:
-                id_text = f'{frame_id:08X}' if extended else f'{frame_id:03X}'
-                names = {message.name for message in editor.messages}
-                name, index = f'Message_{id_text}', 2
-                while name in names:
-                    name, index = f'Message_{id_text}_{index}', index + 1
-                name = editor.add_message(name, frame_id, extended)
-                current_length = 0
-            else:
-                name, current_length = message.name, message.length
-            if needed > current_length:
-                fd = needed > 8 or (message is not None and message.is_fd)
-                length = min(length for length in (CAN_FD_LENGTHS if fd else CAN_LENGTHS) if length >= min(needed, 64))
-                name = editor.update_message(name, length=length, is_fd=fd)
-            signal = editor.add_signal(name, definition.get('name') or None)
-            fields = {
-                key: definition[key]
-                for key in ('start', 'length', 'byte_order', 'is_signed', 'scale', 'offset', 'unit', 'comment')
-                if key in definition
-            }
-            try:
-                signal = editor.update_signal(name, signal, **fields)
-            except (EditError, ValueError):
-                editor.remove_signal(name, signal)
-                raise
-            self._message, self._signal = name, signal
+            self._message, self._signal = self._add_found(editor, definition)
 
         return self._apply(edit)
+
+    def _add_found(self, editor, definition: Dict[str, Any]):
+        """Add one reverse-engineering signal (and its message if needed) to the editor; returns (message, signal)."""
+        frame_id, extended = int(definition['frame_id']), bool(definition.get('extended', False))
+        needed = int(definition.get('frame_length', 8))
+        message = next((m for m in editor.messages if m.frame_id == frame_id and m.is_extended_frame == extended), None)
+        if message is None:
+            id_text = f'{frame_id:08X}' if extended else f'{frame_id:03X}'
+            names = {m.name for m in editor.messages}
+            name, index = f'Message_{id_text}', 2
+            while name in names:
+                name, index = f'Message_{id_text}_{index}', index + 1
+            name = editor.add_message(name, frame_id, extended)
+            current_length = 0
+        else:
+            name, current_length = message.name, message.length
+        if needed > current_length:
+            fd = needed > 8 or (message is not None and message.is_fd)
+            length = min(length for length in (CAN_FD_LENGTHS if fd else CAN_LENGTHS) if length >= min(needed, 64))
+            name = editor.update_message(name, length=length, is_fd=fd)
+        fields = {
+            key: definition[key]
+            for key in ('start', 'length', 'byte_order', 'is_signed', 'scale', 'offset', 'unit', 'comment')
+            if key in definition
+        }
+        signal = None
+        try:
+            # add_signal places the signal at a default position before update_signal moves it to its real one;
+            # defer validation so the (possibly overlapping) default position is never checked, only the result.
+            with editor.deferred():
+                signal = editor.add_signal(name, definition.get('name') or None)
+                signal = editor.update_signal(name, signal, **fields)
+        except Exception as e:  # Invalid or overlapping signal (cantools validates on refresh): undo and report
+            if signal is not None:
+                editor.remove_signal(name, signal)
+            raise EditError(str(e)) from e
+        return name, signal
+
+    @pyqtSlot('QVariantList', str, result=str)
+    def add_found_signals(self, definitions: List[Dict[str, Any]], database_file: str = '') -> str:
+        """Promote reverse-engineering results in bulk: add every signal (and its message) in one undo step, into
+        the open database or, with none open, the connection's database or a new one. Returns a summary or error."""
+        if not definitions:
+            return 'No signals to promote'
+        if self._editor is None:
+            suffix = Path(database_file).suffix.lower() if database_file else ''
+            if suffix in READ_SUFFIXES:
+                error = self.open_path(database_file)
+                if error:
+                    return error
+            else:
+                self.new_database()
+        if self.lin:
+            return 'The editor has a LIN database open; close it or open a CAN database first'
+        editor = self._editor
+        added = {'signals': 0, 'messages': set(), 'skipped': 0}
+
+        def edit():
+            for definition in definitions:
+                try:
+                    int(definition['frame_id'])
+                except (KeyError, TypeError, ValueError):
+                    added['skipped'] += 1
+                    continue
+                try:
+                    name, signal = self._add_found(editor, dict(definition))
+                    added['signals'] += 1
+                    added['messages'].add(name)
+                    self._message, self._signal = name, signal
+                except (EditError, ValueError):
+                    added['skipped'] += 1
+
+        error = self._apply(edit)
+        if error:
+            return error
+        if not added['signals']:
+            return 'Could not promote any signal'
+        summary = f'Promoted {added["signals"]} signal{"s" if added["signals"] != 1 else ""} to {len(added["messages"])} message{"s" if len(added["messages"]) != 1 else ""}'
+        if added['skipped']:
+            summary += f' ({added["skipped"]} skipped)'
+        return summary
 
     @pyqtSlot(result=str)
     def remove_signal(self) -> str:

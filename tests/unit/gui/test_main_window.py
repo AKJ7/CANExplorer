@@ -70,6 +70,8 @@ def test_dashboard_pages_and_themes_render_without_warnings(window, qtbot):
         'diagnostics',
         'flash',
         'uds-scan',
+        'xcp',
+        'gmlan',
         'simulation',
         'tests',
     ]
@@ -152,6 +154,10 @@ async def test_reverse_engineering_page_renders_without_warnings(window, qapp, q
     await finished(tools.markers)
     tabs.setProperty('currentIndex', 3)
     qtbot.wait(100)
+    tabs.setProperty('currentIndex', 4)  # Related signals
+    tools.related.find(0.99, 0.5)
+    await finished(tools.related)
+    qtbot.wait(100)
     tools.analysis.use(0)
     tabs.setProperty('currentIndex', 0)
     qtbot.wait(100)
@@ -202,6 +208,17 @@ def test_database_editor_renders_without_warnings(window, qtbot, data_dir, tmp_p
         for signal in editor.signals[:3]:
             editor.select_signal(signal['name'])
             qtbot.wait(10)
+
+    # The multiplexing controls of the signal form (switch, multiplexed signal with its switch values)
+    editor.select_message('Multiplexed')
+    assert editor.multiplexers == ['Mux']
+    by_name = {signal['name']: signal for signal in editor.signals}
+    assert by_name['Mux']['is_multiplexer'] and by_name['ValueA']['multiplexer_ids'] == '0'
+    assert by_name['ValueA']['multiplexer_signal'] == 'Mux'
+    for name in ('Mux', 'ValueA', 'ValueB'):
+        editor.select_signal(name)
+        qtbot.wait(10)
+
     assert editor.add_message() == '' and editor.add_signal() == ''
     assert editor.update_message({'is_fd': True, 'length': 64}) == ''
     qtbot.wait(50)
@@ -232,6 +249,30 @@ def test_database_editor_renders_without_warnings(window, qtbot, data_dir, tmp_p
     root.setProperty('tool', '')
     qtbot.wait(30)
     assert warnings == []
+
+
+def test_multiplexer_editing_through_the_controller(window):
+    _, manager, _ = window
+    editor = manager.database_editor
+    editor.new_database()
+    assert editor.add_message() == '' and editor.update_message({'length': 8}) == ''
+
+    # A switch signal, then multiplexed signals that follow it
+    assert editor.add_signal() == ''
+    assert editor.update_signal({'name': 'Mode', 'start': 0, 'length': 2}) == ''
+    assert editor.update_signal({'is_multiplexer': True}) == ''
+    assert editor.multiplexers == ['Mode']
+    assert editor.add_signal() == ''
+    assert editor.update_signal({'name': 'Val', 'start': 8, 'length': 8, 'multiplexer_ids': '0, 1'}) == ''
+
+    rows = {signal['name']: signal for signal in editor.signals}
+    assert rows['Mode']['is_multiplexer'] and not rows['Val']['is_multiplexer']
+    assert rows['Val']['multiplexer_ids'] == '0, 1' and rows['Val']['multiplexer_signal'] == 'Mode'
+
+    # An invalid change comes back as an error string from the slot, without raising
+    assert editor.add_message() == '' and editor.update_message({'length': 8}) == ''
+    assert editor.add_signal() == '' and editor.update_signal({'start': 0, 'length': 8}) == ''
+    assert 'multiplexer' in editor.update_signal({'multiplexer_ids': '0'})
 
 
 async def test_tests_view_renders_while_running(window, qapp):
@@ -829,7 +870,7 @@ def test_combo_box_lists_show_their_texts(window, qtbot):
         texts.append(set(shown))
         popup.toQObject().setProperty('visible', False)
     assert {'Dark', 'Light'} <= texts[0]
-    assert texts[1] == {'System language', 'English', 'Deutsch'}
+    assert texts[1] == {'System language', 'English', 'Deutsch', 'Français', '中文', '日本語'}
     dialog.close()
     assert warnings == []
 

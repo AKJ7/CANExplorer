@@ -40,6 +40,8 @@ database or reopen a recent connection.
 | **J1939** | Nodes with their address claims and trouble codes, requests and sending parameter groups ([J1939 connections](j1939.md)) |
 | **CANopen** | NMT, SDO access to object dictionaries (EDS/DCF), PDOs and emergencies ([CANopen connections](canopen.md)) |
 | **Flashing** | Programming ECUs over UDS from Intel HEX, S-record or binary files ([Flashing](flashing.md), not for log replays) |
+| **XCP/CCP** | Measurement and calibration over XCP or CCP, by address or by name from an A2L file ([XCP/CCP](xcp.md)) |
+| **GMLAN** | GM/Opel (GMW3110) diagnostics over CAN, on a single-wire (SWCAN) or dual-wire bus ([GMLAN](gmlan.md)) |
 | **LIN Schedule** | LIN master schedule tables (LIN connections) |
 | **Simulation** | Simulated nodes and QML panels (not for log replays) |
 | **Tests** | Automated test scripts with verdicts and reports (not for log replays) |

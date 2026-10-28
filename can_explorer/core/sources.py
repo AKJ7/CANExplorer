@@ -28,6 +28,13 @@ class SourceError(Exception):
     pass
 
 
+# GMLAN single-wire CAN (SWCAN) runs at 33.333 kbit/s, with an optional 83.333 kbit/s high-speed mode for flashing
+GMLAN_SINGLE_WIRE_BITRATE = 33_333
+GMLAN_SINGLE_WIRE_HIGH_SPEED = 83_333
+# python-can backends whose can.Bus accepts a single_wire option to switch the transceiver
+SINGLE_WIRE_INTERFACES = frozenset({'kvaser'})
+
+
 @dataclass(frozen=True, slots=True)
 class BusConfig:
     interface: str
@@ -39,6 +46,9 @@ class BusConfig:
     # 'CAN', or 'LIN' for LIN carried as CAN frames (sllin convention, see core/lin.py)
     bus_type: str = 'CAN'
     lin_baudrate: int = 19200
+    # GMLAN single-wire CAN (SWCAN): one-wire physical layer at 33.3 kbit/s. The frames are ordinary CAN frames;
+    # the flag selects the single-wire transceiver on interfaces that have one (e.g. Kvaser) and labels the bus.
+    single_wire: bool = False
 
     @property
     def is_lin(self) -> bool:
@@ -149,6 +159,8 @@ class LiveSource:
         rate = f'{config.bitrate} bit/s'
         if config.fd:
             rate += f' (FD{f", data {config.data_bitrate} bit/s" if config.data_bitrate else ""})'
+        elif config.single_wire:
+            rate += ' (single-wire)'
         return f'{config.interface}:{config.channel} @ {rate}'
 
     @property
@@ -191,6 +203,10 @@ class LiveSource:
             options.update(bitrate=config.bitrate, fd=config.fd)
         if config.fd and config.data_bitrate and not config.is_lin:
             options['data_bitrate'] = config.data_bitrate
+        # Select the single-wire transceiver on interfaces whose python-can backend accepts the option; on others
+        # (SocketCAN, virtual) single-wire is just the 33.3 kbit/s bitrate, set here or on the link.
+        if config.single_wire and config.interface in SINGLE_WIRE_INTERFACES:
+            options['single_wire'] = True
         try:
             self._bus = can.Bus(**options)
         except Exception as e:

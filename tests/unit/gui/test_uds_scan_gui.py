@@ -170,3 +170,29 @@ async def test_uds_scan_page_renders_without_warnings(manager, channel, ecu, qap
     engine.deleteLater()
     QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete.value)
     assert warnings == []
+
+
+async def test_fuzz_mode_runs_and_opt_in(manager, channel, ecu):
+    connection = open_connection(manager, channel)
+    scan = connection.uds_scan
+    assert any(k['value'] == 'fuzz' for k in scan.kinds)
+    # Fuzzing is state-changing, so it needs the opt-in
+    assert scan.start({'kind': 'fuzz', 'count': 40}) == (
+        'This scan can change the ECU state; enable "Allow state-changing probes" to run it'
+    )
+    assert (
+        scan.start({'kind': 'fuzz', 'count': 40, 'fuzz_seed': '1', 'timeout_ms': 150, 'allow_state_changing': True})
+        == ''
+    )
+    await wait_until(lambda: not scan.running)
+    assert scan.state == 'done' and scan.scanned >= 40
+    # The hardened simulated ECU never hangs, so no unresponsive anomaly is reported
+    assert not any(row['category'] == 'unresponsive' for row in scan.results)
+
+
+async def test_fuzz_mode_validates_seed(manager, channel, ecu):
+    connection = open_connection(manager, channel)
+    scan = connection.uds_scan
+    assert 'reproducibility seed must be a number' in scan.start(
+        {'kind': 'fuzz', 'fuzz_seed': 'abc', 'allow_state_changing': True}
+    )

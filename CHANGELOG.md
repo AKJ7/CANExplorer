@@ -6,7 +6,70 @@ All notable changes to CANExplorer are documented in this file. The format follo
 CANExplorer follows [semantic versioning](https://semver.org/) from 1.0.0 on. Between `0.0.1` and `1.0.0`, the
 development stages are listed by date and commit, newest first.
 
-## [Unreleased]
+## [1.3.0] – 2026-10-27
+
+### Added
+
+- **GMLAN single-wire CAN (SWCAN)**: connections can open a GM single-wire low-speed bus at 33.3 kbit/s — tick
+  **Single-wire CAN (GMLAN)** in the new-connection dialog. It sets the bitrate and selects the single-wire
+  transceiver on interfaces that have one (e.g. Kvaser); on SocketCAN and the virtual interface it is the 33.3
+  kbit/s bitrate. The frames are ordinary CAN frames, so the whole application works on a single-wire bus.
+- **GMLAN diagnostics** (GMW3110): a **GMLAN** page on each CAN connection speaking the GM/Opel diagnostic
+  protocol over ISO-TP — one-byte data identifiers (ReadDataByIdentifier 0x1A / WriteDataByIdentifier 0x3B),
+  InitiateDiagnosticOperation, DisableNormalCommunication, ReturnToNormalMode, ReportProgrammedState, security
+  access, ReadDiagnosticInformation (DTCs as `P0123-04`) and ClearDiagnosticInformation, TesterPresent keep-alive
+  and a raw-request field. A simulated GMLAN ECU (`can_explorer.core.simulation.GmlanEcuSimulator`) allows trying
+  it without hardware; scripts use `can_explorer.core.gmlan` (`GmlanClient`).
+- **French, Chinese and Japanese translations** of the whole interface, selectable under **Settings → Language**
+  (or following the system language). Every view is covered — the dashboard, trace, signals, bus health, reverse
+  engineering, the database editor, diagnostics, flashing, UDS/XCP, DoIP, J1939, CANopen, EtherCAT, the bus
+  gateway, physical I/O, simulation and tests — along with the menus, dialogs and settings. The existing German
+  translation was completed to the same coverage. Texts without a translation fall back to English.
+
+- **XCP/CCP measurement & calibration**: a page on each CAN connection that connects to an ECU's XCP (ASAM MCD-1
+  XCP) or CCP slave and reads measurements live and reads or writes calibration values — by memory address, or by
+  name in physical units from a loaded **A2L** file (ASAM MCD-2 MC: measurements and scalar characteristics with
+  IDENTICAL/LINEAR/RAT_FUNC conversions and the standard data types). Simulated XCP and CCP slaves
+  (`can_explorer.core.xcp`, `can_explorer.core.ccp`) and `examples/calibration/example.a2l` allow trying it and
+  testing without hardware; scripts use `XcpClient`/`CcpClient` and `can_explorer.core.a2l`.
+
+- **UDS fuzzing**: a *Fuzz* mode on the UDS discovery page sends mutated requests (bit flips, boundary bytes,
+  truncation, extension) from seed requests or random ones, and flags the anomalies: a positive response to a
+  malformed request, an unusual rejection, and — via a periodic TesterPresent liveness check — the ECU going
+  unresponsive (a possible hang or crash), on which the run stops. Reproducible from a seed number. Needs the
+  state-changing opt-in. Scripts use `can_explorer.core.uds_fuzz.fuzz`.
+- **Related signals** (reverse engineering): groups fields that carry the same signal across messages — the same
+  quantity re-broadcast by a gateway, or a scaled or lagged copy — by turning each value field into a reference
+  and correlating the others with it. Each group gives every member's factor, offset, lag and correlation to the
+  group's reference, to label unknowns from an already-identified one. Scripts use
+  `can_explorer.core.reverse.related.signal_groups`.
+- **Promote to database** (reverse engineering): a button on the automatic analysis panel that turns every found
+  field (except constant bits) into a signal in the database editor in one step — creating each message as needed
+  and recording each field's kind, multiplexer and details as the signal comment — ready to review and save as a
+  DBC. Where interpretations of the same bits compete, the most confident one wins, so the result has no
+  overlapping signals. Scripts use `AnalysisController.found_signals` with
+  `DatabaseEditorController.add_found_signals`.
+- **Multiplexer editing** in the database editor: a signal's **Multiplexing** can be set to *Multiplexer* (the
+  switch) or *Multiplexed* with its switch values (e.g. `0, 1, 3`); when a message has several multiplexers, which
+  switch a signal follows is chosen too. The switch cannot be dropped while signals follow it, and renaming it
+  keeps them pointing at it. Scripts use `DatabaseEditor.update_signal` with `is_multiplexer`, `multiplexer_ids`
+  and `multiplexer_signal`.
+
+### Changed
+
+- New application logo: a diamond mark used for the window, desktop entry, installers and documentation (rendered
+  from `docs/assets/logo.svg` by `tools/make_icons.py`). In the interface — the sidebar, welcome page and about
+  dialog — it is drawn in the current theme's accent colour, so the logo follows the selected theme.
+- The startup update check now runs every time CANExplorer starts (a few seconds after the window opens), instead
+  of at most once a day, so a new release is noticed on the next launch. **Preferences → Updates → Check at start**
+  still turns it off.
+
+### Fixed
+
+- The *update available* dialog no longer clips its content (release notes, hint and buttons) in a short window:
+  it is capped to the window height and the release-notes area scrolls when there is not enough room.
+- The *unsaved database changes* and *discard changes* dialogs no longer run their message off the edge of the
+  dialog: the width is capped and the message wraps, so a long database name stays inside the dialog.
 
 ## [1.2.0] – 2026-10-21
 

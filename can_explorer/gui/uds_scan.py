@@ -5,14 +5,14 @@ from PyQt6.QtCore import QObject, QTimer, pyqtProperty, pyqtSignal, pyqtSlot
 
 from can_explorer.core.frames import format_hex, parse_hex_bytes
 from can_explorer.core.uds import UdsClient, did_name, service_name
-from can_explorer.core import uds_scan
+from can_explorer.core import uds_fuzz, uds_scan
 from can_explorer.sys.log_handler import get_logger
 
 logger = get_logger(__name__)
 
 MAX_RESULTS = 2000  # Rows kept for the table; the counters still count every probe
 REFRESH_MS = 100
-STATE_CHANGING_KINDS = (uds_scan.SWEEP,)  # Kinds the GUI only runs once the user allows state changes
+STATE_CHANGING_KINDS = (uds_scan.SWEEP, uds_scan.FUZZ)  # Kinds the GUI only runs once state changes are allowed
 
 
 def _hex(text: str, maximum: int, what: str, default: Optional[int] = None) -> int:
@@ -100,6 +100,7 @@ class UdsScanController(QObject):
             {'value': uds_scan.SUBFUNCTIONS, 'name': 'Subfunctions of a service'},
             {'value': uds_scan.ROUTINES, 'name': 'Routines (0x31)'},
             {'value': uds_scan.SWEEP, 'name': 'Sweep one byte of a request'},
+            {'value': uds_scan.FUZZ, 'name': 'Fuzz (mutate requests)'},
         ]
 
     @pyqtProperty(str, notify=changed)
@@ -193,6 +194,19 @@ class UdsScanController(QObject):
                 client, template, position, start, end, width, delay=delay, stop=self._stop
             )
             plan['total'] = end - start + 1
+        elif kind == uds_scan.FUZZ:
+            seeds = uds_fuzz.parse_seeds(str(options.get('template') or ''))
+            count = max(1, int(options.get('count', 500) or 500))
+            fuzz_seed_text = str(options.get('fuzz_seed') or '').strip()
+            try:
+                fuzz_seed = int(fuzz_seed_text) if fuzz_seed_text else None
+            except ValueError:
+                raise ValueError(f'The reproducibility seed must be a number: {fuzz_seed_text!r}') from None
+            liveness = max(0, int(options.get('liveness_every', uds_fuzz.DEFAULT_LIVENESS_EVERY) or 0))
+            plan['maker'] = lambda client: uds_fuzz.fuzz(
+                client, seeds, count, seed=fuzz_seed, delay=delay, liveness_every=liveness, stop=self._stop
+            )
+            plan['total'] = count
         else:
             raise ValueError(f'Unknown scan kind {kind!r}')
         return plan

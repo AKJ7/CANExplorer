@@ -62,10 +62,7 @@ ScrollView {
         RowLayout {
             spacing: 20
             Layout.topMargin: 12
-            Image {
-                source: "images/logo.png"
-                sourceSize: Qt.size(176, 176)
-                mipmap: true
+            Logo {
                 Layout.preferredWidth: 88
                 Layout.preferredHeight: 88
             }

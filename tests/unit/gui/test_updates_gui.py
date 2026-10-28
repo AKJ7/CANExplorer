@@ -96,6 +96,22 @@ async def test_check_skip_and_install(qapp, server, settings, tmp_path, monkeypa
     assert controller.state == 'current' and controller.version == ''
 
 
+def test_check_at_startup_runs_on_every_start(qapp, settings, monkeypatch):
+    from can_explorer.gui import updates as updates_gui
+
+    scheduled = []
+    monkeypatch.setattr(updates_gui.QTimer, 'singleShot', lambda ms, callback: scheduled.append((ms, callback)))
+    controller = UpdateController(settings, current='1.0.0')
+
+    controller.check_at_startup()
+    controller.check_at_startup()  # A later restart: still scheduled, with no once-a-day throttle suppressing it
+    assert len(scheduled) == 2 and scheduled[0][0] == updates_gui.STARTUP_DELAY_MS
+
+    controller.set_check_at_start(False)
+    controller.check_at_startup()  # Turned off in the preferences: no check is scheduled
+    assert len(scheduled) == 2
+
+
 async def test_errors_and_settings(qapp, settings, monkeypatch):
     monkeypatch.setenv('CANEXPLORER_UPDATE_URL', 'http://127.0.0.1:1/releases.json')  # Nothing listens there
     controller = UpdateController(settings, current='1.0.0')

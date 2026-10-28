@@ -35,6 +35,7 @@ SUBFUNCTIONS = 'subfunctions'
 DATA_IDENTIFIERS = 'dids'
 ROUTINES = 'routines'
 SWEEP = 'sweep'
+FUZZ = 'fuzz'
 
 # The service identifiers worth probing by default: the ISO 14229 request SIDs CANExplorer knows, read-only ones
 # first. A full scan can still try every SID 0x00–0xFF.
@@ -71,6 +72,8 @@ _ABSENT_CODES = {
     DATA_IDENTIFIERS: (0x11, 0x31),
     ROUTINES: (0x11, 0x31),
     SWEEP: (0x11,),
+    # A fuzzer sends malformed and unsupported requests, so a well-formed rejection of one is the boring case
+    FUZZ: (0x11, 0x12, 0x13, 0x31, 0x7E, 0x7F),
 }
 
 # Categories, most interesting first (the GUI colours and filters by these)
@@ -78,15 +81,17 @@ POSITIVE = 'positive'
 SECURITY = 'security'
 CONDITIONS = 'conditions'
 REJECTED = 'rejected'
+UNRESPONSIVE = 'unresponsive'  # Fuzzing: no answer where one was expected — a possible hang or crash
 ABSENT = 'absent'
 NO_RESPONSE = 'no-response'
-_INTERESTING = (POSITIVE, SECURITY, CONDITIONS, REJECTED)
+_INTERESTING = (POSITIVE, SECURITY, CONDITIONS, REJECTED, UNRESPONSIVE)
 
 
 def classify(kind: str, request: bytes, response: Optional[bytes], error: Optional[str]) -> str:
-    """One of POSITIVE, SECURITY, CONDITIONS, REJECTED, ABSENT, NO_RESPONSE for a probe's outcome."""
+    """One of POSITIVE, SECURITY, CONDITIONS, REJECTED, UNRESPONSIVE, ABSENT, NO_RESPONSE for a probe's outcome."""
     if error is not None or response is None:
-        return NO_RESPONSE
+        # For a fuzzer a missing answer is an anomaly worth flagging; for a scan it just means "nothing there"
+        return UNRESPONSIVE if kind == FUZZ else NO_RESPONSE
     if response and request and response[0] == request[0] + 0x40:
         return POSITIVE
     if len(response) >= 3 and response[0] == NEGATIVE_RESPONSE:

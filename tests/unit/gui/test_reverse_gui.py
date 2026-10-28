@@ -252,6 +252,31 @@ async def test_automatic_analysis(manager, data_dir, tmp_path):
     assert analysis.results == [] and reverse.analyses == []
 
 
+async def test_promote_analysis_results_to_a_database(manager, data_dir, tmp_path):
+    connection, _ = await replay(manager, data_dir, tmp_path)
+    analysis = connection.reverse.analysis
+    analysis.run(False)
+    await finished(analysis)
+
+    definitions = analysis.found_signals
+    assert definitions  # Every found field except constant bits, as signal definitions
+    # Promote in one step into a new database; overlapping interpretations are resolved, not rejected
+    editor = manager.database_editor
+    summary = editor.add_found_signals(definitions, '')
+    assert summary.startswith(f'Promoted {len(definitions)} signal')
+    assert len(editor.messages) == len({(d['frame_id'], d['extended']) for d in definitions})
+
+    # The result is a valid database that saves and reloads as a DBC
+    out = tmp_path / 'reversed.dbc'
+    assert editor.save_as(QUrl.fromLocalFile(str(out))) == ''
+    import cantools
+
+    reloaded = cantools.database.load_file(str(out))
+    assert sum(len(message.signals) for message in reloaded.messages) == len(definitions)
+
+    assert manager.database_editor.add_found_signals([], '') == 'No signals to promote'
+
+
 async def test_reference_signals(manager, data_dir, tmp_path):
     connection, traffic = await replay(manager, data_dir, tmp_path)
     reference = connection.reverse.reference
@@ -354,3 +379,96 @@ def test_multiplexed_fields_are_saved_in_workspaces(manager, tmp_path):
     assert manager.open_workspace(QUrl.fromLocalFile(str(workspace))) == ''
     restored = manager.connections[-1].session.signals
     assert restored.multiplexers == {key: (multiplexer, 2)} and restored.fields[key] == field
+
+
+async def test_bits_are_cached_and_invalidated_on_selection(manager, channel, peer):
+    """The QML grid reads `bits` once per byte row; it must be computed once per change (a naive recompute froze
+    the GUI on wide CAN FD frames), and switching identifiers must invalidate it so the length is always right."""
+    connection = open_connection(manager, channel)
+    for i in range(20):
+        send(peer, 0x300, [i, i, i, i, i, i, i, i])  # 8 bytes -> 64 bits
+        send(peer, 0x400, [i, i])  # 2 bytes -> 16 bits
+    await wait_until(lambda: connection.session.trace.total == 40)
+    tools = connection.reverse
+    tools.set_visible(True)
+    tools._timer.stop()  # No periodic refresh interfering with the identity check
+
+    tools.select('300')
+    first = tools.bits
+    assert len(first) == 64
+    assert tools.bits is first  # Cached: not rebuilt on every access
+
+    tools.select('400')  # Switching must invalidate the cache, not return the stale 64-bit list
+    assert len(tools.bits) == 16
+    tools.select('300')
+    assert len(tools.bits) == 64
+
+
+async def test_selecting_an_identifier_does_not_reset_the_id_list(manager, channel, peer):
+    """Selecting must not re-notify the identifier list, or Qt would reset that list's model from inside its own
+    delegate's onClicked (which called select), destroying the delegate mid-handler and crashing."""
+    connection = open_connection(manager, channel)
+    for i in range(10):
+        send(peer, 0x100, [i])
+        send(peer, 0x200, [i, i])
+    await wait_until(lambda: connection.session.trace.total == 20)
+    tools = connection.reverse
+    tools.set_visible(True)
+    tools._timer.stop()
+
+    fired = {'identifiers': 0, 'changed': 0}
+    tools.identifiers_changed.connect(lambda: fired.__setitem__('identifiers', fired['identifiers'] + 1))
+    tools.changed.connect(lambda: fired.__setitem__('changed', fired['changed'] + 1))
+    before = tools.identifiers
+
+    tools.select('200')
+    assert fired['identifiers'] == 0  # The id list is not reset by a selection
+    assert fired['changed'] >= 1  # But the bit grid of the selected id does update
+    assert tools.identifiers == before
+
+
+async def test_id_list_updates_in_place_without_resetting(manager, channel, peer):
+    """The id list must not be rebuilt on every refresh — that destroyed the delegates under the cursor, so a
+    click landing during a refresh was lost and could crash. Stat updates change rows in place; new ids insert."""
+    connection = open_connection(manager, channel)
+    for i in range(10):
+        send(peer, 0x100, [i])
+    await wait_until(lambda: connection.session.trace.total == 10)
+    tools = connection.reverse
+    tools.set_visible(True)
+    tools._timer.stop()
+    model = tools.identifier_model
+    resets, inserts, changes = [], [], []
+    model.modelAboutToBeReset.connect(lambda: resets.append(1))
+    model.rowsInserted.connect(lambda *a: inserts.append(1))
+    model.dataChanged.connect(lambda *a: changes.append(1))
+    assert model.rowCount() == 1
+
+    for i in range(10, 20):  # More frames of the same id: rows update in place
+        send(peer, 0x100, [i])
+    await wait_until(lambda: connection.session.trace.total == 20)
+    tools._refresh()
+    assert changes and not resets and not inserts
+
+    send(peer, 0x200, [1, 2])  # A new id appears: it is inserted, still no full reset
+    await wait_until(lambda: connection.session.trace.total == 21)
+    tools._refresh()
+    assert inserts and not resets and model.rowCount() == 2
+
+
+async def test_id_list_filtering(manager, channel, peer):
+    connection = open_connection(manager, channel)
+    for i in range(5):
+        send(peer, 0x100, [i])
+        send(peer, 0x201, [i])
+        send(peer, 0x202, [i])
+    await wait_until(lambda: connection.session.trace.total == 15)
+    tools = connection.reverse
+    tools.set_visible(True)
+    tools._timer.stop()
+    model = tools.identifier_model
+    assert model.rowCount() == 3
+    tools.set_id_search('20')
+    assert model.rowCount() == 2  # 201 and 202
+    tools.set_id_search('')
+    assert model.rowCount() == 3

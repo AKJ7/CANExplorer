@@ -6,8 +6,9 @@ result and saves it in the format of the file extension.
 
 import re
 from collections import OrderedDict
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
 
 from cantools.database.can import Database, Message, Node, Signal
 
@@ -74,11 +75,21 @@ def _names(value: Any) -> List[str]:
     return [name.strip() for name in value or [] if name and name.strip()]
 
 
+def _mux_ids(value: Any) -> Optional[List[int]]:
+    """Switch values of a multiplexed signal, from a list or text such as '0, 1, 3' (empty: not multiplexed)."""
+    if value in (None, ''):
+        return None
+    parts = re.split(r'[,\s]+', value.strip()) if isinstance(value, str) else list(value)
+    ids = sorted({_number(part, 'Multiplexer value', integer=True) for part in parts if part not in (None, '')})
+    return ids or None
+
+
 class DatabaseEditor:
     def __init__(self, path: Optional[str | Path] = None):
         self.path: Optional[Path] = None
         self.warnings: List[str] = []
         self.dirty = False
+        self._defer = 0  # >0 while a deferred() block batches changes and holds back validation
         if path is None:
             self.database = Database()
         else:
@@ -130,10 +141,25 @@ class DatabaseEditor:
     # Changes
 
     def _changed(self, message: Optional[Message] = None) -> None:
+        self.dirty = True
+        if self._defer:  # Inside a deferred() block: validate once when it ends, not on every step
+            return
         if message is not None:
             message.refresh(strict=False)
         self.database.refresh()
-        self.dirty = True
+
+    @contextmanager
+    def deferred(self) -> Iterator[None]:
+        """Batch several changes, validating only the final result when the block ends. A multi-step edit (e.g.
+        adding a signal, which is placed at a default position and then moved) can pass through intermediate states
+        that would not validate on their own; this holds strict validation back until the edit is complete."""
+        self._defer += 1
+        try:
+            yield
+        finally:
+            self._defer -= 1
+        if not self._defer:
+            self._changed()
 
     @staticmethod
     def _check_name(name: str, what: str) -> str:
@@ -229,7 +255,8 @@ class DatabaseEditor:
 
     def update_signal(self, message_name: str, signal_name: str, **fields: Any) -> str:
         """Change signal properties: name, start, length, byte_order, is_signed, scale, offset, minimum, maximum,
-        unit, initial, receivers, comment, choices (dict or text). Returns the (possibly new) name."""
+        unit, initial, receivers, comment, choices (dict or text) and the multiplexing (is_multiplexer,
+        multiplexer_ids, multiplexer_signal). Returns the (possibly new) name."""
         message = self.message(message_name)
         signal = self.signal(message_name, signal_name)
         new_name = self._check_name(fields['name'], 'Signal') if 'name' in fields else signal.name
@@ -262,6 +289,7 @@ class DatabaseEditor:
         initial = signal.raw_initial
         if 'initial' in fields:
             initial = _number(fields['initial'], 'Initial value', allow_none=True)
+        is_multiplexer, multiplexer_ids, multiplexer_signal = self._resolve_multiplexing(message, signal, fields)
 
         signal.name, signal.start, signal.length, signal.byte_order = new_name, start, length, byte_order
         signal.is_signed = bool(fields.get('is_signed', signal.is_signed))
@@ -273,10 +301,60 @@ class DatabaseEditor:
         if 'comment' in fields:
             signal.comment = fields['comment'] or None
         signal.receivers[:] = receivers
+        if is_multiplexer and new_name != signal_name:  # Keep the multiplexed signals pointing at the renamed switch
+            for other in message.signals:
+                if other.multiplexer_signal == signal_name:
+                    other.multiplexer_signal = new_name
+        signal.is_multiplexer, signal.multiplexer_ids, signal.multiplexer_signal = (
+            is_multiplexer,
+            multiplexer_ids,
+            multiplexer_signal,
+        )
         self._add_nodes(receivers)
         message.signals.sort(key=lambda candidate: candidate.start)
         self._changed(message)
         return new_name
+
+    @staticmethod
+    def _resolve_multiplexing(
+        message: Message, signal: Signal, fields: Dict[str, Any]
+    ) -> Tuple[bool, Optional[List[int]], Optional[str]]:
+        """Validate and resolve the multiplexing fields of a signal: whether it is the message's multiplexer switch,
+        or a multiplexed signal present only for some switch values (and which switch it follows)."""
+        is_multiplexer = bool(fields.get('is_multiplexer', signal.is_multiplexer))
+        if 'multiplexer_ids' in fields:
+            multiplexer_ids = _mux_ids(fields['multiplexer_ids'])
+        else:
+            multiplexer_ids = list(signal.multiplexer_ids) if signal.multiplexer_ids else None
+        requested_signal = fields.get('multiplexer_signal', signal.multiplexer_signal) or None
+
+        if is_multiplexer and multiplexer_ids is not None:
+            raise EditError('A signal cannot be both the multiplexer and multiplexed')
+        others = [s for s in message.signals if s.name != signal.name]
+        if signal.is_multiplexer and not is_multiplexer:  # Giving up the multiplexer role
+            dependents = [s.name for s in others if s.multiplexer_signal == signal.name]
+            if dependents:
+                raise EditError(f'{signal.name} is the multiplexer for {", ".join(dependents)}; change those first')
+        if is_multiplexer:
+            existing = next((s.name for s in others if s.is_multiplexer), None)
+            if existing is not None:
+                raise EditError(f'{message.name} already has a multiplexer signal ({existing})')
+            return True, None, None
+        if multiplexer_ids is None:
+            return False, None, None
+
+        switches = [s.name for s in others if s.is_multiplexer]
+        if requested_signal is not None:
+            if requested_signal not in switches:
+                raise EditError(f'{message.name} has no multiplexer signal named {requested_signal}')
+            multiplexer_signal = requested_signal
+        elif len(switches) == 1:
+            multiplexer_signal = switches[0]
+        elif not switches:
+            raise EditError(f'{message.name} has no multiplexer signal; make one signal the multiplexer first')
+        else:
+            raise EditError(f'{message.name} has several multiplexer signals; choose which one this follows')
+        return False, multiplexer_ids, multiplexer_signal
 
     def remove_signal(self, message_name: str, signal_name: str) -> None:
         message = self.message(message_name)

@@ -7,7 +7,12 @@ import pytest
 from PyQt6.QtCore import QUrl
 from PyQt6.QtGui import QColor, QImage, QPainter
 
-from can_explorer.core.simulation import LinSlaveSimulator, UdsEcuSimulator, UdsServer
+from can_explorer.core.simulation import (
+    GmlanEcuSimulator,
+    LinSlaveSimulator,
+    UdsEcuSimulator,
+    UdsServer,
+)
 from can_explorer.core.session import BusSession
 from can_explorer.core.sources import BusConfig, LiveSource
 from can_explorer.gui.connection_manager import ConnectionManager
@@ -225,6 +230,54 @@ async def test_diagnostics_against_simulated_ecu(manager, channel, tmp_path):
     assert 'out of range' in diagnostics.set_addressing('800', '7E9', False, '')
     diagnostics.clear_history()
     assert diagnostics.history == []
+    simulator.stop()
+    ecu_session.stop()
+
+
+async def test_gmlan_against_simulated_ecu(manager, channel, tmp_path):
+    connection = open_connection(manager, channel, single_wire=True)
+    source = connection.session.source
+    assert source.config.single_wire and source.config.bitrate == 33_333
+    assert 'single-wire' in source.description
+
+    ecu_session = BusSession(LiveSource(BusConfig('virtual', channel, bitrate=33_333, single_wire=True)))
+    ecu_session.start()
+    simulator = GmlanEcuSimulator(ecu_session)
+    simulator.start()
+    gmlan = connection.gmlan
+
+    async def run(start):
+        assert start() == ''
+        await wait_until(lambda: not gmlan.busy)
+        return gmlan.history[-1]
+
+    assert gmlan.set_addressing('241', '641', False) == ''
+    entry = await run(lambda: gmlan.read_did('90'))
+    assert entry['positive'] and entry['response'].startswith('5A 90')
+    assert gmlan.raw_request('zz') != ''
+    assert (await run(lambda: gmlan.write_did('90', '41 42')))['description'] == 'DID 0x90 written'
+    assert (await run(lambda: gmlan.initiate_operation(0x02)))['positive']
+    assert (await run(gmlan.disable_normal_communication))['positive']
+    assert (await run(gmlan.return_to_normal))['positive']
+
+    key_file = tmp_path / 'key.py'
+    key_file.write_text('def compute_key(level, seed):\n    return bytes(b ^ 0xFF for b in seed)\n')
+    assert gmlan.security_access('1') == 'Choose a key file first'
+    gmlan.set_key_file(QUrl.fromLocalFile(str(key_file)))
+    assert (await run(lambda: gmlan.security_access('1')))['description'] == 'Security level 1 unlocked'
+
+    await run(gmlan.read_dtcs)
+    assert gmlan.dtcs[0] == {'code': 'P0123-04', 'status': '0x60'}
+    await run(gmlan.clear_dtcs)
+    assert gmlan.dtcs == []
+
+    gmlan.toggle_tester_present()
+    assert gmlan.tester_present
+    gmlan.toggle_tester_present()
+    assert not gmlan.tester_present
+    assert 'out of range' in gmlan.set_addressing('800', '641', False)
+    gmlan.clear_history()
+    assert gmlan.history == []
     simulator.stop()
     ecu_session.stop()
 
