@@ -26,6 +26,7 @@ layer, or [DoIP](doip.md) over Ethernet), so set the ECU's identifiers or addres
 | **Subfunctions** | A service with each subfunction `00`–`7F` | the subfunction is accepted or rejected for a reason other than *subFunctionNotSupported* |
 | **Routines** | RoutineControl (0x31) for each routine identifier | the routine exists (by default with *request results*, which starts nothing) |
 | **Sweep one byte** | A request template with one byte (or two) replaced by each value in the range | always listed when the answer is interesting; a free-form fuzz of a known request |
+| **Fuzz** | Mutated requests (bit flips, boundary bytes, truncation, extension) from seed requests or random ones | a positive response to a malformed request, an unusual rejection, or the ECU going unresponsive |
 
 Each found item is coloured by its answer:
 
@@ -35,14 +36,28 @@ Each found item is coloured by its answer:
   *serviceNotSupportedInActiveSession*). **Enter session** changes the session before scanning to reach these.
 - **rejected** (grey): any other negative response, which still proves the service or identifier is handled (for
   example *incorrectMessageLengthOrInvalidFormat* to a bare service probe).
+- **no response (hang?)** (red, fuzzing only): the ECU stopped answering — a periodic liveness check (TesterPresent)
+  no longer gets a reply, which may mean a hang or a crash. Fuzzing stops there so the cause can be found.
 
 Items that answer *serviceNotSupported* or *requestOutOfRange*, and those that do not answer at all, are counted
 but not listed.
 
+## Fuzzing
+
+**Fuzz** is a robustness test: it mutates requests and sends many of them to see how the ECU copes. Give it one or
+more **Seeds** (requests to mutate, `;` separated; empty fuzzes random requests from the known services), the number
+of **Iterations** and a **Seed** number that makes the run reproducible — so a request that upset the ECU can be
+found again by re-running with the same number. Every so often it checks the ECU still answers a TesterPresent; if
+it does not, the run reports *no response (hang?)* and stops.
+
+Fuzzing sends arbitrary, state-changing requests, so it needs **Allow state-changing probes** and is for ECUs you
+own or are authorised to test, on a bench, with the vehicle stationary and the power supply stable.
+
 ## Running a scan
 
 1. Choose the **Scan** and its **Range** (hexadecimal). For subfunctions, set the **Service**; for routines, the
-   control type; for a sweep, the request **Template**, the **Byte** to replace and its width.
+   control type; for a sweep, the request **Template**, the **Byte** to replace and its width; for a fuzz, the
+   **Seeds**, **Iterations** and reproducibility **Seed**.
 2. Optionally **Enter session** (e.g. *extended*) before scanning, raise the **Per-request timeout** for a slow
    ECU, or add a **delay** between requests to go easier on the bus.
 3. **Start**. The progress shows how many values were probed and how many were found; **Stop** ends it early.

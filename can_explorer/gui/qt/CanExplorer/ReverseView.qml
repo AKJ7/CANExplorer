@@ -10,6 +10,9 @@ SplitView {
     required property var connection
     readonly property var tools: connection.reverse
     property int anchorBit: -1  // First bit of a selection in the grid; Shift+click selects up to another bit
+    // A placeholder for a bit cell whose data is momentarily out of range (while the grid shrinks for a smaller
+    // identifier), so its bindings never dereference undefined
+    readonly property var emptyBit: ({ bit: 0, value: 0, masked: true, flips: 0, ones: 0, field: false, hit: false, recent: 0, age: -1 })
     property string status: ""
 
     signal showPage(string page)
@@ -51,43 +54,44 @@ SplitView {
                 id: idFilter
                 placeholderText: qsTr("Search ID or name")
                 Layout.fillWidth: true
+                onTextChanged: root.tools.set_id_search(text)
             }
             CheckBox {
                 id: hitsOnly
                 visible: root.tools.notched
                 text: qsTr("Only changed since the notch")
+                onToggled: root.tools.set_hits_only(checked)
             }
             ListView {
                 id: idList
+                objectName: "reverseIdList"
                 clip: true
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 ScrollBar.vertical: ScrollBar {}
-                model: root.tools.identifiers.filter(item => {
-                    const search = idFilter.text.toLowerCase()
-                    return (!search || item.id.toLowerCase().includes(search) || item.name.toLowerCase().includes(search))
-                        && (!hitsOnly.checked || !root.tools.notched || item.hits > 0 || item.new)
-                })
+                // A real model updated in place: the list is not rebuilt on every refresh, so clicking an entry
+                // while traffic flows always selects it and never destroys the delegate mid-click
+                model: root.tools.identifier_model
                 delegate: ItemDelegate {
                     id: idItem
-                    required property var modelData
+                    required property var model
                     width: idList.width
-                    highlighted: modelData.id === root.tools.selected
-                    onClicked: root.tools.select(modelData.id)
+                    highlighted: idItem.model.id === root.tools.selected
+                    onClicked: root.tools.select(idItem.model.id)
                     contentItem: RowLayout {
                         spacing: 8
                         ColumnLayout {
                             spacing: 0
                             Layout.fillWidth: true
                             Label {
-                                text: idItem.modelData.id
+                                text: idItem.model.id
                                 color: Theme.text
                                 font.family: "monospace"
                                 font.bold: true
                             }
                             Label {
-                                text: [idItem.modelData.name, qsTr("%1 frames").arg(idItem.modelData.count),
-                                       idItem.modelData.cycle].filter(t => t).join(" · ")
+                                text: [idItem.model.name, qsTr("%1 frames").arg(idItem.model.count),
+                                       idItem.model.cycle].filter(t => t).join(" · ")
                                 color: Theme.muted
                                 font.pixelSize: 11
                                 elide: Text.ElideRight
@@ -95,13 +99,13 @@ SplitView {
                             }
                         }
                         Pill {
-                            visible: idItem.modelData.new
+                            visible: idItem.model.new
                             text: qsTr("new")
                             tint: Theme.success
                         }
                         Pill {
-                            visible: idItem.modelData.hits > 0
-                            text: idItem.modelData.hits === 1 ? qsTr("1 bit") : qsTr("%1 bits").arg(idItem.modelData.hits)
+                            visible: idItem.model.hits > 0
+                            text: idItem.model.hits === 1 ? qsTr("1 bit") : qsTr("%1 bits").arg(idItem.model.hits)
                             tint: Theme.warning
                             ToolTip.visible: hovered
                             ToolTip.text: qsTr("Bits that changed since the notch")
@@ -130,6 +134,7 @@ SplitView {
             TabButton { text: qsTr("Automatic analysis") }
             TabButton { text: qsTr("Reference signals") }
             TabButton { text: qsTr("Markers") }
+            TabButton { text: qsTr("Related signals") }
         }
 
         StackLayout {
@@ -244,11 +249,16 @@ SplitView {
                                             }
                                         }
                                         Repeater {
-                                            model: root.tools.bits.slice(byteRow.index * 8, byteRow.index * 8 + 8)
+                                            // A fixed count with indexed access into the cached bits list. Slicing
+                                            // returned a new array on every refresh, recreating the cells — so a
+                                            // cell clicked while a refresh was due (selecting a bit itself triggers
+                                            // one) was destroyed mid-click and crashed. A constant model keeps the
+                                            // cells; only their bindings re-evaluate.
+                                            model: 8
                                             Rectangle {
                                                 id: cell
-                                                required property var modelData
-                                                readonly property var bit: modelData
+                                                required property int index
+                                                readonly property var bit: root.tools.bits[byteRow.index * 8 + cell.index] || root.emptyBit
                                                 width: 38
                                                 height: 28
                                                 radius: 5
@@ -495,6 +505,7 @@ SplitView {
 
             ReverseAnalysisPanel {
                 tools: root.tools
+                connection: root.connection
                 onFieldUsed: tabBar.currentIndex = 0
                 onPlotted: root.showPage("signals")
                 onMessage: text => root.showStatus(text)
@@ -507,6 +518,12 @@ SplitView {
                 onMessage: text => root.showStatus(text)
             }
             ReverseMarkersPanel {
+                tools: root.tools
+                onFieldUsed: tabBar.currentIndex = 0
+                onPlotted: root.showPage("signals")
+                onMessage: text => root.showStatus(text)
+            }
+            ReverseRelatedPanel {
                 tools: root.tools
                 onFieldUsed: tabBar.currentIndex = 0
                 onPlotted: root.showPage("signals")

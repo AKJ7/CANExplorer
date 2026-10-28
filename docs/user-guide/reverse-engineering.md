@@ -18,6 +18,7 @@ Its tabs:
 | **Automatic analysis** | Checksums, counters, multiplexers, values, states and flags of every identifier, found automatically |
 | **Reference signals** | The fields following a known value: a database signal, a CSV file (e.g. GPS) or OBD-II values |
 | **Markers** | The bits changing each time you mark that something happened |
+| **Related signals** | Fields carrying the same signal on several messages, grouped |
 
 The view works on live buses and on replayed log files. The bit statistics start when it is first opened,
 including the frames already in the trace, and follow the bus from then on; **Clear** in the trace toolbar and
@@ -124,6 +125,12 @@ order giving the more plausible fields is kept.
 **Use** shows a field in the **Bits** tab (for a multiplexed field with its condition, see below); **Plot** plots it
 on the Signals page right away.
 
+**Promote to database** turns the whole result into a draft database in one step: every found field except the
+constant bits becomes a signal in the [database editor](database-editor.md), each message is created as needed, and
+each field's kind, multiplexer condition and details are kept as the signal's comment. Where two interpretations
+claim the same bits, the more confident one is used, so the signals never overlap. It is a starting point to
+review — rename the signals, set units and scaling, drop what is noise — and then **Save as** a `.dbc` file.
+
 ## Reference signals
 
 When you know a value from elsewhere, the field carrying it can be found by comparing:
@@ -167,6 +174,25 @@ are not the only bits changing:
 ![Markers: the door switch changed at all five markers and never otherwise](../assets/screenshots/reverse-markers.png)
 
 The time of a marker is that of the newest frame, so markers also work while replaying a log file at normal speed.
+
+## Related signals
+
+Vehicles often carry the same quantity on several messages — a gateway re-broadcasts wheel speed, engine speed or a
+pedal position from one bus onto another, sometimes scaled or delayed. **Related signals** finds these without any
+reference: every value and state field found by the automatic analysis is compared with all the other fields, and
+those that follow one another are grouped.
+
+**Find related signals** lists the groups. Each group's first field is the **reference** the others are compared
+with; every other member shows its **Correlation** to it, the **Factor** and **Offset** converting its raw value to
+the reference's, and the **Lag** (how far it trails the reference, e.g. a gateway re-broadcasting after 20 ms).
+**Minimum correlation** sets how closely two fields must match to be grouped, and **Max lag** how far apart in time
+a copy may be.
+
+This labels unknowns cheaply: once one member of a group is identified (here, or against a database or GPS log in
+**Reference signals**), the others are the same signal elsewhere. **Use** a member to load it into the bit field
+form, or **Plot** it.
+
+![Related signals: one signal found on three messages, one of them at twice the scale](../assets/screenshots/reverse-related.png)
 
 ## Multiplexed fields
 

@@ -44,8 +44,8 @@ buses. It runs on Linux, Windows and macOS with any interface supported by
 
     ---
 
-    UDS over ISO-TP and the LIN transport layer, with DTCs, security access, CANdelaStudio CDD and ASAM ODX/PDX descriptions and
-    ECU flashing.
+    UDS over ISO-TP and the LIN transport layer, with DTCs, security access, CANdelaStudio CDD and ASAM ODX/PDX descriptions,
+    ECU flashing, and GMLAN (GMW3110) diagnostics for GM/Opel vehicles.
 
     [:octicons-arrow-right-24: Diagnostics](user-guide/diagnostics.md)
 

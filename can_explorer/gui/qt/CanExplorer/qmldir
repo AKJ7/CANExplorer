@@ -34,6 +34,7 @@ ReverseResults 1.0 ReverseResults.qml
 ReverseAnalysisPanel 1.0 ReverseAnalysisPanel.qml
 ReverseReferencePanel 1.0 ReverseReferencePanel.qml
 ReverseMarkersPanel 1.0 ReverseMarkersPanel.qml
+ReverseRelatedPanel 1.0 ReverseRelatedPanel.qml
 WelcomeView 1.0 WelcomeView.qml
 PlaybackBar 1.0 PlaybackBar.qml
 BusReplayDialog 1.0 BusReplayDialog.qml
@@ -43,10 +44,13 @@ EtherCatView 1.0 EtherCatView.qml
 PhysicalIoView 1.0 PhysicalIoView.qml
 DoipView 1.0 DoipView.qml
 UdsScanView 1.0 UdsScanView.qml
+XcpView 1.0 XcpView.qml
+GmlanView 1.0 GmlanView.qml
 GatewayView 1.0 GatewayView.qml
 MultiBusView 1.0 MultiBusView.qml
 TestsView 1.0 TestsView.qml
 GlassPanel 1.0 GlassPanel.qml
+Logo 1.0 Logo.qml
 TraceFindBar 1.0 TraceFindBar.qml
 RecordDialog 1.0 RecordDialog.qml
 MqttDialog 1.0 MqttDialog.qml

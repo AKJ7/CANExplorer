@@ -23,6 +23,7 @@ ColumnLayout {
         return category === "positive" ? Theme.success
              : category === "security" ? Theme.warning
              : category === "conditions" ? Theme.accent
+             : category === "unresponsive" ? Theme.danger
              : Theme.chart[5]
     }
 
@@ -30,6 +31,7 @@ ColumnLayout {
         return category === "positive" ? qsTr("supported")
              : category === "security" ? qsTr("locked")
              : category === "conditions" ? qsTr("wrong state/session")
+             : category === "unresponsive" ? qsTr("no response (hang?)")
              : qsTr("rejected")
     }
 
@@ -48,6 +50,8 @@ ColumnLayout {
             delay_ms: Number(delayField.text),
             enter_session: sessionBox.currentValue,
             allow_state_changing: allowBox.checked,
+            count: Number(countField.text),
+            fuzz_seed: fuzzSeedField.text,
         }))
     }
 
@@ -98,13 +102,17 @@ ColumnLayout {
         }
 
         // Sweep template and position
-        Label { text: qsTr("Template"); visible: root.kind === "sweep" }
+        Label { text: root.kind === "fuzz" ? qsTr("Seeds") : qsTr("Template")
+                visible: root.kind === "sweep" || root.kind === "fuzz" }
         TextField {
             id: templateField
             text: "22 F1 90"
-            placeholderText: qsTr("request, hex")
-            visible: root.kind === "sweep"
-            Layout.preferredWidth: 120
+            placeholderText: root.kind === "fuzz" ? qsTr("seed requests, hex; ; separated (optional)")
+                                                  : qsTr("request, hex")
+            visible: root.kind === "sweep" || root.kind === "fuzz"
+            Layout.preferredWidth: root.kind === "fuzz" ? 220 : 120
+            ToolTip.visible: hovered && root.kind === "fuzz"
+            ToolTip.text: qsTr("Requests to mutate (optional; empty fuzzes random requests from the known services)")
         }
         Label { text: qsTr("Byte"); visible: root.kind === "sweep" }
         TextField {
@@ -122,19 +130,40 @@ ColumnLayout {
             Layout.preferredWidth: 90
         }
 
-        Label { text: qsTr("Range") }
+        Label { text: qsTr("Range"); visible: root.kind !== "fuzz" }
         TextField {
             id: startField
             text: "0000"
             placeholderText: qsTr("start")
+            visible: root.kind !== "fuzz"
             Layout.preferredWidth: 70
         }
-        Label { text: "–" }
+        Label { text: "–"; visible: root.kind !== "fuzz" }
         TextField {
             id: endField
             text: "FFFF"
             placeholderText: qsTr("end")
+            visible: root.kind !== "fuzz"
             Layout.preferredWidth: 70
+        }
+
+        Label { text: qsTr("Iterations"); visible: root.kind === "fuzz" }
+        TextField {
+            id: countField
+            text: "500"
+            visible: root.kind === "fuzz"
+            validator: IntValidator { bottom: 1; top: 1000000 }
+            Layout.preferredWidth: 80
+        }
+        Label { text: qsTr("Seed"); visible: root.kind === "fuzz" }
+        TextField {
+            id: fuzzSeedField
+            text: "1"
+            placeholderText: qsTr("reproducible")
+            visible: root.kind === "fuzz"
+            Layout.preferredWidth: 70
+            ToolTip.visible: hovered
+            ToolTip.text: qsTr("A number making the run reproducible: the same seed replays the same requests")
         }
         Item { Layout.fillWidth: true }
     }

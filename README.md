@@ -35,7 +35,8 @@
   chart and CSV export
 - Reverse engineering: bit and byte statistics per identifier and a notch; automatic detection of checksums,
   counters, multiplexers and values; matching fields to database signals, CSV/GPS logs or polled OBD-II values;
-  event markers; and bit fields to plot without a database or add to one
+  grouping fields that carry the same signal across messages; event markers; and bit fields to plot without a
+  database or add to one
 
 **Recording and replay**
 - ASC, BLF, CSV, candump LOG, PEAK TRC, SQLite, ASAM MF4 and gzip compressed text logs
@@ -59,8 +60,12 @@
 - DoIP (Diagnostics over IP, ISO 13400-2): finds DoIP entities, connects with routing activation (optionally over
   TLS) and runs diagnostics and flashing over Ethernet; a simulated entity works without a vehicle
 - UDS discovery: scan an ECU for the services, data identifiers, subfunctions and routines it exposes, classifying
-  the answers, for reverse engineering diagnostics
+  the answers, for reverse engineering diagnostics; and fuzz it with mutated requests, detecting hangs and crashes
 - Bus gateway: forward frames between two connections with filtering, identifier rewriting and rate limiting
+- XCP/CCP measurement and calibration: read measurements live and read/write calibration values by address or by
+  name from an A2L file, with simulated slaves for trying it without hardware
+- GMLAN (GMW3110) diagnostics for GM/Opel vehicles — data identifiers, modes, security access and trouble codes —
+  over CAN, including single-wire (SWCAN, 33.3 kbit/s) buses; a simulated ECU works without hardware
 - J1939: nodes with their address claims, DM1/DM2 trouble codes and lamps, clearing codes, requests and sending
   parameter groups by name with BAM or RTS/CTS
 - CANopen master: NMT, SDO access to object dictionaries from EDS/DCF files, PDO mappings with live values,
@@ -80,7 +85,7 @@
 
 **Workspace**
 - Connections, databases, filters, plots and scripts saved in one workspace file
-- Dashboard-style interface with six colour themes, a command palette (Ctrl+K) and English and German texts
+- Dashboard-style interface with six colour themes, a command palette (Ctrl+K) and English, German, French, Chinese and Japanese texts
 
 See the [documentation](https://akj7.github.io/CANExplorer/) for a guide to every feature.
 

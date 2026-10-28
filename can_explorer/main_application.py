@@ -27,7 +27,7 @@ from can_explorer.gui.signal_plot import register_qml_types
 logger = get_logger(__name__)
 
 
-APP_ICON = 'CanExplorer/images/logo.png'  # Generated from docs/assets/logo.png by tools/make_icons.py
+APP_ICON = 'CanExplorer/images/logo.png'  # Generated from docs/assets/logo.svg by tools/make_icons.py
 
 
 def create_qml_engine(

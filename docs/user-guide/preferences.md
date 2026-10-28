@@ -9,11 +9,11 @@
 | Setting | Default | Range | Description |
 |---|---|---|---|
 | Theme | Dark | Dark, Purple, Nord, Ocean, Forest, Light | Colours of the user interface; applies immediately |
-| Language | System language | English, Deutsch | Language of the user interface; applies immediately. Texts without a translation stay in English; see [Translations](../development/translations.md) to add a language |
+| Language | System language | English, Deutsch, Français, 中文, 日本語 | Language of the user interface; applies immediately. Texts without a translation stay in English; see [Translations](../development/translations.md) to add a language |
 | Trace in memory (frames) | 100 000 | 1 000 – 2 000 000 | The most recent frames of the trace, kept in memory |
 | Trace history (frames) | 5 000 000 | 0 – 50 000 000 | Frames of the trace kept in total, the older ones on disk (about 160 bytes each); 0 keeps only those in memory. See [long recordings](trace-and-overview.md#long-recordings) |
 | Trace history directory | the cache directory | | Where the temporary files of the history go, e.g. `~/.cache/AKJ7/CANExplorer/trace` on Linux |
-| Updates: check at start | On | | Look for new releases on GitHub at most once a day; see [Updates](updates.md) |
+| Updates: check at start | On | | Look for new releases on GitHub each time CANExplorer starts; see [Updates](updates.md) |
 | Updates: pre-releases | Off | | Also offer release candidates and other pre-releases |
 | View refresh interval (ms) | 33 | 16 – 1 000 | How often new frames are shown; longer intervals reduce the CPU load on busy buses |
 

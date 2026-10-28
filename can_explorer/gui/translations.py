@@ -18,7 +18,15 @@ logger = get_logger(__name__)
 
 TRANSLATIONS_DIR = Path(__file__).resolve().parent.parent / 'resources' / 'translations'
 PREFIX = 'canexplorer_'
-LANGUAGE_NAMES = {'en': 'English', 'de': 'Deutsch', 'fr': 'Français', 'es': 'Español', 'it': 'Italiano'}
+LANGUAGE_NAMES = {
+    'en': 'English',
+    'de': 'Deutsch',
+    'fr': 'Français',
+    'es': 'Español',
+    'it': 'Italiano',
+    'zh': '中文',
+    'ja': '日本語',
+}
 
 
 def translation_file(code: str, directory: Path = TRANSLATIONS_DIR) -> Path:

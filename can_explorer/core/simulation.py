@@ -2,6 +2,7 @@
 
 - UdsServer: answers UDS requests (sessions, DIDs, security access, DTCs, routines).
 - UdsEcuSimulator: a UdsServer reachable over ISO-TP on CAN.
+- GmlanServer / GmlanEcuSimulator: the GMLAN (GMW3110) counterparts, for GM/Opel single-wire buses.
 - LinSlaveSimulator: LIN slaves answering headers, optionally with a UdsServer behind the LIN transport layer.
 
 They run on a BusSession, typically on python-can's virtual interface next to the session under test.
@@ -12,6 +13,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 import can
 
+from can_explorer.core import gmlan
 from can_explorer.core.isotp_client import IsoTpClient, IsoTpError
 from can_explorer.core.lin import MASTER_REQUEST_ID, SLAVE_RESPONSE_ID, LinTpReassembler
 from can_explorer.core.session import BusSession, SessionError
@@ -244,6 +246,150 @@ class UdsEcuSimulator:
             for index, response in enumerate(self.server.handle(request)):
                 if index:
                     await asyncio.sleep(0.05)  # After a 'response pending'
+                await self._client.send(response)
+
+
+class GmlanServer:
+    """GMLAN (GMW3110) server logic. handle() returns the responses to send to a request."""
+
+    def __init__(
+        self,
+        dids: Optional[Dict[int, bytes]] = None,
+        dtcs: Optional[List[Tuple[int, int, int]]] = None,
+        seed: bytes = b'\x12\x34',
+        key_function: Callable[[int, bytes], bytes] = xor_key,
+    ):
+        # GMLAN data identifiers are one byte: 0x90 is the VIN, 0xB0 a part number, …
+        self.dids = dict(dids or {0x90: b'W0L0000000000000', 0xB0: b'12345678'})
+        # Each DTC is (two-byte code, failure-type byte, status byte)
+        self.dtcs = list(dtcs if dtcs is not None else [(0x0123, 0x04, 0x60), (0xC100, 0x08, 0x20)])
+        self.seed = seed
+        self.key_function = key_function
+        self.normal_communication = True
+        self.programmed_state = 0x00
+        self.unlocked_level: Optional[int] = None
+        self._pending_seed_level: Optional[int] = None
+        self.tester_present_count = 0
+        self.requests: List[bytes] = []
+
+    @staticmethod
+    def _negative(sid: int, code: int) -> List[bytes]:
+        return [bytes([NEGATIVE_RESPONSE, sid, code])]
+
+    def handle(self, request: bytes) -> List[bytes]:
+        self.requests.append(request)
+        if not request:
+            return []
+        sid = request[0]
+        handler = {
+            0x04: self._clear_dtcs,
+            0x10: self._initiate,
+            0x1A: self._read_did,
+            0x20: self._return_to_normal,
+            0x27: self._security_access,
+            0x28: self._disable_normal,
+            0x3B: self._write_did,
+            0x3E: self._tester_present,
+            0xA2: self._report_programmed_state,
+            0xA9: self._read_dtcs,
+            0xAE: self._device_control,
+        }.get(sid)
+        if handler is None:
+            return self._negative(sid, 0x11)
+        try:
+            return handler(request)
+        except (IndexError, ValueError):
+            return self._negative(sid, 0x31)  # requestOutOfRange: a truncated/malformed request, not a crash
+
+    def _initiate(self, request: bytes) -> List[bytes]:
+        if len(request) < 2 or request[1] not in gmlan.DIAGNOSTIC_OPERATIONS:
+            return self._negative(0x10, 0x12)
+        return [bytes([0x50, request[1]])]
+
+    def _return_to_normal(self, request: bytes) -> List[bytes]:
+        self.normal_communication, self.unlocked_level = True, None
+        return [bytes([0x60])]
+
+    def _disable_normal(self, request: bytes) -> List[bytes]:
+        self.normal_communication = False
+        return [bytes([0x68])]
+
+    def _tester_present(self, request: bytes) -> List[bytes]:
+        self.tester_present_count += 1
+        return [bytes([0x7E])]
+
+    def _read_did(self, request: bytes) -> List[bytes]:
+        did = request[1]
+        if did not in self.dids:
+            return self._negative(0x1A, 0x31)
+        return [bytes([0x5A, did]) + self.dids[did]]
+
+    def _write_did(self, request: bytes) -> List[bytes]:
+        did = request[1]
+        self.dids[did] = bytes(request[2:])
+        return [bytes([0x7B, did])]
+
+    def _security_access(self, request: bytes) -> List[bytes]:
+        level = request[1]
+        if level % 2 == 1:  # Request a seed
+            if self.unlocked_level == level + 1:
+                return [bytes([0x67, level]) + b'\x00' * len(self.seed)]  # Already unlocked: zero seed
+            self._pending_seed_level = level
+            return [bytes([0x67, level]) + self.seed]
+        if self._pending_seed_level != level - 1:  # Send a key
+            return self._negative(0x27, 0x37)  # requiredTimeDelayNotExpired / wrong sequence
+        if bytes(request[2:]) == self.key_function(level - 1, self.seed):
+            self.unlocked_level = level
+            self._pending_seed_level = None
+            return [bytes([0x67, level])]
+        return self._negative(0x27, 0x35)  # invalidKey
+
+    def _report_programmed_state(self, request: bytes) -> List[bytes]:
+        return [bytes([0xE2, self.programmed_state])]
+
+    def _read_dtcs(self, request: bytes) -> List[bytes]:
+        if len(request) < 3 or request[1] != 0x80:
+            return self._negative(0xA9, 0x12)
+        records = b''.join(bytes([code >> 8, code & 0xFF, ftb, status]) for code, ftb, status in self.dtcs)
+        return [bytes([0xE9, 0x80]) + records]
+
+    def _clear_dtcs(self, request: bytes) -> List[bytes]:
+        self.dtcs = []
+        return [bytes([0x44])]
+
+    def _device_control(self, request: bytes) -> List[bytes]:
+        return [bytes([0xEE, request[1]])]
+
+
+class GmlanEcuSimulator:
+    """A GmlanServer answering over ISO-TP (USDT) on a session, for GM/Opel single-wire buses."""
+
+    def __init__(
+        self,
+        session: BusSession,
+        request_id: int = gmlan.DEFAULT_REQUEST_ID,
+        response_id: int = gmlan.DEFAULT_RESPONSE_ID,
+        server=None,
+    ):
+        self.server = server or GmlanServer()
+        self._client = IsoTpClient(session, response_id, request_id)
+        self._task: Optional[asyncio.Task] = None
+
+    def start(self) -> None:
+        self._task = asyncio.get_running_loop().create_task(self._run(), name='GMLAN ECU simulator')
+
+    def stop(self) -> None:
+        if self._task is not None:
+            self._task.cancel()
+        self._client.close()
+
+    async def _run(self) -> None:
+        while True:
+            try:
+                request = await self._client.receive(3600)
+            except IsoTpError:
+                continue
+            for response in self.server.handle(request):
                 await self._client.send(response)
 
 

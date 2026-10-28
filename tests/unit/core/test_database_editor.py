@@ -77,6 +77,77 @@ def test_messages_and_signals(editor, tmp_path):
     assert editor.path.name == 'saved.dbf' and not editor.dirty
 
 
+def test_deferred_validates_only_the_final_layout():
+    editor = DatabaseEditor()  # A new database validates strictly, rejecting overlaps as they appear
+    name = editor.add_message('Packed', 0x456)
+    editor.update_message(name, length=2)
+    low0 = editor.add_signal(name, 'Low0')
+    editor.update_signal(name, low0, start=0, length=4)  # Low nibble of byte 0
+    low1 = editor.add_signal(name, 'Low1')
+    editor.update_signal(name, low1, start=8, length=4)  # Low nibble of byte 1: now no whole byte is free
+
+    # add_signal falls back to bit 0 when no byte is free, so a new signal momentarily overlaps Low0 before it is
+    # moved to the free high nibble. deferred() holds strict validation back to the end, so only the result is checked.
+    with editor.deferred():
+        high = editor.add_signal(name, 'High0')
+        editor.update_signal(name, high, start=4, length=4)
+    assert editor.issues() == [] and editor.dirty
+
+    # A deferred edit whose final layout is still invalid is rejected when the block ends, and can be undone
+    from cantools.database.errors import Error as DatabaseError
+
+    with pytest.raises(DatabaseError):
+        with editor.deferred():
+            clash = editor.add_signal(name, 'Clash')
+            editor.update_signal(name, clash, start=0, length=4)
+    editor.remove_signal(name, 'Clash')
+    assert editor.issues() == []
+
+
+def test_multiplexing(tmp_path):
+    editor = DatabaseEditor()  # A new database validates the multiplexer tree strictly
+    name = editor.add_message('Status', 0x200)
+    editor.update_message(name, length=8)
+    editor.update_signal(name, editor.add_signal(name, 'Mode'), start=0, length=2)
+    editor.update_signal(name, editor.add_signal(name, 'VoltA'), start=8, length=8)
+    editor.update_signal(name, editor.add_signal(name, 'VoltB'), start=16, length=8)
+
+    # One signal becomes the multiplexer switch; the others become multiplexed and follow it automatically
+    editor.update_signal(name, 'Mode', is_multiplexer=True)
+    assert editor.signal(name, 'Mode').is_multiplexer
+    editor.update_signal(name, 'VoltA', multiplexer_ids='0')
+    editor.update_signal(name, 'VoltB', multiplexer_ids='2, 1, 2')  # Parsed, de-duplicated and sorted
+    volt_b = editor.signal(name, 'VoltB')
+    assert volt_b.multiplexer_ids == [1, 2] and volt_b.multiplexer_signal == 'Mode'
+    editor.update_signal(name, 'VoltB', start=8)  # Multiplexed signals of different switch values may share bits
+    assert editor.issues() == []
+
+    # Renaming the switch keeps its multiplexed signals pointing at it, and it round-trips through a DBC
+    editor.update_signal(name, 'Mode', name='Selector')
+    assert editor.signal(name, 'VoltA').multiplexer_signal == 'Selector' and editor.issues() == []
+    target = tmp_path / 'mux.dbc'
+    editor.save(target)
+    reloaded = DatabaseEditor(target)
+    signals = {signal.name: signal for signal in reloaded.message('Status').signals}
+    assert signals['Selector'].is_multiplexer
+    assert signals['VoltB'].multiplexer_ids == [1, 2] and signals['VoltB'].multiplexer_signal == 'Selector'
+
+    # Guards
+    with pytest.raises(EditError):  # A signal cannot be both the switch and multiplexed
+        editor.update_signal(name, 'Selector', is_multiplexer=True, multiplexer_ids='0')
+    with pytest.raises(EditError):  # The switch is still in use by its multiplexed signals
+        editor.update_signal(name, 'Selector', is_multiplexer=False)
+    lone = editor.add_message('Lone', 0x201)
+    editor.update_message(lone, length=8)
+    editor.update_signal(lone, editor.add_signal(lone, 'X'), start=0, length=8)
+    with pytest.raises(EditError):  # No multiplexer signal to follow
+        editor.update_signal(lone, 'X', multiplexer_ids='0')
+
+    # Clearing the switch values makes a signal plain again
+    editor.update_signal(name, 'VoltB', start=24, multiplexer_ids='')
+    assert editor.signal(name, 'VoltB').multiplexer_ids is None
+
+
 def test_invalid_edits_leave_the_database_unchanged(editor):
     message = editor.messages[0].name
     signal = editor.messages[0].signals[0].name

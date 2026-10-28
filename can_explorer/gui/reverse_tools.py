@@ -10,6 +10,7 @@ from PyQt6.QtCore import QObject, QTimer, QUrl, pyqtProperty, pyqtSignal, pyqtSl
 from can_explorer.core.reverse.analysis import FoundField, analyse_all, collect
 from can_explorer.core.reverse.markers import Marker, MarkerMatch, find_marker_changes
 from can_explorer.core.reverse.obd import PIDS, ObdPoller, is_obd_identifier
+from can_explorer.core.reverse.related import SignalGroup, signal_groups
 from can_explorer.core.reverse.reference import (
     Match,
     Reference,
@@ -178,6 +179,45 @@ class AnalysisController(_Tool):
                 }
             )
         return rows
+
+    @pyqtProperty('QVariantList', notify=changed)
+    def found_signals(self) -> List[Dict[str, Any]]:
+        """Every found field (except constants) as a signal definition, for promoting the results to a database
+        (DatabaseEditorController.add_found_signals)."""
+        definitions = []
+        taken: Dict[tuple, set] = {}  # Bits already used per identifier, so promoted signals never overlap (a DBC
+        found_fields = [(a, f) for a, f in self._found if f is not None and f.kind != 'constant']
+        found_fields.sort(key=lambda item: -item[1].confidence)  # The strongest interpretation wins an overlap
+        for analysis, found in found_fields:
+            field = found.field
+            key = (field.frame_id, field.extended)
+            bits = set(field.bits)
+            used = taken.setdefault(key, set())
+            if bits & used:
+                continue
+            used |= bits
+            comment = [KIND_NAMES.get(found.kind, found.kind)]
+            if found.details:
+                comment.append(found.details)
+            if found.multiplexer is not None:
+                comment.append(f'only in frames with {found.multiplexer.key} = {found.mux_value}')
+            definitions.append(
+                {
+                    'frame_id': field.frame_id,
+                    'extended': field.extended,
+                    'frame_length': max(analysis.length, field.min_length),
+                    'name': _signal_name(KIND_NAMES.get(found.kind, 'Signal'), field),
+                    'start': field.start,
+                    'length': field.length,
+                    'byte_order': field.byte_order,
+                    'is_signed': field.signed,
+                    'scale': field.scale,
+                    'offset': field.offset,
+                    'unit': '',
+                    'comment': '; '.join(comment),
+                }
+            )
+        return definitions
 
     def _get(self, index: int) -> Optional[FoundField]:
         return self._found[index][1] if 0 <= index < len(self._found) else None
@@ -524,3 +564,89 @@ class MarkerController(_Tool):
             return 'Nothing to plot'
         self.reverse.connection.track_field(match.field)
         return ''
+
+
+class RelatedController(_Tool):
+    """Finding fields that carry the same signal across the trace, grouped, without an external reference."""
+
+    changed = pyqtSignal()
+    running = pyqtProperty(bool, fget=_Tool._get_running, notify=changed)
+    status = pyqtProperty(str, fget=_Tool._get_status, notify=changed)
+
+    def __init__(self, reverse, parent: Optional[QObject] = None):
+        super().__init__(reverse, parent)
+        self._groups: List[SignalGroup] = []
+        self._members: List[tuple] = []  # (field, unit, name, multiplexer, mux_value) per results row
+
+    @pyqtSlot(float, float)
+    def find(self, min_correlation: float, max_lag: float):
+        if not self._running:
+            self._start(self._find(min_correlation, max(0.0, max_lag)))
+
+    async def _find(self, min_correlation: float, max_lag: float) -> None:
+        self._status = 'Reading the trace…'
+        self._groups, self._members = [], []
+        self.changed.emit()
+        messages = await self.reverse.snapshot()
+        frames = await asyncio.to_thread(collect, messages)
+        frames = {key: item for key, item in frames.items() if not is_obd_identifier(key)}
+        analyses = self.reverse.analyses or await asyncio.to_thread(analyse_all, frames)
+        self._status = 'Correlating the value fields with each other…'
+        self.changed.emit()
+        self._groups = await asyncio.to_thread(signal_groups, frames, analyses, min_correlation, max_lag)
+        for group in self._groups:
+            for member in group.members:
+                name = _signal_name('Signal', member.field)
+                self._members.append((member.field, '', name, member.multiplexer, member.mux_value))
+        if self._groups:
+            fields = sum(len(group.members) for group in self._groups)
+            self._status = f'{len(self._groups)} group(s) of fields carrying the same signal ({fields} fields)'
+        else:
+            self._status = 'No two fields follow one another closely (no signal is repeated across messages)'
+
+    @pyqtProperty('QVariantList', notify=changed)
+    def results(self) -> List[Dict[str, Any]]:
+        rows: List[Dict[str, Any]] = []
+        index = 0
+        for group_number, group in enumerate(self._groups):
+            for member in group.members:
+                rows.append(
+                    {
+                        'index': index,
+                        'group': group_number + 1,
+                        'representative': member.representative,
+                        'id': member.field.id_text,
+                        'key': member.field.key,
+                        'correlation': 1.0 if member.representative else round(abs(member.correlation), 3),
+                        'scale': f'{member.field.scale:.6g}',
+                        'offset': f'{member.field.offset:.6g}',
+                        'lag': '' if member.representative else f'{member.lag * 1000:.0f} ms',
+                        'condition': f'if {member.multiplexer.key} = {member.mux_value}' if member.multiplexer else '',
+                    }
+                )
+                index += 1
+        return rows
+
+    def _member(self, index: int) -> Optional[tuple]:
+        return self._members[index] if 0 <= index < len(self._members) else None
+
+    @pyqtSlot(int)
+    def use(self, index: int):
+        member = self._member(index)
+        if member is not None:
+            field, unit, name, multiplexer, mux_value = member
+            self.reverse.use_field(field, unit, name, multiplexer, mux_value)
+
+    @pyqtSlot(int, result=str)
+    def plot(self, index: int) -> str:
+        member = self._member(index)
+        if member is None:
+            return 'Nothing to plot'
+        field, unit, _name, multiplexer, mux_value = member
+        self.reverse.connection.track_field(field, unit, multiplexer, mux_value)
+        return ''
+
+    def clear(self) -> None:
+        self._groups, self._members = [], []
+        self._status = ''
+        self.changed.emit()

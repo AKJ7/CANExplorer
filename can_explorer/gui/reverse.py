@@ -5,11 +5,16 @@ import asyncio
 from typing import Any, Dict, List, Optional, Tuple
 
 import can
-from PyQt6.QtCore import QObject, QTimer, pyqtProperty, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QAbstractListModel, QModelIndex, QObject, Qt, QTimer, pyqtProperty, pyqtSignal, pyqtSlot
 
 from can_explorer.core.reverse.bitstats import BitStatistics, IdBitStatistics, IdKey
 from can_explorer.core.reverse.fields import BYTE_ORDERS, BitField
-from can_explorer.gui.reverse_tools import AnalysisController, MarkerController, ReferenceController
+from can_explorer.gui.reverse_tools import (
+    AnalysisController,
+    MarkerController,
+    ReferenceController,
+    RelatedController,
+)
 
 REFRESH_INTERVAL_MS = 250
 SNAPSHOT_FRAMES = 1_000_000  # The newest frames of the trace are used by the analysis tools
@@ -30,11 +35,74 @@ def _parse_id(text: str) -> Optional[IdKey]:
         return None
 
 
+_ID_FIELDS = ('id', 'name', 'count', 'length', 'cycle', 'changing', 'hits', 'new')
+
+
+class IdentifierModel(QAbstractListModel):
+    """The identifier list as a proper model, so live updates change rows in place instead of resetting the whole
+    list. A plain `QVariantList` model was rebuilt on every refresh (every 250 ms under traffic), destroying and
+    recreating all delegates — a click landing during a rebuild was lost and could crash."""
+
+    _ROLES = {Qt.ItemDataRole.UserRole + index: field.encode() for index, field in enumerate(_ID_FIELDS)}
+
+    def __init__(self, parent: Optional[QObject] = None):
+        super().__init__(parent)
+        self._rows: List[Dict[str, Any]] = []
+
+    def roleNames(self):
+        return dict(self._ROLES)
+
+    def rowCount(self, parent=QModelIndex()) -> int:
+        return 0 if parent.isValid() else len(self._rows)
+
+    def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole):
+        if not index.isValid() or not 0 <= index.row() < len(self._rows):
+            return None
+        field = self._ROLES.get(role)
+        return self._rows[index.row()].get(field.decode()) if field is not None else None
+
+    def rows(self) -> List[Dict[str, Any]]:
+        return list(self._rows)
+
+    def update(self, rows: List[Dict[str, Any]]) -> None:
+        """Bring the model to `rows`, changing only what differs: existing rows update in place (dataChanged),
+        new identifiers are inserted and gone ones removed, so delegates are not destroyed under the cursor."""
+        new_ids = [row['id'] for row in rows]
+        if new_ids == [row['id'] for row in self._rows]:
+            for position, (old, new) in enumerate(zip(self._rows, rows, strict=True)):
+                if old != new:
+                    self._rows[position] = new
+                    self.dataChanged.emit(self.index(position), self.index(position))
+            return
+        by_id = {row['id']: row for row in rows}
+        position = 0  # Remove identifiers no longer present
+        while position < len(self._rows):
+            if self._rows[position]['id'] not in by_id:
+                self.beginRemoveRows(QModelIndex(), position, position)
+                del self._rows[position]
+                self.endRemoveRows()
+            else:
+                position += 1
+        for target, row in enumerate(rows):  # Insert new ones in order, update any that moved into place
+            if target < len(self._rows) and self._rows[target]['id'] == row['id']:
+                if self._rows[target] != row:
+                    self._rows[target] = row
+                    self.dataChanged.emit(self.index(target), self.index(target))
+            else:
+                self.beginInsertRows(QModelIndex(), target, target)
+                self._rows.insert(target, row)
+                self.endInsertRows()
+
+
 class ReverseController(QObject):
     """Statistics are collected once the page is first shown (from the frames in the trace on), so connections
     that never use the page do not pay for them."""
 
-    changed = pyqtSignal()  # Statistics
+    changed = pyqtSignal()  # Statistics of the selected identifier (bits, bytes, field value)
+    # The list of identifiers. Kept separate from `changed`: selecting an identifier must not re-notify the id
+    # list, or Qt would reset that list's model while its own delegate's onClicked (which called select) is still
+    # running, destroying the delegate mid-handler and crashing.
+    identifiers_changed = pyqtSignal()
     selection_changed = pyqtSignal()
     field_changed = pyqtSignal()
 
@@ -58,6 +126,15 @@ class ReverseController(QObject):
         }
         self._field_error = ''
         self._multiplexer: Optional[Tuple[BitField, int]] = None  # The field is only in frames with this value
+        # The QML bit grid reads `bits` once per byte row (N+1 times per pass); computing it is O(bytes) and the
+        # per-bit work scans a 256-value histogram, so for a 64-byte CAN FD frame the naive recompute took ~350 ms
+        # a pass and, fired every refresh, froze the GUI. Compute it once per change instead.
+        self._bits_cache: Optional[List[Dict[str, Any]]] = None
+        self.changed.connect(self._invalidate_bits)
+        self.field_changed.connect(self._invalidate_bits)
+        self._id_model = IdentifierModel(self)
+        self._id_search = ''
+        self._hits_only = False
         self.analyses = []  # Of the last automatic analysis, also used as candidates for references
         self._timer = QTimer(self)
         self._timer.setInterval(REFRESH_INTERVAL_MS)
@@ -66,6 +143,7 @@ class ReverseController(QObject):
         self._analysis = AnalysisController(self, parent=self)
         self._reference = ReferenceController(self, parent=self)
         self._markers = MarkerController(self, parent=self)
+        self._related = RelatedController(self, parent=self)
 
     @property
     def connection(self):
@@ -82,6 +160,10 @@ class ReverseController(QObject):
     @pyqtProperty(QObject, constant=True)
     def markers(self):
         return self._markers
+
+    @pyqtProperty(QObject, constant=True)
+    def related(self):
+        return self._related
 
     async def snapshot(self) -> List[can.Message]:
         """The newest SNAPSHOT_FRAMES frames of the trace, read in chunks so the window stays responsive."""
@@ -123,6 +205,7 @@ class ReverseController(QObject):
             if self._selected is None and self.statistics.ids:
                 self._selected = min(self.statistics.ids, key=lambda key: (key[1], key[0]))
             self.changed.emit()
+            self._update_id_model()
             self.selection_changed.emit()
         if visible:
             self._timer.start()
@@ -134,12 +217,14 @@ class ReverseController(QObject):
         if seen != self._seen:
             self._seen = seen
             self.changed.emit()
+            self._update_id_model()
 
     @pyqtSlot()
     def reset(self):
         """Forget the statistics (and the notch), e.g. when the trace is cleared."""
         self.statistics.reset()
         self.changed.emit()
+        self._update_id_model()
 
     def clear(self) -> None:
         """The trace was cleared: forget the statistics, results and markers, which refer to its frames."""
@@ -147,6 +232,7 @@ class ReverseController(QObject):
         self._analysis.clear()
         self._reference.clear()
         self._markers.clear()
+        self._related.clear()
 
     def shutdown(self) -> None:
         self._reference.stop_obd()
@@ -162,11 +248,13 @@ class ReverseController(QObject):
         """Hide the bits that changed so far; bits changing afterwards stand out."""
         self.statistics.notch()
         self.changed.emit()
+        self._update_id_model()
 
     @pyqtSlot()
     def clear_notch(self):
         self.statistics.clear_notch()
         self.changed.emit()
+        self._update_id_model()
 
     # Identifiers
 
@@ -180,10 +268,18 @@ class ReverseController(QObject):
             return ''
         return definition.name if definition is not None else ''
 
-    @pyqtProperty('QVariantList', notify=changed)
+    @pyqtProperty(QObject, constant=True)
+    def identifier_model(self) -> IdentifierModel:
+        """The identifier list for the view, updated in place (see IdentifierModel)."""
+        return self._id_model
+
+    @pyqtProperty('QVariantList', notify=identifiers_changed)
     def identifiers(self) -> List[Dict[str, Any]]:
         """Each identifier with its frames, cycle time, changing bits and, after a notch, the bits that changed
         since (`hits`) and whether it is `new`."""
+        return self._identifier_rows()
+
+    def _identifier_rows(self) -> List[Dict[str, Any]]:
         statistics = self.statistics
         result = []
         for key in sorted(statistics.ids, key=lambda key: (key[1], key[0])):
@@ -202,6 +298,32 @@ class ReverseController(QObject):
                 }
             )
         return result
+
+    def _filtered_rows(self) -> List[Dict[str, Any]]:
+        search = self._id_search.lower()
+        notched = self.statistics.notched
+        rows = []
+        for row in self._identifier_rows():
+            if search and search not in row['id'].lower() and search not in row['name'].lower():
+                continue
+            if self._hits_only and notched and not (row['hits'] > 0 or row['new']):
+                continue
+            rows.append(row)
+        return rows
+
+    def _update_id_model(self) -> None:
+        self._id_model.update(self._filtered_rows())
+        self.identifiers_changed.emit()  # The "no identifiers" label and scripts read `identifiers`
+
+    @pyqtSlot(str)
+    def set_id_search(self, text: str):
+        self._id_search = text or ''
+        self._update_id_model()
+
+    @pyqtSlot(bool)
+    def set_hits_only(self, enabled: bool):
+        self._hits_only = bool(enabled)
+        self._update_id_model()
 
     @pyqtProperty(str, notify=selection_changed)
     def selected(self) -> str:
@@ -224,13 +346,23 @@ class ReverseController(QObject):
     def _current(self) -> Optional[IdBitStatistics]:
         return self.statistics.get(self._selected) if self._selected is not None else None
 
+    def _invalidate_bits(self) -> None:
+        self._bits_cache = None
+
     @pyqtProperty('QVariantList', notify=changed)
     def bits(self) -> List[Dict[str, Any]]:
         """The bits of the selected identifier in display order: byte 0 bit 7 to 0, byte 1 bit 7 to 0, …
 
+        Computed once per change and cached, because the QML grid reads it once per byte row (see __init__).
+
         age: seconds since the bit last changed (relative to the newest frame), -1 if it never changed;
         recent: 1 just after a change, fading to 0 over HIGHLIGHT_SECONDS.
         """
+        if self._bits_cache is None:
+            self._bits_cache = self._compute_bits()
+        return self._bits_cache
+
+    def _compute_bits(self) -> List[Dict[str, Any]]:
         item = self._current()
         if item is None:
             return []

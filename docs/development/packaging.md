@@ -79,9 +79,8 @@ notarization for macOS), which can be added to the release workflow as secrets.
 The application icon (`.ico` on Windows, `.icns` on macOS, `.png` on Linux) is set on the bundle and on the
 window; on Linux, `--install-desktop-entry` installs a desktop menu entry with the icon (see
 [Installation](../getting-started/installation.md#desktop-menu-entry-linux)). The icons, the logo in the
-application and the logo and favicon of this documentation are generated from the logo artwork
-`docs/assets/logo.png`, drawn on black: the tool first makes the background transparent
-(`docs/assets/logo-transparent.png`), keeping the glow as a soft edge. After changing the logo, run
+application and the logo and favicon of this documentation are generated from the vector logo
+`docs/assets/logo.svg` by rendering it at each size. After changing the logo, run
 
 ```bash
 QT_QPA_PLATFORM=offscreen uv run python tools/make_icons.py
@@ -124,9 +123,9 @@ login first: `oras login ghcr.io -u <user>` with a personal access token with `r
 
 ### Releasing a version
 
-1. Set the version in `pyproject.toml` (`uv version 1.2.0`), move the *Unreleased* entries of `CHANGELOG.md` under a
+1. Set the version in `pyproject.toml` (`uv version 1.3.0`), move the *Unreleased* entries of `CHANGELOG.md` under a
    heading for it and commit.
-2. Tag the commit and push the tag: `git tag v1.2.0 && git push origin v1.2.0`.
+2. Tag the commit and push the tag: `git tag v1.3.0 && git push origin v1.3.0`.
 3. The release workflow checks that the tag matches the version, builds and tests the installers on the three
    platforms and publishes the release with them.
 

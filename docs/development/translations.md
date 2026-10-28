@@ -18,10 +18,10 @@ test suite checks that the files contain every text (`tests/unit/gui/test_transl
 ## Adding a language
 
 ```bash
-uv run python tools/update_translations.py fr
+uv run python tools/update_translations.py es
 ```
 
-creates `canexplorer_fr.ts`. Translate it with Qt Linguist (`linguist canexplorer_fr.ts`), or in a text editor:
+creates `canexplorer_es.ts`. Translate it with Qt Linguist (`linguist canexplorer_es.ts`), or in a text editor:
 fill in each `<translation>` and remove its `type="unfinished"` attribute. Keep placeholders such as `%1` and the
 `&` of menu shortcuts. The language appears in **Preferences → Language** and in the command palette once the
 file exists; its name comes from `LANGUAGE_NAMES` in `can_explorer/gui/translations.py`.

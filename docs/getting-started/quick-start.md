@@ -12,7 +12,7 @@ You need CANExplorer and the three files of the example simulation:
 |---|---|
 | `vehicle.dbc` | The signal database: which messages exist and what their bytes mean |
 | `engine_simulation.py` | Two simulated bus nodes, *Engine* and *Gearbox* |
-| `engine_panel.qml` | A small control panel with an ignition switch and a speed slider |
+| `engine_panel.qml` | A small control panel with an ignition switch, a target-speed slider and an engine-speed gauge |
 
 === "Installed with an installer"
 

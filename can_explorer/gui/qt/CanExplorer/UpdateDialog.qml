@@ -15,6 +15,10 @@ Dialog {
     modal: true
     anchors.centerIn: parent
     width: Math.min(640, parent.width - 48)
+    // The release-notes phases need room for the notes, the hint and the buttons; cap to the window and let the
+    // notes area fill or scroll. The lighter phases (checking, up to date, error) size to their content.
+    readonly property bool showsNotes: phase === "available" || phase === "downloading" || phase === "installing"
+    height: showsNotes ? Math.min(parent.height - 48, 540) : Math.min(parent.height - 48, implicitHeight)
     closePolicy: busy ? Popup.NoAutoClose : Popup.CloseOnEscape | Popup.CloseOnPressOutside
     onClosed: updates.dismiss()
 
@@ -47,9 +51,10 @@ Dialog {
 
         // An update
         ColumnLayout {
-            visible: dialog.phase === "available" || dialog.phase === "downloading" || dialog.phase === "installing"
+            visible: dialog.showsNotes
             spacing: 8
             Layout.fillWidth: true
+            Layout.fillHeight: true
 
             Label {
                 text: qsTr("You have %1. Version %2 was released on %3%4.")
@@ -60,7 +65,9 @@ Dialog {
             }
             Frame {
                 Layout.fillWidth: true
+                Layout.fillHeight: true
                 Layout.preferredHeight: 260
+                Layout.minimumHeight: 120
                 padding: 0
                 ScrollView {
                     anchors.fill: parent

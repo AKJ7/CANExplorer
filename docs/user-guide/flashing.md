@@ -52,3 +52,19 @@ while erasing, are waited for.
     `can_explorer.core.simulation`) accepts downloads in the programming
     session and stores the data. `examples/flashing/firmware.hex` is an example firmware with two segments and
     `examples/flashing/simulator_key.py` the simulator's key algorithm for security access.
+
+## In scripts
+
+`can_explorer.core.flashing` programs an ECU over UDS from a script, over the same ISO-TP transport as the
+[Diagnostics](diagnostics.md) client:
+
+```python
+from can_explorer.core.flashing import FlashJob, FlashOptions, load_image
+from can_explorer.core.isotp_client import IsoTpClient
+from can_explorer.core.uds import UdsClient
+
+image = load_image('firmware.hex')                  # Intel HEX, S-record or binary (binary needs base_address=…)
+job = FlashJob(image, FlashOptions())               # set security_level and compute_key for a secured ECU
+await job.run(UdsClient(IsoTpClient(session, 0x7E0, 0x7E8)))   # session: the connection's bus
+print(job.error or f'programmed {job.bytes_done} bytes')
+```

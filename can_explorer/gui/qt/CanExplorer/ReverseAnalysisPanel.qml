@@ -7,6 +7,7 @@ import CanExplorer 1.0
 ColumnLayout {
     id: root
     required property var tools
+    required property var connection
     readonly property var analysis: tools.analysis
 
     signal fieldUsed()
@@ -38,6 +39,14 @@ ColumnLayout {
         CheckBox {
             id: constantsBox
             text: qsTr("Constant bits")
+        }
+        Button {
+            text: qsTr("Promote to database")
+            enabled: !root.analysis.running && root.analysis.found_signals.length > 0
+            ToolTip.visible: hovered
+            ToolTip.text: qsTr("Add every found field (except constant bits) as a signal to the database editor, where it can be reviewed and saved as a DBC")
+            onClicked: root.message(connectionManager.database_editor.add_found_signals(
+                root.analysis.found_signals, root.connection.database_file))
         }
         BusyIndicator {
             running: root.analysis.running

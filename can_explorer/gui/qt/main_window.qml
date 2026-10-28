@@ -608,8 +608,11 @@ ApplicationWindow {
         title: qsTr("Unsaved database changes")
         modal: true
         anchors.centerIn: Overlay.overlay
+        width: Math.min(460, Overlay.overlay.width - 48)
         standardButtons: Dialog.Save | Dialog.Discard | Dialog.Cancel
         Label {
+            width: unsavedDialog.availableWidth
+            wrapMode: Text.Wrap
             text: qsTr("Save the changes to %1 before quitting?").arg(connectionManager.database_editor.file_name)
         }
         onAccepted: {

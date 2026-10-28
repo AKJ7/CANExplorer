@@ -15,6 +15,7 @@
 | Protocol | Protocol decoder for the *Info* column: Raw, ISO-TP, UDS, J1939, CANopen ([Protocol decoding](protocols.md)) |
 | Bitrate | Nominal bitrate (CAN) |
 | Flexible Data (CAN FD) | Enables CAN FD and the **Data bitrate** |
+| Single-wire CAN (GMLAN) | A GM single-wire low-speed bus (SWCAN) at 33.3 kbit/s; see [GMLAN](gmlan.md) |
 | Baud rate | LIN baud rate (LIN) |
 | Self-Reception | The interface reports the frames CANExplorer sends (`receive_own_messages`); without it, sent frames are added to the trace directly |
 

@@ -65,8 +65,15 @@ values are reported in the header and the field returns to the stored value.
 | Receivers | Node names, comma separated |
 | Value descriptions | Names of raw values, e.g. `0=Off; 1=On; 3=Error` (hexadecimal values such as `0x0F=Fault` work too) |
 | Comment | Free text |
+| Multiplexing | **None**, **Multiplexer** (the switch) or **Multiplexed** (present only for some switch values) |
 
-Multiplexed signals show their multiplexer and values; their multiplexing is kept but not edited.
+### Multiplexing
+
+A message can carry different signals depending on the value of one **multiplexer** (switch) signal. Set one signal
+to **Multiplexer**, then set the others to **Multiplexed** and enter the **switch values** they appear for
+(e.g. `0, 1, 3`). Multiplexed signals for different switch values may share the same bits. When a message has more
+than one multiplexer, a second control chooses which switch a signal follows. The switch cannot be removed while
+signals still follow it, and renaming it updates them.
 
 ## Layout and problems
 

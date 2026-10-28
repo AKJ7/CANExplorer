@@ -297,10 +297,100 @@ async def reverse_engineering_scenario():
     tabs.setProperty('currentIndex', 3)
     await shot('reverse-markers')
 
+    # Related signals: re-broadcast the vehicle speed on another message, so it is found on two
+    for stamp, raw in traffic.raw['Body.VehicleSpeed'][::2]:
+        echo = can.Message(
+            arbitration_id=0x510, is_extended_id=False, data=bytes([int(raw) & 0xFF, (int(raw) >> 8) & 0xFF, 0, 0])
+        )
+        echo.timestamp = stamp + 0.02
+        connection.session._dispatch(echo)
+    connection._refresh()
+    reverse.analysis.run(False)
+    while reverse.analysis.running:
+        await asyncio.sleep(0.05)
+    reverse.related.find(0.98, 0.5)
+    while reverse.related.running:
+        await asyncio.sleep(0.05)
+    tabs.setProperty('currentIndex', 4)
+    await shot('reverse-related')
+
     tabs.setProperty('currentIndex', 0)
     manager.remove_connection(len(manager.connections) - 1)
     window.setProperty('selectedIndex', 0)
     await asyncio.sleep(0.2)
+
+
+async def xcp_scenario():
+    """The XCP/CCP page reading an ECU's measurements and calibration values from its A2L (simulated XCP slave)."""
+    import struct
+    import uuid as _uuid
+
+    from can_explorer.core.xcp import XcpSlaveSimulator
+
+    channel = f'xcp-{_uuid.uuid4().hex}'
+    manager.add_connection({'name': 'Powertrain ECU', 'interface': 'VirtualBus', 'channel': channel})
+    connection = manager.connections[-1]
+    connection.open()
+    window.setProperty('selectedIndex', len(manager.connections) - 1)
+    slave_session = BusSession(LiveSource(BusConfig('virtual', channel)))
+    slave_session.start()
+    slave = XcpSlaveSimulator(slave_session, request_id=0x7E0, response_id=0x7E1)
+    slave.memory[0x1000:0x1002] = (6000).to_bytes(2, 'little')  # 1500 rpm
+    slave.memory[0x1002:0x1003] = bytes([90])  # 50 degC
+    slave.memory[0x1004:0x1006] = (13800).to_bytes(2, 'little')  # 13.8 V
+    slave.memory[0x2000:0x2002] = (3200).to_bytes(2, 'little')  # idle 800 rpm
+    slave.memory[0x2002:0x2003] = bytes([1])
+    slave.memory[0x2004:0x2008] = struct.pack('<f', 1.0)
+    xcp = connection.xcp
+    show_page('xcp')
+    xcp.connect_slave({'protocol': 'XCP', 'request_id': '7E0', 'response_id': '7E1'})
+    while xcp.busy:
+        await asyncio.sleep(0.05)
+    xcp.load_a2l(QUrl.fromLocalFile(str(ROOT / 'examples' / 'calibration' / 'example.a2l')))
+    await xcp._poll_once()
+    await shot('xcp', 0.5)
+    xcp.disconnect_slave()
+    await asyncio.sleep(0.1)
+    slave.stop()
+    slave_session.stop()
+    manager.remove_connection(len(manager.connections) - 1)
+    window.setProperty('selectedIndex', 0)
+
+
+async def gmlan_scenario():
+    """The GMLAN page reading a GM ECU's identifiers and trouble codes over a single-wire bus (simulated ECU)."""
+    import uuid as _uuid
+
+    from can_explorer.core.simulation import GmlanEcuSimulator
+
+    channel = f'gmlan-{_uuid.uuid4().hex}'
+    manager.add_connection(
+        {'name': 'Body control module', 'interface': 'VirtualBus', 'channel': channel, 'single_wire': True}
+    )
+    connection = manager.connections[-1]
+    connection.open()
+    window.setProperty('selectedIndex', len(manager.connections) - 1)
+    ecu_session = BusSession(LiveSource(BusConfig('virtual', channel, bitrate=33_333, single_wire=True)))
+    ecu_session.start()
+    simulator = GmlanEcuSimulator(ecu_session)
+    simulator.start()
+    gmlan = connection.gmlan
+    show_page('gmlan')
+    for call in (
+        lambda: gmlan.read_did('90'),
+        lambda: gmlan.initiate_operation(0x02),
+        gmlan.read_dtcs,
+        lambda: gmlan.write_did('90', '41 42'),
+    ):
+        call()
+        while gmlan.busy:
+            await asyncio.sleep(0.03)
+        await asyncio.sleep(0.05)
+    await shot('gmlan', 0.4)
+    simulator.stop()
+    ecu_session.stop()
+    manager.remove_connection(len(manager.connections) - 1)
+    window.setProperty('selectedIndex', 0)
 
 
 async def gateway_scenario():
@@ -618,6 +708,8 @@ async def scenario():
     await ethercat_scenario()
     await physical_io_scenario()
     await doip_scenario()
+    await xcp_scenario()
+    await gmlan_scenario()
     await gateway_scenario()
 
     await reverse_engineering_scenario()

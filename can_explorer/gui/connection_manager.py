@@ -25,7 +25,14 @@ from can_explorer.core.recording import Trigger, TriggeredRecorder
 from can_explorer.core.reverse.fields import BitField
 from can_explorer.core.session import BusSession, SessionError, SessionState
 from can_explorer.core.log_formats import file_filters
-from can_explorer.core.sources import BusConfig, FileSource, LiveSource, MessageSource
+from can_explorer.core.sources import (
+    GMLAN_SINGLE_WIRE_BITRATE,
+    GMLAN_SINGLE_WIRE_HIGH_SPEED,
+    BusConfig,
+    FileSource,
+    LiveSource,
+    MessageSource,
+)
 from can_explorer.gui.app_state import AppState
 from can_explorer.gui.compare import CompareController
 from can_explorer.gui.updates import UpdateController
@@ -46,6 +53,8 @@ from can_explorer.gui.simulation import SimulationController
 from can_explorer.gui.plot_view import PlotView
 from can_explorer.gui.reverse import ReverseController
 from can_explorer.gui.uds_scan import UdsScanController
+from can_explorer.gui.gmlan import GmlanController
+from can_explorer.gui.xcp import XcpController
 from can_explorer.gui.testing import TestController
 from can_explorer.gui.trace_tools import TraceTools
 from can_explorer.gui.workspace import SUFFIX as WORKSPACE_SUFFIX
@@ -133,6 +142,8 @@ class CanConnection(QObject):
         self._canopen = CanOpenController(self, parent=self)
         self._flashing = FlashController(self._diagnostics, parent=self)
         self._uds_scan = UdsScanController(self, parent=self)
+        self._xcp = XcpController(self, parent=self)
+        self._gmlan = GmlanController(self, parent=self)
         self._bus_health = BusHealthController(self, parent=self)
         self._reverse = ReverseController(self, parent=self)
         self._simulation = SimulationController(self, parent=self)
@@ -351,6 +362,8 @@ class CanConnection(QObject):
         self._bus_replay.stop()
         self._tests.shutdown()
         self._uds_scan.shutdown()
+        self._xcp.shutdown()
+        self._gmlan.shutdown()
         self._flashing.shutdown()
         self._diagnostics.shutdown()
         self._simulation.shutdown()
@@ -687,6 +700,16 @@ class CanConnection(QObject):
         return self._uds_scan
 
     @pyqtProperty(QObject, constant=True)
+    def xcp(self) -> XcpController:
+        """XCP/CCP measurement and calibration."""
+        return self._xcp
+
+    @pyqtProperty(QObject, constant=True)
+    def gmlan(self) -> GmlanController:
+        """GMLAN (GMW3110) diagnostics."""
+        return self._gmlan
+
+    @pyqtProperty(QObject, constant=True)
     def canopen(self) -> CanOpenController:
         """NMT, SDO access and PDOs on CANopen connections."""
         return self._canopen
@@ -962,7 +985,8 @@ class ConnectionManager(QObject):
 
     @pyqtProperty('QStringList', constant=True)
     def bitrates(self) -> List[str]:
-        return [str(bitrate) for bitrate in canutils.CLASSIC_CAN_BITRATES]
+        rates = set(canutils.CLASSIC_CAN_BITRATES) | {GMLAN_SINGLE_WIRE_BITRATE, GMLAN_SINGLE_WIRE_HIGH_SPEED}
+        return [str(bitrate) for bitrate in sorted(rates)]
 
     @pyqtProperty('QStringList', constant=True)
     def data_bitrates(self) -> List[str]:
@@ -1105,16 +1129,18 @@ class ConnectionManager(QObject):
                 raise ValueError(f'Unknown bus type {bus_type!r}')
             lin = bus_type == 'LIN'
             fd = bool(options.get('fd', False)) and not lin
+            single_wire = bool(options.get('single_wire', False)) and not lin and not fd
             data_bitrate = str(options.get('data_bitrate') or '')
             config = BusConfig(
                 interface=canutils.get_interface_name(options['interface']) or options['interface'],
                 channel=str(options['channel']),
-                bitrate=int(options.get('bitrate', 500_000)),
+                bitrate=int(options.get('bitrate') or (GMLAN_SINGLE_WIRE_BITRATE if single_wire else 500_000)),
                 fd=fd,
                 data_bitrate=int(data_bitrate) if fd and data_bitrate else None,
                 receive_own_messages=bool(options.get('receive_own_messages', False)),
                 bus_type=bus_type,
                 lin_baudrate=int(options.get('lin_baudrate') or DEFAULT_BAUDRATE),
+                single_wire=single_wire,
             )
             protocol = options.get('protocol') or ('LIN' if lin else 'Raw')
             create_protocol_decoder(protocol)
@@ -1133,6 +1159,7 @@ class ConnectionManager(QObject):
             'lin_baudrate': config.lin_baudrate,
             'protocol': protocol,
             'fd': config.fd,
+            'single_wire': config.single_wire,
             'receive_own_messages': config.receive_own_messages,
         }
         connection = self._add(name, LiveSource(config), protocol)

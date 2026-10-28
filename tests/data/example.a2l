@@ -1,0 +1,48 @@
+ASAP2_VERSION 1 60
+/begin PROJECT Example "CANExplorer example"
+  /begin MODULE CoreModule "Example ECU"
+
+    /begin COMPU_METHOD RPM "Engine speed" LINEAR "%6.2" "rpm"
+      COEFFS_LINEAR 0.25 0
+    /end COMPU_METHOD
+    /begin COMPU_METHOD TEMP "Temperature" LINEAR "%6.1" "degC"
+      COEFFS_LINEAR 1 -40
+    /end COMPU_METHOD
+    /begin COMPU_METHOD VOLT "Voltage" LINEAR "%6.3" "V"
+      COEFFS_LINEAR 0.001 0
+    /end COMPU_METHOD
+    /begin COMPU_METHOD IDENT "Identity" IDENTICAL "%6.0" ""
+    /end COMPU_METHOD
+
+    /begin RECORD_LAYOUT RL_UWORD
+      FNC_VALUES 1 UWORD ROW_DIR DIRECT
+    /end RECORD_LAYOUT
+    /begin RECORD_LAYOUT RL_UBYTE
+      FNC_VALUES 1 UBYTE ROW_DIR DIRECT
+    /end RECORD_LAYOUT
+    /begin RECORD_LAYOUT RL_FLOAT
+      FNC_VALUES 1 FLOAT32_IEEE ROW_DIR DIRECT
+    /end RECORD_LAYOUT
+
+    /begin MEASUREMENT EngineSpeed "Engine speed"
+      UWORD RPM 0 0 0 16000
+      ECU_ADDRESS 0x1000
+    /end MEASUREMENT
+    /begin MEASUREMENT CoolantTemp "Coolant temperature"
+      SBYTE TEMP 0 0 -40 215
+      ECU_ADDRESS 0x1002
+    /end MEASUREMENT
+    /begin MEASUREMENT BatteryVoltage "Battery voltage"
+      UWORD VOLT 0 0 0 20
+      ECU_ADDRESS 0x1004
+    /end MEASUREMENT
+
+    /begin CHARACTERISTIC IdleTarget "Idle speed target" VALUE 0x2000 RL_UWORD 0 RPM 0 8000
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC FanOn "Cooling fan on" VALUE 0x2002 RL_UBYTE 0 IDENT 0 1
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC InjectorScale "Injector scaling" VALUE 0x2004 RL_FLOAT 0 IDENT 0 2
+    /end CHARACTERISTIC
+
+  /end MODULE
+/end PROJECT

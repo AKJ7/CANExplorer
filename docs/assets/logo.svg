@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- CANExplorer logo: a rounded diamond frame enclosing a solid diamond, in the brand blue-to-cyan gradient.
+     Based on the diamond-in-diamond mark; flat and transparent so it renders cleanly at every icon size. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>CANExplorer</title>
+  <defs>
+    <linearGradient id="brand" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3ac8f5"/>
+      <stop offset="1" stop-color="#2f6bed"/>
+    </linearGradient>
+  </defs>
+  <g transform="rotate(45 256 256)">
+    <rect x="127" y="127" width="258" height="258" rx="30" ry="30"
+          fill="none" stroke="url(#brand)" stroke-width="44" stroke-linejoin="round"/>
+    <rect x="204" y="204" width="104" height="104" rx="18" ry="18" fill="url(#brand)"/>
+  </g>
+</svg>

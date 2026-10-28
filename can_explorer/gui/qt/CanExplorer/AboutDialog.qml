@@ -14,10 +14,7 @@ Dialog {
 
         RowLayout {
             spacing: 16
-            Image {
-                source: "images/logo.png"
-                sourceSize: Qt.size(160, 160)
-                mipmap: true
+            Logo {
                 Layout.preferredWidth: 80
                 Layout.preferredHeight: 80
             }

@@ -55,3 +55,18 @@ largest difference and the first one, e.g. *2.095 s: 3381 → 3042.75*. Changed 
 
 **Export CSV…** saves the identifier comparison, one line per identifier with the status, frame counts, cycle
 times, paired and differing frames, the first difference with both payloads and the notes, separated by `;`.
+
+## In scripts
+
+`can_explorer.core.compare` compares two recordings from a script:
+
+```python
+from can_explorer.core.compare import compare, read_recording, summary_csv
+
+a, b = read_recording('before.asc'), read_recording('after.asc')
+comparison = compare(a, b)                           # align='id' or 'sequence', database=… adds signal values
+print(comparison.counts())                           # {'only_a': …, 'only_b': …, 'changed': …, 'same': …}
+for difference in comparison.ids:
+    print(difference.status, hex(difference.key[0]))
+open('diff.csv', 'w').write(summary_csv(comparison))
+```
