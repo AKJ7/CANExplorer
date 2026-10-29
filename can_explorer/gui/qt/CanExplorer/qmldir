@@ -35,6 +35,7 @@ ReverseAnalysisPanel 1.0 ReverseAnalysisPanel.qml
 ReverseReferencePanel 1.0 ReverseReferencePanel.qml
 ReverseMarkersPanel 1.0 ReverseMarkersPanel.qml
 ReverseRelatedPanel 1.0 ReverseRelatedPanel.qml
+ReverseTimelineBar 1.0 ReverseTimelineBar.qml
 WelcomeView 1.0 WelcomeView.qml
 PlaybackBar 1.0 PlaybackBar.qml
 BusReplayDialog 1.0 BusReplayDialog.qml

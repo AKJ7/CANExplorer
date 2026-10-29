@@ -172,6 +172,14 @@ SplitView {
                             ToolTip.text: qsTr("Forget the statistics and start counting again")
                             onClicked: root.tools.reset()
                         }
+                        Button {
+                            text: root.tools.timeline.active ? qsTr("● Replay") : qsTr("Replay")
+                            highlighted: root.tools.timeline.active
+                            enabled: root.tools.selected !== ""
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("Play this identifier's captured frames back over time; scrub to any moment and watch the bits flow")
+                            onClicked: root.tools.timeline.active ? root.tools.stop_replay() : root.tools.start_replay()
+                        }
                         Label {
                             text: root.status
                             color: Theme.muted
@@ -183,6 +191,12 @@ SplitView {
                             color: Theme.muted
                             font.family: "monospace"
                         }
+                    }
+
+                    ReverseTimelineBar {
+                        timeline: root.tools.timeline
+                        visible: root.tools.timeline.active
+                        Layout.fillWidth: true
                     }
 
                     Label {

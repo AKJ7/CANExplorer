@@ -43,6 +43,19 @@ The bit grid shows the bits of the selected identifier as in a DBC file: one row
 Counters show up as a staircase: the lowest bit changes in every frame, the next one in every second frame and so
 on. Physical values such as speeds look similar but slower and less regular, and flags change rarely.
 
+## Temporal replay (scrubbing)
+
+**Replay** in the Bits toolbar plays the selected identifier's captured frames back over time. A scrubber bar
+appears: drag the slider to any moment, or press play to watch the frames stream by. While replaying, the bit grid,
+the byte values and the bit field value show the payload **at that moment**, and bits that just changed light up and
+fade — so you can watch the data flow and catch exactly when and how bits move.
+
+- **Play / pause** runs the capture at its recorded pace; **Speed** scales it from 0.1× to 10×.
+- **«** and **»** step one frame back or forward; the slider and the `frame N / M` readout show where you are.
+- Scrub to the instant something happened and read off which bits and bytes changed into it.
+
+Leave replay (toggle **Replay** off, or select another identifier) to return the grid to the live, latest frame.
+
 ## Finding the bits of an action: the notch
 
 1. Let the traffic run for a while without doing anything, so that the bits that change by themselves are

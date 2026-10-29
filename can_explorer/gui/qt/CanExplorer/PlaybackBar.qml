@@ -88,7 +88,8 @@ Card {
         }
 
         ToolButton {
-            text: "⏪"
+            text: "◀◀"
+            font.pixelSize: 12
             enabled: root.playback.can_seek
             ToolTip.visible: hovered
             ToolTip.text: qsTr("10 s back")
@@ -117,7 +118,8 @@ Card {
             ToolTip.text: qsTr("The length of the recording is being determined")
         }
         ToolButton {
-            text: "⏩"
+            text: "▶▶"
+            font.pixelSize: 12
             enabled: root.playback.can_seek
             ToolTip.visible: hovered
             ToolTip.text: qsTr("10 s forward")

@@ -73,6 +73,26 @@ can-server --bus NAME=INTERFACE:CHANNEL[:BITRATE[:DATA_BITRATE]] [--bus ...] [--
 | `--token` | Token clients must present; also from `CAN_SERVER_TOKEN` |
 | `-v`, `--verbose` | Log every client connection and bus event |
 
+## can-mcp
+
+Exposes one bus to an AI agent over the [Model Context Protocol](../user-guide/mcp.md) (stdio). Needs the `mcp`
+extra. Read-only unless `--allow-send` is given.
+
+```text
+can-mcp --interface INTERFACE --channel CHANNEL [--bitrate BITRATE] [--fd] [--data-bitrate DATA_BITRATE]
+        [--database FILE] [--protocol {Raw,ISO-TP,UDS,J1939,CANopen,LIN}] [--allow-send]
+```
+
+| Argument | Description |
+|---|---|
+| `-i`, `--interface` | python-can interface, e.g. `socketcan`, `pcan`, `virtual`, `gvret` (required) |
+| `-c`, `--channel` | Channel, e.g. `can0`, `PCAN_USBBUS1`, `COM7` (required) |
+| `-b`, `--bitrate` | Nominal bitrate; default 500000 |
+| `--fd`, `--data-bitrate` | CAN FD; a data bitrate enables it |
+| `-d`, `--database` | Signal database (DBC, ARXML, KCD, SYM, DBF) for decoding |
+| `--protocol` | Protocol decoder for the frames; default `Raw` |
+| `--allow-send` | Allow the agent to transmit (`send_frame`, `query_obd`) |
+
 ## can-db-convert
 
 Converts signal databases; the formats follow the file extensions.

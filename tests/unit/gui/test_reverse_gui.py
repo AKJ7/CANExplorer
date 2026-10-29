@@ -472,3 +472,86 @@ async def test_id_list_filtering(manager, channel, peer):
     assert model.rowCount() == 2  # 201 and 202
     tools.set_id_search('')
     assert model.rowCount() == 3
+
+
+async def test_timeline_replay_scrub_and_playback(manager, channel, peer):
+    """Replay the selected identifier's frames: the bit grid and bytes follow the scrub position, and playback
+    advances it."""
+    connection = open_connection(manager, channel)
+    for i in range(6):
+        send(peer, 0x100, [i, 0x80 if i >= 3 else 0x00])  # byte 0 counts up; bit 15 flips on at frame 3
+    await wait_until(lambda: connection.session.trace.total == 6)
+    tools = connection.reverse
+    tools.set_visible(True)
+    tools.select('100')
+    timeline = tools.timeline
+    assert not timeline.active
+
+    tools.start_replay()
+    await wait_until(lambda: timeline.active)
+    assert timeline.frames == 6
+
+    # Scrub to the first frame: byte 0 == 0, bit 15 (byte 1 bit 7) is 0
+    timeline.set_position(0.0)
+    assert timeline.frame == 1 and tools.last_data == '00 00'
+    bits = {b['bit']: b['value'] for b in tools.bits}
+    assert bits[15] == 0 and tools.bytes[0]['value'] == '00'
+
+    # Scrub to the end: byte 0 == 5, bit 15 is now 1
+    timeline.set_position(1.0)
+    assert timeline.frame == 6 and tools.last_data == '05 80'
+    bits = {b['bit']: b['value'] for b in tools.bits}
+    assert bits[15] == 1 and tools.bytes[0]['value'] == '05'
+
+    # Stepping back one frame
+    timeline.step(-1)
+    assert timeline.frame == 5 and tools.last_data == '04 80'
+
+    # Playback advances the position and pauses at the end. The QTimer that drives it fires on the Qt event loop
+    # (qasync in the app); under the asyncio test loop it is not pumped, so the tick is invoked directly.
+    timeline.set_position(0.0)
+    timeline.set_speed(10.0)
+    timeline.play()
+    assert timeline.playing and timeline.frame == 1
+    await asyncio.sleep(0.05)
+    timeline._tick()
+    assert not timeline.playing and timeline.frame == 6  # Reached the end
+
+    # Leaving replay returns the grid to the live latest frame
+    tools.stop_replay()
+    assert not timeline.active and tools.last_data == '05 80'
+    # Selecting another identifier drops the timeline
+    tools.start_replay()
+    await wait_until(lambda: timeline.active)
+    send(peer, 0x200, [1, 2, 3])
+    await wait_until(lambda: any(item['id'] == '200' for item in tools.identifiers))
+    tools.select('200')
+    assert not timeline.active
+    tools.set_visible(False)
+
+
+def test_timeline_scrubs_by_index_when_all_timestamps_equal(qapp):
+    """A capture whose frames share a timestamp (a coarse clock, or a tight loop) has zero duration; scrubbing
+    must still map the slider to the first/last frame instead of always landing on the last."""
+    from types import SimpleNamespace
+
+    from can_explorer.core.reverse.timeline import IdTimeline
+    from can_explorer.gui.reverse_timeline import ReverseTimeline
+
+    reverse = SimpleNamespace(session=SimpleNamespace(start_time=None))
+    timeline = ReverseTimeline(reverse)
+    timeline.enable(IdTimeline([5.0] * 4, [bytes([i]) for i in range(4)]))
+    assert timeline.active and timeline.frames == 4 and timeline.timeline.duration == 0.0
+
+    timeline.set_position(0.0)
+    assert timeline.frame == 1 and timeline.payload() == b'\x00'
+    timeline.set_position(1.0)
+    assert timeline.frame == 4 and timeline.payload() == b'\x03'
+    timeline.step(-1)
+    assert timeline.frame == 3 and timeline.payload() == b'\x02'
+
+    # Playback over a zero-duration capture jumps to the end and pauses
+    timeline.set_position(0.0)
+    timeline.play()
+    timeline._tick()
+    assert not timeline.playing and timeline.frame == 4

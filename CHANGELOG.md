@@ -6,6 +6,34 @@ All notable changes to CANExplorer are documented in this file. The format follo
 CANExplorer follows [semantic versioning](https://semver.org/) from 1.0.0 on. Between `0.0.1` and `1.0.0`, the
 development stages are listed by date and commit, newest first.
 
+## [1.4.0] – 2026-10-29
+
+### Added
+
+- **Temporal replay** in the reverse engineering Bits tab: **Replay** plays the selected identifier's captured
+  frames back over time with a scrubber, play/pause, speed and frame stepping. While replaying, the bit grid, byte
+  values and field value show the payload at the scrub position, with bits that just changed lighting up and
+  fading — so you can scrub to any moment and watch the bits flow and flip.
+- **MCP interface** (`can-mcp`, the `mcp` extra): exposes a CAN bus to an AI agent over the Model Context
+  Protocol (stdio). Read-only by default — `bus_status`, `list_identifiers`, `get_frames` (decoded with a
+  database), `decode_frame`, `analyze_identifier` (the automatic reverse-engineering analysis), `correlate`
+  (rank fields against a reference signal, CSV column or inline series), `promote_to_dbc` (write found fields to a
+  DBC) and `load_database` — with `send_frame` and `query_obd` added only when started with `--allow-send`. The
+  logic is a Qt-free, SDK-free service layer wrapping a `BusSession`, so it works with any python-can interface,
+  including a remote bus shared by `can-server`.
+
+### Changed
+
+- The replay playback bar's 10 s skip buttons use the themed back/forward glyphs (◀◀ / ▶▶) instead of coloured
+  emoji, to match the rest of the controls.
+
+### Fixed
+
+- **GVRET devices** (ESP32RET and other SavvyCAN-protocol boards): CANExplorer now sends a keepalive once a second,
+  as SavvyCAN does. Some firmware stops streaming frames when the host goes quiet, so capturing could stop after
+  some minutes. The receive queue is also bounded now, so a stalled consumer drops frames (counted and logged)
+  instead of the buffer growing without limit.
+
 ## [1.3.0] – 2026-10-27
 
 ### Added
