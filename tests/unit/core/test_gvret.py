@@ -274,3 +274,41 @@ async def test_connection_through_a_session(device):
         assert device.setups[0][:4] == (0xC0000000 | 125_000).to_bytes(4, 'little')
     finally:
         session.stop()
+
+
+def test_keepalives_are_sent_periodically(device):
+    """The bus sends GVRET keepalives (F1 09) on its own, as SavvyCAN does, so the device keeps streaming."""
+    bus = can.Bus(interface='gvret', channel=device.url, keepalive_interval=0.05)
+    try:
+        wait_until(lambda: device.received.count(b'\xf1\x09') >= 3)
+        count_before = device.received.count(b'\xf1\x09')
+        assert count_before >= 3  # Several over time, not a one-off
+    finally:
+        bus.shutdown()
+    # No keepalives are sent after shutdown
+    sent = device.received.count(b'\xf1\x09')
+    time.sleep(0.15)
+    assert device.received.count(b'\xf1\x09') == sent
+
+
+def test_no_keepalive_when_disabled(device):
+    bus = can.Bus(interface='gvret', channel=device.url, keepalive_interval=0)
+    try:
+        wait_until(lambda: device.setups or device.received)
+        time.sleep(0.1)
+        assert device.received.count(b'\xf1\x09') == 0
+    finally:
+        bus.shutdown()
+
+
+def test_full_receive_queue_drops_frames_instead_of_growing(device):
+    """A consumer that never reads must not make the queue grow without limit: frames are dropped and counted."""
+    bus = can.Bus(interface='gvret', channel=device.url, queue_size=5, keepalive_interval=0)
+    try:
+        for i in range(30):
+            device.receive(0, 0x100 + i, [i])
+        wait_until(lambda: bus.dropped > 0, timeout=3.0)
+        assert bus._queue.qsize() <= 5  # Bounded: it never grows past the limit
+        assert bus.dropped >= 20  # The rest were dropped, not buffered forever
+    finally:
+        bus.shutdown()

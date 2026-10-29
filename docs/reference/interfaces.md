@@ -73,6 +73,9 @@ open one of its buses per device. GVRET devices carry
 classic CAN frames: CAN FD and remote frames are not supported. The device does not echo sent frames;
 **Receive own messages** adds them to the trace locally. SavvyCAN must not have the device open at the same time.
 
+CANExplorer sends a keepalive to the device once a second, as SavvyCAN does; some GVRET firmware stops streaming
+frames when the host goes quiet, so without it capturing would stop after a while.
+
 ## J2534 pass-thru devices
 
 *J2534Bus* opens the CAN bus of a vehicle interface through its SAE J2534 (version 04.04) driver, the standard

@@ -31,6 +31,8 @@
 - Remote buses: `can-server` shares the interfaces of e.g. a Raspberry Pi in a vehicle over the network
 - MQTT: publish decoded signals (and frames) to a broker for dashboards and home automation, from the application or
   `can-server`, and optionally send frames requested over MQTT
+- MCP: `can-mcp` exposes a bus to an AI agent over the Model Context Protocol — inspect identifiers, decode frames,
+  run the automatic signal analysis, correlate fields to a reference, promote results to a DBC, and optionally transmit
 - Signal plots with zoom and pan over the whole buffer, two cursors with values and statistics, several signals per
   chart and CSV export
 - Reverse engineering: bit and byte statistics per identifier and a notch; automatic detection of checksums,

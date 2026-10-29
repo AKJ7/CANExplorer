@@ -52,6 +52,7 @@ nav:
       - Several buses: user-guide/multi-bus.md
       - Bus gateway: user-guide/bus-gateway.md
       - Remote buses: user-guide/remote-buses.md
+      - MCP interface: user-guide/mcp.md
       - MQTT: user-guide/mqtt.md
       - Signal databases: user-guide/signal-databases.md
       - Database editor: user-guide/database-editor.md

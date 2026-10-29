@@ -9,12 +9,12 @@
             <translation>À propos de %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/AboutDialog.qml" line="25" />
+            <location filename="../../gui/qt/CanExplorer/AboutDialog.qml" line="22" />
             <source>%1 (v%2)</source>
             <translation>%1 (v%2)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/AboutDialog.qml" line="37" />
+            <location filename="../../gui/qt/CanExplorer/AboutDialog.qml" line="34" />
             <source>Copy to Clipboard</source>
             <translation>Copier dans le presse-papiers</translation>
         </message>
@@ -1639,7 +1639,7 @@ B : %3</translation>
             <translation>Abandonner les modifications ?</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1091" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1094" />
             <source>%1 has unsaved changes.</source>
             <translation>%1 a des modifications non enregistrées.</translation>
         </message>
@@ -3326,32 +3326,32 @@ B : %3</translation>
             <translation>%1 trames</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="94" />
+            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="95" />
             <source>10 s back</source>
             <translation>10 s en arrière</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="117" />
+            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="118" />
             <source>The length of the recording is being determined</source>
             <translation>La durée de l'enregistrement est en cours de détermination</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="123" />
+            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="125" />
             <source>10 s forward</source>
             <translation>10 s en avant</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="139" />
+            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="141" />
             <source>Playback speed relative to the recorded timing</source>
             <translation>Vitesse de lecture relative au timing enregistré</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="146" />
+            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="148" />
             <source>Stop</source>
             <translation>Arrêter</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="153" />
+            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="155" />
             <source>Close</source>
             <translation>Fermer</translation>
         </message>
@@ -4001,6 +4001,64 @@ B : %3</translation>
         </message>
     </context>
     <context>
+        <name>ReverseTimelineBar</name>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ReverseTimelineBar.qml" line="24" />
+            <source>❚❚</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ReverseTimelineBar.qml" line="24" />
+            <source>▶</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ReverseTimelineBar.qml" line="29" />
+            <source>Pause</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ReverseTimelineBar.qml" line="29" />
+            <source>Play</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ReverseTimelineBar.qml" line="33" />
+            <source>«</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ReverseTimelineBar.qml" line="37" />
+            <source>Previous frame</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ReverseTimelineBar.qml" line="41" />
+            <source>»</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ReverseTimelineBar.qml" line="45" />
+            <source>Next frame</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ReverseTimelineBar.qml" line="70" />
+            <source>frame %1 / %2</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ReverseTimelineBar.qml" line="76" />
+            <source>Speed</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ReverseTimelineBar.qml" line="81" />
+            <source>%1×</source>
+            <translation type="unfinished" />
+        </message>
+    </context>
+    <context>
         <name>ReverseView</name>
         <message>
             <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="55" />
@@ -4103,182 +4161,197 @@ B : %3</translation>
             <translation>Oublier les statistiques et recommencer à compter</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="190" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="176" />
+            <source>● Replay</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="176" />
+            <source>Replay</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="180" />
+            <source>Play this identifier's captured frames back over time; scrub to any moment and watch the bits flow</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="204" />
             <source>Select an identifier to see its bits</source>
             <translation>Sélectionner un identifiant pour voir ses bits</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="198" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="212" />
             <source>Bits of %1 (%2)</source>
             <translation>Bits de %1 (%2)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="199" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="213" />
             <source>Bits of %1</source>
             <translation>Bits de %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="239" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="253" />
             <source>Byte %1</source>
             <translation>Octet %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="299" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="313" />
             <source>Bit %1: set in %2 of the frames, changed in %3</source>
             <translation>Bit %1 : à 1 dans %2 des trames, changé dans %3</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="301" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="315" />
             <source>, last %1 s ago</source>
             <translation>, il y a %1 s</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="301" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="315" />
             <source>, never changed</source>
             <translation>, jamais changé</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="302" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="316" />
             <source> (hidden by the notch)</source>
             <translation> (masqué par le repère)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="311" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="325" />
             <source>Click a bit to start a field, Shift+click another bit to extend it, click a byte label to select the byte. Blue: how often a bit changes; orange: changed just now; outlined orange: changed since the notch.</source>
             <translation>Cliquez sur un bit pour commencer un champ, Maj+clic sur un autre bit pour l'étendre, cliquez sur une étiquette d'octet pour sélectionner l'octet. Bleu : fréquence de changement d'un bit ; orange : changé à l'instant ; contour orange : changé depuis le repère.</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="323" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="337" />
             <source>Bit field %1</source>
             <translation>Champ de bits %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="350" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="364" />
             <source>Start bit</source>
             <translation>Bit de départ</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="352" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="366" />
             <source>Length</source>
             <translation>Longueur</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="354" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="368" />
             <source>Byte order</source>
             <translation>Ordre des octets</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="356" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="370" />
             <source>Intel (little endian)</source>
             <translation>Intel (petit-boutiste)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="356" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="370" />
             <source>Motorola (big endian)</source>
             <translation>Motorola (gros-boutiste)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="362" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="376" />
             <source>Signed</source>
             <translation>Signé</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="368" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="382" />
             <source>Factor</source>
             <translation>Facteur</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="370" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="384" />
             <source>Offset</source>
             <translation>Décalage</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="372" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="386" />
             <source>Unit</source>
             <translation>Unité</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="374" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="388" />
             <source>Name</source>
             <translation>Nom</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="375" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="389" />
             <source>Signal_%1</source>
             <translation>Signal_%1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="384" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="398" />
             <source>only if %1</source>
             <translation>seulement si %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="387" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="401" />
             <source>The field is multiplexed: only frames with this multiplexer value carry it. Click to use all frames.</source>
             <translation>Le champ est multiplexé : seules les trames ayant cette valeur de multiplexeur le portent. Cliquer pour utiliser toutes les trames.</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="398" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="412" />
             <source>Value: %1</source>
             <translation>Valeur : %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="405" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="419" />
             <source>Plot</source>
             <translation>Tracer</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="407" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="421" />
             <source>Plot the field on the Signals page, from the first frame in the trace on</source>
             <translation>Tracer le champ sur la page Signaux, à partir de la première trame de la trace</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="417" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="431" />
             <source>Add to database</source>
             <translation>Ajouter à la base</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="419" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="433" />
             <source>Add the field as a signal in the database editor (and its message if needed)</source>
             <translation>Ajouter le champ comme signal dans l'éditeur de base (et son message si nécessaire)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="436" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="450" />
             <source>Bytes</source>
             <translation>Octets</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="448" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="462" />
             <source>Byte</source>
             <translation>Octet</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="448" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="462" />
             <source>Value</source>
             <translation>Valeur</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="448" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="462" />
             <source>Distinct</source>
             <translation>Distincts</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="448" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="462" />
             <source>Min</source>
             <translation>Min</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="448" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="462" />
             <source>Max</source>
             <translation>Max</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="449" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="463" />
             <source>Entropy</source>
             <translation>Entropie</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="449" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="463" />
             <source>Values 00–FF</source>
             <translation>Valeurs 00–FF</translation>
         </message>
@@ -4286,67 +4359,67 @@ B : %3</translation>
     <context>
         <name>Sidebar</name>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="137" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="133" />
             <source>CONNECTIONS</source>
             <translation>CONNEXIONS</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="166" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="162" />
             <source>Replay a log file…</source>
             <translation>Rejouer un fichier journal…</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="173" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="169" />
             <source>VIEWS</source>
             <translation>VUES</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="187" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="183" />
             <source>TOOLS</source>
             <translation>OUTILS</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="190" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="186" />
             <source>Database editor</source>
             <translation>Éditeur de base de données</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="198" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="194" />
             <source>Multi-bus trace</source>
             <translation>Trace multi-bus</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="205" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="201" />
             <source>Compare recordings</source>
             <translation>Comparer des enregistrements</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="212" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="208" />
             <source>EtherCAT (CoE)</source>
             <translation>EtherCAT (CoE)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="220" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="216" />
             <source>Physical I/O</source>
             <translation>E/S physiques</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="228" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="224" />
             <source>DoIP</source>
             <translation>DoIP</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="236" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="232" />
             <source>Bus gateway</source>
             <translation>Passerelle de bus</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="254" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="250" />
             <source>Settings</source>
             <translation>Paramètres</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="282" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="278" />
             <source>Version %1</source>
             <translation>Version %1</translation>
         </message>
@@ -5215,72 +5288,72 @@ B : %3</translation>
             <translation>Mises à jour</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="41" />
+            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="45" />
             <source>Looking for new releases…</source>
             <translation>Recherche de nouvelles versions…</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="42" />
+            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="46" />
             <source>CANExplorer %1 is up to date.</source>
             <translation>CANExplorer %1 est à jour.</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="55" />
+            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="60" />
             <source>You have %1. Version %2 was released on %3%4.</source>
             <translation>Vous avez %1. La version %2 est sortie le %3%4.</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="57" />
+            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="62" />
             <source> (pre-release)</source>
             <translation> (préversion)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="71" />
+            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="78" />
             <source>No release notes.</source>
             <translation>Pas de notes de version.</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="94" />
+            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="101" />
             <source>Installing; CANExplorer restarts in a moment…</source>
             <translation>Installation ; CANExplorer redémarre dans un instant…</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="95" />
+            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="102" />
             <source>Downloading %1</source>
             <translation>Téléchargement de %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="115" />
+            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="122" />
             <source>Skip this version</source>
             <translation>Ignorer cette version</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="124" />
+            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="131" />
             <source>Release page</source>
             <translation>Page de la version</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="131" />
+            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="138" />
             <source>Check again</source>
             <translation>Vérifier à nouveau</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="136" />
+            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="143" />
             <source>Cancel</source>
             <translation>Annuler</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="141" />
+            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="148" />
             <source>Later</source>
             <translation>Plus tard</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="141" />
+            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="148" />
             <source>Close</source>
             <translation>Fermer</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="146" />
+            <location filename="../../gui/qt/CanExplorer/UpdateDialog.qml" line="153" />
             <source>Install and restart</source>
             <translation>Installer et redémarrer</translation>
         </message>
@@ -5288,72 +5361,72 @@ B : %3</translation>
     <context>
         <name>WelcomeView</name>
         <message>
-            <location filename="../../gui/qt/CanExplorer/WelcomeView.qml" line="75" />
+            <location filename="../../gui/qt/CanExplorer/WelcomeView.qml" line="72" />
             <source>Welcome to %1</source>
             <translation>Bienvenue dans %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/WelcomeView.qml" line="81" />
+            <location filename="../../gui/qt/CanExplorer/WelcomeView.qml" line="78" />
             <source>Monitor, analyse, diagnose and simulate CAN, CAN FD and LIN buses.</source>
             <translation>Surveiller, analyser, diagnostiquer et simuler des bus CAN, CAN FD et LIN.</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/WelcomeView.qml" line="94" />
+            <location filename="../../gui/qt/CanExplorer/WelcomeView.qml" line="91" />
             <source>New connection</source>
             <translation>Nouvelle connexion</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/WelcomeView.qml" line="95" />
+            <location filename="../../gui/qt/CanExplorer/WelcomeView.qml" line="92" />
             <source>Connect to a CAN, CAN FD or LIN interface, or to a virtual bus.</source>
             <translation>Se connecter à une interface CAN, CAN FD ou LIN, ou à un bus virtuel.</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/WelcomeView.qml" line="101" />
+            <location filename="../../gui/qt/CanExplorer/WelcomeView.qml" line="98" />
             <source>Replay a log file</source>
             <translation>Rejouer un fichier journal</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/WelcomeView.qml" line="102" />
+            <location filename="../../gui/qt/CanExplorer/WelcomeView.qml" line="99" />
             <source>Open an ASC, BLF, CSV, LOG, TRC or SQLite recording.</source>
             <translation>Ouvrir un enregistrement ASC, BLF, CSV, LOG, TRC ou SQLite.</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/WelcomeView.qml" line="108" />
+            <location filename="../../gui/qt/CanExplorer/WelcomeView.qml" line="105" />
             <source>Convert a database</source>
             <translation>Convertir une base de données</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/WelcomeView.qml" line="109" />
+            <location filename="../../gui/qt/CanExplorer/WelcomeView.qml" line="106" />
             <source>Convert between DBC, DBF, KCD and SYM, or from ARXML.</source>
             <translation>Convertir entre DBC, DBF, KCD et SYM, ou depuis ARXML.</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/WelcomeView.qml" line="115" />
+            <location filename="../../gui/qt/CanExplorer/WelcomeView.qml" line="112" />
             <source>Open a workspace</source>
             <translation>Ouvrir un espace de travail</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/WelcomeView.qml" line="116" />
+            <location filename="../../gui/qt/CanExplorer/WelcomeView.qml" line="113" />
             <source>Connections, databases, filters, plots and scripts saved together.</source>
             <translation>Connexions, bases de données, filtres, graphiques et scripts enregistrés ensemble.</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/WelcomeView.qml" line="122" />
+            <location filename="../../gui/qt/CanExplorer/WelcomeView.qml" line="119" />
             <source>Edit a database</source>
             <translation>Modifier une base de données</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/WelcomeView.qml" line="123" />
+            <location filename="../../gui/qt/CanExplorer/WelcomeView.qml" line="120" />
             <source>Edit the messages, signals and nodes of DBC, DBF, KCD and SYM files.</source>
             <translation>Modifier les messages, signaux et nœuds des fichiers DBC, DBF, KCD et SYM.</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/WelcomeView.qml" line="130" />
+            <location filename="../../gui/qt/CanExplorer/WelcomeView.qml" line="127" />
             <source>Recent workspaces</source>
             <translation>Espaces de travail récents</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/WelcomeView.qml" line="166" />
+            <location filename="../../gui/qt/CanExplorer/WelcomeView.qml" line="163" />
             <source>Recent connections</source>
             <translation>Connexions récentes</translation>
         </message>
@@ -5699,17 +5772,17 @@ B : %3</translation>
             <translation>Modifications de base de données non enregistrées</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="613" />
+            <location filename="../../gui/qt/main_window.qml" line="616" />
             <source>Save the changes to %1 before quitting?</source>
             <translation>Enregistrer les modifications de %1 avant de quitter ?</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="617" />
+            <location filename="../../gui/qt/main_window.qml" line="620" />
             <source>Use "Save as" in the database editor first</source>
             <translation>Utilisez d'abord « Enregistrer sous » dans l'éditeur de base de données</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="666" />
+            <location filename="../../gui/qt/main_window.qml" line="669" />
             <source>CANExplorer %1 is available: ⋮ → Check for Updates…</source>
             <translation>CANExplorer %1 est disponible : ⋮ → Rechercher des mises à jour…</translation>
         </message>

@@ -1,6 +1,6 @@
 [project]
 name = "can-explorer"
-version = "1.3.0"
+version = "1.4.0"
 description = "Monitor, analyse, diagnose, simulate and test CAN, CAN FD and LIN buses"
 authors = [{ name = "AKJ7", email = "akj123429@gmail.com" }]
 license = "MIT"
@@ -52,6 +52,7 @@ canexplorer = "can_explorer.__main__:main"
 can-db-convert = "can_explorer.db_convert:main"
 can-test = "can_explorer.testing.cli:main"
 can-server = "can_server.__main__:main"
+can-mcp = "can_explorer.mcp.__main__:main"
 
 [project.entry-points."can.interface"]
 # Remote buses shared with can-server, usable as python-can interface "canexplorer_remote" (class RemoteBus)
@@ -83,6 +84,10 @@ drivers = [
 ]
 mqtt = [
     "aiomqtt>=2.3",
+]
+# MCP server (can-mcp): expose a CAN bus to an agent over the Model Context Protocol
+mcp = [
+    "mcp>=2",
 ]
 
 [dependency-groups]

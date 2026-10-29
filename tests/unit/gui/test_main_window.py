@@ -161,6 +161,20 @@ async def test_reverse_engineering_page_renders_without_warnings(window, qapp, q
     tools.analysis.use(0)
     tabs.setProperty('currentIndex', 0)
     qtbot.wait(100)
+
+    # Temporal replay: the scrubber bar and the bit grid at a playback position render
+    tools.start_replay()
+    for _ in range(200):
+        if tools.timeline.active:
+            break
+        await asyncio.sleep(0.01)
+        qapp.processEvents()
+    assert tools.timeline.active
+    tools.timeline.set_position(0.5)
+    tools.timeline.play()
+    qtbot.wait(150)  # qtbot pumps Qt, so the playback QTimer fires here
+    tools.timeline.pause()
+    qtbot.wait(50)
     assert warnings == []
 
 

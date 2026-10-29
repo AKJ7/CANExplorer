@@ -76,6 +76,7 @@ computer.
 | `core/mqtt.py`, `gui/mqtt.py` | MQTT bridge of a bus (aiomqtt on a thread of its own): signals, frames and status out, allow-listed send requests in; the connection's MQTT controller |
 | `core/compare.py` | Comparing two recordings |
 | `core/gateway.py` | Bus gateway: forwarding rules between sessions, with filtering, identifier rewriting, rate limiting and an echo guard |
+| `core/reverse/timeline.py` | Reverse engineering: the frames of one identifier over time, for the Bits-tab replay scrubber |
 | `core/reverse/` | Reverse engineering: bit fields (`fields.py`), bit and byte statistics with the notch (`bitstats.py`), checksum detection (`checksums.py`), the automatic analysis of fields, their kinds and multiplexers (`analysis.py`), correlation with reference signals (`reference.py`) and OBD-II polling (`obd.py`), grouping fields that carry the same signal (`related.py`), event markers (`markers.py`), synthetic traffic with known signals and scoring of found fields (`synthetic.py`) |
 | `core/bushealth.py` | Error frame decoding, error states and the bus health history |
 | `core/updates.py`, `gui/updates.py` | Finding, downloading, verifying and installing new releases from GitHub |
@@ -100,3 +101,4 @@ computer.
 | `gui/qt/CanExplorerStyle/` | Qt Quick Controls style drawing buttons, inputs, dialogs, menus etc. with the theme colours (Fusion for the rest) |
 | `sys/config.py`, `sys/environment.py` | Application settings; clean-up of snap environments |
 | `can_server/` | `can-server`: shares local CAN interfaces over WebSocket |
+| `can_explorer/mcp/` | `can-mcp`: exposes a bus to an agent over the Model Context Protocol (`service.py` the logic, `server.py` the MCP tools) |

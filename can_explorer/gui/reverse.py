@@ -9,6 +9,8 @@ from PyQt6.QtCore import QAbstractListModel, QModelIndex, QObject, Qt, QTimer, p
 
 from can_explorer.core.reverse.bitstats import BitStatistics, IdBitStatistics, IdKey
 from can_explorer.core.reverse.fields import BYTE_ORDERS, BitField
+from can_explorer.core.reverse.timeline import IdTimeline
+from can_explorer.gui.reverse_timeline import ReverseTimeline
 from can_explorer.gui.reverse_tools import (
     AnalysisController,
     MarkerController,
@@ -144,6 +146,8 @@ class ReverseController(QObject):
         self._reference = ReferenceController(self, parent=self)
         self._markers = MarkerController(self, parent=self)
         self._related = RelatedController(self, parent=self)
+        self._timeline = ReverseTimeline(self, parent=self)
+        self._timeline.moved.connect(self._on_timeline_moved)
 
     @property
     def connection(self):
@@ -164,6 +168,39 @@ class ReverseController(QObject):
     @pyqtProperty(QObject, constant=True)
     def related(self):
         return self._related
+
+    @pyqtProperty(QObject, constant=True)
+    def timeline(self):
+        """Temporal playback of the selected identifier (scrubber and play/pause for the Bits grid)."""
+        return self._timeline
+
+    def _on_timeline_moved(self) -> None:
+        self._invalidate_bits()
+        self.changed.emit()
+
+    @pyqtSlot()
+    def start_replay(self):
+        """Load the selected identifier's frames into the timeline and show the bit grid at a scrub position."""
+        import asyncio
+
+        asyncio.ensure_future(self._start_replay())
+
+    async def _start_replay(self) -> None:
+        if self._selected is None:
+            return
+        key = self._selected
+        messages = await self.snapshot()
+        times, payloads = [], []
+        for message in messages:
+            if (message.arbitration_id, message.is_extended_id) == key and not message.is_remote_frame:
+                times.append(message.timestamp)
+                payloads.append(bytes(message.data))
+        if payloads:
+            self._timeline.enable(IdTimeline(times, payloads))
+
+    @pyqtSlot()
+    def stop_replay(self):
+        self._timeline.disable()
 
     async def snapshot(self) -> List[can.Message]:
         """The newest SNAPSHOT_FRAMES frames of the trace, read in chunks so the window stays responsive."""
@@ -223,6 +260,7 @@ class ReverseController(QObject):
     def reset(self):
         """Forget the statistics (and the notch), e.g. when the trace is cleared."""
         self.statistics.reset()
+        self._timeline.disable()  # The timeline refers to frames that are gone
         self.changed.emit()
         self._update_id_model()
 
@@ -339,6 +377,7 @@ class ReverseController(QObject):
         if key is not None and key != self._selected:
             self._selected = key
             self._multiplexer = None
+            self._timeline.disable()  # The timeline was for the previous identifier
             self.selection_changed.emit()
             self.changed.emit()
             self.field_changed.emit()
@@ -363,6 +402,8 @@ class ReverseController(QObject):
         return self._bits_cache
 
     def _compute_bits(self) -> List[Dict[str, Any]]:
+        if self._timeline.active:
+            return self._compute_bits_replay()
         item = self._current()
         if item is None:
             return []
@@ -390,21 +431,62 @@ class ReverseController(QObject):
                 )
         return result
 
+    def _compute_bits_replay(self) -> List[Dict[str, Any]]:
+        """The bit grid at the playback position: values from the frame at that time, recency fading from when
+        each bit last changed up to then — so playing shows the bits flow and flip. Flip/set shares stay the
+        session-wide figures for context."""
+        timeline = self._timeline.timeline
+        index = self._timeline.index
+        item = self._current()
+        now = timeline.time_at(index)
+        field = self._field_object()
+        in_field = set(field.bits) if field is not None else set()
+        result = []
+        for byte in range(timeline.length):
+            for bit_in_byte in range(7, -1, -1):
+                bit = byte * 8 + bit_in_byte
+                change = timeline.last_change_time(index, bit)
+                age = now - change if change is not None else -1.0
+                info = item.bit(bit) if item is not None and bit < item.length * 8 else None
+                result.append(
+                    {
+                        'bit': bit,
+                        'byte': byte,
+                        'value': timeline.bit_value(index, bit),
+                        'ones': info.ones if info is not None else 0.0,
+                        'flips': info.flips if info is not None else 0.0,
+                        'age': age,
+                        'recent': max(0.0, 1.0 - age / HIGHLIGHT_SECONDS) if age >= 0 else 0.0,
+                        'masked': False,
+                        'hit': False,
+                        'field': bit in in_field,
+                    }
+                )
+        return result
+
     @pyqtProperty('QVariantList', notify=changed)
     def bytes(self) -> List[Dict[str, Any]]:
-        """The bytes of the selected identifier: value, distinct values, range, entropy and a histogram."""
+        """The bytes of the selected identifier: value, distinct values, range, entropy and a histogram.
+
+        While replaying, the value column shows the byte at the playback position; the statistics stay
+        session-wide."""
         item = self._current()
         if item is None:
             return []
+        replay = self._timeline.payload() if self._timeline.active else None
         result = []
         bucket = 256 // HISTOGRAM_BARS
         for info in item.bytes():
             bars = [sum(info.histogram[start : start + bucket]) for start in range(0, 256, bucket)]
             peak = max(bars) or 1
+            if replay is not None:
+                value = f'{replay[info.index]:02X}' if info.index < len(replay) else ''
+            else:
+                value = '' if info.value is None else f'{info.value:02X}'
             result.append(
                 {
                     'index': info.index,
-                    'value': '' if info.value is None else f'{info.value:02X}',
+                    'value': value,
                     'distinct': info.distinct,
                     'minimum': f'{info.minimum:02X}',
                     'maximum': f'{info.maximum:02X}',
@@ -416,6 +498,8 @@ class ReverseController(QObject):
 
     @pyqtProperty(str, notify=changed)
     def last_data(self) -> str:
+        if self._timeline.active:
+            return self._timeline.payload().hex(' ').upper()
         item = self._current()
         return item.last.hex(' ').upper() if item is not None else ''
 
@@ -524,11 +608,12 @@ class ReverseController(QObject):
 
     @pyqtProperty(str, notify=changed)
     def field_value(self) -> str:
-        """The field's value in the last frame of the selected identifier."""
+        """The field's value in the latest frame, or at the playback position while replaying."""
         field, item = self._field_object(), self._current()
         if field is None or item is None:
             return ''
-        raw = field.raw(item.last)
+        payload = self._timeline.payload() if self._timeline.active else item.last
+        raw = field.raw(payload)
         if raw is None:
             return 'outside the frame'
         value = raw * field.scale + field.offset

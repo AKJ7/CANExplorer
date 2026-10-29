@@ -18,6 +18,10 @@ from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 import can
 
+from can_explorer.sys.log_handler import get_logger
+
+logger = get_logger(__name__)
+
 BINARY_MODE = b'\xe7\xe7'
 START = 0xF1
 CMD_FRAME, CMD_TIME_SYNC, CMD_SETUP_CANBUS, CMD_GET_CANBUS_PARAMS = 0x00, 0x01, 0x05, 0x06
@@ -31,6 +35,12 @@ CONFIGURABLE_BUSES = 2  # SETUP_CANBUS configures buses 0 and 1
 SERIAL_BAUDRATE = 1_000_000  # Native USB devices ignore it; USB serial bridges of ESP32 boards need it
 INIT_TIMEOUT = 2.0
 TIMESTAMP_WRAP = 1 << 32
+# The GVRET firmware expects the host to send keepalives (as SavvyCAN does); without them some firmware stops
+# streaming frames after a while. One per second, like SavvyCAN.
+KEEPALIVE_INTERVAL = 1.0
+# Frames buffered between the reader thread and the consumer. Bounded so a stalled consumer (e.g. the event loop
+# throttled by macOS App Nap) drops frames and is noticed, instead of the queue growing without limit.
+QUEUE_SIZE = 50_000
 _CLOSED = object()
 
 
@@ -183,6 +193,8 @@ class GvretBus(can.BusABC):
         fd: bool = False,
         serial_baudrate: int = SERIAL_BAUDRATE,
         timeout: float = INIT_TIMEOUT,
+        keepalive_interval: float = KEEPALIVE_INTERVAL,
+        queue_size: int = QUEUE_SIZE,
         **kwargs: Any,
     ):
         import serial  # pyserial, installed with python-can[serial]
@@ -195,8 +207,12 @@ class GvretBus(can.BusABC):
         self.info = DeviceInfo()
         self._parser = GvretParser()
         self._clock = TimestampClock()
-        self._queue: queue.Queue = queue.Queue()
+        self._queue: queue.Queue = queue.Queue(max(1, queue_size))
+        self.dropped = 0  # Frames dropped because the queue was full (consumer could not keep up)
         self._closed = False
+        self._write_lock = threading.Lock()  # The reader never writes; send() and the keepalive do
+        self._wake = threading.Event()  # Set on shutdown to end the keepalive wait at once
+        self._keepalive_interval = keepalive_interval
         try:
             self._serial = serial.serial_for_url(self.port, baudrate=serial_baudrate, timeout=0.05)
         except (serial.SerialException, ValueError) as e:
@@ -208,6 +224,10 @@ class GvretBus(can.BusABC):
             raise
         self._reader = threading.Thread(target=self._read, name=f'GvretBus {self.port}', daemon=True)
         self._reader.start()
+        self._keeper: Optional[threading.Thread] = None
+        if keepalive_interval > 0:
+            self._keeper = threading.Thread(target=self._keepalive, name=f'GvretBus keepalive {self.port}', daemon=True)
+            self._keeper.start()
         super().__init__(channel=channel, **kwargs)
 
     def _initialise(self, bitrate: Optional[int], listen_only: bool, timeout: float) -> None:
@@ -248,21 +268,55 @@ class GvretBus(can.BusABC):
                 data = self._serial.read(max(1, self._serial.in_waiting))
                 for command, payload in self._parser.feed(data):
                     if command == CMD_FRAME and payload.bus == self.bus:
-                        self._queue.put(
-                            can.Message(
-                                timestamp=self._clock(payload.timestamp_us),
-                                arbitration_id=payload.arbitration_id,
-                                is_extended_id=payload.is_extended_id,
-                                data=payload.data,
-                                channel=self.bus,
-                                is_rx=True,
-                            )
+                        message = can.Message(
+                            timestamp=self._clock(payload.timestamp_us),
+                            arbitration_id=payload.arbitration_id,
+                            is_extended_id=payload.is_extended_id,
+                            data=payload.data,
+                            channel=self.bus,
+                            is_rx=True,
                         )
+                        try:
+                            self._queue.put_nowait(message)
+                        except queue.Full:
+                            self.dropped += 1
+                            if self.dropped == 1 or self.dropped % 10_000 == 0:
+                                logger.warning(
+                                    '%s: receive queue full, dropped %d frames (consumer not keeping up)',
+                                    self.channel_info,
+                                    self.dropped,
+                                )
         except Exception as e:  # The device was unplugged or the connection dropped
             error = e
         if not self._closed:
-            self._queue.put(can.CanOperationError(f'Connection to {self.port} lost: {error}'))
-        self._queue.put(_CLOSED)
+            try:
+                self._queue.put_nowait(can.CanOperationError(f'Connection to {self.port} lost: {error}'))
+            except queue.Full:  # Make room for the error so the loss is always reported
+                self._drain_one()
+                self._queue.put_nowait(can.CanOperationError(f'Connection to {self.port} lost: {error}'))
+        self._put_closed()
+
+    def _drain_one(self) -> None:
+        try:
+            self._queue.get_nowait()
+        except queue.Empty:
+            pass
+
+    def _put_closed(self) -> None:
+        try:
+            self._queue.put_nowait(_CLOSED)
+        except queue.Full:
+            self._drain_one()
+            self._queue.put_nowait(_CLOSED)
+
+    def _keepalive(self) -> None:
+        """Send a keepalive every interval, as SavvyCAN does, so the device keeps streaming frames."""
+        while not self._wake.wait(self._keepalive_interval):
+            try:
+                with self._write_lock:
+                    self._serial.write(bytes([START, CMD_KEEPALIVE]))
+            except Exception:  # The connection dropped; the reader thread reports the loss
+                return
 
     def _recv_internal(self, timeout: Optional[float]) -> Tuple[Optional[can.Message], bool]:
         try:
@@ -270,7 +324,7 @@ class GvretBus(can.BusABC):
         except queue.Empty:
             return None, False
         if item is _CLOSED:
-            self._queue.put(_CLOSED)  # Keep reporting it
+            self._put_closed()  # Keep reporting it (a slot was just freed by the get above)
             return None, False
         if isinstance(item, Exception):
             raise item
@@ -279,18 +333,25 @@ class GvretBus(can.BusABC):
     def send(self, msg: can.Message, timeout: Optional[float] = None) -> None:
         packet = encode_frame(msg, self.bus)
         try:
-            self._serial.write(packet)
+            with self._write_lock:  # The keepalive thread writes too; keep the byte streams from interleaving
+                self._serial.write(packet)
         except Exception as e:
             raise can.CanOperationError(f'Could not send to {self.port}: {e}') from e
         if self.receive_own_messages:  # The device does not echo sent frames
             echo = msg.__copy__()
             echo.timestamp, echo.is_rx, echo.channel = time.time(), False, self.bus
-            self._queue.put(echo)
+            try:
+                self._queue.put_nowait(echo)
+            except queue.Full:
+                self.dropped += 1
 
     def shutdown(self) -> None:
         if self._closed:
             return
         self._closed = True
+        self._wake.set()  # End the keepalive wait at once
+        if self._keeper is not None:
+            self._keeper.join(1)
         self._reader.join(1)
         self._serial.close()
         super().shutdown()
