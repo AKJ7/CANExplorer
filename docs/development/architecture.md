@@ -65,6 +65,8 @@ computer.
 | `core/can_command.py` | Request/response over a CAN session for command protocols (XCP, CCP) |
 | `core/xcp.py`, `core/ccp.py` | XCP and CCP masters (connect, read/write memory by address) and simulated slaves |
 | `core/a2l.py` | A minimal A2L (ASAM MCD-2 MC) reader: measurements and scalar characteristics with address, data type and linear conversion |
+| `core/someip.py` | SOME/IP and SOME/IP-SD parsing, and a UDP monitor tracking discovered services |
+| `core/someip_serialization.py`, `core/someip_fibex.py` | SOME/IP payload serialization (type model and deserializer) and a FIBEX reader that builds it |
 | `core/doip.py` | Diagnostics over IP (ISO 13400-2): vehicle discovery, entity status and power mode over UDP; the tester's TCP connection with routing activation and alive checks; the UDS transport per target address; the simulated DoIP entity |
 | `core/j1939_tools.py` | J1939 NAME, DM1/DM2, transport reassembly, network tracking and sending with BAM or RTS/CTS |
 | `core/canopen_tools.py` | EDS/DCF object dictionaries, SDO client, NMT, PDO mappings, network tracking, simulated node |
@@ -76,6 +78,7 @@ computer.
 | `core/mqtt.py`, `gui/mqtt.py` | MQTT bridge of a bus (aiomqtt on a thread of its own): signals, frames and status out, allow-listed send requests in; the connection's MQTT controller |
 | `core/compare.py` | Comparing two recordings |
 | `core/gateway.py` | Bus gateway: forwarding rules between sessions, with filtering, identifier rewriting, rate limiting and an echo guard |
+| `core/reverse/reactions.py` | Reverse engineering: baseline-vs-action diffing (Capture reaction) |
 | `core/reverse/timeline.py` | Reverse engineering: the frames of one identifier over time, for the Bits-tab replay scrubber |
 | `core/reverse/` | Reverse engineering: bit fields (`fields.py`), bit and byte statistics with the notch (`bitstats.py`), checksum detection (`checksums.py`), the automatic analysis of fields, their kinds and multiplexers (`analysis.py`), correlation with reference signals (`reference.py`) and OBD-II polling (`obd.py`), grouping fields that carry the same signal (`related.py`), event markers (`markers.py`), synthetic traffic with known signals and scoring of found fields (`synthetic.py`) |
 | `core/bushealth.py` | Error frame decoding, error states and the bus health history |
@@ -97,7 +100,7 @@ computer.
 | `gui/translations.py` | Translations from Qt Linguist files |
 | `gui/plot_view.py`, `gui/signal_plot.py` | Time range, cursors and charts of the signal plots; plot item (QQuickPaintedItem) |
 | `gui/app_state.py` | Persistent settings (QSettings) |
-| `gui/qt/CanExplorer/` | QML views, dialogs and dashboard components; `Theme.qml` holds the colours of the six themes, `GlassPanel.qml` the frosted glass of dialogs, menus and popups |
+| `gui/qt/CanExplorer/` | QML views, dialogs and dashboard components; `Theme.qml` holds the colours of the themes, `GlassPanel.qml` the frosted glass of dialogs, menus and popups |
 | `gui/qt/CanExplorerStyle/` | Qt Quick Controls style drawing buttons, inputs, dialogs, menus etc. with the theme colours (Fusion for the rest) |
 | `sys/config.py`, `sys/environment.py` | Application settings; clean-up of snap environments |
 | `can_server/` | `can-server`: shares local CAN interfaces over WebSocket |

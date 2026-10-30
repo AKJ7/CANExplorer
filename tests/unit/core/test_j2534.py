@@ -400,3 +400,35 @@ def test_compiled_driver_in_process_and_through_the_bridge(tmp_path, monkeypatch
             bus.shutdown()
     with pytest.raises(can.CanInitializationError, match=r'invalid bitrate \(stub error\)'):
         can.Bus(interface='j2534', channel=str(library), bitrate=250_000)
+
+
+def test_devices_sharing_one_driver_library_are_both_listed(monkeypatch):
+    """Autel's MaxiFlash registers its USB and Bluetooth connections as two devices that use the same driver DLL;
+    both must be offered, not collapsed into one. The same device repeated across the 64/32-bit registry views is
+    still deduplicated."""
+    usb = {
+        'Key': 'Maxiflash',
+        'Name': 'MaxiFlash VCI',
+        'Vendor': 'Autel',
+        'FunctionLibrary': r'C:\Autel\MaxiFlash.dll',
+        'CAN': 1,
+    }
+    bluetooth = {
+        'Key': 'MaxiflashBT',
+        'Name': 'MaxiFlash VCI Bluetooth',
+        'Vendor': 'Autel',
+        'FunctionLibrary': r'C:\Autel\MaxiFlash.dll',
+        'CAN': 1,
+    }
+    entries = [usb, bluetooth, dict(usb)]  # The trailing copy simulates the other registry view
+    monkeypatch.setattr(j2534, '_registry_entries', lambda: entries)
+    monkeypatch.setattr(j2534, 'library_machine', lambda path: X64)
+    monkeypatch.setattr(j2534, 'process_machine', lambda: X64)
+    monkeypatch.setattr(j2534, 'bridge_command', lambda: None)
+
+    assert [device.name for device in registered_devices()] == ['MaxiFlash VCI', 'MaxiFlash VCI Bluetooth']
+    assert J2534Bus._detect_available_configs() == [
+        {'interface': 'j2534', 'channel': 'MaxiFlash VCI'},
+        {'interface': 'j2534', 'channel': 'MaxiFlash VCI Bluetooth'},
+    ]
+    assert resolve_channel('MaxiFlash VCI Bluetooth').library == r'C:\Autel\MaxiFlash.dll'

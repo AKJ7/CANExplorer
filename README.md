@@ -61,6 +61,8 @@
 - ECU flashing over UDS (RequestDownload/TransferData) from Intel HEX, S-record or binary files, with progress
 - DoIP (Diagnostics over IP, ISO 13400-2): finds DoIP entities, connects with routing activation (optionally over
   TLS) and runs diagnostics and flashing over Ethernet; a simulated entity works without a vehicle
+- SOME/IP over automotive Ethernet: listens on UDP, discovers the services offered through SOME/IP-SD and shows the
+  decoded messages; load a FIBEX file to deserialize the payloads into named signals
 - UDS discovery: scan an ECU for the services, data identifiers, subfunctions and routines it exposes, classifying
   the answers, for reverse engineering diagnostics; and fuzz it with mutated requests, detecting hangs and crashes
 - Bus gateway: forward frames between two connections with filtering, identifier rewriting and rate limiting

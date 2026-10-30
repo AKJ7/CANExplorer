@@ -6,6 +6,30 @@ All notable changes to CANExplorer are documented in this file. The format follo
 CANExplorer follows [semantic versioning](https://semver.org/) from 1.0.0 on. Between `0.0.1` and `1.0.0`, the
 development stages are listed by date and commit, newest first.
 
+## [1.5.0] – 2026-10-30
+
+### Added
+
+- **SOME/IP over Ethernet** tool: listens on UDP, discovers the services offered through SOME/IP-SD (Service
+  Discovery) — with their instances, versions and endpoints — and shows the decoded messages (requests, responses,
+  errors with return codes, events, and the SD entries OfferService / FindService / SubscribeEventgroup). Load a
+  **FIBEX** file to decode the message payloads into named signals (scalars, strings, fixed and dynamic arrays and
+  nested structs, with a method's request and response decoded separately). Capture is over UDP.
+- **Capture reaction** in the reverse engineering view: record a steady baseline, perform an action, and diff the
+  two to find what changed on the bus — identifiers that appeared and runs of bits that were stable during the
+  baseline but changed during the action (with their before/after values), most reactive first. It is passive
+  (it only reads captured frames, never transmits), so it finds which message controls a relay, light or door
+  without sending unknown frames; replay the captured frame to confirm. A one-click generalization of markers.
+- **Five more colour themes**, selectable in the preferences: **Dracula**, **Solarized Dark**, **High Contrast**
+  (a colour-blind-safe, high-contrast theme using the Okabe-Ito palette on black), **Cyberpunk** (neon on
+  near-black) and **Rosé** (hot pink on a deep rosy background). Eleven themes in all.
+
+### Fixed
+
+- **J2534 devices**: a device whose USB and Bluetooth connections register as two entries sharing one driver DLL
+  (such as the Autel MaxiFlash VCI) now shows both; detection no longer dropped the second one when
+  deduplicating the 64/32-bit registry views by library path.
+
 ## [1.4.0] – 2026-10-29
 
 ### Added

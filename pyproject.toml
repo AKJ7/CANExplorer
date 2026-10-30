@@ -1,6 +1,6 @@
 [project]
 name = "can-explorer"
-version = "1.4.0"
+version = "1.5.0"
 description = "Monitor, analyse, diagnose, simulate and test CAN, CAN FD and LIN buses"
 authors = [{ name = "AKJ7", email = "akj123429@gmail.com" }]
 license = "MIT"

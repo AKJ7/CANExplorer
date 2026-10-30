@@ -34,6 +34,7 @@ ReverseResults 1.0 ReverseResults.qml
 ReverseAnalysisPanel 1.0 ReverseAnalysisPanel.qml
 ReverseReferencePanel 1.0 ReverseReferencePanel.qml
 ReverseMarkersPanel 1.0 ReverseMarkersPanel.qml
+ReverseReactionPanel 1.0 ReverseReactionPanel.qml
 ReverseRelatedPanel 1.0 ReverseRelatedPanel.qml
 ReverseTimelineBar 1.0 ReverseTimelineBar.qml
 WelcomeView 1.0 WelcomeView.qml
@@ -44,6 +45,7 @@ CompareView 1.0 CompareView.qml
 EtherCatView 1.0 EtherCatView.qml
 PhysicalIoView 1.0 PhysicalIoView.qml
 DoipView 1.0 DoipView.qml
+SomeIpView 1.0 SomeIpView.qml
 UdsScanView 1.0 UdsScanView.qml
 XcpView 1.0 XcpView.qml
 GmlanView 1.0 GmlanView.qml

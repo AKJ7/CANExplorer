@@ -217,14 +217,19 @@ def registered_devices() -> List[J2534Device]:
     devices: List[J2534Device] = []
     seen = set()
     for entry in _registry_entries():
+        name = str(entry.get('Name') or entry['Key'])
         libraries = [entry.get('FunctionLibrary'), entry.get('FunctionLibrary64')]
         for library in filter(None, libraries):
-            if str(library).lower() in seen:
+            # Deduplicate by (device, library): the same device appears in both the 64- and 32-bit registry
+            # views, but two different devices may share one driver DLL (e.g. an Autel MaxiFlash registers its
+            # USB and Bluetooth connections as separate devices using the same library), and both must be listed.
+            identity = (name.lower(), str(library).lower())
+            if identity in seen:
                 continue
-            seen.add(str(library).lower())
+            seen.add(identity)
             devices.append(
                 J2534Device(
-                    name=str(entry.get('Name') or entry['Key']),
+                    name=name,
                     vendor=str(entry.get('Vendor', '')),
                     library=str(library),
                     can=bool(entry.get('CAN', 1)),

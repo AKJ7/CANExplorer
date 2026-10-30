@@ -15,8 +15,8 @@ The window is laid out as a dashboard:
 - *Tools* in the sidebar opens the [database editor](database-editor.md), the [multi-bus trace](multi-bus.md),
   [compares recordings](compare-recordings.md), the [EtherCAT master](ethercat.md) (CANopen over EtherCAT),
   [Physical I/O](physical-io.md) (digital lines and analogue inputs of a USB I/O adapter), [DoIP](doip.md)
-  (UDS diagnostics and flashing over Ethernet) and the [bus gateway](bus-gateway.md) (forwarding frames between
-  connections).
+  (UDS diagnostics and flashing over Ethernet), [SOME/IP](someip.md) (service discovery and messages on automotive
+  Ethernet) and the [bus gateway](bus-gateway.md) (forwarding frames between connections).
 - ++ctrl+k++ opens the **command palette**: type a few letters of any command, view, tool, connection, theme or
   language and press ++enter++. Letters may be skipped (`cmp rec` finds *Compare recordings*), so everything is
   reachable from the keyboard.
@@ -64,7 +64,7 @@ estimated bus load, error frames, the protocol decoder and the loaded database.
 
 ## Themes
 
-Six colour themes are available under **Settings → Theme**: Dark (default), Purple, Nord, Ocean, Forest and Light.
+Eleven colour themes are available under **Settings → Theme**: Dark (default), Purple, Nord, Ocean, Forest, Light, Dracula, Solarized Dark, High Contrast (colour-blind-safe), Cyberpunk and Rosé.
 
 Dialogs can be moved by dragging their title; they open centred again the next time. Dialogs, menus and popups are
 made of frosted glass: the window behind them shows through, blurred and tinted in

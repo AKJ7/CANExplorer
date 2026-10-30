@@ -555,3 +555,80 @@ def test_timeline_scrubs_by_index_when_all_timestamps_equal(qapp):
     timeline.play()
     timeline._tick()
     assert not timeline.playing and timeline.frame == 4
+
+
+async def test_reaction_capture_baseline_action_diff(manager, channel, peer):
+    """Record a baseline, mark the action, capture: a new identifier and a bit that flipped only during the
+    action are reported; a bit that was already moving is not."""
+    connection = open_connection(manager, channel)
+    send(peer, 0x100, [0, 0x00])
+    await wait_until(lambda: connection.session.trace.total == 1)
+    tools = connection.reverse
+    tools.set_visible(True)
+    reaction = tools.reaction
+    assert reaction.phase == 'idle'
+    assert reaction.start_baseline() == '' and reaction.phase == 'baseline'
+
+    # Baseline: byte 0 counts (already moving), byte 1 stays 0
+    total = connection.session.trace.total
+    for i in range(20):
+        send(peer, 0x100, [i % 4, 0x00])
+    await wait_until(lambda: connection.session.trace.total >= total + 20)
+    assert reaction.mark_action() == '' and reaction.phase == 'action'
+
+    # Action: byte 1 bit 0 flips on, and a new identifier appears
+    total = connection.session.trace.total
+    for i in range(20):
+        send(peer, 0x100, [i % 4, 0x01 if i >= 5 else 0x00])
+    send(peer, 0x201, [9])
+    await wait_until(lambda: connection.session.trace.total >= total + 21)
+    reaction.capture()
+    await wait_until(lambda: reaction.phase == 'done', timeout=10)
+
+    rows = {(row['id'], row['key']): row for row in reaction.results}
+    assert ('201', '') in rows and rows[('201', '')]['kind'] == 'new'
+    assert ('100', '100[8|1@1+]') in rows
+    assert rows[('100', '100[8|1@1+]')]['change'] == '0x0 → 0x1'
+    assert not any(
+        row['id'] == '100' and row['key'].startswith('100[0') for row in reaction.results
+    )  # byte 0 moved anyway
+
+    reaction.use(rows[('100', '100[8|1@1+]')]['index'])
+    assert tools.field_key == '100[8|1@1+]'
+    assert reaction.plot(rows[('201', '')]['index']) == 'Nothing to plot'  # The new-ID row has no field
+
+    reaction.reset()
+    assert reaction.phase == 'idle' and reaction.results == []
+    tools.set_visible(False)
+
+
+async def test_reaction_windows_split_by_frame_count_not_timestamp(manager, channel, peer, monkeypatch):
+    """A coarse clock (seen on Windows, ~15 ms) can stamp a whole burst of frames with one timestamp. The
+    baseline/action split must use frame counts, not timestamps — otherwise the baseline window collapses to
+    nothing and an identifier present throughout wrongly looks new (its before value renders as '—')."""
+    import time
+
+    monkeypatch.setattr(time, 'time', lambda: 10_000.0)  # Freeze the clock: every frame shares one timestamp
+    connection = open_connection(manager, channel)
+    send(peer, 0x100, [0, 0x00])
+    await wait_until(lambda: connection.session.trace.total == 1)
+    reaction = connection.reverse.reaction
+
+    assert reaction.start_baseline() == ''
+    total = connection.session.trace.total
+    for _ in range(10):
+        send(peer, 0x100, [0, 0x00])
+    await wait_until(lambda: connection.session.trace.total >= total + 10)
+    assert reaction.mark_action() == ''
+    total = connection.session.trace.total
+    for _ in range(10):
+        send(peer, 0x100, [0, 0x01])
+    await wait_until(lambda: connection.session.trace.total >= total + 10)
+    reaction.capture()
+    await wait_until(lambda: reaction.phase == 'done', timeout=10)
+
+    rows = {(row['id'], row['key']): row for row in reaction.results}
+    # 0x100 was present in both windows, so it is a 'changed' reaction with a real before value, never 'new'.
+    assert ('100', '100[8|1@1+]') in rows
+    assert rows[('100', '100[8|1@1+]')]['kind'] == 'changed'
+    assert rows[('100', '100[8|1@1+]')]['change'] == '0x0 → 0x1'

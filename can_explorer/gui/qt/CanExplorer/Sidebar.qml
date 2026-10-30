@@ -229,6 +229,14 @@ Rectangle {
                 }
 
                 NavItem {
+                    text: qsTr("SOME/IP")
+                    glyph: "⿻"
+                    active: root.currentTool === "someip"
+                    dotColor: connectionManager.someip.is_open ? Theme.success : "transparent"
+                    onClicked: root.toolSelected("someip")
+                }
+
+                NavItem {
                     text: qsTr("Bus gateway")
                     glyph: "⇄"
                     active: root.currentTool === "gateway"

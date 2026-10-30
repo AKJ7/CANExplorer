@@ -39,6 +39,7 @@ from can_explorer.gui.updates import UpdateController
 from can_explorer.gui.multibus import MultiBusController
 from can_explorer.gui.database_editor import DatabaseEditorController
 from can_explorer.gui.doip import DoipController
+from can_explorer.gui.someip import SomeIpController
 from can_explorer.gui.gateway import GatewayController
 from can_explorer.gui.ethercat import EtherCatController
 from can_explorer.gui.physical_io import PhysicalIoController
@@ -854,6 +855,7 @@ class ConnectionManager(QObject):
         self._ethercat = EtherCatController(parent=self)
         self._physical_io = PhysicalIoController(parent=self)
         self._doip = DoipController(parent=self)
+        self._someip = SomeIpController(parent=self)
         self._gateway = GatewayController(self, parent=self)
         self._updates = UpdateController(self._app_state.settings, parent=self)
         self._database_editor.saved.connect(self._reload_database)
@@ -963,6 +965,11 @@ class ConnectionManager(QObject):
     def doip(self) -> DoipController:
         """Diagnostics over IP: DoIP entities, routing activation and UDS over it."""
         return self._doip
+
+    @pyqtProperty(QObject, constant=True)
+    def someip(self) -> SomeIpController:
+        """SOME/IP over Ethernet: service discovery and decoded messages."""
+        return self._someip
 
     def _reload_database(self, path: str) -> None:
         """Connections decoding with a database that was edited and saved use the new version."""
@@ -1208,6 +1215,7 @@ class ConnectionManager(QObject):
         self._ethercat.shutdown()
         self._physical_io.shutdown()
         self._doip.shutdown()
+        self._someip.shutdown()
         self._gateway.shutdown()
 
     def _apply_preferences(self):

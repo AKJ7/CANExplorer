@@ -14,6 +14,7 @@ from can_explorer.gui.reverse_timeline import ReverseTimeline
 from can_explorer.gui.reverse_tools import (
     AnalysisController,
     MarkerController,
+    ReactionController,
     ReferenceController,
     RelatedController,
 )
@@ -146,6 +147,7 @@ class ReverseController(QObject):
         self._reference = ReferenceController(self, parent=self)
         self._markers = MarkerController(self, parent=self)
         self._related = RelatedController(self, parent=self)
+        self._reaction = ReactionController(self, parent=self)
         self._timeline = ReverseTimeline(self, parent=self)
         self._timeline.moved.connect(self._on_timeline_moved)
 
@@ -168,6 +170,10 @@ class ReverseController(QObject):
     @pyqtProperty(QObject, constant=True)
     def related(self):
         return self._related
+
+    @pyqtProperty(QObject, constant=True)
+    def reaction(self):
+        return self._reaction
 
     @pyqtProperty(QObject, constant=True)
     def timeline(self):
@@ -271,6 +277,7 @@ class ReverseController(QObject):
         self._reference.clear()
         self._markers.clear()
         self._related.clear()
+        self._reaction.clear()
 
     def shutdown(self) -> None:
         self._reference.stop_obd()
