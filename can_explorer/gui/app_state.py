@@ -11,7 +11,19 @@ logger = get_logger(__name__)
 
 MAX_RECENT = 10
 # Must match the palettes of Theme.qml
-THEMES = ('Dark', 'Purple', 'Nord', 'Ocean', 'Forest', 'Light')
+THEMES = (
+    'Dark',
+    'Purple',
+    'Nord',
+    'Ocean',
+    'Forest',
+    'Light',
+    'Dracula',
+    'Solarized Dark',
+    'High Contrast',
+    'Cyberpunk',
+    'Rosé',
+)
 DEFAULT_THEME = 'Dark'
 DEFAULT_MAX_TRACE_ROWS = 100_000
 DEFAULT_REFRESH_INTERVAL_MS = 33

@@ -20,7 +20,7 @@ ApplicationWindow {
     readonly property var currentConnectionView: currentIndex >= 0 ? connectionViews.itemAt(currentIndex) : null
     property var notifications: []
     // A tool shown instead of the connections: "", "database-editor", "multi-bus", "compare", "ethercat", "physical-io",
-    // "doip" or "gateway"
+    // "doip", "someip" or "gateway"
     property string tool: ""
     property bool closeConfirmed: false
     // Dragged with the handle on the right edge of the sidebar
@@ -63,7 +63,7 @@ ApplicationWindow {
         for (const [key, title] of [["database-editor", qsTr("Database editor")], ["multi-bus", qsTr("Multi-bus trace")],
                                     ["compare", qsTr("Compare recordings")], ["ethercat", qsTr("EtherCAT (CoE)")],
                                     ["physical-io", qsTr("Physical I/O")], ["doip", qsTr("DoIP")],
-                                    ["gateway", qsTr("Bus gateway")]])
+                                    ["someip", qsTr("SOME/IP")], ["gateway", qsTr("Bus gateway")]])
             add(qsTr("Tool"), title, () => mainWindow.tool = key)
         for (const theme of connectionManager.app_state.themes)
             add(qsTr("Theme"), theme, () => connectionManager.app_state.set_theme(theme))
@@ -268,6 +268,7 @@ ApplicationWindow {
                     : mainWindow.tool === "ethercat" ? qsTr("EtherCAT (CoE)")
                     : mainWindow.tool === "physical-io" ? qsTr("Physical I/O")
                     : mainWindow.tool === "doip" ? qsTr("DoIP")
+                    : mainWindow.tool === "someip" ? qsTr("SOME/IP")
                     : mainWindow.tool === "gateway" ? qsTr("Bus gateway")
                     : mainWindow.tool === "multi-bus" ? qsTr("Multi-bus trace") : ""
                 pageTitle: mainWindow.tool === "database-editor" ? connectionManager.database_editor.file_name
@@ -275,6 +276,7 @@ ApplicationWindow {
                     : mainWindow.tool === "ethercat" ? etherCatView.pageTitle
                     : mainWindow.tool === "physical-io" ? physicalIoView.pageTitle
                     : mainWindow.tool === "doip" ? doipView.pageTitle
+                    : mainWindow.tool === "someip" ? someIpView.pageTitle
                     : mainWindow.tool === "gateway" ? gatewayView.pageTitle
                     : mainWindow.tool === "multi-bus" ? multiBusView.pageTitle
                     : mainWindow.currentConnectionView ? mainWindow.currentConnectionView.pageTitle : ""
@@ -326,6 +328,14 @@ ApplicationWindow {
             DoipView {
                 id: doipView
                 visible: mainWindow.tool === "doip"
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.margins: 24
+            }
+
+            SomeIpView {
+                id: someIpView
+                visible: mainWindow.tool === "someip"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.margins: 24

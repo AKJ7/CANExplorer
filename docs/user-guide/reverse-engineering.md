@@ -19,6 +19,7 @@ Its tabs:
 | **Reference signals** | The fields following a known value: a database signal, a CSV file (e.g. GPS) or OBD-II values |
 | **Markers** | The bits changing each time you mark that something happened |
 | **Related signals** | Fields carrying the same signal on several messages, grouped |
+| **Reaction** | Diff a baseline against an action to find what a control or an event changes on the bus |
 
 The view works on live buses and on replayed log files. The bit statistics start when it is first opened,
 including the frames already in the trace, and follow the bus from then on; **Clear** in the trace toolbar and
@@ -206,6 +207,30 @@ This labels unknowns cheaply: once one member of a group is identified (here, or
 form, or **Plot** it.
 
 ![Related signals: one signal found on three messages, one of them at twice the scale](../assets/screenshots/reverse-related.png)
+
+## Capture reaction
+
+**Reaction** answers "I did X — what changed?" the safe way: it records the bus while steady, then while you perform
+an action, and diffs the two. It never transmits — it only watches — so it is the right tool for finding which
+message controls something (a relay, a light, a door) without sending unknown frames at the vehicle.
+
+1. **Record baseline** — leave the bus steady (do nothing) for a few seconds.
+2. **Start action** — now perform the action (press the button, open the door) once.
+3. **Capture reaction** — the action window is diffed against the baseline.
+
+The results list, most reactive first:
+
+- **new** identifiers that appeared only during the action (an ECU started transmitting), and
+- **changed** fields: runs of bits that were stable throughout the baseline but changed during the action, with
+  their **Change** (value before → after) and how many times they flipped.
+
+Fields that were already moving on their own during the baseline (counters, live sensors) are left out, so what
+remains is what the action caused. **Use** a result to load it into the bit field form, or **Plot** it.
+
+Having found the controlling message, confirm it by replaying that captured frame back onto the bus with
+**Replay to bus…** or the transmit panel — replaying a real, observed message, not a guessed one.
+
+![Capture reaction: a new identifier, a stepped nibble and a flipped bit found by diffing a baseline against an action](../assets/screenshots/reverse-reaction.png)
 
 ## Multiplexed fields
 

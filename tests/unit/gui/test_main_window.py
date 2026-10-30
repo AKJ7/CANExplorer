@@ -158,6 +158,18 @@ async def test_reverse_engineering_page_renders_without_warnings(window, qapp, q
     tools.related.find(0.99, 0.5)
     await finished(tools.related)
     qtbot.wait(100)
+    tabs.setProperty('currentIndex', 5)  # Reaction
+    qtbot.wait(50)
+    tools.reaction.start_baseline()
+    tools.reaction.mark_action()
+    tools.reaction.capture()
+    for _ in range(200):
+        if not tools.reaction.running:
+            break
+        await asyncio.sleep(0.01)
+        qapp.processEvents()
+    qtbot.wait(50)
+
     tools.analysis.use(0)
     tabs.setProperty('currentIndex', 0)
     qtbot.wait(100)

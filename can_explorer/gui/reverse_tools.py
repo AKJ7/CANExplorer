@@ -5,11 +5,13 @@ import asyncio
 import time
 from typing import Any, Dict, List, Optional
 
+import can
 from PyQt6.QtCore import QObject, QTimer, QUrl, pyqtProperty, pyqtSignal, pyqtSlot
 
 from can_explorer.core.reverse.analysis import FoundField, analyse_all, collect
 from can_explorer.core.reverse.markers import Marker, MarkerMatch, find_marker_changes
 from can_explorer.core.reverse.obd import PIDS, ObdPoller, is_obd_identifier
+from can_explorer.core.reverse.reactions import IdReaction, capture_reaction
 from can_explorer.core.reverse.related import SignalGroup, signal_groups
 from can_explorer.core.reverse.reference import (
     Match,
@@ -650,3 +652,148 @@ class RelatedController(_Tool):
         self._groups, self._members = [], []
         self._status = ''
         self.changed.emit()
+
+
+class ReactionController(_Tool):
+    """Stimulus-response: record a baseline, do an action, and diff what changed on the bus (a one-click version
+    of markers for the "I did X, what changed?" loop). Passive -- it only reads captured frames."""
+
+    changed = pyqtSignal()
+    running = pyqtProperty(bool, fget=_Tool._get_running, notify=changed)
+    status = pyqtProperty(str, fget=_Tool._get_status, notify=changed)
+
+    def __init__(self, reverse, parent: Optional[QObject] = None):
+        super().__init__(reverse, parent)
+        self._phase = 'idle'  # idle -> baseline -> action -> done
+        # Phase boundaries are frame indices (counts), not timestamps: a coarse clock (e.g. Windows' ~15 ms) can
+        # stamp a whole rapid burst with one value, which would collapse a timestamp-based window to nothing.
+        self._baseline_index: Optional[int] = None
+        self._action_index: Optional[int] = None
+        self._rows: List[tuple] = []  # (IdReaction, FieldReaction or None)
+
+    def _count(self) -> int:
+        return self.reverse.session.trace.total
+
+    @pyqtProperty(str, notify=changed)
+    def phase(self) -> str:
+        return self._phase
+
+    @pyqtSlot(result=str)
+    def start_baseline(self) -> str:
+        """Begin recording the baseline window (keep the bus steady). Returns an error or ''."""
+        if self._count() == 0:
+            return 'No frames yet'
+        self._baseline_index = self._count()
+        self._action_index = None
+        self._rows = []
+        self._phase = 'baseline'
+        self._status = 'Recording the baseline — keep the bus steady, then start the action'
+        self.changed.emit()
+        return ''
+
+    @pyqtSlot(result=str)
+    def mark_action(self) -> str:
+        """End the baseline and start the action window (now perform the action). Returns an error or ''."""
+        if self._phase != 'baseline':
+            return 'Record a baseline first'
+        if self._count() == 0:
+            return 'No frames yet'
+        self._action_index = self._count()
+        self._phase = 'action'
+        self._status = 'Now perform the action, then capture the reaction'
+        self.changed.emit()
+        return ''
+
+    @pyqtSlot()
+    def capture(self):
+        """End the action window and diff it against the baseline."""
+        if self._phase == 'action' and not self._running:
+            self._start(self._capture(self._count()))
+
+    async def _capture(self, end_index: Optional[int]) -> None:
+        if end_index is None or self._baseline_index is None or self._action_index is None:
+            self._status = 'No frames to analyse'
+            return
+        trace = self.reverse.session.trace
+        baseline_index = max(self._baseline_index, trace.first)  # Clamp in case older frames were paged off
+        action_index = max(self._action_index, baseline_index)
+        self._status = 'Reading the trace…'
+        self._rows = []
+        self.changed.emit()
+        baseline: List[can.Message] = []
+        action: List[can.Message] = []
+        index = baseline_index
+        for frame in trace.iter_from(baseline_index):
+            if index >= end_index:
+                break
+            (baseline if index < action_index else action).append(frame.message)
+            index += 1
+            if index % 50_000 == 0:
+                await asyncio.sleep(0)
+        exclude = {key for key in {(m.arbitration_id, m.is_extended_id) for m in action} if is_obd_identifier(key)}
+        report = await asyncio.to_thread(capture_reaction, baseline, action, exclude)
+        rows: List[tuple] = []
+        for reaction in report.reactions:
+            if reaction.appeared and not reaction.fields:
+                rows.append((reaction, None))
+            for item in reaction.fields:
+                rows.append((reaction, item))
+        self._rows = rows
+        self._phase = 'done'
+        fields = sum(1 for _, item in rows if item is not None)
+        self._status = (
+            f'{len(report.reactions)} identifiers reacted ({fields} fields) — baseline {report.baseline_frames}, '
+            f'action {report.action_frames} frames'
+            if report.reactions
+            else 'Nothing changed during the action'
+        )
+
+    @pyqtSlot()
+    def reset(self):
+        self._phase = 'idle'
+        self._baseline_index = self._action_index = None
+        self._rows = []
+        self._status = ''
+        self.changed.emit()
+
+    clear = reset
+
+    @staticmethod
+    def _change_text(reaction: IdReaction, item) -> str:
+        if item is None:
+            return '(new identifier)'
+        before = '—' if item.before is None else f'0x{item.before:X}'
+        return f'{before} → 0x{item.after:X}'
+
+    @pyqtProperty('QVariantList', notify=changed)
+    def results(self) -> List[Dict[str, Any]]:
+        return [
+            {
+                'index': index,
+                'id': reaction.id_text,
+                'key': item.field.key if item is not None else '',
+                'kind': 'new' if reaction.appeared else 'changed',
+                'change': self._change_text(reaction, item),
+                'flips': item.action_flips if item is not None else 0,
+            }
+            for index, (reaction, item) in enumerate(self._rows)
+        ]
+
+    def _field(self, index: int):
+        if 0 <= index < len(self._rows):
+            return self._rows[index][1]
+        return None
+
+    @pyqtSlot(int)
+    def use(self, index: int):
+        item = self._field(index)
+        if item is not None:
+            self.reverse.use_field(item.field, '', _signal_name('Reaction', item.field))
+
+    @pyqtSlot(int, result=str)
+    def plot(self, index: int) -> str:
+        item = self._field(index)
+        if item is None:
+            return 'Nothing to plot'
+        self.reverse.connection.track_field(item.field)
+        return ''

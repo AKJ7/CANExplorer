@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<fx:FIBEX xmlns:fx="http://www.asam.net/xml/fbx" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <fx:ELEMENTS>
+    <fx:SERVICE-INTERFACES>
+      <fx:SERVICE-INTERFACE ID="svc_engine">
+        <fx:SHORT-NAME>EngineService</fx:SHORT-NAME>
+        <fx:SERVICE-IDENTIFIER>4660</fx:SERVICE-IDENTIFIER>
+        <fx:METHODS>
+          <fx:METHOD ID="m_getspeed">
+            <fx:SHORT-NAME>GetSpeed</fx:SHORT-NAME>
+            <fx:METHOD-IDENTIFIER>69</fx:METHOD-IDENTIFIER>
+            <fx:INPUT-PARAMETERS>
+              <fx:INPUT-PARAMETER ID="p_req"><fx:SHORT-NAME>req</fx:SHORT-NAME><fx:DATATYPE-REF ID-REF="dt_u8"/><fx:POSITION>0</fx:POSITION></fx:INPUT-PARAMETER>
+            </fx:INPUT-PARAMETERS>
+            <fx:RETURN-PARAMETERS>
+              <fx:RETURN-PARAMETER ID="p_speed"><fx:SHORT-NAME>speed</fx:SHORT-NAME><fx:DATATYPE-REF ID-REF="dt_u16"/><fx:POSITION>0</fx:POSITION></fx:RETURN-PARAMETER>
+            </fx:RETURN-PARAMETERS>
+          </fx:METHOD>
+        </fx:METHODS>
+        <fx:EVENTS>
+          <fx:EVENT ID="e_speed">
+            <fx:SHORT-NAME>SpeedEvent</fx:SHORT-NAME>
+            <fx:EVENT-IDENTIFIER>32769</fx:EVENT-IDENTIFIER>
+            <fx:PARAMETERS>
+              <fx:PARAMETER ID="ep_speed"><fx:SHORT-NAME>speed</fx:SHORT-NAME><fx:DATATYPE-REF ID-REF="dt_u16"/><fx:POSITION>0</fx:POSITION></fx:PARAMETER>
+            </fx:PARAMETERS>
+          </fx:EVENT>
+          <fx:EVENT ID="e_status">
+            <fx:SHORT-NAME>StatusEvent</fx:SHORT-NAME>
+            <fx:EVENT-IDENTIFIER>32770</fx:EVENT-IDENTIFIER>
+            <fx:PARAMETERS>
+              <fx:PARAMETER ID="ep_status"><fx:SHORT-NAME>status</fx:SHORT-NAME><fx:DATATYPE-REF ID-REF="dt_status"/><fx:POSITION>0</fx:POSITION></fx:PARAMETER>
+            </fx:PARAMETERS>
+          </fx:EVENT>
+          <fx:EVENT ID="e_samples">
+            <fx:SHORT-NAME>SamplesEvent</fx:SHORT-NAME>
+            <fx:EVENT-IDENTIFIER>32771</fx:EVENT-IDENTIFIER>
+            <fx:PARAMETERS>
+              <fx:PARAMETER ID="ep_samples"><fx:SHORT-NAME>samples</fx:SHORT-NAME><fx:DATATYPE-REF ID-REF="dt_samples"/><fx:POSITION>0</fx:POSITION></fx:PARAMETER>
+            </fx:PARAMETERS>
+          </fx:EVENT>
+          <fx:EVENT ID="e_name">
+            <fx:SHORT-NAME>NameEvent</fx:SHORT-NAME>
+            <fx:EVENT-IDENTIFIER>32772</fx:EVENT-IDENTIFIER>
+            <fx:PARAMETERS>
+              <fx:PARAMETER ID="ep_name"><fx:SHORT-NAME>name</fx:SHORT-NAME><fx:DATATYPE-REF ID-REF="dt_name"/><fx:POSITION>0</fx:POSITION></fx:PARAMETER>
+            </fx:PARAMETERS>
+          </fx:EVENT>
+        </fx:EVENTS>
+      </fx:SERVICE-INTERFACE>
+    </fx:SERVICE-INTERFACES>
+  </fx:ELEMENTS>
+  <fx:PROCESSING-INFORMATION>
+    <fx:CODINGS>
+      <fx:CODING ID="cod_u8"><fx:CODED-TYPE BASE-DATA-TYPE="A_UINT8"/></fx:CODING>
+      <fx:CODING ID="cod_u16"><fx:CODED-TYPE BASE-DATA-TYPE="A_UINT16"/></fx:CODING>
+      <fx:CODING ID="cod_s16"><fx:CODED-TYPE BASE-DATA-TYPE="A_INT16"/></fx:CODING>
+      <fx:CODING ID="cod_str"><fx:CODED-TYPE BASE-DATA-TYPE="A_ASCIISTRING"/></fx:CODING>
+    </fx:CODINGS>
+    <fx:DATATYPES>
+      <fx:DATATYPE ID="dt_u8" xsi:type="fx:COMMON-DATATYPE-TYPE"><fx:SHORT-NAME>uint8</fx:SHORT-NAME><fx:CODING-REF ID-REF="cod_u8"/></fx:DATATYPE>
+      <fx:DATATYPE ID="dt_u16" xsi:type="fx:COMMON-DATATYPE-TYPE"><fx:SHORT-NAME>uint16</fx:SHORT-NAME><fx:CODING-REF ID-REF="cod_u16"/></fx:DATATYPE>
+      <fx:DATATYPE ID="dt_s16" xsi:type="fx:COMMON-DATATYPE-TYPE"><fx:SHORT-NAME>sint16</fx:SHORT-NAME><fx:CODING-REF ID-REF="cod_s16"/></fx:DATATYPE>
+      <fx:DATATYPE ID="dt_name" xsi:type="fx:COMMON-DATATYPE-TYPE"><fx:SHORT-NAME>string</fx:SHORT-NAME><fx:CODING-REF ID-REF="cod_str"/></fx:DATATYPE>
+      <fx:DATATYPE ID="dt_status" xsi:type="fx:COMPLEX-DATATYPE-TYPE">
+        <fx:SHORT-NAME>Status</fx:SHORT-NAME>
+        <fx:COMPLEX-DATATYPE-CLASS>STRUCTURE</fx:COMPLEX-DATATYPE-CLASS>
+        <fx:MEMBERS>
+          <fx:MEMBER ID="sm_flags"><fx:SHORT-NAME>flags</fx:SHORT-NAME><fx:DATATYPE-REF ID-REF="dt_u8"/><fx:POSITION>0</fx:POSITION></fx:MEMBER>
+          <fx:MEMBER ID="sm_temp"><fx:SHORT-NAME>temp</fx:SHORT-NAME><fx:DATATYPE-REF ID-REF="dt_s16"/><fx:POSITION>1</fx:POSITION></fx:MEMBER>
+        </fx:MEMBERS>
+      </fx:DATATYPE>
+      <fx:DATATYPE ID="dt_samples" xsi:type="fx:COMPLEX-DATATYPE-TYPE">
+        <fx:SHORT-NAME>Samples</fx:SHORT-NAME>
+        <fx:COMPLEX-DATATYPE-CLASS>ARRAY</fx:COMPLEX-DATATYPE-CLASS>
+        <fx:MEMBERS>
+          <fx:MEMBER ID="am_e"><fx:SHORT-NAME>e</fx:SHORT-NAME><fx:DATATYPE-REF ID-REF="dt_u16"/><fx:POSITION>0</fx:POSITION></fx:MEMBER>
+        </fx:MEMBERS>
+      </fx:DATATYPE>
+    </fx:DATATYPES>
+  </fx:PROCESSING-INFORMATION>
+</fx:FIBEX>

@@ -135,6 +135,7 @@ SplitView {
             TabButton { text: qsTr("Reference signals") }
             TabButton { text: qsTr("Markers") }
             TabButton { text: qsTr("Related signals") }
+            TabButton { text: qsTr("Reaction") }
         }
 
         StackLayout {
@@ -538,6 +539,12 @@ SplitView {
                 onMessage: text => root.showStatus(text)
             }
             ReverseRelatedPanel {
+                tools: root.tools
+                onFieldUsed: tabBar.currentIndex = 0
+                onPlotted: root.showPage("signals")
+                onMessage: text => root.showStatus(text)
+            }
+            ReverseReactionPanel {
                 tools: root.tools
                 onFieldUsed: tabBar.currentIndex = 0
                 onPlotted: root.showPage("signals")

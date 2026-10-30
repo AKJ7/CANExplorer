@@ -65,6 +65,7 @@ nav:
       - XCP/CCP: user-guide/xcp.md
       - GMLAN: user-guide/gmlan.md
       - DoIP: user-guide/doip.md
+      - SOME/IP: user-guide/someip.md
       - J1939: user-guide/j1939.md
       - CANopen: user-guide/canopen.md
       - EtherCAT (CoE): user-guide/ethercat.md

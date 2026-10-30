@@ -39,6 +39,35 @@ QtObject {
             background: "#eef1f7", surface: "#ffffff", card: "#ffffff", cardAlt: "#f3f5fa", border: "#dde2ee",
             text: "#1f2437", muted: "#69708c", accent: "#3b82f6", success: "#16a34a", warning: "#d97706",
             danger: "#dc2626", chart: ["#3b82f6", "#16a34a", "#d97706", "#dc2626", "#9333ea", "#0891b2"]
+        },
+        "Dracula": {
+            background: "#282a36", surface: "#2d2f3d", card: "#343746", cardAlt: "#2b2d3a", border: "#44475a",
+            text: "#f8f8f2", muted: "#6272a4", accent: "#bd93f9", success: "#50fa7b", warning: "#ffb86c",
+            danger: "#ff5555", chart: ["#bd93f9", "#50fa7b", "#ffb86c", "#ff5555", "#ff79c6", "#8be9fd"]
+        },
+        "Solarized Dark": {
+            background: "#002b36", surface: "#04313c", card: "#073642", cardAlt: "#053540", border: "#0f4a56",
+            text: "#93a1a1", muted: "#586e75", accent: "#268bd2", success: "#859900", warning: "#b58900",
+            danger: "#dc322f", chart: ["#268bd2", "#859900", "#b58900", "#dc322f", "#6c71c4", "#2aa198"]
+        },
+        // Colour-blind-safe and high contrast: the Okabe-Ito palette (distinguishable across common colour-vision
+        // deficiencies) on a black background with white text and strong borders.
+        "High Contrast": {
+            background: "#000000", surface: "#0a0a0a", card: "#141414", cardAlt: "#1c1c1c", border: "#4d4d4d",
+            text: "#ffffff", muted: "#c8c8c8", accent: "#56b4e9", success: "#009e73", warning: "#e69f00",
+            danger: "#d55e00", chart: ["#56b4e9", "#009e73", "#e69f00", "#d55e00", "#cc79a7", "#f0e442"]
+        },
+        // High-contrast cyberpunk: neon accents on a near-black violet background.
+        "Cyberpunk": {
+            background: "#06010f", surface: "#0f0a1f", card: "#150f2b", cardAlt: "#0e0920", border: "#3a2a6a",
+            text: "#eef2ff", muted: "#9d93c7", accent: "#00e5ff", success: "#00ff9f", warning: "#fde047",
+            danger: "#ff2e88", chart: ["#00e5ff", "#00ff9f", "#fde047", "#ff2e88", "#b14aff", "#ff6ec7"]
+        },
+        // A pink-led theme: hot pink on a deep rosy background, with a clear red kept for danger.
+        "Rosé": {
+            background: "#1b0f16", surface: "#231521", card: "#2c1a28", cardAlt: "#21131e", border: "#4a2a40",
+            text: "#fce7f1", muted: "#c58aa8", accent: "#ff4d94", success: "#34d399", warning: "#fbbf24",
+            danger: "#ef4444", chart: ["#ff4d94", "#c084fc", "#38bdf8", "#fbbf24", "#34d399", "#fb7185"]
         }
     })
     readonly property var current: palettes[name] || palettes["Dark"]

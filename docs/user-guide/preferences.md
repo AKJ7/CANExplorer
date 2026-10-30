@@ -8,7 +8,7 @@
 
 | Setting | Default | Range | Description |
 |---|---|---|---|
-| Theme | Dark | Dark, Purple, Nord, Ocean, Forest, Light | Colours of the user interface; applies immediately |
+| Theme | Dark | Dark, Purple, Nord, Ocean, Forest, Light, Dracula, Solarized Dark, High Contrast, Cyberpunk, Rosé | Colours of the user interface; applies immediately |
 | Language | System language | English, Deutsch, Français, 中文, 日本語 | Language of the user interface; applies immediately. Texts without a translation stay in English; see [Translations](../development/translations.md) to add a language |
 | Trace in memory (frames) | 100 000 | 1 000 – 2 000 000 | The most recent frames of the trace, kept in memory |
 | Trace history (frames) | 5 000 000 | 0 – 50 000 000 | Frames of the trace kept in total, the older ones on disk (about 160 bytes each); 0 keeps only those in memory. See [long recordings](trace-and-overview.md#long-recordings) |
