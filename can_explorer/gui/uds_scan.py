@@ -134,6 +134,9 @@ class UdsScanController(QObject):
         self._state = 'running'
         self._stop = asyncio.Event()
         self._task = asyncio.ensure_future(self._run(plan))
+        # _run emits `changed` from its finally while the task is not yet done (running still reads True); emit once
+        # more after the task has finished so `running` becomes False and the Stop button returns to Start.
+        self._task.add_done_callback(lambda _: self.changed.emit())
         self._timer.start()
         self.changed.emit()
         self.results_changed.emit()
@@ -274,7 +277,11 @@ class UdsScanController(QObject):
 
     @pyqtSlot()
     def stop(self):
+        # Set the event for a clean stop between requests, and cancel the task so an in-flight request (a long
+        # per-request timeout, or an ECU looping on "response pending") is interrupted at once.
         self._stop.set()
+        if self._task is not None and not self._task.done():
+            self._task.cancel()
 
     @pyqtSlot()
     def clear(self):

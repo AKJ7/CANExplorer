@@ -24,6 +24,9 @@ THEMES = (
     'Cyberpunk',
     'Rosé',
 )
+# Hidden themes: valid and persisted, but kept out of the theme list until unlocked. 'Spirit' (the red diamond)
+# is unlocked by the seven havens easter egg in the About dialog (see awaken_spirit).
+SECRET_THEMES = ('Spirit',)
 DEFAULT_THEME = 'Dark'
 DEFAULT_MAX_TRACE_ROWS = 100_000
 DEFAULT_REFRESH_INTERVAL_MS = 33
@@ -185,18 +188,34 @@ class AppState(QObject):
     @pyqtProperty(str, notify=preferences_changed)
     def theme(self) -> str:
         value = self._settings.value('appearance/theme', DEFAULT_THEME)
-        return value if value in THEMES else DEFAULT_THEME
+        return value if value in THEMES or value in SECRET_THEMES else DEFAULT_THEME
 
-    @pyqtProperty('QStringList', constant=True)
+    @pyqtProperty('QStringList', notify=preferences_changed)
     def themes(self) -> List[str]:
-        return list(THEMES)
+        names = list(THEMES)
+        if self.spirit_unlocked:
+            names.extend(SECRET_THEMES)
+        return names
+
+    @pyqtProperty(bool, notify=preferences_changed)
+    def spirit_unlocked(self) -> bool:
+        """Whether the hidden 'Spirit' theme has been unlocked (the seven havens easter egg)."""
+        return str(self._settings.value('appearance/spirit_unlocked', False)).lower() in ('true', '1')
 
     @pyqtSlot(str)
     def set_theme(self, theme: str) -> None:
-        if theme in THEMES and theme != self.theme:
+        if (theme in THEMES or theme in SECRET_THEMES) and theme != self.theme:
             self._settings.setValue('appearance/theme', theme)
             self._settings.sync()
             self.preferences_changed.emit()
+
+    @pyqtSlot()
+    def awaken_spirit(self) -> None:
+        """Easter egg: unlock the hidden 'Spirit' theme (the red diamond spirit) and switch to it."""
+        self._settings.setValue('appearance/spirit_unlocked', True)
+        self._settings.setValue('appearance/theme', 'Spirit')
+        self._settings.sync()
+        self.preferences_changed.emit()
 
     # Language
 

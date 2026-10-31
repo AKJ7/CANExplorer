@@ -60,12 +60,15 @@ nav:
       - Transmitting: user-guide/transmitting.md
       - Protocol decoding: user-guide/protocols.md
       - Diagnostics (UDS): user-guide/diagnostics.md
+      - OBD-II: user-guide/obd.md
       - Flashing: user-guide/flashing.md
       - UDS discovery: user-guide/uds-discovery.md
       - XCP/CCP: user-guide/xcp.md
       - GMLAN: user-guide/gmlan.md
+      - J1850 / Class 2: user-guide/j1850.md
       - DoIP: user-guide/doip.md
       - SOME/IP: user-guide/someip.md
+      - Ethernet capture: user-guide/ethernet.md
       - J1939: user-guide/j1939.md
       - CANopen: user-guide/canopen.md
       - EtherCAT (CoE): user-guide/ethercat.md

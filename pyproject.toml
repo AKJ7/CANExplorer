@@ -1,6 +1,6 @@
 [project]
 name = "can-explorer"
-version = "1.5.0"
+version = "1.6.0"
 description = "Monitor, analyse, diagnose, simulate and test CAN, CAN FD and LIN buses"
 authors = [{ name = "AKJ7", email = "akj123429@gmail.com" }]
 license = "MIT"
@@ -61,6 +61,8 @@ canexplorer_remote = "can_explorer.core.remote:RemoteBus"
 gvret = "can_explorer.core.gvret:GvretBus"
 # ELM327 and OBDLink OBD adapters (USB, Bluetooth, WiFi), usable as python-can interface "elm327"
 elm327 = "can_explorer.core.elm327:Elm327Bus"
+# GM Class 2 / SAE J1850 VPW through an ELM327 adapter, usable as python-can interface "elm327_vpw"
+elm327_vpw = "can_explorer.core.elm327_vpw:Elm327VpwBus"
 # J2534 pass-thru devices (SAE J2534-1 04.04 drivers), usable as python-can interface "j2534"
 j2534 = "can_explorer.core.j2534:J2534Bus"
 

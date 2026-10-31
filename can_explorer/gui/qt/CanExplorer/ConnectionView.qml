@@ -19,16 +19,18 @@ ColumnLayout {
         { key: "health", title: qsTr("Bus health"), icon: "♥" },
         { key: "reverse", title: qsTr("Reverse engineering"), icon: "⌕" },
     ].concat(connection.can_transmit ? [{ key: "diagnostics", title: qsTr("Diagnostics"), icon: "✚" }] : [])
+     .concat(connection.can_transmit && !connection.is_lin && !connection.is_j1850 ? [{ key: "obd", title: qsTr("OBD-II"), icon: "⊙" }] : [])
      .concat(connection.can_transmit ? [{ key: "flash", title: qsTr("Flashing"), icon: "⇪" }] : [])
      .concat(connection.can_transmit ? [{ key: "uds-scan", title: qsTr("UDS discovery"), icon: "⊚" }] : [])
      .concat(connection.can_transmit ? [{ key: "xcp", title: qsTr("XCP/CCP"), icon: "⟐" }] : [])
      .concat(connection.can_transmit ? [{ key: "gmlan", title: qsTr("GMLAN"), icon: "◈" }] : [])
+     .concat(connection.is_j1850 ? [{ key: "j1850", title: qsTr("J1850 / Class 2"), icon: "◇" }] : [])
      .concat(connection.protocol === "J1939" ? [{ key: "j1939", title: qsTr("J1939"), icon: "⛟" }] : [])
      .concat(connection.protocol === "CANopen" ? [{ key: "canopen", title: qsTr("CANopen"), icon: "⚙" }] : [])
      .concat(connection.is_lin ? [{ key: "lin", title: qsTr("LIN Schedule"), icon: "⏱" }] : [])
      .concat(connection.can_transmit ? [{ key: "simulation", title: qsTr("Simulation"), icon: "▶" }] : [])
      .concat(connection.can_transmit ? [{ key: "tests", title: qsTr("Tests"), icon: "✓" }] : [])
-    readonly property var pageKeys: ["dashboard", "trace", "overview", "signals", "health", "reverse", "diagnostics", "flash", "uds-scan", "xcp", "gmlan", "j1939", "canopen", "lin", "simulation", "tests"]
+    readonly property var pageKeys: ["dashboard", "trace", "overview", "signals", "health", "reverse", "diagnostics", "obd", "flash", "uds-scan", "xcp", "gmlan", "j1850", "j1939", "canopen", "lin", "simulation", "tests"]
     property string page: "dashboard"
     readonly property string pageTitle: (pages.find(item => item.key === page) || pages[0]).title
     readonly property bool tablePage: page === "trace" || page === "overview"
@@ -110,6 +112,15 @@ ColumnLayout {
                 ? root.connection.mqtt.topic + ": " + root.connection.mqtt.state
                 : qsTr("Publish the signals and frames to an MQTT broker")
             onClicked: mqttDialog.open()
+        }
+        Button {
+            text: root.connection.mcp_server.running ? qsTr("● Agent") : qsTr("Agent…")
+            highlighted: root.connection.mcp_server.running
+            ToolTip.visible: hovered
+            ToolTip.text: root.connection.mcp_server.running
+                ? root.connection.mcp_server.url + " (" + root.connection.mcp_server.tier + ")"
+                : qsTr("Expose this connection to an AI agent over a local MCP server")
+            onClicked: mcpServerDialog.open()
         }
         Button {
             text: qsTr("Export…")
@@ -238,6 +249,15 @@ ColumnLayout {
         Card {
             Loader {
                 anchors.fill: parent
+                active: root.connection.can_transmit && !root.connection.is_lin && !root.connection.is_j1850
+                sourceComponent: ObdView {
+                    connection: root.connection
+                }
+            }
+        }
+        Card {
+            Loader {
+                anchors.fill: parent
                 active: root.connection.can_transmit
                 sourceComponent: FlashView {
                     flashing: root.connection.flashing
@@ -269,6 +289,15 @@ ColumnLayout {
                 anchors.fill: parent
                 active: root.connection.can_transmit
                 sourceComponent: GmlanView {
+                    connection: root.connection
+                }
+            }
+        }
+        Card {
+            Loader {
+                anchors.fill: parent
+                active: root.connection.is_j1850
+                sourceComponent: J1850View {
                     connection: root.connection
                 }
             }
@@ -351,6 +380,12 @@ ColumnLayout {
 
     MqttDialog {
         id: mqttDialog
+        connection: root.connection
+    }
+
+    McpServerDialog {
+        id: mcpServerDialog
+        objectName: "mcpServerDialog"
         connection: root.connection
     }
 

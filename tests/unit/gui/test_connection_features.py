@@ -234,6 +234,51 @@ async def test_diagnostics_against_simulated_ecu(manager, channel, tmp_path):
     ecu_session.stop()
 
 
+async def test_obd_against_simulated_ecu(manager, channel):
+    from can_explorer.core.obd import ECU_RESPONSE, FUNCTIONAL_REQUEST, ObdServer
+
+    connection = open_connection(manager, channel)
+    ecu_session = BusSession(LiveSource(BusConfig('virtual', channel)))
+    ecu_session.start()
+    simulator = UdsEcuSimulator(
+        ecu_session, request_id=FUNCTIONAL_REQUEST, response_id=ECU_RESPONSE, server=ObdServer()
+    )
+    simulator.start()
+    obd = connection.obd
+
+    obd.scan()
+    await wait_until(lambda: not obd.busy and obd.scanned, timeout=5)
+    assert obd.vin == '1HGCM82633A004352'
+    assert obd.mil_on and obd.dtc_count == 2
+    names = {row['name'] for row in obd.values}
+    assert 'Engine speed' in names and 'Vehicle speed' in names
+
+    obd.toggle_live()
+
+    def speed_row():
+        return next((row for row in obd.values if row['name'] == 'Vehicle speed'), None)
+
+    # Wait for the specific value we assert on, not just any value (the poll reads PIDs one at a time)
+    await wait_until(lambda: speed_row() is not None and speed_row()['value'] != '', timeout=5)
+    speed = speed_row()
+    assert speed['value'] == '60' and speed['unit'] == 'km/h'
+    obd.toggle_live()
+    await wait_until(lambda: not obd.live)
+
+    obd.read_dtcs()
+    await wait_until(lambda: not obd.busy and len(obd.dtcs) == 2, timeout=5)
+    assert {dtc['code'] for dtc in obd.dtcs} == {'P0133', 'P0420'}
+    assert [dtc['code'] for dtc in obd.pending_dtcs] == ['P0171']
+
+    obd.clear_dtcs()
+    await wait_until(lambda: not obd.busy and obd.dtcs == [], timeout=5)
+    assert not obd.mil_on
+
+    obd.shutdown()
+    simulator.stop()
+    ecu_session.stop()
+
+
 async def test_gmlan_against_simulated_ecu(manager, channel, tmp_path):
     connection = open_connection(manager, channel, single_wire=True)
     source = connection.session.source
@@ -831,3 +876,25 @@ async def test_remote_connection(manager, channel):
     finally:
         peer.shutdown()
         thread.stop()
+
+
+async def test_in_app_mcp_server_controller(manager, channel):
+    pytest.importorskip('mcp')
+    import aiohttp
+
+    connection = open_connection(manager, channel)
+    server = connection.mcp_server
+    assert server.available and not server.running
+    assert server.start('read-only') == ''
+    await wait_until(lambda: server.running, timeout=10)
+    assert server.url.startswith('http://127.0.0.1:') and server.token and server.tier == 'read-only'
+
+    async with aiohttp.ClientSession() as http:
+        async with http.get(server.url) as response:
+            assert response.status == 401  # Token required
+        async with http.get(server.url, headers={'Authorization': f'Bearer {server.token}'}) as response:
+            assert response.status != 401
+
+    server.stop()
+    await wait_until(lambda: not server.running, timeout=10)
+    assert server.url == '' and server.token == ''

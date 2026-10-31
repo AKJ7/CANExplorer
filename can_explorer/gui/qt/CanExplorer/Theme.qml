@@ -68,6 +68,13 @@ QtObject {
             background: "#1b0f16", surface: "#231521", card: "#2c1a28", cardAlt: "#21131e", border: "#4a2a40",
             text: "#fce7f1", muted: "#c58aa8", accent: "#ff4d94", success: "#34d399", warning: "#fbbf24",
             danger: "#ef4444", chart: ["#ff4d94", "#c084fc", "#38bdf8", "#fbbf24", "#34d399", "#fb7185"]
+        },
+        // Hidden "red diamond spirit" theme, unlocked from the About dialog (the seven havens easter egg):
+        // a glowing crimson on near-black. Kept out of the normal theme list until it is awakened.
+        "Spirit": {
+            background: "#1a0d0f", surface: "#241315", card: "#2e171a", cardAlt: "#200f12", border: "#4a2328",
+            text: "#f6e7e7", muted: "#b88a8e", accent: "#e23b4e", success: "#2ecc71", warning: "#f39c12",
+            danger: "#ff6b6b", chart: ["#e23b4e", "#ff7a5c", "#ffb347", "#c0392b", "#9b59b6", "#f1c40f"]
         }
     })
     readonly property var current: palettes[name] || palettes["Dark"]

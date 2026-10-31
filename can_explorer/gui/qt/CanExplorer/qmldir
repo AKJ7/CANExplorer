@@ -10,6 +10,7 @@ FrameTable 1.0 FrameTable.qml
 TransmitPanel 1.0 TransmitPanel.qml
 SignalsView 1.0 SignalsView.qml
 DiagnosticsView 1.0 DiagnosticsView.qml
+ObdView 1.0 ObdView.qml
 FlashView 1.0 FlashView.qml
 J1939View 1.0 J1939View.qml
 CanOpenView 1.0 CanOpenView.qml
@@ -36,6 +37,8 @@ ReverseReferencePanel 1.0 ReverseReferencePanel.qml
 ReverseMarkersPanel 1.0 ReverseMarkersPanel.qml
 ReverseReactionPanel 1.0 ReverseReactionPanel.qml
 ReverseRelatedPanel 1.0 ReverseRelatedPanel.qml
+ReverseConsolePanel 1.0 ReverseConsolePanel.qml
+ReverseActivityPanel 1.0 ReverseActivityPanel.qml
 ReverseTimelineBar 1.0 ReverseTimelineBar.qml
 WelcomeView 1.0 WelcomeView.qml
 PlaybackBar 1.0 PlaybackBar.qml
@@ -46,9 +49,11 @@ EtherCatView 1.0 EtherCatView.qml
 PhysicalIoView 1.0 PhysicalIoView.qml
 DoipView 1.0 DoipView.qml
 SomeIpView 1.0 SomeIpView.qml
+EthernetView 1.0 EthernetView.qml
 UdsScanView 1.0 UdsScanView.qml
 XcpView 1.0 XcpView.qml
 GmlanView 1.0 GmlanView.qml
+J1850View 1.0 J1850View.qml
 GatewayView 1.0 GatewayView.qml
 MultiBusView 1.0 MultiBusView.qml
 TestsView 1.0 TestsView.qml
@@ -57,4 +62,5 @@ Logo 1.0 Logo.qml
 TraceFindBar 1.0 TraceFindBar.qml
 RecordDialog 1.0 RecordDialog.qml
 MqttDialog 1.0 MqttDialog.qml
+McpServerDialog 1.0 McpServerDialog.qml
 singleton Theme 1.0 Theme.qml
