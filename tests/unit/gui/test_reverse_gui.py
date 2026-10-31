@@ -557,6 +557,84 @@ def test_timeline_scrubs_by_index_when_all_timestamps_equal(qapp):
     assert not timeline.playing and timeline.frame == 4
 
 
+async def test_activity_raster_builds_for_selected_identifier(manager, channel, peer):
+    """The activity map builds a bit raster of the selected identifier's frames."""
+    connection = open_connection(manager, channel)
+    for i in range(40):
+        send(peer, 0x100, [i, 0x80, 0, 0])  # Byte 0 counts, byte 1 is constant 0x80
+    await wait_until(lambda: connection.session.trace.total == 40)
+    tools = connection.reverse
+    tools.set_visible(True)
+    raster = tools.raster
+
+    tools.select('100')
+    raster.refresh()
+    await wait_until(lambda: raster.has_data, timeout=10)
+    built = raster.raster()
+    assert built.length == 4 and built.rows == 32 and built.frames == 40 and raster.frames == 40
+    # Byte 1 bit 7 (row 8) is a steady 1 across all columns; byte 1 bit 6 (row 9) a steady 0
+    from can_explorer.core.reverse.raster import CELL_ONE, CELL_ZERO
+
+    assert all(built.cell(8, c) == CELL_ONE for c in range(built.columns))
+    assert all(built.cell(9, c) == CELL_ZERO for c in range(built.columns))
+    tools.set_visible(False)
+
+
+async def test_reverse_console_runs_over_the_trace(manager, channel, peer):
+    """The console runs Python over the captured frames, keeps variables between runs, and reports errors."""
+    connection = open_connection(manager, channel)
+    for i in range(20):
+        send(peer, 0x100, [i, 0x55, 0, 0])
+    await wait_until(lambda: connection.session.trace.total == 20)
+    tools = connection.reverse
+    tools.set_visible(True)
+    console = tools.console
+
+    console.run('print("hello"); len(messages)')
+    await wait_until(lambda: len(console.entries) == 1, timeout=10)
+    assert console.entries[0]['value'] == '20' and console.entries[0]['output'].strip() == 'hello'
+    assert console.entries[0]['error'] == ''
+
+    console.run('saved = BitField(0x100, False, 0, 8).key')  # Define a variable
+    await wait_until(lambda: len(console.entries) == 2, timeout=10)
+    console.run('saved')  # Variables persist across runs
+    await wait_until(lambda: len(console.entries) == 3, timeout=10)
+    assert console.entries[2]['value'] == "'100[0|8@1+]'"
+
+    console.run('1 +')  # A syntax error is captured, not raised
+    await wait_until(lambda: len(console.entries) == 4, timeout=10)
+    assert 'SyntaxError' in console.entries[3]['error']
+
+    console.clear()
+    assert console.entries == []
+    console.run('saved')  # Cleared: the variable is gone
+    await wait_until(lambda: len(console.entries) == 1, timeout=10)
+    assert 'NameError' in console.entries[0]['error']
+    tools.set_visible(False)
+
+
+async def test_plot_interval_and_bytes_from_the_reverse_view(manager, channel, peer):
+    """Plot Δt plots the identifier's inter-frame interval; Plot bytes plots every payload byte as a signal."""
+    connection = open_connection(manager, channel)
+    for i in range(4):
+        send(peer, 0x100, [i, 0xAA])
+    await wait_until(lambda: connection.session.trace.total == 4)
+    tools = connection.reverse
+    tools.set_visible(True)
+
+    tools.select('100')
+    assert tools.plot_interval() == ''
+    assert connection.tracked_signals == ['Δt 100']
+    series = connection.session.signals.series['Δt 100']
+    assert series.unit == 'ms' and len(series.values) == 3  # Three gaps between four frames
+
+    assert tools.plot_bytes() == ''
+    assert connection.tracked_signals == ['Δt 100', '100[0|8@1+]', '100[8|8@1+]']
+    assert connection.session.signals.series['100[0|8@1+]'].values == [0, 1, 2, 3]  # Byte 0 counts
+    assert connection.session.signals.series['100[8|8@1+]'].values == [0xAA, 0xAA, 0xAA, 0xAA]  # Byte 1 constant
+    tools.set_visible(False)
+
+
 async def test_reaction_capture_baseline_action_diff(manager, channel, peer):
     """Record a baseline, mark the action, capture: a new identifier and a bit that flipped only during the
     action are reported; a bit that was already moving is not."""

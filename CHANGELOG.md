@@ -6,6 +6,75 @@ All notable changes to CANExplorer are documented in this file. The format follo
 CANExplorer follows [semantic versioning](https://semver.org/) from 1.0.0 on. Between `0.0.1` and `1.0.0`, the
 development stages are listed by date and commit, newest first.
 
+## [1.6.0] – 2026-10-31
+
+### Added
+
+- **Automotive Ethernet capture** tool: open a **pcap** file (or capture live on Linux) and see the decoded
+  packets — Ethernet, 802.1Q VLAN, IPv4/IPv6, ARP, UDP/TCP — with the automotive protocols on top recognised:
+  **SOME/IP** (and SOME/IP-SD), **DoIP**, **gPTP** (IEEE 802.1AS) and **AVTP** (IEEE 1722). Filter by protocol,
+  address or port, see the protocol breakdown, and export back to pcap. Classic pcap (Ethernet link type); live
+  capture needs root/`CAP_NET_RAW` and a tap or mirror port for a full view.
+
+- **Much larger MCP surface.** The `can-mcp` server gains **diagnostics** tools — OBD-II (`obd_status`, `obd_dtcs`,
+  `obd_vin`, `obd_supported`, `obd_read`, `obd_clear`) and UDS (`uds_read_did`, `uds_read_dtcs`, `uds_reset`,
+  `uds_routine`, `uds_request`) — **protocol decoding** (`decode_protocol`), more **reverse-engineering** verbs
+  (`timing`, `related_signals`, `capture_reaction`), **transmit by name** (`send_message`), and `list_interfaces`.
+  The bus is also exposed as read-only **resources** (`can://status`, `can://identifiers`, `can://frames`,
+  `can://database`) and guided **prompts** (reverse-engineer an identifier, diagnose trouble codes, find a signal).
+  New **permission tiers** gate them: `--allow-diagnostics` (safe reads), `--allow-control` (active diagnostics) and
+  `--allow-send` (transmit), each granting the ones below it. `--interface`/`--channel` are now optional — the
+  server can start unconnected and the agent opens a bus itself with the `connect` tool (after `list_interfaces`),
+  and can switch buses with `disconnect`. A database can be loaded or cleared at runtime (`load_database` /
+  `unload_database`).
+- **In-app MCP server.** The GUI can host the MCP server for a connection it already has open (the **Agent…**
+  button on the Trace toolbar), so an agent attaches to the same live bus you are watching — which a separate
+  `can-mcp` process usually cannot, as most adapters are single-access. It is off by default, listens on
+  `127.0.0.1` only over the streamable-HTTP transport, is gated by a generated token, and uses the same permission
+  tiers (read-only by default).
+- **OBD-II page** (SAE J1979 over CAN): a dedicated page for the standard emissions diagnostics. Scan a vehicle
+  for its VIN, MIL status and supported values; watch the live values (engine speed, vehicle speed, temperatures,
+  load, throttle, fuel level, voltage…) as tiles; and read the stored and pending trouble codes (decoded to
+  `P`/`C`/`B`/`U` codes) or clear them. Built on the UDS/ISO-TP stack; an `ObdServer` answers for use without a
+  vehicle.
+- **NMEA 2000 and J1587 trace decoders.** NMEA 2000 (the marine protocol, built on J1939) decodes the common PGNs
+  into fields — engine, position, COG/SOG, heading, wind, depth, speed, battery — in marine units, with Fast Packet
+  reassembly. J1587 decodes the older heavy-truck bus's messages (MID and PIDs), with common parameters scaled;
+  J1708 is a serial bus (not CAN), so the decoder works on J1587 message bytes from a log or gateway, not a live
+  capture. Both are selectable as the connection protocol, like J1939 and CANopen.
+- **Bit-transition activity map** in the reverse engineering view (the **Activity** tab): a raster of every bit of
+  the selected identifier across the whole capture — frames across, bits down (byte 0 at the top) — so counters
+  (diagonal ramps), constant bits (flat), toggles and multiplexed regions stand out at a glance, with changed bits
+  highlighted. Complements the frame-at-a-time temporal replay.
+- **Interactive scripting console** in the reverse engineering view (the **Console** tab): run Python over the
+  frames captured so far, with the reverse-engineering primitives (`collect`, `analyse`, `BitField`, `candidates`,
+  `signal_groups`, `correlate`) and the current frames, found fields and helpers in scope, with Python syntax
+  highlighting. Variables persist between runs and a trailing expression's value is shown, like a REPL — the
+  scriptable surface the MCP service gives an AI agent, for a human at the keyboard.
+- **Frame-interval (Δt) and per-byte timing graphs** in the reverse engineering view: **Plot Δt** graphs a
+  selected identifier's inter-frame interval over time (on the Signals page, with cursors, statistics and CSV
+  export) to spot gateways, bursts and event-triggered messages, and **Plot bytes** graphs every payload byte as
+  a value over time.
+- **GM Class 2 / SAE J1850 VPW** support, for the pre-CAN GM vehicles such as the 1999–2006 P01/P59 PCMs. A new
+  python-can interface (**elm327_vpw**) drives an ELM327/OBDLink adapter in J1850 VPW mode (`AT SP 2`), so the
+  10.4 kbit/s single-wire Class 2 bus appears in the connection dialog and the whole application — trace,
+  dashboard, reverse engineering, recording — works on it, with each VPW frame's
+  three-byte header (priority, target, source) in the extended identifier. A **J1850 / Class 2** diagnostics page
+  (shown on these connections) runs SAE J1979 over the shared adapter: read current-data PIDs and the VIN, read
+  the stored trouble codes (`P0143`…) or clear them, and send raw requests. Monitoring and diagnostics are
+  time-multiplexed on the one adapter. Scripts use `can_explorer.core.j1850` (`J1850Client`) and
+  `can_explorer.core.elm327_vpw`; a `Class2EcuSimulator` allows trying it without hardware.
+
+### Fixed
+
+- **UDS discovery** scans now stop immediately when **Stop** is pressed, and the button returns to **Start**.
+  Stopping interrupts the in-flight request instead of only taking effect between requests (so a scan of an
+  unresponsive bus, or an ECU looping on "response pending", no longer appears to ignore Stop until the per-request
+  timeout elapses), and the running state is updated once the scan task has actually finished.
+- **Closing a connection** no longer leaves the remaining connection's view squeezed into a narrow column: the
+  connection views are no longer hosted in a `StackLayout`, which did not reliably resize its current view when a
+  connection was added or removed.
+
 ## [1.5.0] – 2026-10-30
 
 ### Added

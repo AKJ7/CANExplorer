@@ -196,3 +196,36 @@ async def test_fuzz_mode_validates_seed(manager, channel, ecu):
     assert 'reproducibility seed must be a number' in scan.start(
         {'kind': 'fuzz', 'fuzz_seed': 'abc', 'allow_state_changing': True}
     )
+
+
+async def test_scan_stops_promptly_interrupting_a_long_request(manager, channel):
+    """Stopping a scan interrupts the in-flight request instead of waiting out its timeout, so a scan against an
+    unresponsive bus (or an ECU looping on 'response pending') can always be stopped at once."""
+    connection = open_connection(manager, channel)
+    scan = connection.uds_scan  # No ECU on the bus: the first request would block for the full 5 s timeout
+    assert scan.start({'kind': 'services', 'timeout_ms': 5000, 'delay_ms': 0}) == ''
+    await wait_until(lambda: scan.running, timeout=2)
+    await asyncio.sleep(0.2)
+
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    scan.stop()
+    await wait_until(lambda: not scan.running, timeout=3)
+    assert loop.time() - started < 2.0  # Interrupted, not waiting the 5 s timeout
+    assert scan.state == 'stopped'
+
+
+async def test_stop_notifies_that_running_became_false(manager, channel):
+    """After stopping, the controller emits `changed` while `running` is False, so the Stop button returns to
+    Start (the running state is not left stale)."""
+    connection = open_connection(manager, channel)
+    scan = connection.uds_scan
+    running_at_emit = []
+    scan.changed.connect(lambda: running_at_emit.append(scan.running))
+    assert scan.start({'kind': 'services', 'timeout_ms': 5000, 'delay_ms': 0}) == ''
+    await wait_until(lambda: scan.running, timeout=2)
+    await asyncio.sleep(0.2)
+    scan.stop()
+    await wait_until(lambda: not scan.running, timeout=3)
+    await asyncio.sleep(0.05)  # Let the task's done-callback run
+    assert running_at_emit and running_at_emit[-1] is False
