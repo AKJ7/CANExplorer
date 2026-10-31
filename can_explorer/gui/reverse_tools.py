@@ -9,6 +9,9 @@ import can
 from PyQt6.QtCore import QObject, QTimer, QUrl, pyqtProperty, pyqtSignal, pyqtSlot
 
 from can_explorer.core.reverse.analysis import FoundField, analyse_all, collect
+from can_explorer.core.reverse.console import HELP, build_namespace
+from can_explorer.core.reverse.console import run as run_console
+from can_explorer.core.reverse.raster import Raster, build_raster
 from can_explorer.core.reverse.markers import Marker, MarkerMatch, find_marker_changes
 from can_explorer.core.reverse.obd import PIDS, ObdPoller, is_obd_identifier
 from can_explorer.core.reverse.reactions import IdReaction, capture_reaction
@@ -797,3 +800,114 @@ class ReactionController(_Tool):
             return 'Nothing to plot'
         self.reverse.connection.track_field(item.field)
         return ''
+
+
+class ConsoleController(_Tool):
+    """An interactive Python console over the captured frames, with the reverse-engineering primitives (collect,
+    analyse, BitField, candidates, signal_groups). Variables persist between runs; the frames, found fields and
+    helpers are refreshed from the trace on each run. It runs the snippet in a worker thread."""
+
+    changed = pyqtSignal()
+    running = pyqtProperty(bool, fget=_Tool._get_running, notify=changed)
+    status = pyqtProperty(str, fget=_Tool._get_status, notify=changed)
+
+    def __init__(self, reverse, parent: Optional[QObject] = None):
+        super().__init__(reverse, parent)
+        self._namespace: Dict[str, Any] = {}
+        self._entries: List[Dict[str, str]] = []
+
+    @pyqtProperty(str, constant=True)
+    def help_text(self) -> str:
+        return HELP
+
+    @pyqtProperty('QVariantList', notify=changed)
+    def entries(self) -> List[Dict[str, str]]:
+        return self._entries
+
+    @pyqtSlot(str)
+    def run(self, source: str):
+        """Run a snippet over the current trace. Its output and value (or error) are appended to the transcript."""
+        if not self._running and source.strip():
+            self._start(self._run(source))
+
+    async def _run(self, source: str) -> None:
+        self._status = 'Running…'
+        self.changed.emit()
+        messages = await self.reverse.snapshot()
+        analyses = list(self.reverse.analyses)
+        result = await asyncio.to_thread(self._execute, messages, analyses, source)
+        self._entries.append(
+            {'source': source.strip(), 'output': result.output, 'value': result.value, 'error': result.error}
+        )
+        self._status = '' if result.ok else 'Error'
+
+    def _execute(self, messages, analyses, source: str):
+        self._namespace.update(build_namespace(messages, analyses))
+        return run_console(source, self._namespace)
+
+    @pyqtSlot()
+    def clear(self):
+        """Clear the transcript and forget all variables."""
+        self._entries = []
+        self._namespace = {}
+        self._status = ''
+        self.changed.emit()
+
+
+class RasterController(_Tool):
+    """Builds the bit-transition raster of the selected identifier — the value of every bit across the whole
+    capture — for the activity map. Built in a worker thread; the painter (BitRaster) reads the result."""
+
+    changed = pyqtSignal()
+    running = pyqtProperty(bool, fget=_Tool._get_running, notify=changed)
+    status = pyqtProperty(str, fget=_Tool._get_status, notify=changed)
+
+    def __init__(self, reverse, parent: Optional[QObject] = None):
+        super().__init__(reverse, parent)
+        self._raster: Optional[Raster] = None
+
+    def raster(self) -> Optional[Raster]:
+        """The current raster, read by the BitRaster painter (not a QML-exposed value)."""
+        return self._raster
+
+    @pyqtProperty(bool, notify=changed)
+    def has_data(self) -> bool:
+        return self._raster is not None and self._raster.columns > 0
+
+    @pyqtProperty(int, notify=changed)
+    def frames(self) -> int:
+        return self._raster.frames if self._raster is not None else 0
+
+    @pyqtProperty(str, notify=changed)
+    def span(self) -> str:
+        if self._raster is None or self._raster.frames == 0:
+            return ''
+        return f'{self._raster.end - self._raster.start:.1f} s'
+
+    @pyqtSlot()
+    def refresh(self):
+        """Rebuild the raster of the selected identifier from the trace so far."""
+        if not self._running:
+            self._start(self._refresh())
+
+    async def _refresh(self) -> None:
+        selected = self.reverse.selected
+        if not selected:
+            self._raster = None
+            self._status = 'Select an identifier'
+            self.changed.emit()
+            return
+        key = (int(selected, 16), len(selected) > 3)
+        self._status = 'Reading the trace…'
+        self.changed.emit()
+        messages = await self.reverse.snapshot()
+        frames = [
+            msg
+            for msg in messages
+            if (msg.arbitration_id, msg.is_extended_id) == key and not msg.is_remote_frame and not msg.is_error_frame
+        ]
+        times = [msg.timestamp for msg in frames]
+        payloads = [bytes(msg.data) for msg in frames]
+        self._raster = await asyncio.to_thread(build_raster, times, payloads)
+        self._status = f'{self._raster.frames:,} frames, {self._raster.length} bytes' if self._raster.frames else ''
+        self.changed.emit()

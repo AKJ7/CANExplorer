@@ -53,9 +53,9 @@ ColumnLayout {
             onClicked: root.someip.clear()
         }
         Button {
-            text: root.someip.description_file ? qsTr("Unload FIBEX") : qsTr("FIBEX…")
+            text: root.someip.description_file ? qsTr("Unload description") : qsTr("FIBEX / ARXML…")
             ToolTip.visible: hovered
-            ToolTip.text: qsTr("Load a FIBEX file to decode the message payloads into named signals")
+            ToolTip.text: qsTr("Load a FIBEX or ARXML file to decode the message payloads into named signals")
             onClicked: root.someip.description_file ? root.someip.unload_description() : fibexDialog.open()
         }
         Item { Layout.fillWidth: true }
@@ -193,8 +193,8 @@ ColumnLayout {
 
     FileDialog {
         id: fibexDialog
-        title: qsTr("Load SOME/IP FIBEX description")
-        nameFilters: [qsTr("FIBEX files (*.fibex *.xml)"), qsTr("All files (*)")]
+        title: qsTr("Load SOME/IP description")
+        nameFilters: [qsTr("SOME/IP descriptions (*.fibex *.arxml *.xml)"), qsTr("All files (*)")]
         onAccepted: {
             const error = root.someip.load_description(selectedFile)
             if (error)

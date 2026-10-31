@@ -39,6 +39,7 @@ from can_explorer.gui.updates import UpdateController
 from can_explorer.gui.multibus import MultiBusController
 from can_explorer.gui.database_editor import DatabaseEditorController
 from can_explorer.gui.doip import DoipController
+from can_explorer.gui.ethernet import EthernetController
 from can_explorer.gui.someip import SomeIpController
 from can_explorer.gui.gateway import GatewayController
 from can_explorer.gui.ethercat import EtherCatController
@@ -47,14 +48,17 @@ from can_explorer.gui.canopen import CanOpenController
 from can_explorer.gui.bushealth import BusHealthController
 from can_explorer.gui.diagnostics import DiagnosticsController
 from can_explorer.gui.flashing import FlashController
+from can_explorer.gui.obd import ObdController
 from can_explorer.gui.j1939 import J1939Controller
 from can_explorer.gui.playback import BusReplay, ReplayPlayback
+from can_explorer.gui.mcp_server import McpServerController
 from can_explorer.gui.mqtt import MqttController
 from can_explorer.gui.simulation import SimulationController
 from can_explorer.gui.plot_view import PlotView
 from can_explorer.gui.reverse import ReverseController
 from can_explorer.gui.uds_scan import UdsScanController
 from can_explorer.gui.gmlan import GmlanController
+from can_explorer.gui.j1850 import J1850Controller
 from can_explorer.gui.xcp import XcpController
 from can_explorer.gui.testing import TestController
 from can_explorer.gui.trace_tools import TraceTools
@@ -139,16 +143,19 @@ class CanConnection(QObject):
         self.health = BusHealth()  # Error frames, states and load over the last hour
         session.add_message_listener(self.health.on_message)
         self._diagnostics = DiagnosticsController(self, parent=self)
+        self._obd = ObdController(self, parent=self)
         self._j1939 = J1939Controller(self, parent=self)
         self._canopen = CanOpenController(self, parent=self)
         self._flashing = FlashController(self._diagnostics, parent=self)
         self._uds_scan = UdsScanController(self, parent=self)
         self._xcp = XcpController(self, parent=self)
         self._gmlan = GmlanController(self, parent=self)
+        self._j1850 = J1850Controller(self, parent=self)
         self._bus_health = BusHealthController(self, parent=self)
         self._reverse = ReverseController(self, parent=self)
         self._simulation = SimulationController(self, parent=self)
         self._mqtt = MqttController(self, parent=self)
+        self._mcp_server = McpServerController(self, parent=self)
         self._tests = TestController(self, parent=self)
         self._replay = ReplayPlayback(self, parent=self)
         self._bus_replay = BusReplay(self, parent=self)
@@ -193,6 +200,12 @@ class CanConnection(QObject):
     def is_lin(self) -> bool:
         source = self.session.source
         return isinstance(source, LiveSource) and source.config.is_lin
+
+    @pyqtProperty(bool, constant=True)
+    def is_j1850(self) -> bool:
+        """A GM Class 2 / SAE J1850 VPW connection (the elm327_vpw interface)."""
+        source = self.session.source
+        return isinstance(source, LiveSource) and source.config.interface == 'elm327_vpw'
 
     @pyqtProperty(str, notify=state_changed)
     def state(self) -> str:
@@ -365,10 +378,13 @@ class CanConnection(QObject):
         self._uds_scan.shutdown()
         self._xcp.shutdown()
         self._gmlan.shutdown()
+        self._j1850.shutdown()
         self._flashing.shutdown()
+        self._obd.shutdown()
         self._diagnostics.shutdown()
         self._simulation.shutdown()
         self._reverse.shutdown()
+        self._mcp_server.shutdown()
         self.session.stop()
 
     def set_refresh_interval(self, interval_ms: int):
@@ -625,6 +641,15 @@ class CanConnection(QObject):
         self.signals_updated.emit()
         return key
 
+    def track_interval(self, frame_id: int, extended: bool) -> str:
+        """Plot an identifier's inter-frame interval (Δt) over time, from the trace so far on."""
+        signals = self.session.signals
+        key = signals.track_interval(frame_id, extended)
+        signals.backfill_interval(key, (frame.message for frame in self.session.trace))
+        self.tracked_signals_changed.emit()
+        self.signals_updated.emit()
+        return key
+
     # Transmission
 
     @pyqtSlot(str, str, bool, bool, int, bool, bool, result=str)
@@ -676,6 +701,11 @@ class CanConnection(QObject):
         return self._diagnostics
 
     @pyqtProperty(QObject, constant=True)
+    def obd(self) -> ObdController:
+        """OBD-II (SAE J1979): live data, trouble codes and the VIN."""
+        return self._obd
+
+    @pyqtProperty(QObject, constant=True)
     def j1939(self) -> J1939Controller:
         """Nodes, trouble codes and sending of parameter groups on J1939 connections."""
         return self._j1939
@@ -711,6 +741,11 @@ class CanConnection(QObject):
         return self._gmlan
 
     @pyqtProperty(QObject, constant=True)
+    def j1850(self) -> J1850Controller:
+        """SAE J1850 VPW / GM Class 2 (SAE J1979) diagnostics."""
+        return self._j1850
+
+    @pyqtProperty(QObject, constant=True)
     def canopen(self) -> CanOpenController:
         """NMT, SDO access and PDOs on CANopen connections."""
         return self._canopen
@@ -723,6 +758,11 @@ class CanConnection(QObject):
     def mqtt(self) -> MqttController:
         """Publishing the connection to an MQTT broker."""
         return self._mqtt
+
+    @pyqtProperty(QObject, constant=True)
+    def mcp_server(self) -> McpServerController:
+        """The in-app MCP server exposing this connection to an AI agent."""
+        return self._mcp_server
 
     @pyqtProperty(QObject, constant=True)
     def plot_view(self) -> PlotView:
@@ -856,6 +896,7 @@ class ConnectionManager(QObject):
         self._physical_io = PhysicalIoController(parent=self)
         self._doip = DoipController(parent=self)
         self._someip = SomeIpController(parent=self)
+        self._ethernet = EthernetController(parent=self)
         self._gateway = GatewayController(self, parent=self)
         self._updates = UpdateController(self._app_state.settings, parent=self)
         self._database_editor.saved.connect(self._reload_database)
@@ -970,6 +1011,11 @@ class ConnectionManager(QObject):
     def someip(self) -> SomeIpController:
         """SOME/IP over Ethernet: service discovery and decoded messages."""
         return self._someip
+
+    @pyqtProperty(QObject, constant=True)
+    def ethernet(self) -> EthernetController:
+        """Automotive Ethernet capture: pcap files and live capture, decoded."""
+        return self._ethernet
 
     def _reload_database(self, path: str) -> None:
         """Connections decoding with a database that was edited and saved use the new version."""
@@ -1216,6 +1262,7 @@ class ConnectionManager(QObject):
         self._physical_io.shutdown()
         self._doip.shutdown()
         self._someip.shutdown()
+        self._ethernet.shutdown()
         self._gateway.shutdown()
 
     def _apply_preferences(self):

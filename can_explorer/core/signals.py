@@ -70,8 +70,11 @@ class SignalTracker:
         self.series: Dict[str, SignalSeries] = {}
         self.fields: Dict[str, BitField] = {}  # By key, e.g. '1A0[16|8@1+]'
         self.multiplexers: Dict[str, Tuple[BitField, Optional[int]]] = {}  # Of multiplexed fields, by key
+        self.intervals: Dict[str, Tuple[int, bool]] = {}  # Δt series, by key: (frame_id, extended)
         self._by_message: Dict[str, Set[str]] = {}
         self._fields_by_id: Dict[Tuple[int, bool], List[Tuple[str, BitField, Optional[BitField], Optional[int]]]] = {}
+        self._intervals_by_id: Dict[Tuple[int, bool], List[str]] = {}
+        self._interval_last: Dict[str, float] = {}  # Last frame timestamp seen, per interval key
         self._changed = False
 
     @staticmethod
@@ -135,8 +138,51 @@ class SignalTracker:
                     series.append(msg.timestamp, value)
         self._changed = True
 
+    @staticmethod
+    def interval_key(frame_id: int, extended: bool) -> str:
+        """E.g. 'Δt 1A0' or 'Δt 18FEF1FE': the inter-frame interval series of one identifier."""
+        return f'Δt {frame_id:08X}' if extended else f'Δt {frame_id:03X}'
+
+    def track_interval(self, frame_id: int, extended: bool, unit: str = 'ms') -> str:
+        """Track the inter-frame interval (Δt between consecutive frames) of one identifier, as a time series."""
+        key = self.interval_key(frame_id, extended)
+        self.untrack_key(key)
+        self.series[key] = SignalSeries(self.max_points, unit)
+        self.intervals[key] = (frame_id, extended)
+        self._intervals_by_id.setdefault((frame_id, extended), []).append(key)
+        return key
+
+    def backfill_interval(self, key: str, messages) -> None:
+        """Add the intervals of a tracked identifier in earlier frames, e.g. of the trace, in time order."""
+        info, series = self.intervals.get(key), self.series.get(key)
+        if info is None or series is None:
+            return
+        frame_id, extended = info
+        last: Optional[float] = None
+        for msg in messages:
+            if msg.arbitration_id == frame_id and msg.is_extended_id == extended:
+                if msg.is_remote_frame or msg.is_error_frame:
+                    continue
+                if last is not None:
+                    series.append(msg.timestamp, (msg.timestamp - last) * 1000.0)
+                last = msg.timestamp
+        if last is not None:
+            self._interval_last[key] = last
+        self._changed = True
+
     def untrack_key(self, key: str) -> None:
-        """Stop tracking a field or signal by its key."""
+        """Stop tracking a field, signal or interval by its key."""
+        if key in self.intervals:
+            self.series.pop(key, None)
+            self._interval_last.pop(key, None)
+            frame_id, extended = self.intervals.pop(key)
+            id_key = (frame_id, extended)
+            remaining = [existing for existing in self._intervals_by_id.get(id_key, []) if existing != key]
+            if remaining:
+                self._intervals_by_id[id_key] = remaining
+            else:
+                self._intervals_by_id.pop(id_key, None)
+            return
         field = self.fields.pop(key, None)
         if field is not None:
             self.series.pop(key, None)
@@ -153,18 +199,30 @@ class SignalTracker:
             self.untrack(message, signal)
 
     def untrack_all(self, fields: bool = True) -> None:
-        """Stop tracking the database signals, and the bit fields unless `fields` is false."""
+        """Stop tracking the database signals, and the bit fields and intervals unless `fields` is false."""
         if fields:
             self.series.clear()
             self.fields.clear()
             self.multiplexers.clear()
             self._fields_by_id.clear()
+            self.intervals.clear()
+            self._intervals_by_id.clear()
+            self._interval_last.clear()
         else:
-            for key in [key for key in self.series if key not in self.fields]:
+            for key in [key for key in self.series if key not in self.fields and key not in self.intervals]:
                 del self.series[key]
         self._by_message.clear()
 
     def update(self, msg: can.Message, database: Optional[DbcDecoder]) -> None:
+        if self._intervals_by_id and not msg.is_remote_frame and not msg.is_error_frame:
+            keys = self._intervals_by_id.get((msg.arbitration_id, msg.is_extended_id))
+            if keys:
+                for key in keys:
+                    last = self._interval_last.get(key)
+                    if last is not None:
+                        self.series[key].append(msg.timestamp, (msg.timestamp - last) * 1000.0)
+                        self._changed = True
+                    self._interval_last[key] = msg.timestamp
         if self._fields_by_id:
             fields = self._fields_by_id.get((msg.arbitration_id, msg.is_extended_id))
             if fields and not msg.is_remote_frame and not msg.is_error_frame:

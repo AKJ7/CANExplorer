@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metadata for CANExplorer. The snap build copies this into usr/share/metainfo and adopts its
+     screenshots (via parse-info in snap/snapcraft.yaml); app stores such as GNOME Software and KDE Discover
+     read the description and screenshots from it. -->
+<component type="desktop-application">
+  <id>io.github.akj7.CANExplorer</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>CANExplorer</name>
+  <summary>Monitor, analyse, diagnose and simulate CAN, CAN FD and LIN buses</summary>
+  <developer id="io.github.akj7">
+    <name>AKJ7</name>
+  </developer>
+
+  <description>
+    <p>
+      CANExplorer is a cross-platform workbench for CAN, CAN FD and LIN buses, for engineers, tuners and
+      hobbyists working on vehicles and embedded networks. It works with any python-can adapter, or on a virtual
+      bus with no hardware at all.
+    </p>
+    <p>What it does:</p>
+    <ul>
+      <li>Live trace and dashboard with decoded signals (DBC, DBF, ARXML, KCD, SYM, LDF), frame rates, bus load
+          and the busiest identifiers, handling millions of frames.</li>
+      <li>Signal plots with cursors and CSV export, and bus health: error states, TEC/REC and load over time.</li>
+      <li>Recording and replay in ASC, BLF, CSV, candump LOG, PEAK TRC, SQLite, ASAM MF4 and gzip, with
+          triggered and split recording, replay onto a bus, and recording comparison.</li>
+      <li>Reverse engineering of an unknown bus: bit and byte statistics, automatic detection of checksums,
+          counters, multiplexers and values, reference signals, and a scripting console.</li>
+      <li>Diagnostics and protocols: UDS over ISO-TP, ECU flashing, DoIP, J1939, CANopen, XCP/CCP, GMLAN and
+          GM Class 2 (SAE J1850 VPW), with simulated ECUs to try without hardware.</li>
+      <li>A signal database editor for CAN and LIN, and conversion between the formats.</li>
+      <li>Simulated nodes with control panels, and test automation with HTML and JUnit reports for CI.</li>
+      <li>Remote buses, MQTT publishing, six colour themes and a command palette.</li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">canexplorer.desktop</launchable>
+
+  <screenshots>
+    <screenshot type="default">
+      <caption>The dashboard: frame rates, bus load, error frames and the busiest identifiers</caption>
+      <image>https://akj7.github.io/CANExplorer/assets/screenshots/dashboard.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>The trace and per-identifier overview with decoded signals and changed bytes highlighted</caption>
+      <image>https://akj7.github.io/CANExplorer/assets/screenshots/trace.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Reverse engineering: bit and byte statistics with automatically detected fields</caption>
+      <image>https://akj7.github.io/CANExplorer/assets/screenshots/reverse-engineering.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Signal plots with cursors, statistics and CSV export</caption>
+      <image>https://akj7.github.io/CANExplorer/assets/screenshots/signals.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>UDS diagnostics over ISO-TP against an ECU</caption>
+      <image>https://akj7.github.io/CANExplorer/assets/screenshots/diagnostics.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>The signal database editor with a bit-layout view</caption>
+      <image>https://akj7.github.io/CANExplorer/assets/screenshots/database-editor.png</image>
+    </screenshot>
+  </screenshots>
+
+  <url type="homepage">https://akj7.github.io/CANExplorer/</url>
+  <url type="bugtracker">https://github.com/AKJ7/CANExplorer/issues</url>
+  <url type="vcs-browser">https://github.com/AKJ7/CANExplorer</url>
+
+  <categories>
+    <category>Development</category>
+    <category>Electronics</category>
+    <category>Engineering</category>
+  </categories>
+
+  <keywords>
+    <keyword>CAN</keyword>
+    <keyword>CAN FD</keyword>
+    <keyword>LIN</keyword>
+    <keyword>automotive</keyword>
+    <keyword>UDS</keyword>
+    <keyword>DBC</keyword>
+    <keyword>OBD</keyword>
+  </keywords>
+
+  <content_rating type="oars-1.1"/>
+</component>

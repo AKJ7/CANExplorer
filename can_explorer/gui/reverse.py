@@ -13,7 +13,9 @@ from can_explorer.core.reverse.timeline import IdTimeline
 from can_explorer.gui.reverse_timeline import ReverseTimeline
 from can_explorer.gui.reverse_tools import (
     AnalysisController,
+    ConsoleController,
     MarkerController,
+    RasterController,
     ReactionController,
     ReferenceController,
     RelatedController,
@@ -148,6 +150,8 @@ class ReverseController(QObject):
         self._markers = MarkerController(self, parent=self)
         self._related = RelatedController(self, parent=self)
         self._reaction = ReactionController(self, parent=self)
+        self._console = ConsoleController(self, parent=self)
+        self._raster = RasterController(self, parent=self)
         self._timeline = ReverseTimeline(self, parent=self)
         self._timeline.moved.connect(self._on_timeline_moved)
 
@@ -174,6 +178,16 @@ class ReverseController(QObject):
     @pyqtProperty(QObject, constant=True)
     def reaction(self):
         return self._reaction
+
+    @pyqtProperty(QObject, constant=True)
+    def console(self):
+        """Interactive Python console over the captured frames, with the reverse-engineering primitives."""
+        return self._console
+
+    @pyqtProperty(QObject, constant=True)
+    def raster(self):
+        """The bit-transition raster (activity map) of the selected identifier."""
+        return self._raster
 
     @pyqtProperty(QObject, constant=True)
     def timeline(self):
@@ -635,6 +649,31 @@ class ReverseController(QObject):
             return self._field_error or 'Select an identifier first'
         multiplexer, value = self._multiplexer or (None, None)
         self._connection.track_field(field, self._field['unit'], multiplexer, value)
+        return ''
+
+    @pyqtSlot(result=str)
+    def plot_interval(self) -> str:
+        """Plot the selected identifier's inter-frame interval (Δt, in ms) over time on the Signals page: spot
+        gateways, bursts and event-triggered messages. Returns an error, or ''."""
+        if self._selected is None:
+            return 'Select an identifier first'
+        frame_id, extended = self._selected
+        self._connection.track_interval(frame_id, extended)
+        return ''
+
+    @pyqtSlot(result=str)
+    def plot_bytes(self) -> str:
+        """Plot each byte of the selected identifier's payload as a value over time on the Signals page. Returns
+        an error, or ''."""
+        if self._selected is None:
+            return 'Select an identifier first'
+        item = self._current()
+        length = item.length if item is not None else 0
+        if length == 0:
+            return 'No frames for this identifier yet'
+        frame_id, extended = self._selected
+        for byte in range(length):
+            self._connection.track_field(BitField(frame_id, extended, byte * 8, 8))
         return ''
 
     @pyqtProperty('QVariantMap', notify=field_changed)

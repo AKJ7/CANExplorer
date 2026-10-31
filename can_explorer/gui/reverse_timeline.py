@@ -1,12 +1,14 @@
 """Temporal "flow" playback for the Reverse engineering Bits tab: a scrubber and play/pause over the selected
 identifier's frames, so the bit grid shows the payload at any point in time and the bits flowing and flipping.
 
-The controller holds an IdTimeline (built from a trace snapshot) and a playback position; while it is active the
-ReverseController's bit grid, bytes and field value read the payload at that position instead of the latest frame.
+The controller holds an IdTimeline (built from a trace snapshot) and a current frame index; while it is active the
+ReverseController's bit grid, bytes and field value read the payload at that index instead of the latest frame.
 
-The position is a fraction (0 at the first frame, 1 at the last). Within a recording it maps to time, so playback
-runs at the recorded pace and a frame holds until the next one; when every frame shares a timestamp (a coarse
-clock, or a capture made in a tight loop) it maps straight to the frame index, so scrubbing still works.
+The current frame index is the source of truth: scrubbing and stepping move it directly, so they are frame-exact
+even when several frames share a timestamp (a coarse clock, or a capture made in a tight loop, where time no
+longer tells frames apart). Playback instead advances a time cursor so it runs at the recorded pace — a frame
+holds until the next one — mapping that time back to a frame index as it goes. The slider reads the index as a
+fraction (0 at the first frame, 1 at the last).
 """
 
 import time
@@ -30,9 +32,10 @@ class ReverseTimeline(QObject):
         super().__init__(parent)
         self._reverse = reverse
         self._timeline: Optional[IdTimeline] = None
-        self._position = 0.0  # 0 at the first frame, 1 at the last
+        self._index = 0  # The current frame, source of truth
         self._speed = 1.0
         self._playing = False
+        self._play_time = 0.0  # Seconds from the start of the recording, advanced during playback
         self._last_tick = 0.0
         self._timer = QTimer(self)
         self._timer.setInterval(TICK_MS)
@@ -46,7 +49,8 @@ class ReverseTimeline(QObject):
 
     def enable(self, timeline: IdTimeline) -> None:
         self._timeline = timeline
-        self._position = 0.0
+        self._index = 0
+        self._play_time = 0.0
         self._playing = False
         self._timer.stop()
         self.changed.emit()
@@ -57,6 +61,8 @@ class ReverseTimeline(QObject):
         if self._timeline is None and not self._playing:
             return
         self._timeline = None
+        self._index = 0
+        self._play_time = 0.0
         self._playing = False
         self._timer.stop()
         self.changed.emit()
@@ -71,35 +77,26 @@ class ReverseTimeline(QObject):
 
     # Position
 
-    def _compute_index(self) -> int:
-        count = len(self._timeline)
-        if count <= 1:
-            return 0 if count == 1 else -1
-        if self._timeline.duration <= 0:  # Every frame at the same time: scrub by frame index
-            return min(count - 1, max(0, round(self._position * (count - 1))))
-        if self._position <= 0.0:
-            return 0
-        if self._position >= 1.0:
-            return count - 1
-        return self._timeline.index_at(self._timeline.start + self._position * self._timeline.duration)
-
-    def _time_value(self) -> float:
-        return self._timeline.start + self._position * self._timeline.duration
+    def _clamped_index(self) -> int:
+        return max(0, min(len(self._timeline) - 1, self._index))
 
     @pyqtProperty(int, notify=moved)
     def index(self) -> int:
-        return self._compute_index() if self.active else -1
+        return self._clamped_index() if self.active else -1
 
     @pyqtProperty(float, notify=moved)
     def position(self) -> float:
-        """0 at the first frame, 1 at the last."""
-        return self._position if self.active else 0.0
+        """The current frame as a fraction: 0 at the first frame, 1 at the last."""
+        count = len(self._timeline) if self.active else 0
+        return self._clamped_index() / (count - 1) if count > 1 else 0.0
 
     @pyqtSlot(float)
     def set_position(self, fraction: float) -> None:
+        """Scrub to a frame by fraction (0 the first, 1 the last) — by frame index, so every frame is reachable."""
         if not self.active:
             return
-        self._position = max(0.0, min(1.0, fraction))
+        count = len(self._timeline)
+        self._index = round(max(0.0, min(1.0, fraction)) * (count - 1)) if count > 1 else 0
         self.moved.emit()
 
     @pyqtProperty(int, notify=moved)
@@ -116,7 +113,8 @@ class ReverseTimeline(QObject):
         if not self.active:
             return ''
         offset = self._reverse.session.start_time
-        return f'{self._time_value() - (offset if offset is not None else self._timeline.start):.3f} s'
+        base = offset if offset is not None else self._timeline.start
+        return f'{self._timeline.time_at(self.index) - base:.3f} s'
 
     @pyqtSlot(int)
     def step(self, delta: int) -> None:
@@ -124,15 +122,8 @@ class ReverseTimeline(QObject):
         if not self.active:
             return
         self.pause()
-        count = len(self._timeline)
-        target = max(0, min(count - 1, self._compute_index() + delta))
-        if count <= 1:
-            self._position = 0.0
-        elif self._timeline.duration > 0:
-            # Land exactly on the frame's time, so the index maps back to it
-            self._position = (self._timeline.time_at(target) - self._timeline.start) / self._timeline.duration
-        else:
-            self._position = target / (count - 1)
+        self._index = self._clamped_index() + delta
+        self._index = self._clamped_index()
         self.moved.emit()
 
     # Playback
@@ -145,8 +136,9 @@ class ReverseTimeline(QObject):
     def play(self) -> None:
         if not self.active or self._playing:
             return
-        if self._position >= 1.0:  # At the end: start over
-            self._position = 0.0
+        if self._clamped_index() >= len(self._timeline) - 1:  # At the end: start over
+            self._index = 0
+        self._play_time = self._timeline.time_at(self._clamped_index()) - self._timeline.start
         self._playing = True
         self._last_tick = time.monotonic()
         self._timer.start()
@@ -183,11 +175,13 @@ class ReverseTimeline(QObject):
         self._last_tick = now
         duration = self._timeline.duration
         if duration <= 0:  # Nothing to advance through in time: jump to the end
-            self._position = 1.0
+            self._index = len(self._timeline) - 1
             self.pause()
         else:
-            self._position += elapsed * self._speed / duration
-            if self._position >= 1.0:
-                self._position = 1.0
+            self._play_time += elapsed * self._speed
+            if self._play_time >= duration:
+                self._index = len(self._timeline) - 1
                 self.pause()
+            else:
+                self._index = self._timeline.index_at(self._timeline.start + self._play_time)
         self.moved.emit()

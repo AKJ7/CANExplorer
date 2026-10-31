@@ -131,6 +131,62 @@ async def mqtt_scenario(connection, view):
     broker.stop()
 
 
+async def mcp_scenario(connection, view):
+    """The in-app MCP server dialog, started read-only on the live connection, showing the URL and token an agent's
+    client connects with."""
+    server = connection.mcp_server
+    if not server.available:
+        print('skipping mcp screenshot: the mcp extra is not installed', file=sys.stderr)
+        return
+    dialog = view.findChild(QObject, 'mcpServerDialog')
+    dialog.open()
+    await asyncio.sleep(0.2)
+    server.start('read-only')
+    for _ in range(250):  # Wait for the server to bind and publish its URL and token
+        if server.url:
+            break
+        await asyncio.sleep(0.02)
+    await shot('mcp', 0.5)
+    server.stop()
+    dialog.close()
+    await asyncio.sleep(0.2)
+
+
+async def obd_scenario():
+    """The OBD-II page reading live values, the VIN and trouble codes from a simulated OBD-II ECU (no vehicle)."""
+    import uuid as _uuid
+
+    from can_explorer.core.obd import ECU_RESPONSE, FUNCTIONAL_REQUEST, ObdServer
+
+    channel = f'docs-obd-{_uuid.uuid4().hex[:6]}'
+    manager.add_connection({'name': 'Vehicle OBD-II', 'interface': 'VirtualBus', 'channel': channel})
+    connection = manager.connections[-1]
+    connection.open()
+    window.setProperty('selectedIndex', len(manager.connections) - 1)
+    ecu_session = BusSession(LiveSource(BusConfig('virtual', channel)))
+    ecu_session.start()
+    ecu = UdsEcuSimulator(ecu_session, request_id=FUNCTIONAL_REQUEST, response_id=ECU_RESPONSE, server=ObdServer())
+    ecu.start()
+    obd = connection.obd
+    show_page('obd')
+    obd.scan()  # VIN, status and the supported PIDs
+    while not obd.scanned:
+        await asyncio.sleep(0.03)
+    obd.read_dtcs()  # The stored and pending trouble codes
+    await asyncio.sleep(0.1)
+    while obd.busy:
+        await asyncio.sleep(0.03)
+    obd.toggle_live()  # Poll the supported values so the tiles fill
+    await asyncio.sleep(0.8)
+    await shot('obd', 0.5)
+    obd.toggle_live()
+    await asyncio.sleep(0.1)
+    ecu.stop()
+    ecu_session.stop()
+    manager.remove_connection(len(manager.connections) - 1)
+    window.setProperty('selectedIndex', 0)
+
+
 async def ethercat_scenario():
     """The EtherCAT tool on the simulated network: an output terminal's objects, SDO transfers and an emergency."""
     ethercat = manager.ethercat
@@ -393,6 +449,94 @@ async def gmlan_scenario():
     window.setProperty('selectedIndex', 0)
 
 
+async def j1850_scenario():
+    """The J1850 / Class 2 page reading PIDs, the VIN and trouble codes over a GM Class 2 (SAE J1850 VPW) bus,
+    through a simulated ELM327 adapter on a local socket (no hardware)."""
+    import socket as _socket
+    import threading as _threading
+
+    class _VpwAdapter:
+        """A minimal ELM327 (J1850 VPW) adapter behind a TCP socket: answers AT commands, monitors with AT MA,
+        and prints the configured response for a data request."""
+
+        def __init__(self):
+            self.echo = True
+            self.monitoring = False
+            self.responses = {}
+            self._server = _socket.create_server(('127.0.0.1', 0))
+            self.url = f'socket://127.0.0.1:{self._server.getsockname()[1]}'
+            _threading.Thread(target=self._serve, daemon=True).start()
+
+        def _serve(self):
+            try:
+                self._conn, _ = self._server.accept()
+            except OSError:
+                return
+            line = ''
+            while True:
+                try:
+                    data = self._conn.recv(4096)
+                except OSError:
+                    return
+                if not data:
+                    return
+                for char in data.decode('ascii'):
+                    if self.monitoring:
+                        self.monitoring = False
+                        self._conn.sendall(b'\r>')
+                    elif char == '\r':
+                        self._handle(line.replace(' ', '').upper())
+                        line = ''
+                    else:
+                        line += char
+
+        def _handle(self, command):
+            if self.echo:
+                self._conn.sendall((command + '\r').encode('ascii'))
+            if command == 'ATZ':
+                self.echo = True
+                self._conn.sendall(b'\rELM327 v1.5\r\r>')
+            elif command == 'ATE0':
+                self.echo = False
+                self._conn.sendall(b'OK\r\r>')
+            elif command == 'ATMA':
+                self.monitoring = True
+            elif command.startswith(('AT', 'ST')):
+                self._conn.sendall(b'OK\r\r>')
+            else:
+                lines = self.responses.get(command, ['NO DATA'])
+                self._conn.sendall((''.join(line + '\r' for line in lines) + '\r>').encode('ascii'))
+
+        def close(self):
+            if hasattr(self, '_conn'):
+                self._conn.close()
+            self._server.close()
+
+    def vin_line(vin):
+        return '48 6B 10 49 02 ' + ' '.join(f'{byte:02X}' for byte in vin.encode('ascii'))
+
+    adapter = _VpwAdapter()
+    adapter.responses['010C'] = ['48 6B 10 41 0C 0C 6B']  # Engine speed
+    adapter.responses['0105'] = ['48 6B 10 41 05 5A']  # Coolant temperature (50 °C)
+    adapter.responses['03'] = ['48 6B 10 43 01 43 01 71']  # Stored codes P0143, P0171
+    adapter.responses['0902'] = [vin_line('1GCEK14V5XZ100001')]
+    manager.add_connection({'name': 'GM powertrain (Class 2)', 'interface': 'elm327_vpw', 'channel': adapter.url})
+    connection = manager.connections[-1]
+    connection.open()
+    window.setProperty('selectedIndex', len(manager.connections) - 1)
+    j1850 = connection.j1850
+    show_page('j1850')
+    for call in (lambda: j1850.read_pid('0C'), lambda: j1850.read_pid('05'), j1850.read_vin, j1850.read_dtcs):
+        call()
+        while j1850.busy:
+            await asyncio.sleep(0.03)
+        await asyncio.sleep(0.05)
+    await shot('j1850', 0.4)
+    manager.remove_connection(len(manager.connections) - 1)
+    window.setProperty('selectedIndex', 0)
+    adapter.close()
+
+
 async def gateway_scenario():
     """The bus gateway forwarding from a Powertrain to a Body virtual connection, with live counters."""
     import uuid as _uuid
@@ -486,6 +630,7 @@ async def scenario():
     record_dialog.open()
     await shot('record-dialog')
     record_dialog.close()
+    await mcp_scenario(connection, view)
     await mqtt_scenario(connection, view)
     connection.set_paused(False)
     show_page('overview')
@@ -710,6 +855,8 @@ async def scenario():
     await doip_scenario()
     await xcp_scenario()
     await gmlan_scenario()
+    await obd_scenario()
+    await j1850_scenario()
     await gateway_scenario()
 
     await reverse_engineering_scenario()

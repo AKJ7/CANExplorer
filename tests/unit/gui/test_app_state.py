@@ -57,3 +57,13 @@ def test_theme(state, tmp_path):
     state.set_theme('Unknown')
     reloaded = AppState(QSettings(str(tmp_path / 'settings.ini'), QSettings.Format.IniFormat))
     assert reloaded.theme == 'Nord'
+
+
+def test_spirit_easter_egg(state, tmp_path):
+    # The hidden 'Spirit' theme is not offered until it is awakened.
+    assert not state.spirit_unlocked and 'Spirit' not in state.themes
+    state.awaken_spirit()
+    assert state.spirit_unlocked and state.theme == 'Spirit' and 'Spirit' in state.themes
+    # It is persisted: a reload keeps it unlocked and active.
+    reloaded = AppState(QSettings(str(tmp_path / 'settings.ini'), QSettings.Format.IniFormat))
+    assert reloaded.spirit_unlocked and reloaded.theme == 'Spirit'

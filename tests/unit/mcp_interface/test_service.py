@@ -4,11 +4,12 @@ import uuid
 import can
 import pytest
 
+from can_explorer.core.reverse.markers import Marker
 from can_explorer.core.reverse.obd import response as obd_response
 from can_explorer.core.reverse.synthetic import Behaviour, generate
 from can_explorer.core.decoding import open_signal_database
 from can_explorer.core.sources import BusConfig, LiveSource
-from can_explorer.mcp.service import CanService, SendNotAllowed, _parse_id
+from can_explorer.mcp.service import NOT_CONNECTED, CanService, SendNotAllowed, _parse_id
 
 
 async def wait_until(predicate, timeout=3.0):
@@ -330,3 +331,250 @@ def test_identifiers_cycle_ms_is_zero_not_none_for_equal_timestamps(channel):
         svc.session._dispatch(can.Message(timestamp=5.0, arbitration_id=0x100, is_extended_id=False, data=bytes([i])))
     row = svc.identifiers()[0]
     assert row['cycle_ms'] == 0.0
+
+
+# --- New tools: protocol decode, timing, reaction, send-by-name, diagnostics ---
+
+
+def _frame(can_id, data, extended=False, timestamp=0.0):
+    return can.Message(arbitration_id=can_id, is_extended_id=extended, data=bytes(data), timestamp=timestamp)
+
+
+def test_decode_protocol(channel):
+    svc = service_unstarted(channel)
+    out = svc.decode_protocol('J1939', '18FEF100', '00 11 22 33 44 55 66 77', extended=True)
+    assert 'PGN' in out['description'] and out['protocol'] == 'J1939'
+    assert svc.decode_protocol('Nope', '100', '00')['error']
+
+
+def test_timing_and_capture_reaction(channel):
+    svc = service_unstarted(channel)
+    t0 = 1000.0
+    for i in range(120):  # 0x100 every 20 ms; byte 1 bit 0 flips on only late in the window
+        bit = 0x01 if i >= 90 else 0x00
+        svc.session._dispatch(_frame(0x100, [i & 0xFF, bit], timestamp=t0 + i * 0.02))
+    svc.session._dispatch(_frame(0x300, [9], timestamp=t0 + 2.38))  # Appears only at the end
+
+    timing = {row['id']: row for row in svc.timing()}
+    assert timing['100']['pattern'] == 'periodic' and abs(timing['100']['cycle_ms'] - 20) < 2
+
+    reaction = svc.capture_reaction(baseline_seconds=0.6, action_seconds=0.6)
+    reactions = {row['id']: row for row in reaction['reactions']}
+    assert '300' in reactions and reactions['300']['appeared']
+    assert any(field['field'].startswith('100[8') for field in reactions['100']['fields'])
+
+
+def test_timing_series(channel):
+    svc = service_unstarted(channel)
+    t0 = 1000.0
+    for i in range(50):
+        svc.session._dispatch(_frame(0x100, [i & 0xFF], timestamp=t0 + i * 0.02))  # Every 20 ms
+    row = {r['id']: r for r in svc.timing('100', series=True)}['100']
+    assert 'intervals_ms' in row and len(row['intervals_ms']) == 49
+    assert all(abs(delta - 20) < 1 for delta in row['intervals_ms'])
+
+
+def test_bit_activity(channel):
+    svc = service_unstarted(channel)
+    t0 = 1000.0
+    for i in range(100):
+        # byte 0 is a free-running counter (every bit flips), byte 1 is constant 0xA5, bit 15-as-byte1 constant
+        svc.session._dispatch(_frame(0x100, [i & 0xFF, 0xA5], timestamp=t0 + i * 0.01))
+    result = svc.bit_activity('100')
+    assert result['frames'] == 100 and result['length'] == 2
+    by_bit = {bit['bit']: bit for bit in result['bits']}
+    assert by_bit[0]['flips'] > 0.4 and not by_bit[0]['constant']  # Counter LSB toggles every frame
+    assert by_bit[8]['constant'] and by_bit[8]['ones'] == 1.0  # byte 1 bit 0 of 0xA5 is a constant 1
+    assert svc.bit_activity('7FF')['frames'] == 0
+
+
+def test_extract_field_and_promote(channel, tmp_path):
+    svc = service_unstarted(channel)
+    t0 = 1000.0
+    for i in range(80):
+        value = i * 10  # A 16-bit little-endian ramp in bytes 2-3
+        svc.session._dispatch(_frame(0x200, [0, 0, value & 0xFF, (value >> 8) & 0xFF], timestamp=t0 + i * 0.01))
+    out = svc.extract_field('200', start=16, length=16, scale=0.5)
+    assert out['frames'] == 80 and out['field'] == '200[16|16@1+]'
+    assert out['min'] == 0.0 and out['max'] == 79 * 10 * 0.5 and out['changes'] == 79
+    assert out['series'][0]['value'] == 0.0 and out['series'][-1]['value'] == 79 * 10 * 0.5
+    assert svc.extract_field('200', start=0, length=0)['error']  # Invalid length
+
+    # Promote the confirmed field, then load it back and check the signal exists
+    path = tmp_path / 'found.dbc'
+    result = svc.promote_to_dbc(
+        str(path), fields=[{'identifier': '200', 'start': 16, 'length': 16, 'scale': 0.5, 'name': 'Speed'}]
+    )
+    assert result.get('signals', 0) == 1 and path.exists()
+    assert 'Speed' in path.read_text()
+
+
+def test_markers_reaction(channel):
+    svc = service_unstarted(channel)
+    t0 = 1000.0
+    # 0x100 every 20 ms; byte 0 bit 0 flips only right after each of three "actions" at 1, 2 and 3 s
+    actions = [t0 + 1.0, t0 + 2.0, t0 + 3.0]
+    state = 0
+    for i in range(250):
+        time = t0 + i * 0.02
+        if any(0 <= time - action < 0.1 for action in actions):
+            state = 1
+        svc.session._dispatch(_frame(0x100, [state, i & 0xFF], timestamp=time))
+        state = 0 if any(0.1 <= time - action < 0.2 for action in actions) else state
+
+    assert svc.reaction_at_markers()['error']  # No markers yet
+    svc._markers = [Marker(action, 'press') for action in actions]  # Markers at the three action moments
+    result = svc.reaction_at_markers(before=0.1, after=0.2, top=10)
+    assert result['markers'] == 3
+    assert any(r['field'].startswith('100[0') for r in result['reactions'])
+
+
+def test_mark_and_clear(channel):
+    svc = service_unstarted(channel)
+    svc.session._dispatch(_frame(0x100, [0], timestamp=1000.0))
+    svc.session._dispatch(_frame(0x100, [1], timestamp=1001.0))
+    marked = svc.mark('door')
+    assert marked['count'] == 1 and marked['markers'][0]['label'] == 'door'
+    assert svc.clear_markers()['count'] == 0
+    assert svc.reaction_at_markers()['error']
+
+
+async def test_send_message_by_name(channel, data_dir):
+    svc = service(channel, database=open_signal_database(data_dir / 'example.dbc'), allow_send=True)
+    try:
+        peer = can.Bus(interface='virtual', channel=channel)
+        result = svc.send_message('EngineData', {'EngineSpeed': 1000, 'CoolantTemp': 20, 'GearPosition': 3})
+        assert result['sent'] and result['id'] == '100'
+        received = peer.recv(0.5)
+        assert received is not None and received.arbitration_id == 0x100
+        peer.shutdown()
+        assert svc.send_message('Nope')['error']
+    finally:
+        svc.stop()
+
+
+async def test_obd_diagnostics_against_simulated_ecu(channel):
+    from can_explorer.core.obd import ECU_RESPONSE, FUNCTIONAL_REQUEST, ObdServer
+    from can_explorer.core.session import BusSession
+    from can_explorer.core.simulation import UdsEcuSimulator
+
+    ecu = BusSession(LiveSource(BusConfig('virtual', channel)))
+    ecu.start()
+    simulator = UdsEcuSimulator(ecu, request_id=FUNCTIONAL_REQUEST, response_id=ECU_RESPONSE, server=ObdServer())
+    simulator.start()
+    svc = service(channel, allow_control=True)  # Control grants diagnostics and obd_clear
+    try:
+        assert (await svc.obd_status())['dtc_count'] == 2
+        assert (await svc.obd_vin())['vin'] == '1HGCM82633A004352'
+        assert (await svc.obd_dtcs())['dtcs'] == ['P0133', 'P0420']
+        assert (await svc.obd_dtcs(pending=True))['dtcs'] == ['P0171']
+        assert '0D' in (await svc.obd_supported())['supported_pids']
+        values = {row['pid']: row for row in (await svc.obd_read([0x0C, 0x0D]))['values']}
+        assert values[0x0D]['value'] == 60 and values[0x0C]['value'] == 2500
+        assert (await svc.obd_clear())['cleared']
+        assert (await svc.obd_dtcs())['dtcs'] == []
+    finally:
+        svc.stop()
+        simulator.stop()
+        ecu.stop()
+
+
+async def test_uds_diagnostics_against_simulated_ecu(channel):
+    from can_explorer.core.session import BusSession
+    from can_explorer.core.simulation import UdsEcuSimulator, UdsServer
+
+    ecu = BusSession(LiveSource(BusConfig('virtual', channel)))
+    ecu.start()
+    simulator = UdsEcuSimulator(ecu, server=UdsServer())  # Default 0x7E0 / 0x7E8
+    simulator.start()
+    svc = service(channel, allow_control=True)
+    try:
+        assert 'WDB1234567890ABCD' in (await svc.uds_read_did('F190'))['text']
+        assert (await svc.uds_read_dtcs())['dtcs']
+        assert (await svc.uds_reset(1))['reset']
+    finally:
+        svc.stop()
+        simulator.stop()
+        ecu.stop()
+
+
+async def test_permission_tiers_raise_when_disabled(channel):
+    svc = service_unstarted(channel)  # Read-only
+    with pytest.raises(SendNotAllowed):
+        await svc.obd_status()
+    with pytest.raises(SendNotAllowed):
+        await svc.obd_clear()
+    with pytest.raises(SendNotAllowed):
+        svc.send_message('X')
+    # Diagnostics tier allows reads but not control or send
+    diag = service_unstarted(channel, allow_diagnostics=True)
+    assert diag.can_diagnose and not diag.can_control and not diag.allow_send
+    with pytest.raises(SendNotAllowed):
+        await diag.obd_clear()
+
+
+def test_interfaces_is_a_list(channel):
+    assert isinstance(service_unstarted(channel).interfaces(), list)
+
+
+# --- Dynamic connection: start unconnected, then connect/disconnect ---
+
+
+async def test_connect_disconnect_flow(channel, data_dir):
+    svc = CanService(database=open_signal_database(data_dir / 'example.dbc'))  # No source: unconnected
+    assert not svc.connected
+    status = svc.status()
+    assert status['connected'] is False and status['state'] == 'disconnected' and 'hint' in status
+    # Tools that need a bus report it clearly; database-only tools still work
+    assert svc.identifiers() == [] and svc.timing() == []
+    assert svc.analyze('100')['error'] == NOT_CONNECTED
+    assert svc.decode_frame('100', '00 27 5A')['name'] == 'EngineData'  # Uses the database, no bus needed
+
+    svc.start()  # No-op while unconnected
+    connected = svc.connect('virtual', channel)
+    try:
+        assert svc.connected and connected['connected'] is True and connected['open'] is True
+        peer = can.Bus(interface='virtual', channel=channel)
+        peer.send(can.Message(arbitration_id=0x100, is_extended_id=False, data=bytes([0, 0x27, 0, 0, 0, 0, 0, 0])))
+        await wait_until(lambda: svc.session.trace.total == 1)
+        assert [row['id'] for row in svc.identifiers()] == ['100']
+        peer.shutdown()
+    finally:
+        svc.disconnect()
+    assert not svc.connected and svc.status()['state'] == 'disconnected'
+    # The database persisted across the disconnect
+    assert svc.decode_frame('100', '00 27 5A')['name'] == 'EngineData'
+    # Unloading the database goes back to raw bytes (works while disconnected, too)
+    assert svc.unload_database() == {'database': None, 'unloaded': True}
+    assert svc.status()['database'] is None
+    assert 'error' in svc.decode_frame('100', '00 27 5A')
+    assert svc.unload_database()['unloaded'] is False  # Idempotent
+    assert svc.load_database(str(data_dir / 'example.dbc'))['messages'] >= 1  # And can reload
+
+
+def test_connect_reports_error_for_a_bad_interface(channel):
+    svc = CanService()
+    result = svc.connect('definitely-not-an-interface', channel)
+    assert result['connected'] is False and 'error' in result
+    assert not svc.connected
+
+
+def test_from_config_without_interface_is_unconnected():
+    svc = CanService.from_config()
+    assert not svc.connected
+    svc.start()  # Does not raise
+    assert not svc.connected
+
+
+async def test_attach_wraps_an_external_session(channel):
+    from can_explorer.core.session import BusSession
+
+    session = BusSession(LiveSource(BusConfig('virtual', channel)))
+    session.start()
+    svc = CanService.attach(session, allow_diagnostics=True)
+    assert svc.session is session and svc.connected and not svc.manages_connection
+    assert svc.can_diagnose and not svc.allow_send
+    assert svc.status()['connected'] is True
+    svc.stop()  # Must not close a session it does not own
+    assert session.is_open
+    session.stop()

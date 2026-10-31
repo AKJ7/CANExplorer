@@ -180,3 +180,23 @@
 [data-md-color-scheme="slate"] .md-search-result mark {
   color: var(--dracula-pink);
 }
+
+/* Download buttons on the home page */
+.md-typeset .download-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin: 1em 0 0.4em;
+}
+
+.md-typeset .download-buttons .md-button {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+}
+
+.md-typeset .download-note {
+  font-size: 0.75rem;
+  color: var(--dracula-comment);
+}

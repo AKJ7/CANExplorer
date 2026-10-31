@@ -131,11 +131,13 @@ SplitView {
             objectName: "reverseTabs"
             Layout.fillWidth: true
             TabButton { text: qsTr("Bits") }
+            TabButton { text: qsTr("Activity") }
             TabButton { text: qsTr("Automatic analysis") }
             TabButton { text: qsTr("Reference signals") }
             TabButton { text: qsTr("Markers") }
             TabButton { text: qsTr("Related signals") }
             TabButton { text: qsTr("Reaction") }
+            TabButton { text: qsTr("Console") }
         }
 
         StackLayout {
@@ -180,6 +182,32 @@ SplitView {
                             ToolTip.visible: hovered
                             ToolTip.text: qsTr("Play this identifier's captured frames back over time; scrub to any moment and watch the bits flow")
                             onClicked: root.tools.timeline.active ? root.tools.stop_replay() : root.tools.start_replay()
+                        }
+                        Button {
+                            text: qsTr("Plot Δt")
+                            enabled: root.tools.selected !== ""
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("Plot this identifier's inter-frame interval (Δt) over time on the Signals page, to spot gateways, bursts and event-triggered messages")
+                            onClicked: {
+                                const error = root.tools.plot_interval()
+                                if (error)
+                                    root.showStatus(error)
+                                else
+                                    root.showPage("signals")
+                            }
+                        }
+                        Button {
+                            text: qsTr("Plot bytes")
+                            enabled: root.tools.selected !== ""
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("Plot every byte of this identifier's payload as a value over time on the Signals page")
+                            onClicked: {
+                                const error = root.tools.plot_bytes()
+                                if (error)
+                                    root.showStatus(error)
+                                else
+                                    root.showPage("signals")
+                            }
                         }
                         Label {
                             text: root.status
@@ -518,6 +546,10 @@ SplitView {
                 }
             }
 
+            ReverseActivityPanel {
+                tools: root.tools
+                onMessage: text => root.showStatus(text)
+            }
             ReverseAnalysisPanel {
                 tools: root.tools
                 connection: root.connection
@@ -548,6 +580,10 @@ SplitView {
                 tools: root.tools
                 onFieldUsed: tabBar.currentIndex = 0
                 onPlotted: root.showPage("signals")
+                onMessage: text => root.showStatus(text)
+            }
+            ReverseConsolePanel {
+                tools: root.tools
                 onMessage: text => root.showStatus(text)
             }
         }

@@ -4,17 +4,22 @@
     <context>
         <name>AboutDialog</name>
         <message>
-            <location filename="../../gui/qt/CanExplorer/AboutDialog.qml" line="7" />
+            <location filename="../../gui/qt/CanExplorer/AboutDialog.qml" line="9" />
             <source>About %1</source>
             <translation>关于 %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/AboutDialog.qml" line="22" />
+            <location filename="../../gui/qt/CanExplorer/AboutDialog.qml" line="61" />
             <source>%1 (v%2)</source>
             <translation>%1 (v%2)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/AboutDialog.qml" line="34" />
+            <location filename="../../gui/qt/CanExplorer/AboutDialog.qml" line="74" />
+            <source>The red diamond spirit awakens.</source>
+            <translation>红钻之魂觉醒。</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/AboutDialog.qml" line="80" />
             <source>Copy to Clipboard</source>
             <translation>复制到剪贴板</translation>
         </message>
@@ -801,186 +806,211 @@ B：%3</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="22" />
+            <source>OBD-II</source>
+            <translation>OBD-II</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="23" />
             <source>Flashing</source>
             <translation>刷写</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="23" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="24" />
             <source>UDS discovery</source>
             <translation>UDS 发现</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="24" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="25" />
             <source>XCP/CCP</source>
             <translation>XCP/CCP</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="25" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="26" />
             <source>GMLAN</source>
             <translation>GMLAN</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="26" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="27" />
+            <source>J1850 / Class 2</source>
+            <translation>J1850 / Class 2</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="28" />
             <source>J1939</source>
             <translation>J1939</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="27" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="29" />
             <source>CANopen</source>
             <translation>CANopen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="28" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="30" />
             <source>LIN Schedule</source>
             <translation>LIN 调度</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="29" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="31" />
             <source>Simulation</source>
             <translation>仿真</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="30" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="32" />
             <source>Tests</source>
             <translation>测试</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="67" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="69" />
             <source>Replaying %1 on the bus</source>
             <translation>正在总线上回放 %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="68" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="70" />
             <source> (pass %1)</source>
             <translation>（第 %1 遍）</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="81" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="83" />
             <source>Pause view</source>
             <translation>暂停视图</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="87" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="89" />
             <source>Clear</source>
             <translation>清除</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="91" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="93" />
             <source>● Stop recording</source>
             <translation>● 停止录制</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="91" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="93" />
             <source>Record…</source>
             <translation>录制…</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="99" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="101" />
             <source>Replay to bus…</source>
             <translation>回放到总线…</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="102" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="104" />
             <source>Transmit the frames of a log file on this bus with their recorded timing</source>
             <translation>以录制时序在此总线上发送日志文件中的帧</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="106" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="108" />
             <source>● MQTT</source>
             <translation>● MQTT</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="106" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="108" />
             <source>MQTT…</source>
             <translation>MQTT…</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="111" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="113" />
             <source>Publish the signals and frames to an MQTT broker</source>
             <translation>将信号和帧发布到 MQTT 代理</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="115" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="117" />
+            <source>● Agent</source>
+            <translation>● 代理</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="117" />
+            <source>Agent…</source>
+            <translation>代理…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="122" />
+            <source>Expose this connection to an AI agent over a local MCP server</source>
+            <translation>通过本地 MCP 服务器将此连接开放给 AI 代理</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="126" />
             <source>Export…</source>
             <translation>导出…</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="117" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="128" />
             <source>Save the selected trace rows, or all displayed rows, to a log file</source>
             <translation>将所选跟踪行或所有显示的行保存到日志文件</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="121" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="132" />
             <source>Unload database</source>
             <translation>卸载数据库</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="121" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="132" />
             <source>Load database…</source>
             <translation>加载数据库…</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="126" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="137" />
             <source>Edit database</source>
             <translation>编辑数据库</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="128" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="139" />
             <source>Open the database in the editor; saving it updates the decoding</source>
             <translation>在编辑器中打开数据库；保存后更新解码</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="134" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="145" />
             <source>All buses</source>
             <translation>所有总线</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="138" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="149" />
             <source>The database describes several buses; decode with the messages of this one</source>
             <translation>该数据库描述了多条总线；使用此总线的报文进行解码</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="143" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="154" />
             <source>Auto-scroll</source>
             <translation>自动滚动</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="151" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="162" />
             <source>● REC</source>
             <translation>● REC</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="166" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="177" />
             <source>%1 frames</source>
             <translation>%1 帧</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="369" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="404" />
             <source>Bookmark / remove bookmark	Ctrl+B</source>
             <translation>添加/移除书签	Ctrl+B</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="373" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="408" />
             <source>Copy selected rows	Ctrl+C</source>
             <translation>复制所选行	Ctrl+C</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="379" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="414" />
             <source>Replay from here</source>
             <translation>从此处回放</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="383" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="418" />
             <source>Find…	Ctrl+F</source>
             <translation>查找…	Ctrl+F</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="412" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="447" />
             <source>Export trace</source>
             <translation>导出跟踪</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="425" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="460" />
             <source>Load signal database</source>
             <translation>加载信号数据库</translation>
         </message>
@@ -2197,6 +2227,219 @@ B：%3</translation>
         </message>
     </context>
     <context>
+        <name>EthernetView</name>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="12" />
+            <source>capturing</source>
+            <translation>正在捕获</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="12" />
+            <source>no capture</source>
+            <translation>无捕获</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="20" />
+            <source>Open pcap…</source>
+            <translation>打开 pcap…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="31" />
+            <source>Interface to capture live from (needs Linux and root/CAP_NET_RAW)</source>
+            <translation>用于实时捕获的接口（需要 Linux 和 root/CAP_NET_RAW）</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="34" />
+            <source>Stop</source>
+            <translation>停止</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="34" />
+            <source>Capture</source>
+            <translation>捕获</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="49" />
+            <source>Export…</source>
+            <translation>导出…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="54" />
+            <source>Clear</source>
+            <translation>清除</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="60" />
+            <source>filter: SOME/IP, 192.168.0.10, 30509…</source>
+            <translation>过滤：SOME/IP, 192.168.0.10, 30509…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="74" />
+            <source>%1 packets</source>
+            <translation>%1 个数据包</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="91" />
+            <source>Open a pcap capture of automotive Ethernet traffic (classic pcap, Ethernet link type), or capture live on an interface. Frames are decoded down the stack and the automotive protocols — SOME/IP, DoIP, gPTP, AVTP — are recognised. A full capture needs a network tap or a mirror/SPAN port.</source>
+            <translation>打开一份汽车以太网流量的 pcap 捕获（经典 pcap，以太网链路类型），或在某个接口上实时捕获。帧会按整个协议栈解码，并识别汽车协议 — SOME/IP、DoIP、gPTP、AVTP。完整捕获需要网络分流器（tap）或镜像/SPAN 端口。</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="115" />
+            <source>Time sync (gPTP)</source>
+            <translation>时间同步 (gPTP)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="128" />
+            <source>Grandmaster</source>
+            <translation>主时钟 (Grandmaster)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="131" />
+            <source>  (priority %1, %2)</source>
+            <translation>  （优先级 %1，%2）</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="132" />
+            <source>class %1</source>
+            <translation>类别 %1</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="133" />
+            <source>none announced</source>
+            <translation>未通告</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="142" />
+            <source>Steps removed</source>
+            <translation>到主时钟的跳数</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="144" />
+            <source>Time source</source>
+            <translation>时间源</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="147" />
+            <source>Sync interval</source>
+            <translation>Sync 间隔</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="150" />
+            <source>%1 ms</source>
+            <translation>%1 ms</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="151" />
+            <source> (observed %1 Hz)</source>
+            <translation>（实测 %1 Hz）</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="156" />
+            <source>Announce interval</source>
+            <translation>Announce 间隔</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="159" />
+            <source>Clocks / domains</source>
+            <translation>时钟 / 域</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="161" />
+            <source>%1 clock(s) on domain(s) %2</source>
+            <translation>%2 域上有 %1 个时钟</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="174" />
+            <source>SOME/IP services</source>
+            <translation>SOME/IP 服务</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="188" />
+            <source>Service</source>
+            <translation>服务</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="188" />
+            <source>Instance</source>
+            <translation>实例</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="188" />
+            <source>Version</source>
+            <translation>版本</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="188" />
+            <source>Endpoints</source>
+            <translation>端点</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="188" />
+            <source>Offers</source>
+            <translation>提供数</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="218" />
+            <source>Packets</source>
+            <translation>数据包</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="229" />
+            <source>Time</source>
+            <translation>时间</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="229" />
+            <source>Source</source>
+            <translation>源</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="229" />
+            <source>Destination</source>
+            <translation>目的</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="229" />
+            <source>Protocol</source>
+            <translation>协议</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="229" />
+            <source>Len</source>
+            <translation>长度</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="229" />
+            <source>Info</source>
+            <translation>信息</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="273" />
+            <source>Open a pcap capture</source>
+            <translation>打开 pcap 捕获</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="274" />
+            <source>pcap files (*.pcap *.cap)</source>
+            <translation>pcap 文件 (*.pcap *.cap)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="274" />
+            <source>All files (*)</source>
+            <translation>所有文件 (*)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="284" />
+            <source>Save the packets</source>
+            <translation>保存数据包</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/EthernetView.qml" line="287" />
+            <source>pcap files (*.pcap)</source>
+            <translation>pcap 文件 (*.pcap)</translation>
+        </message>
+    </context>
+    <context>
         <name>FlashView</name>
         <message>
             <location filename="../../gui/qt/CanExplorer/FlashView.qml" line="36" />
@@ -2656,6 +2899,89 @@ B：%3</translation>
         </message>
     </context>
     <context>
+        <name>J1850View</name>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/J1850View.qml" line="24" />
+            <source>J1850 VPW / GM Class 2</source>
+            <translation>J1850 VPW / GM Class 2</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/J1850View.qml" line="27" />
+            <source>SAE J1979 over J1850 VPW</source>
+            <translation>基于 J1850 VPW 的 SAE J1979</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/J1850View.qml" line="27" />
+            <source>Connect first</source>
+            <translation>请先连接</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/J1850View.qml" line="37" />
+            <source>PID</source>
+            <translation>PID</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/J1850View.qml" line="45" />
+            <source>Read</source>
+            <translation>读取</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/J1850View.qml" line="48" />
+            <source>ShowCurrentData (mode 0x01)</source>
+            <translation>ShowCurrentData（模式 0x01）</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/J1850View.qml" line="52" />
+            <source>Read VIN</source>
+            <translation>读取 VIN</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/J1850View.qml" line="55" />
+            <source>RequestVehicleInformation (mode 0x09)</source>
+            <translation>RequestVehicleInformation（模式 0x09）</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/J1850View.qml" line="72" />
+            <source>Read DTCs</source>
+            <translation>读取 DTC</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/J1850View.qml" line="77" />
+            <source>Clear DTCs</source>
+            <translation>清除 DTC</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/J1850View.qml" line="81" />
+            <source>Raw request</source>
+            <translation>原始请求</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/J1850View.qml" line="84" />
+            <source>J1979 request, hex, e.g. 01 0C</source>
+            <translation>J1979 请求，十六进制，例如 01 0C</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/J1850View.qml" line="89" />
+            <source>Send</source>
+            <translation>发送</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/J1850View.qml" line="111" />
+            <source>Diagnostic trouble codes (%1)</source>
+            <translation>诊断故障码 (%1)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/J1850View.qml" line="133" />
+            <source>History</source>
+            <translation>历史</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/J1850View.qml" line="136" />
+            <source>Clear</source>
+            <translation>清除</translation>
+        </message>
+    </context>
+    <context>
         <name>J1939View</name>
         <message>
             <location filename="../../gui/qt/CanExplorer/J1939View.qml" line="32" />
@@ -2894,6 +3220,74 @@ B：%3</translation>
             <location filename="../../gui/qt/CanExplorer/LinScheduleView.qml" line="50" />
             <source>Signals published by the master (number, 0x hex or logical value name):</source>
             <translation>主机发布的信号（数字、0x 十六进制或逻辑值名称）：</translation>
+        </message>
+    </context>
+    <context>
+        <name>McpServerDialog</name>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/McpServerDialog.qml" line="12" />
+            <source>AI agent (MCP)</source>
+            <translation>AI 代理 (MCP)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/McpServerDialog.qml" line="23" />
+            <source>Let an AI agent inspect this connection — the bus you already have open — over a local MCP server. It listens on 127.0.0.1 only and requires the token below.</source>
+            <translation>让 AI 代理通过本地 MCP 服务器检查此连接 — 即你已打开的总线。它仅监听 127.0.0.1，并需要下方的令牌。</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/McpServerDialog.qml" line="33" />
+            <source>Access</source>
+            <translation>访问权限</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/McpServerDialog.qml" line="43" />
+            <source>Stop</source>
+            <translation>停止</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/McpServerDialog.qml" line="43" />
+            <source>Start</source>
+            <translation>启动</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/McpServerDialog.qml" line="60" />
+            <source>Read-only, plus OBD-II and UDS diagnostic reads (these send requests on the bus).</source>
+            <translation>只读，另加 OBD-II 和 UDS 诊断读取（这些会在总线上发送请求）。</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/McpServerDialog.qml" line="61" />
+            <source>Plus active diagnostics: clear trouble codes, reset ECUs, run routines. Use with care.</source>
+            <translation>另加主动诊断：清除故障码、复位 ECU、运行例程。请谨慎使用。</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/McpServerDialog.qml" line="62" />
+            <source>Plus transmitting arbitrary frames and messages. The agent fully controls the bus.</source>
+            <translation>另加发送任意帧和消息。代理将完全控制总线。</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/McpServerDialog.qml" line="63" />
+            <source>Read-only: inspect frames, decode and reverse-engineer. Sends nothing.</source>
+            <translation>只读：检查帧、解码和逆向工程。不发送任何内容。</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/McpServerDialog.qml" line="94" />
+            <source>URL</source>
+            <translation>URL</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/McpServerDialog.qml" line="102" />
+            <source>Copy</source>
+            <translation>复制</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/McpServerDialog.qml" line="104" />
+            <source>Token</source>
+            <translation>令牌</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/McpServerDialog.qml" line="119" />
+            <source>Point your MCP client at the URL using the streamable-HTTP transport, with the token as a Bearer header (Authorization: Bearer &lt;token&gt;) or appended as ?token=&lt;token&gt;.</source>
+            <translation>使用 streamable-HTTP 传输将你的 MCP 客户端指向该 URL，并将令牌作为 Bearer 头 (Authorization: Bearer &lt;token&gt;) 或作为 ?token=&lt;token&gt; 附加。</translation>
         </message>
     </context>
     <context>
@@ -3148,6 +3542,119 @@ B：%3</translation>
             <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="173" />
             <source>Self-Reception</source>
             <translation>自接收</translation>
+        </message>
+    </context>
+    <context>
+        <name>ObdView</name>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ObdView.qml" line="11" />
+            <source>connected</source>
+            <translation>已连接</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ObdView.qml" line="11" />
+            <source>not scanned</source>
+            <translation>未扫描</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ObdView.qml" line="18" />
+            <source>Request</source>
+            <translation>请求</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ObdView.qml" line="25" />
+            <source>Request identifier (hex): 7DF is the OBD-II functional broadcast; 7E0 addresses one ECU</source>
+            <translation>请求标识符（十六进制）：7DF 是 OBD-II 功能广播；7E0 寻址单个 ECU</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ObdView.qml" line="27" />
+            <source>Response</source>
+            <translation>响应</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ObdView.qml" line="34" />
+            <source>Response identifier (hex): 7E8 is the first ECU</source>
+            <translation>响应标识符（十六进制）：7E8 是第一个 ECU</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ObdView.qml" line="37" />
+            <source>Scan</source>
+            <translation>扫描</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ObdView.qml" line="43" />
+            <source>Stop</source>
+            <translation>停止</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ObdView.qml" line="43" />
+            <source>Live</source>
+            <translation>实时</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ObdView.qml" line="47" />
+            <source>Poll the supported values continuously</source>
+            <translation>持续轮询支持的值</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ObdView.qml" line="64" />
+            <source>MIL on · %1 DTC</source>
+            <translation>MIL 点亮 · %1 个 DTC</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ObdView.qml" line="64" />
+            <source>MIL off</source>
+            <translation>MIL 熄灭</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ObdView.qml" line="79" />
+            <source>Connect to a vehicle's OBD-II port (a standard 500 kbit/s CAN bus), then press Scan to read the VIN, the supported live values and the trouble codes. If nothing answers, try the request/response identifiers 7E0 and 7E8 for a single ECU.</source>
+            <translation>连接到车辆的 OBD-II 端口（标准的 500 kbit/s CAN 总线），然后按扫描以读取 VIN、支持的实时值和故障码。如果无响应，请尝试用于单个 ECU 的请求/响应标识符 7E0 和 7E8。</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ObdView.qml" line="87" />
+            <source>Live data</source>
+            <translation>实时数据</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ObdView.qml" line="140" />
+            <source>Trouble codes</source>
+            <translation>故障码</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ObdView.qml" line="152" />
+            <source>Read codes</source>
+            <translation>读取代码</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ObdView.qml" line="157" />
+            <source>Clear codes</source>
+            <translation>清除代码</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ObdView.qml" line="160" />
+            <source>Clear the stored trouble codes and turn the MIL off (service 04)</source>
+            <translation>清除存储的故障码并熄灭 MIL（服务 04）</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ObdView.qml" line="173" />
+            <source>Stored</source>
+            <translation>已存储</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ObdView.qml" line="173" />
+            <source>No stored codes</source>
+            <translation>无存储的代码</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ObdView.qml" line="174" />
+            <source>Pending</source>
+            <translation>待定</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ObdView.qml" line="174" />
+            <source>No pending codes</source>
+            <translation>无待定代码</translation>
         </message>
     </context>
     <context>
@@ -3621,6 +4128,49 @@ B：%3</translation>
         </message>
     </context>
     <context>
+        <name>ReverseActivityPanel</name>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ReverseActivityPanel.qml" line="32" />
+            <source>Refresh</source>
+            <translation>刷新</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ReverseActivityPanel.qml" line="35" />
+            <source>Rebuild the activity map from the frames captured so far</source>
+            <translation>根据目前已捕获的帧重建活动图</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ReverseActivityPanel.qml" line="47" />
+            <source>0</source>
+            <translation>0</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ReverseActivityPanel.qml" line="48" />
+            <source>1</source>
+            <translation>1</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ReverseActivityPanel.qml" line="49" />
+            <source>changed</source>
+            <translation>已变化</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ReverseActivityPanel.qml" line="60" />
+            <source>%1 over %2</source>
+            <translation>%2 中的 %1</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ReverseActivityPanel.qml" line="77" />
+            <source>Select an identifier to see its bits over the whole capture</source>
+            <translation>选择一个标识符以查看其在整个捕获期间的各位</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ReverseActivityPanel.qml" line="92" />
+            <source>Each row is a bit (byte 0 at the top, most significant bit first), each column a frame over time. Solid blue is a steady 1, dark a steady 0; orange marks a bit that changed. Counters ramp as diagonal stripes, constants are flat, multiplexers switch.</source>
+            <translation>每行是一个位（字节 0 在顶部，最高有效位在前），每列是随时间变化的一帧。实蓝色表示稳定的 1，暗色表示稳定的 0；橙色标记发生变化的位。计数器呈对角条纹递增，常量保持平坦，多路复用器会切换。</translation>
+        </message>
+    </context>
+    <context>
         <name>ReverseAnalysisPanel</name>
         <message>
             <location filename="../../gui/qt/CanExplorer/ReverseAnalysisPanel.qml" line="29" />
@@ -3691,6 +4241,34 @@ B：%3</translation>
             <location filename="../../gui/qt/CanExplorer/ReverseAnalysisPanel.qml" line="84" />
             <source>No results yet</source>
             <translation>暂无结果</translation>
+        </message>
+    </context>
+    <context>
+        <name>ReverseConsolePanel</name>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ReverseConsolePanel.qml" line="30" />
+            <source>Run</source>
+            <translation>运行</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ReverseConsolePanel.qml" line="34" />
+            <source>Run the snippet over the frames captured so far (Ctrl+Enter)</source>
+            <translation>对目前已捕获的帧运行该代码片段 (Ctrl+Enter)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ReverseConsolePanel.qml" line="38" />
+            <source>Clear</source>
+            <translation>清除</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ReverseConsolePanel.qml" line="41" />
+            <source>Clear the transcript and forget all variables</source>
+            <translation>清除记录并清空所有变量</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ReverseConsolePanel.qml" line="146" />
+            <source>Python here, Ctrl+Enter to run — e.g.  [(f.field.key, f.kind) for f in analyse(frames_of('100')).fields]   (type HELP for the available names)</source>
+            <translation>在此输入 Python，Ctrl+Enter 运行 — 例如  [(f.field.key, f.kind) for f in analyse(frames_of('100')).fields]   （输入 HELP 查看可用名称）</translation>
         </message>
     </context>
     <context>
@@ -3781,82 +4359,82 @@ B：%3</translation>
         <message>
             <location filename="../../gui/qt/CanExplorer/ReverseReactionPanel.qml" line="38" />
             <source>Start action</source>
-            <translation type="unfinished" />
+            <translation>开始动作</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/ReverseReactionPanel.qml" line="39" />
             <source>Capture reaction</source>
-            <translation type="unfinished" />
+            <translation>捕获反应</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/ReverseReactionPanel.qml" line="40" />
             <source>Record baseline</source>
-            <translation type="unfinished" />
+            <translation>记录基线</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/ReverseReactionPanel.qml" line="46" />
             <source>1. Record a baseline while the bus is steady  2. Start the action and do it  3. Capture the reaction</source>
-            <translation type="unfinished" />
+            <translation>1. 在总线稳定时记录基线  2. 开始并执行动作  3. 捕获反应</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/ReverseReactionPanel.qml" line="51" />
             <source>Baseline</source>
-            <translation type="unfinished" />
+            <translation>基线</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/ReverseReactionPanel.qml" line="51" />
             <source>Action</source>
-            <translation type="unfinished" />
+            <translation>动作</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/ReverseReactionPanel.qml" line="51" />
             <source>Result</source>
-            <translation type="unfinished" />
+            <translation>结果</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/ReverseReactionPanel.qml" line="67" />
             <source>Reset</source>
-            <translation type="unfinished" />
+            <translation>重置</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/ReverseReactionPanel.qml" line="82" />
             <source>Find what a CAN message controls: capture a steady baseline, then do the action (press a button, open a door) and see which identifiers appeared and which bits changed — safely, by watching, not by sending.</source>
-            <translation type="unfinished" />
+            <translation>找出某条 CAN 消息控制的内容：先捕获稳定的基线，然后执行动作（按下按钮、打开车门），查看出现了哪些标识符以及哪些位发生变化 — 通过观察而非发送，安全地进行。</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/ReverseReactionPanel.qml" line="92" />
             <source>ID</source>
-            <translation type="unfinished" />
+            <translation>ID</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/ReverseReactionPanel.qml" line="93" />
             <source>Field</source>
-            <translation type="unfinished" />
+            <translation>字段</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/ReverseReactionPanel.qml" line="94" />
             <source>Kind</source>
-            <translation type="unfinished" />
+            <translation>类型</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/ReverseReactionPanel.qml" line="95" />
             <source>Change</source>
-            <translation type="unfinished" />
+            <translation>变化</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/ReverseReactionPanel.qml" line="96" />
             <source>Flips</source>
-            <translation type="unfinished" />
+            <translation>翻转次数</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/ReverseReactionPanel.qml" line="100" />
             <source>Nothing changed during the action</source>
-            <translation type="unfinished" />
+            <translation>动作期间没有任何变化</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/ReverseReactionPanel.qml" line="101" />
             <source>The identifiers and bits that react to the action appear here, most reactive first</source>
-            <translation type="unfinished" />
+            <translation>对动作有反应的标识符和位显示在此处，反应最强的在前</translation>
         </message>
     </context>
     <context>
@@ -4088,57 +4666,57 @@ B：%3</translation>
         <message>
             <location filename="../../gui/qt/CanExplorer/ReverseTimelineBar.qml" line="24" />
             <source>❚❚</source>
-            <translation type="unfinished" />
+            <translation>❚❚</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/ReverseTimelineBar.qml" line="24" />
             <source>▶</source>
-            <translation type="unfinished" />
+            <translation>▶</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/ReverseTimelineBar.qml" line="29" />
             <source>Pause</source>
-            <translation type="unfinished" />
+            <translation>暂停</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/ReverseTimelineBar.qml" line="29" />
             <source>Play</source>
-            <translation type="unfinished" />
+            <translation>播放</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/ReverseTimelineBar.qml" line="33" />
             <source>«</source>
-            <translation type="unfinished" />
+            <translation>«</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/ReverseTimelineBar.qml" line="37" />
             <source>Previous frame</source>
-            <translation type="unfinished" />
+            <translation>上一帧</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/ReverseTimelineBar.qml" line="41" />
             <source>»</source>
-            <translation type="unfinished" />
+            <translation>»</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/ReverseTimelineBar.qml" line="45" />
             <source>Next frame</source>
-            <translation type="unfinished" />
+            <translation>下一帧</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/ReverseTimelineBar.qml" line="70" />
             <source>frame %1 / %2</source>
-            <translation type="unfinished" />
+            <translation>帧 %1 / %2</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/ReverseTimelineBar.qml" line="76" />
             <source>Speed</source>
-            <translation type="unfinished" />
+            <translation>速度</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/ReverseTimelineBar.qml" line="81" />
             <source>%1×</source>
-            <translation type="unfinished" />
+            <translation>%1×</translation>
         </message>
     </context>
     <context>
@@ -4195,251 +4773,281 @@ B：%3</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="134" />
+            <source>Activity</source>
+            <translation>活动</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="135" />
             <source>Automatic analysis</source>
             <translation>自动分析</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="135" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="136" />
             <source>Reference signals</source>
             <translation>参考信号</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="136" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="137" />
             <source>Markers</source>
             <translation>标记</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="137" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="138" />
             <source>Related signals</source>
             <translation>相关信号</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="138" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="139" />
             <source>Reaction</source>
-            <translation type="unfinished" />
+            <translation>反应</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="159" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="140" />
+            <source>Console</source>
+            <translation>控制台</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="161" />
             <source>Notch again</source>
             <translation>重新标记</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="159" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="161" />
             <source>Notch</source>
             <translation>标记点</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="162" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="164" />
             <source>Hide every bit that changed so far; bits that change afterwards, e.g. when you press a button, stand out</source>
             <translation>隐藏迄今为止变化的所有位；之后变化的位（例如按下按钮时）会凸显出来</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="167" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="169" />
             <source>Clear notch</source>
             <translation>清除标记点</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="171" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="173" />
             <source>Reset</source>
             <translation>重置</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="173" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="175" />
             <source>Forget the statistics and start counting again</source>
             <translation>清除统计信息并重新开始计数</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="177" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="179" />
             <source>● Replay</source>
-            <translation type="unfinished" />
+            <translation>● 回放</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="177" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="179" />
             <source>Replay</source>
-            <translation type="unfinished" />
+            <translation>回放</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="181" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="183" />
             <source>Play this identifier's captured frames back over time; scrub to any moment and watch the bits flow</source>
-            <translation type="unfinished" />
+            <translation>随时间回放此标识符捕获的帧；可拖动到任意时刻并观察各位的变化</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="205" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="187" />
+            <source>Plot Δt</source>
+            <translation>绘制 Δt</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="190" />
+            <source>Plot this identifier's inter-frame interval (Δt) over time on the Signals page, to spot gateways, bursts and event-triggered messages</source>
+            <translation>在信号页面上绘制此标识符的帧间间隔 (Δt) 随时间的变化，以发现网关、突发和事件触发的消息</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="200" />
+            <source>Plot bytes</source>
+            <translation>绘制字节</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="203" />
+            <source>Plot every byte of this identifier's payload as a value over time on the Signals page</source>
+            <translation>在信号页面上将此标识符负载的每个字节作为值随时间绘制</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="233" />
             <source>Select an identifier to see its bits</source>
             <translation>选择一个标识符以查看其位</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="213" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="241" />
             <source>Bits of %1 (%2)</source>
             <translation>%1 的位 (%2)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="214" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="242" />
             <source>Bits of %1</source>
             <translation>%1 的位</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="254" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="282" />
             <source>Byte %1</source>
             <translation>字节 %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="314" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="342" />
             <source>Bit %1: set in %2 of the frames, changed in %3</source>
             <translation>位 %1：在 %2 的帧中置位，在 %3 中变化</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="316" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="344" />
             <source>, last %1 s ago</source>
             <translation>，上次 %1 s 前</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="316" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="344" />
             <source>, never changed</source>
             <translation>，从未变化</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="317" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="345" />
             <source> (hidden by the notch)</source>
             <translation>（被标记点隐藏）</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="326" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="354" />
             <source>Click a bit to start a field, Shift+click another bit to extend it, click a byte label to select the byte. Blue: how often a bit changes; orange: changed just now; outlined orange: changed since the notch.</source>
             <translation>点击一个位开始一个字段，Shift+点击另一个位可扩展，点击字节标签可选择该字节。蓝色：位变化的频率；橙色：刚刚变化；橙色描边：自标记点以来变化。</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="338" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="366" />
             <source>Bit field %1</source>
             <translation>位字段 %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="365" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="393" />
             <source>Start bit</source>
             <translation>起始位</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="367" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="395" />
             <source>Length</source>
             <translation>长度</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="369" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="397" />
             <source>Byte order</source>
             <translation>字节序</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="371" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="399" />
             <source>Intel (little endian)</source>
             <translation>Intel（小端）</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="371" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="399" />
             <source>Motorola (big endian)</source>
             <translation>Motorola（大端）</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="377" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="405" />
             <source>Signed</source>
             <translation>有符号</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="383" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="411" />
             <source>Factor</source>
             <translation>系数</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="385" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="413" />
             <source>Offset</source>
             <translation>偏移</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="387" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="415" />
             <source>Unit</source>
             <translation>单位</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="389" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="417" />
             <source>Name</source>
             <translation>名称</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="390" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="418" />
             <source>Signal_%1</source>
             <translation>Signal_%1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="399" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="427" />
             <source>only if %1</source>
             <translation>仅当 %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="402" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="430" />
             <source>The field is multiplexed: only frames with this multiplexer value carry it. Click to use all frames.</source>
             <translation>该字段是多路复用的：只有具有此多路复用值的帧才承载它。点击以使用所有帧。</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="413" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="441" />
             <source>Value: %1</source>
             <translation>值：%1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="420" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="448" />
             <source>Plot</source>
             <translation>绘图</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="422" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="450" />
             <source>Plot the field on the Signals page, from the first frame in the trace on</source>
             <translation>在信号页面绘制该字段，从跟踪中的第一帧开始</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="432" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="460" />
             <source>Add to database</source>
             <translation>添加到数据库</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="434" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="462" />
             <source>Add the field as a signal in the database editor (and its message if needed)</source>
             <translation>将该字段作为信号添加到数据库编辑器（必要时连同其报文）</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="451" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="479" />
             <source>Bytes</source>
             <translation>字节</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="463" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="491" />
             <source>Byte</source>
             <translation>字节</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="463" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="491" />
             <source>Value</source>
             <translation>值</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="463" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="491" />
             <source>Distinct</source>
             <translation>不同值</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="463" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="491" />
             <source>Min</source>
             <translation>最小</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="463" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="491" />
             <source>Max</source>
             <translation>最大</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="464" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="492" />
             <source>Entropy</source>
             <translation>熵</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="464" />
+            <location filename="../../gui/qt/CanExplorer/ReverseView.qml" line="492" />
             <source>Values 00–FF</source>
             <translation>值 00–FF</translation>
         </message>
@@ -4499,20 +5107,25 @@ B：%3</translation>
         <message>
             <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="232" />
             <source>SOME/IP</source>
-            <translation type="unfinished" />
+            <translation>SOME/IP</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="240" />
+            <source>Ethernet capture</source>
+            <translation>以太网捕获</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="248" />
             <source>Bus gateway</source>
             <translation>总线网关</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="258" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="266" />
             <source>Settings</source>
             <translation>设置</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="286" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="294" />
             <source>Version %1</source>
             <translation>版本 %1</translation>
         </message>
@@ -4763,152 +5376,152 @@ B：%3</translation>
         <message>
             <location filename="../../gui/qt/CanExplorer/SomeIpView.qml" line="11" />
             <source>listening</source>
-            <translation type="unfinished" />
+            <translation>正在监听</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/SomeIpView.qml" line="11" />
             <source>not listening</source>
-            <translation type="unfinished" />
+            <translation>未监听</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/SomeIpView.qml" line="19" />
             <source>UDP ports</source>
-            <translation type="unfinished" />
+            <translation>UDP 端口</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/SomeIpView.qml" line="26" />
             <source>UDP ports to listen on, comma separated (30490 is the usual Service Discovery port)</source>
-            <translation type="unfinished" />
+            <translation>要监听的 UDP 端口，用逗号分隔（30490 是常用的服务发现端口）</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/SomeIpView.qml" line="28" />
             <source>SD multicast</source>
-            <translation type="unfinished" />
+            <translation>SD 组播</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/SomeIpView.qml" line="35" />
             <source>Service Discovery multicast group to join (leave empty to listen on unicast only)</source>
-            <translation type="unfinished" />
+            <translation>要加入的服务发现组播组（留空则仅监听单播）</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/SomeIpView.qml" line="38" />
             <source>Stop</source>
-            <translation type="unfinished" />
+            <translation>停止</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/SomeIpView.qml" line="38" />
             <source>Listen</source>
-            <translation type="unfinished" />
+            <translation>监听</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/SomeIpView.qml" line="51" />
             <source>Clear</source>
-            <translation type="unfinished" />
+            <translation>清除</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/SomeIpView.qml" line="56" />
-            <source>Unload FIBEX</source>
-            <translation type="unfinished" />
+            <source>Unload description</source>
+            <translation>卸载描述</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/SomeIpView.qml" line="56" />
-            <source>FIBEX…</source>
-            <translation type="unfinished" />
+            <source>FIBEX / ARXML…</source>
+            <translation>FIBEX / ARXML…</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/SomeIpView.qml" line="58" />
-            <source>Load a FIBEX file to decode the message payloads into named signals</source>
-            <translation type="unfinished" />
+            <source>Load a FIBEX or ARXML file to decode the message payloads into named signals</source>
+            <translation>加载 FIBEX 或 ARXML 文件，将消息负载解码为命名信号</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/SomeIpView.qml" line="69" />
             <source>%1 messages</source>
-            <translation type="unfinished" />
+            <translation>%1 条消息</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/SomeIpView.qml" line="86" />
             <source>SOME/IP is the service-oriented middleware of automotive Ethernet. Listen on the Service Discovery port to see the services offered on the network and the messages exchanged. A plain UDP socket sees the multicast it joins and traffic addressed to this host; full capture needs a network tap or mirror port.</source>
-            <translation type="unfinished" />
+            <translation>SOME/IP 是汽车以太网的面向服务中间件。在服务发现端口上监听即可查看网络上提供的服务和交换的消息。普通 UDP 套接字只能看到其加入的组播以及发往本主机的流量；完整捕获需要网络分流器或镜像端口。</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/SomeIpView.qml" line="94" />
             <source>Services (%1)</source>
-            <translation type="unfinished" />
+            <translation>服务 (%1)</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/SomeIpView.qml" line="106" />
             <source>Service</source>
-            <translation type="unfinished" />
+            <translation>服务</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/SomeIpView.qml" line="106" />
             <source>Instance</source>
-            <translation type="unfinished" />
+            <translation>实例</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/SomeIpView.qml" line="106" />
             <source>Version</source>
-            <translation type="unfinished" />
+            <translation>版本</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/SomeIpView.qml" line="106" />
             <source>Endpoints</source>
-            <translation type="unfinished" />
+            <translation>端点</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/SomeIpView.qml" line="106" />
             <source>Offers</source>
-            <translation type="unfinished" />
+            <translation>提供数</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/SomeIpView.qml" line="141" />
             <source>Messages</source>
-            <translation type="unfinished" />
+            <translation>消息</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/SomeIpView.qml" line="152" />
             <source>Time</source>
-            <translation type="unfinished" />
+            <translation>时间</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/SomeIpView.qml" line="152" />
             <source>Source</source>
-            <translation type="unfinished" />
+            <translation>源</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/SomeIpView.qml" line="152" />
             <source>Service.Method</source>
-            <translation type="unfinished" />
+            <translation>Service.Method</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/SomeIpView.qml" line="152" />
             <source>Type</source>
-            <translation type="unfinished" />
+            <translation>类型</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/SomeIpView.qml" line="152" />
             <source>Len</source>
-            <translation type="unfinished" />
+            <translation>长度</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/SomeIpView.qml" line="152" />
             <source>Description</source>
-            <translation type="unfinished" />
+            <translation>描述</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/SomeIpView.qml" line="196" />
-            <source>Load SOME/IP FIBEX description</source>
-            <translation type="unfinished" />
+            <source>Load SOME/IP description</source>
+            <translation>加载 SOME/IP 描述</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/SomeIpView.qml" line="197" />
-            <source>FIBEX files (*.fibex *.xml)</source>
-            <translation type="unfinished" />
+            <source>SOME/IP descriptions (*.fibex *.arxml *.xml)</source>
+            <translation>SOME/IP 描述 (*.fibex *.arxml *.xml)</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/SomeIpView.qml" line="197" />
             <source>All files (*)</source>
-            <translation type="unfinished" />
+            <translation>所有文件 (*)</translation>
         </message>
     </context>
     <context>
@@ -5858,182 +6471,187 @@ B：%3</translation>
     <context>
         <name>main_window</name>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="48" />
+            <location filename="../../gui/qt/main_window.qml" line="52" />
             <source>Command</source>
             <translation>命令</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="53" />
+            <location filename="../../gui/qt/main_window.qml" line="57" />
             <source>View</source>
             <translation>视图</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="54" />
+            <location filename="../../gui/qt/main_window.qml" line="58" />
             <source>Connection</source>
             <translation>连接</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="54" />
+            <location filename="../../gui/qt/main_window.qml" line="58" />
             <source>Disconnect %1</source>
             <translation>断开 %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="55" />
+            <location filename="../../gui/qt/main_window.qml" line="59" />
             <source>Connect %1</source>
             <translation>连接 %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="57" />
+            <location filename="../../gui/qt/main_window.qml" line="61" />
             <source>Resume the trace</source>
             <translation>继续跟踪</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="57" />
+            <location filename="../../gui/qt/main_window.qml" line="61" />
             <source>Pause the trace</source>
             <translation>暂停跟踪</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="59" />
+            <location filename="../../gui/qt/main_window.qml" line="63" />
             <source>Clear the trace and statistics</source>
             <translation>清除跟踪和统计信息</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="62" />
+            <location filename="../../gui/qt/main_window.qml" line="66" />
             <source>Go to</source>
             <translation>跳转到</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="62" />
+            <location filename="../../gui/qt/main_window.qml" line="66" />
             <source>Connection %1</source>
             <translation>连接 %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="63" />
+            <location filename="../../gui/qt/main_window.qml" line="67" />
             <source>Database editor</source>
             <translation>数据库编辑器</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="63" />
+            <location filename="../../gui/qt/main_window.qml" line="67" />
             <source>Multi-bus trace</source>
             <translation>多总线跟踪</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="64" />
+            <location filename="../../gui/qt/main_window.qml" line="68" />
             <source>Compare recordings</source>
             <translation>比较录制</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="64" />
+            <location filename="../../gui/qt/main_window.qml" line="68" />
             <source>EtherCAT (CoE)</source>
             <translation>EtherCAT (CoE)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="65" />
+            <location filename="../../gui/qt/main_window.qml" line="69" />
             <source>Physical I/O</source>
             <translation>物理 I/O</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="65" />
+            <location filename="../../gui/qt/main_window.qml" line="69" />
             <source>DoIP</source>
             <translation>DoIP</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="66" />
+            <location filename="../../gui/qt/main_window.qml" line="70" />
             <source>SOME/IP</source>
-            <translation type="unfinished" />
+            <translation>SOME/IP</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="66" />
+            <location filename="../../gui/qt/main_window.qml" line="70" />
+            <source>Ethernet capture</source>
+            <translation>以太网捕获</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/main_window.qml" line="71" />
             <source>Bus gateway</source>
             <translation>总线网关</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="67" />
+            <location filename="../../gui/qt/main_window.qml" line="72" />
             <source>Tool</source>
             <translation>工具</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="69" />
+            <location filename="../../gui/qt/main_window.qml" line="74" />
             <source>Theme</source>
             <translation>主题</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="71" />
+            <location filename="../../gui/qt/main_window.qml" line="76" />
             <source>Language</source>
             <translation>语言</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="167" />
+            <location filename="../../gui/qt/main_window.qml" line="172" />
             <source>Open workspace</source>
             <translation>打开工作区</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="175" />
+            <location filename="../../gui/qt/main_window.qml" line="180" />
             <source>Save workspace</source>
             <translation>保存工作区</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="189" />
+            <location filename="../../gui/qt/main_window.qml" line="194" />
             <source>The open connections are closed and replaced by those of the workspace.</source>
             <translation>打开的连接将被关闭，并替换为工作区中的连接。</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="392" />
+            <location filename="../../gui/qt/main_window.qml" line="412" />
             <source>%1 frames</source>
             <translation>%1 帧</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="394" />
+            <location filename="../../gui/qt/main_window.qml" line="414" />
             <source>Rx %1/s  Tx %2/s</source>
             <translation>Rx %1/s  Tx %2/s</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="396" />
+            <location filename="../../gui/qt/main_window.qml" line="416" />
             <source>load %1%</source>
             <translation>负载 %1%</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="398" />
+            <location filename="../../gui/qt/main_window.qml" line="418" />
             <source>bus %1</source>
             <translation>总线 %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="401" />
+            <location filename="../../gui/qt/main_window.qml" line="421" />
             <source>%1 error frames</source>
             <translation>%1 个错误帧</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="405" />
+            <location filename="../../gui/qt/main_window.qml" line="425" />
             <source>DB: %1</source>
             <translation>数据库：%1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="407" />
+            <location filename="../../gui/qt/main_window.qml" line="427" />
             <source>● recording to %1</source>
             <translation>● 正在录制到 %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="459" />
+            <location filename="../../gui/qt/main_window.qml" line="479" />
             <source>Drag to resize, double-click to reset</source>
             <translation>拖动以调整大小，双击以重置</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="618" />
+            <location filename="../../gui/qt/main_window.qml" line="638" />
             <source>Unsaved database changes</source>
             <translation>未保存的数据库更改</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="626" />
+            <location filename="../../gui/qt/main_window.qml" line="646" />
             <source>Save the changes to %1 before quitting?</source>
             <translation>退出前保存对 %1 的更改吗？</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="630" />
+            <location filename="../../gui/qt/main_window.qml" line="650" />
             <source>Use "Save as" in the database editor first</source>
             <translation>请先在数据库编辑器中使用"另存为"</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="679" />
+            <location filename="../../gui/qt/main_window.qml" line="699" />
             <source>CANExplorer %1 is available: ⋮ → Check for Updates…</source>
             <translation>CANExplorer %1 可用：⋮ → 检查更新…</translation>
         </message>
