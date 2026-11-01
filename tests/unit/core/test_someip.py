@@ -4,14 +4,43 @@ import struct
 
 
 from can_explorer.core.someip import (
+    TP_FLAG,
     Endpoint,
     SomeIpMonitor,
+    SomeIpReassembler,
     _ingest,
     describe,
     parse_message,
     parse_messages,
     parse_sd,
 )
+
+
+def _tp(service, method, offset_units, more, segment, message_type=0x02):
+    """A SOME/IP-TP segment datagram: the 4-byte TP header (offset in 16-byte units + More flag) plus a segment."""
+    tp_header = ((offset_units << 4) | (1 if more else 0)).to_bytes(4, 'big')
+    return someip(service, method, message_type | TP_FLAG, tp_header + segment)
+
+
+def test_tp_reassembly():
+    reassembler = SomeIpReassembler()
+    assert reassembler.feed(parse_message(_tp(0x1234, 0x8003, 0, True, b'A' * 16))) is None  # First segment
+    complete = reassembler.feed(parse_message(_tp(0x1234, 0x8003, 1, False, b'B' * 4)))  # Last segment at offset 16
+    assert complete is not None
+    assert complete.payload == b'A' * 16 + b'B' * 4 and not complete.message_type & TP_FLAG
+    assert complete.message_type_name == 'NOTIFICATION'
+    # A non-segmented message passes straight through
+    plain = parse_message(someip(0x1234, 0x0045, 0x00, b'\x01\x02'))
+    assert reassembler.feed(plain) is plain
+
+
+def test_monitor_reassembles_tp():
+    monitor = SomeIpMonitor()
+    _ingest(monitor, _tp(0x1234, 0x8003, 0, True, b'X' * 16))
+    assert monitor.total == 0  # A segment is not surfaced on its own
+    _ingest(monitor, _tp(0x1234, 0x8003, 1, False, b'Y' * 4))
+    assert monitor.total == 1
+    assert monitor.messages[-1].message.payload == b'X' * 16 + b'Y' * 4
 
 
 def someip(service, method, message_type, payload=b'', client=0x0001, session=0x0001, return_code=0x00, interface=1):

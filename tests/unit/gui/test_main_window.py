@@ -1,3 +1,5 @@
+import socket
+import threading
 import uuid
 
 import pytest
@@ -68,6 +70,7 @@ def test_dashboard_pages_and_themes_render_without_warnings(window, qtbot):
         'health',
         'reverse',
         'diagnostics',
+        'obd',
         'flash',
         'uds-scan',
         'xcp',
@@ -982,4 +985,71 @@ def test_update_dialog_renders_without_warnings(window, qtbot):
     controller._set_state('available')
     dialog.close()
     qtbot.wait(50)  # The top bar shows the update button
+    assert warnings == []
+
+
+class _VpwSocketAdapter:
+    """A minimal ELM327 (J1850 VPW) adapter behind a TCP socket, enough for a connection to open and monitor."""
+
+    def __init__(self):
+        self.echo = True
+        self.monitoring = False
+        self._server = socket.create_server(('127.0.0.1', 0))
+        self.url = f'socket://127.0.0.1:{self._server.getsockname()[1]}'
+        threading.Thread(target=self._serve, daemon=True).start()
+
+    def _serve(self):
+        try:
+            self._connection, _ = self._server.accept()
+        except OSError:
+            return
+        line = ''
+        while True:
+            try:
+                data = self._connection.recv(4096)
+            except OSError:
+                return
+            if not data:
+                return
+            for char in data.decode('ascii'):
+                if self.monitoring:
+                    self.monitoring = False
+                    self._connection.sendall(b'\r>')
+                elif char == '\r':
+                    self._handle(line.replace(' ', '').upper())
+                    line = ''
+                else:
+                    line += char
+
+    def _handle(self, command):
+        if self.echo:
+            self._connection.sendall((command + '\r').encode('ascii'))
+        if command == 'ATZ':
+            self.echo = True
+            self._connection.sendall(b'\rELM327 v1.5\r\r>')
+        elif command == 'ATE0':
+            self.echo = False
+            self._connection.sendall(b'OK\r\r>')
+        elif command == 'ATMA':
+            self.monitoring = True
+        else:
+            self._connection.sendall(b'OK\r\r>')
+
+    def close(self):
+        if hasattr(self, '_connection'):
+            self._connection.close()
+        self._server.close()
+
+
+def test_j1850_class2_connection_gates_its_page(window, qtbot):
+    """A connection on the elm327_vpw interface opens in the app and exposes the gated J1850 / Class 2 page."""
+    engine, manager, warnings = window
+    adapter = _VpwSocketAdapter()
+    try:
+        manager.add_connection({'name': 'Class2', 'interface': 'elm327_vpw', 'channel': adapter.url})
+        qtbot.wait(200)
+        connection = manager.connections[0]
+        assert connection.is_j1850 and connection.j1850 is not None
+    finally:
+        adapter.close()
     assert warnings == []

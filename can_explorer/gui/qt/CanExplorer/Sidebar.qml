@@ -237,6 +237,14 @@ Rectangle {
                 }
 
                 NavItem {
+                    text: qsTr("Ethernet capture")
+                    glyph: "🖧"
+                    active: root.currentTool === "ethernet"
+                    dotColor: connectionManager.ethernet.capturing ? Theme.success : "transparent"
+                    onClicked: root.toolSelected("ethernet")
+                }
+
+                NavItem {
                     text: qsTr("Bus gateway")
                     glyph: "⇄"
                     active: root.currentTool === "gateway"

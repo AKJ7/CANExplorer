@@ -127,6 +127,36 @@ async def test_unknown_service(ecu):
     assert not result.positive and 'serviceNotSupported' in result.description
 
 
+class _ScriptedTransport:
+    """A transport that replays a fixed list of responses, to drive UdsClient.request deterministically."""
+
+    def __init__(self, responses):
+        self._responses = list(responses)
+
+    async def send(self, payload):
+        pass
+
+    async def receive(self, timeout=None):
+        if not self._responses:
+            raise TimeoutError('Timeout waiting for a response')
+        return self._responses.pop(0)
+
+
+async def test_request_skips_stale_response_from_a_shared_id():
+    """A leftover mode-01 response (0x41) sits on the bus — e.g. from a live poll that was just stopped — when we
+    ask for DTCs (service 0x03). It must be skipped, not mistaken for the answer, and the real 0x43 returned."""
+    transport = _ScriptedTransport([bytes([0x41, 0x0F, 0x46]), bytes([0x43, 0x01, 0x23, 0x45])])
+    result = await UdsClient(transport).request(bytes([0x03]))
+    assert result.positive and result.response == bytes([0x43, 0x01, 0x23, 0x45])
+
+
+async def test_request_still_surfaces_matching_negative_response():
+    """A negative response that echoes the request's service is the answer, not stale traffic — keep it."""
+    transport = _ScriptedTransport([bytes([0x7F, 0x03, 0x31])])  # requestOutOfRange for service 0x03
+    result = await UdsClient(transport).request(bytes([0x03]))
+    assert not result.positive and result.response == bytes([0x7F, 0x03, 0x31])
+
+
 def test_passive_uds_decoder():
     decoder = UdsDecoder()
     request = can.Message(arbitration_id=0x7E0, is_extended_id=False, data=bytes([0x03, 0x22, 0xF1, 0x90, 0, 0, 0, 0]))

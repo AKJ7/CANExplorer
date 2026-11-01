@@ -8,9 +8,21 @@ name: canexplorer
 title: CANExplorer
 summary: Monitor, analyse, diagnose and simulate CAN, CAN FD and LIN buses
 description: |
-  CANExplorer monitors, analyses, diagnoses and simulates CAN, CAN FD and LIN buses: a live trace with decoded
-  signals (DBC, DBF, ARXML, KCD, SYM, LDF), signal plots, recording and replay, bus health, UDS diagnostics and
-  flashing, J1939 and CANopen tools, simulated nodes with control panels, test automation, remote buses and MQTT.
+  CANExplorer is a cross-platform workbench for CAN, CAN FD and LIN buses — for engineers, tuners and hobbyists
+  working on vehicles and embedded networks. It works with any python-can adapter, or on a virtual bus with no
+  hardware at all.
+
+  * Live trace and dashboard with decoded signals (DBC, DBF, ARXML, KCD, SYM, LDF), frame rates, bus load and the
+    busiest identifiers, handling millions of frames.
+  * Signal plots with cursors and CSV export, and bus health: error states, TEC/REC and load over time.
+  * Recording and replay in ASC, BLF, CSV, candump LOG, PEAK TRC, SQLite, ASAM MF4 and gzip, with triggered and
+    split recording, replay onto a bus, and recording comparison.
+  * Reverse engineering of an unknown bus: bit and byte statistics, automatic detection of checksums, counters,
+    multiplexers and values, reference signals, and a scripting console.
+  * Diagnostics and protocols: UDS over ISO-TP, ECU flashing, DoIP, J1939, CANopen, XCP/CCP, GMLAN and GM Class 2
+    (SAE J1850 VPW), with simulated ECUs to try without hardware.
+  * A signal database editor for CAN and LIN, simulated nodes with control panels, test automation with HTML and
+    JUnit reports, remote buses and MQTT publishing.
 
   Connect the interfaces for your hardware once after installing:
 
@@ -49,12 +61,17 @@ parts:
   canexplorer:
     plugin: nil
     source: dist/CANExplorer
+    # Adopt the screenshots (and other metadata not set above) from the AppStream metainfo file
+    parse-info: [usr/share/metainfo/io.github.akj7.CANExplorer.metainfo.xml]
     override-pull: |
       craftctl default
       craftctl set version="$(sed -n 's/^version = "\(.*\)"$/\1/p' "$CRAFT_PROJECT_DIR/pyproject.toml" | head -n 1)"
     override-build: |
       mkdir -p "$CRAFT_PART_INSTALL/opt/canexplorer"
       cp -a "$CRAFT_PART_SRC/." "$CRAFT_PART_INSTALL/opt/canexplorer/"
+      mkdir -p "$CRAFT_PART_INSTALL/usr/share/metainfo"
+      cp "$CRAFT_PROJECT_DIR/packaging/io.github.akj7.CANExplorer.metainfo.xml" \
+        "$CRAFT_PART_INSTALL/usr/share/metainfo/"
     # Libraries of Qt's xcb platform plugin and of the bundled Python that the gnome extension's runtime lacks
     stage-packages:
       - libxcb-cursor0

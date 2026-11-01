@@ -10,6 +10,22 @@ buses. It runs on Linux, Windows and macOS with any interface supported by
 
 ![CANExplorer showing a trace with decoded signals](assets/screenshots/trace.png)
 
+## Download
+
+Ready-to-run installers of the latest release — no Python needed. The button for your platform is highlighted:
+
+<div class="download-buttons" markdown>
+[:material-microsoft-windows: Windows](https://github.com/AKJ7/CANExplorer/releases/latest){ .md-button data-download="windows" }
+[:material-apple: macOS](https://github.com/AKJ7/CANExplorer/releases/latest){ .md-button data-download="macos" }
+[:material-linux: Linux · AppImage](https://github.com/AKJ7/CANExplorer/releases/latest){ .md-button data-download="appimage" }
+[:material-linux: Linux · .deb](https://github.com/AKJ7/CANExplorer/releases/latest){ .md-button data-download="deb" }
+</div>
+
+<p id="download-note" class="download-note">Fetching the latest release… meanwhile, browse <a href="https://github.com/AKJ7/CANExplorer/releases">all releases</a>.</p>
+
+Prefer a package manager or running from source? The [installation guide](getting-started/installation.md) covers
+the Snap, the archives and building with `uv`. Installed copies [update themselves](user-guide/updates.md).
+
 ## Features
 
 <div class="grid cards" markdown>

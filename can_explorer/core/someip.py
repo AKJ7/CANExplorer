@@ -10,6 +10,7 @@ signals (that needs an ARXML/FIBEX SOME/IP transformer and is left to a later st
 """
 
 import asyncio
+import dataclasses
 import ipaddress
 import socket
 import struct
@@ -127,9 +128,9 @@ class SdEntry:
         return name
 
 
-def parse_messages(data: bytes) -> List[SomeIpMessage]:
-    """Every SOME/IP message in a datagram (several may be concatenated), skipping trailing bytes that are too
-    short to be a header."""
+def parse_stream(data: bytes) -> Tuple[List['SomeIpMessage'], int]:
+    """Parse as many complete SOME/IP messages as `data` holds and return them with the number of bytes consumed,
+    so a caller reassembling a TCP stream can keep the trailing incomplete bytes for the next segment."""
     messages = []
     offset = 0
     while offset + HEADER.size <= len(data):
@@ -142,7 +143,7 @@ def parse_messages(data: bytes) -> List[SomeIpMessage]:
         start = offset + HEADER.size
         end = start + payload_length
         if end > len(data):
-            break  # Truncated
+            break  # Truncated: wait for more of the stream
         messages.append(
             SomeIpMessage(
                 service_id=message_id >> 16,
@@ -158,12 +159,56 @@ def parse_messages(data: bytes) -> List[SomeIpMessage]:
             )
         )
         offset = end
-    return messages
+    return messages, offset
+
+
+def parse_messages(data: bytes) -> List[SomeIpMessage]:
+    """Every SOME/IP message in a datagram (several may be concatenated), skipping trailing bytes that are too
+    short to be a header."""
+    return parse_stream(data)[0]
 
 
 def parse_message(data: bytes) -> Optional[SomeIpMessage]:
     messages = parse_messages(data)
     return messages[0] if messages else None
+
+
+TP_HEADER_SIZE = 4  # SOME/IP-TP: a 4-byte header (28-bit offset in 16-byte units, 3 reserved bits, 1 "more" bit)
+
+
+class SomeIpReassembler:
+    """Reassembles SOME/IP-TP segmented messages. feed() returns a complete message when the last segment arrives,
+    the message unchanged when it is not segmented, or None while earlier segments are still outstanding."""
+
+    def __init__(self, max_message: int = 4 * 1024 * 1024):
+        self._max = max_message
+        self._segments: Dict[Tuple[int, int, int], bytearray] = {}
+
+    def feed(self, message: SomeIpMessage) -> Optional[SomeIpMessage]:
+        if not message.message_type & TP_FLAG:
+            return message
+        if len(message.payload) < TP_HEADER_SIZE:
+            return None
+        tp_header = int.from_bytes(message.payload[:TP_HEADER_SIZE], 'big')
+        offset = (tp_header >> 4) * 16
+        more_segments = tp_header & 0x1
+        segment = message.payload[TP_HEADER_SIZE:]
+        key = (message.message_id, message.request_id, message.message_type & ~TP_FLAG)
+        end = offset + len(segment)
+        if end > self._max:
+            self._segments.pop(key, None)
+            return None
+        buffer = self._segments.setdefault(key, bytearray())
+        if len(buffer) < end:
+            buffer.extend(bytes(end - len(buffer)))
+        buffer[offset:end] = segment
+        if more_segments:
+            return None
+        self._segments.pop(key, None)
+        payload = bytes(buffer)
+        return dataclasses.replace(
+            message, message_type=message.message_type & ~TP_FLAG, payload=payload, length=HEADER_COVERED + len(payload)
+        )
 
 
 def _parse_options(data: bytes) -> List[Optional[Endpoint]]:
@@ -225,6 +270,28 @@ def parse_sd(payload: bytes) -> Tuple[int, List[SdEntry]]:
             SdEntry(type_id, service_id, instance_id, major_version, ttl, minor_version, eventgroup_id, endpoints)
         )
     return flags, entries
+
+
+def update_services(services: Dict[Tuple[int, int], 'Service'], message: SomeIpMessage) -> None:
+    """Apply a Service Discovery message to a {(service, instance): Service} map: add or refresh offered services
+    and drop them on a Stop offer (TTL 0)."""
+    _, entries = parse_sd(message.payload)
+    for entry in entries:
+        if entry.type_id != 0x01:  # Only OfferService / StopOfferService change the service landscape
+            continue
+        key = (entry.service_id, entry.instance_id)
+        if entry.ttl == 0:
+            services.pop(key, None)
+            continue
+        service = services.get(key)
+        if service is None:
+            service = services[key] = Service(entry.service_id, entry.instance_id)
+        service.major_version = entry.major_version
+        if entry.minor_version is not None:
+            service.minor_version = entry.minor_version
+        service.offers += 1
+        for endpoint in entry.endpoints:
+            service.endpoints[str(endpoint)] = endpoint
 
 
 def describe(message: SomeIpMessage) -> str:
@@ -303,6 +370,7 @@ class SomeIpMonitor:
         self.error: Optional[str] = None
         self._transports: List[asyncio.BaseTransport] = []
         self._listeners: List[Callable[[ReceivedMessage], None]] = []
+        self._reassembler = SomeIpReassembler()
 
     @property
     def is_open(self) -> bool:
@@ -332,6 +400,9 @@ class SomeIpMonitor:
     def _on_datagram(self, data: bytes, addr: Tuple[str, int], local_port: int) -> None:
         now = time.time()
         for message in parse_messages(data):
+            message = self._reassembler.feed(message)  # Reassemble SOME/IP-TP; segments return None until complete
+            if message is None:
+                continue
             received = ReceivedMessage(now, f'{addr[0]}:{addr[1]}', local_port, message)
             self.messages.append(received)
             self.total += 1
@@ -341,23 +412,7 @@ class SomeIpMonitor:
                 listener(received)
 
     def _update_services(self, message: SomeIpMessage) -> None:
-        _, entries = parse_sd(message.payload)
-        for entry in entries:
-            if entry.type_id != 0x01:  # Only OfferService / StopOfferService change the service landscape
-                continue
-            key = (entry.service_id, entry.instance_id)
-            if entry.ttl == 0:
-                self.services.pop(key, None)
-                continue
-            service = self.services.get(key)
-            if service is None:
-                service = self.services[key] = Service(entry.service_id, entry.instance_id)
-            service.major_version = entry.major_version
-            if entry.minor_version is not None:
-                service.minor_version = entry.minor_version
-            service.offers += 1
-            for endpoint in entry.endpoints:
-                service.endpoints[str(endpoint)] = endpoint
+        update_services(self.services, message)
 
     def clear(self) -> None:
         self.messages.clear()

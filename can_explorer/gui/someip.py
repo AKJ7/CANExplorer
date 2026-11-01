@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 from PyQt6.QtCore import QObject, QTimer, QUrl, pyqtProperty, pyqtSignal, pyqtSlot
 
 from can_explorer.core.someip import DEFAULT_SD_MULTICAST, DEFAULT_SD_PORT, SomeIpMonitor, describe
+from can_explorer.core.someip_arxml import ArxmlError, load_arxml
 from can_explorer.core.someip_fibex import FibexError, load_fibex
 from can_explorer.core.someip_serialization import SomeIpDescription
 from can_explorer.sys.log_handler import get_logger
@@ -142,11 +143,14 @@ class SomeIpController(QObject):
 
     @pyqtSlot(QUrl, result=str)
     def load_description(self, url: QUrl) -> str:
-        """Load a FIBEX file so payloads are decoded into signals. Returns an error or ''."""
+        """Load a FIBEX or ARXML file so payloads are decoded into signals. Returns an error or ''."""
         path = url.toLocalFile() if url.isLocalFile() else url.toString()
         try:
-            self._description = load_fibex(path)
-        except (FibexError, OSError) as e:
+            if path.lower().endswith('.arxml'):
+                self._description = load_arxml(path)
+            else:
+                self._description = load_fibex(path)
+        except (FibexError, ArxmlError, OSError) as e:
             return str(e)
         self._description_path = path
         logger.info('Loaded SOME/IP description %s (%d message types)', path, len(self._description))

@@ -76,22 +76,25 @@ can-server --bus NAME=INTERFACE:CHANNEL[:BITRATE[:DATA_BITRATE]] [--bus ...] [--
 ## can-mcp
 
 Exposes one bus to an AI agent over the [Model Context Protocol](../user-guide/mcp.md) (stdio). Needs the `mcp`
-extra. Read-only unless `--allow-send` is given.
+extra. Read-only unless a permission flag is given. With `--interface` and `--channel` it opens that bus at start;
+without them it starts unconnected and the agent opens a bus with the `connect` tool.
 
 ```text
-can-mcp --interface INTERFACE --channel CHANNEL [--bitrate BITRATE] [--fd] [--data-bitrate DATA_BITRATE]
-        [--database FILE] [--protocol {Raw,ISO-TP,UDS,J1939,CANopen,LIN}] [--allow-send]
+can-mcp [--interface INTERFACE --channel CHANNEL] [--bitrate BITRATE] [--fd] [--data-bitrate DATA_BITRATE]
+        [--database FILE] [--protocol PROTOCOL] [--allow-diagnostics] [--allow-control] [--allow-send]
 ```
 
 | Argument | Description |
 |---|---|
-| `-i`, `--interface` | python-can interface, e.g. `socketcan`, `pcan`, `virtual`, `gvret` (required) |
-| `-c`, `--channel` | Channel, e.g. `can0`, `PCAN_USBBUS1`, `COM7` (required) |
+| `-i`, `--interface` | python-can interface, e.g. `socketcan`, `pcan`, `virtual`, `gvret` (with `--channel`, or omit both) |
+| `-c`, `--channel` | Channel, e.g. `can0`, `PCAN_USBBUS1`, `COM7` (with `--interface`, or omit both) |
 | `-b`, `--bitrate` | Nominal bitrate; default 500000 |
 | `--fd`, `--data-bitrate` | CAN FD; a data bitrate enables it |
 | `-d`, `--database` | Signal database (DBC, ARXML, KCD, SYM, DBF) for decoding |
 | `--protocol` | Protocol decoder for the frames; default `Raw` |
-| `--allow-send` | Allow the agent to transmit (`send_frame`, `query_obd`) |
+| `--allow-diagnostics` | Allow safe diagnostic reads (OBD-II and UDS reads; these send requests) |
+| `--allow-control` | Allow active diagnostics (clear DTCs, ECU reset, routines, raw UDS) |
+| `--allow-send` | Allow the agent to transmit arbitrary frames (grants everything) |
 
 ## can-db-convert
 

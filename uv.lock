@@ -559,13 +559,14 @@ wheels = [
 
 [[package]]
 name = "can-explorer"
-version = "1.5.0"
+version = "1.6.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
     { name = "cantools" },
     { name = "click" },
     { name = "ldfparser" },
+    { name = "mcp" },
     { name = "pydantic-settings", version = "2.15.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "pydantic-settings", version = "2.16.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "pyqt6" },
@@ -583,9 +584,6 @@ ethercat = [
 io = [
     { name = "libusb-package" },
     { name = "pyusb" },
-]
-mcp = [
-    { name = "mcp" },
 ]
 mf4 = [
     { name = "asammdf" },
@@ -635,7 +633,7 @@ requires-dist = [
     { name = "click" },
     { name = "ldfparser", specifier = "==0.26.0" },
     { name = "libusb-package", marker = "extra == 'io'", specifier = ">=1.0.26" },
-    { name = "mcp", marker = "extra == 'mcp'", specifier = ">=2" },
+    { name = "mcp", specifier = ">=2" },
     { name = "pydantic-settings" },
     { name = "pyqt6", specifier = "~=6.9.0" },
     { name = "pysoem", marker = "extra == 'ethercat'", specifier = ">=1.1.13" },
@@ -644,7 +642,7 @@ requires-dist = [
     { name = "pyusb", marker = "extra == 'io'", specifier = ">=1.3" },
     { name = "qasync" },
 ]
-provides-extras = ["mf4", "ethercat", "io", "drivers", "mqtt", "mcp"]
+provides-extras = ["mf4", "ethercat", "io", "drivers", "mqtt"]
 
 [package.metadata.requires-dev]
 dev = [

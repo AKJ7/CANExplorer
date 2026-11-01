@@ -33,16 +33,26 @@ port), the **Service.Method** ID, the message **Type**, the payload length and a
 - **SOME/IP-SD** messages (service `FFFF`, method `8100`) are expanded into their entries: OfferService,
   FindService, SubscribeEventgroup and the acknowledgements, with the service, version, endpoints and TTL.
 
-## Decoding payloads (FIBEX)
+## Decoding payloads (FIBEX / ARXML)
 
-Load a **FIBEX** file (**FIBEX…**) describing the SOME/IP service interfaces to decode the message payloads into
-named signals: the **Description** column then shows the decoded values (for example `speed=4000` or
-`status.flags=3, status.temp=-15`) instead of the payload length. A method's request and response are decoded with
-their own parameters.
+Load a **FIBEX** or AUTOSAR **ARXML** file (**FIBEX / ARXML…**) describing the SOME/IP service interfaces to decode
+the message payloads into named signals: the **Description** column then shows the decoded values (for example
+`speed=4000` or `status.flags=3, status.temp=-15`) instead of the payload length. A method's request and response
+are decoded with their own parameters. The format is chosen by the file extension (`.arxml` for ARXML, otherwise
+FIBEX).
 
-A subset of FIBEX 4 is read: service interfaces with their methods (input and return parameters) and events, and
-the data types they use — scalars, fixed and dynamic arrays, length-prefixed and fixed strings, and nested
-structures. Unions, optional (TLV) members and bit fields are not read; a message whose type uses one keeps its
-generic description. ARXML SOME/IP service interfaces are a different format and are not read here.
+A subset of each is read: service interfaces with their methods (input and return parameters) and events, and the
+data types they use — scalars, fixed and dynamic arrays, length-prefixed and fixed strings, and nested structures.
+From ARXML the SOME/IP service/method/event ids come from the `SOMEIP-SERVICE-INTERFACE-DEPLOYMENT` elements, which
+reference the service interfaces. Unions, optional (TLV) members and bit fields are not read; a message whose type
+uses one keeps its generic description.
 
-SOME/IP over TCP is not decoded yet; the tool reads UDP.
+The live SOME/IP tool reads UDP. SOME/IP carried over **TCP** (reassembled across segments) and **SOME/IP-TP**
+segmented messages are decoded when you open a capture in the [Ethernet capture](ethernet.md) tool.
+
+## End-to-end protection (E2E)
+
+AUTOSAR **E2E** protection (the CRC and sequence counter that guard a PDU against corruption, loss, repetition and
+reordering) is available as a library for scripts — `can_explorer.core.e2e` provides the AUTOSAR CRC routines
+(`crc8`, `crc8h2f`, `crc16`, `crc32`, `crc32p4`) and E2E **Profile 2** protect/check. Validating a live PDU needs
+its E2E configuration (profile, Data IDs, offset) from the ARXML, which the UI does not read yet.

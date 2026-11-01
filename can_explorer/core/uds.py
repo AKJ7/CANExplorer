@@ -109,6 +109,20 @@ P2_EXTENDED_TIMEOUT = 5.0
 TESTER_PRESENT_INTERVAL = 2.0
 
 
+def _is_pending(response: bytes) -> bool:
+    return len(response) >= 3 and response[0] == NEGATIVE_RESPONSE and response[2] == RESPONSE_PENDING
+
+
+def _is_response_to(request: bytes, response: bytes) -> bool:
+    """Whether `response` answers `request`: a positive response (service + 0x40) or a negative response that
+    echoes the request's service. Anything else is stale traffic on a shared response id."""
+    if not response or not request:
+        return False
+    if response[0] == NEGATIVE_RESPONSE:
+        return len(response) >= 2 and response[1] == request[0]
+    return response[0] == request[0] + 0x40
+
+
 class UdsTransport(Protocol):
     async def send(self, payload: bytes) -> None: ...
 
@@ -263,8 +277,11 @@ class UdsClient:
             if suppressed:
                 return UdsResult(payload, None)
             response = await self.transport.receive(self.timeout)
-            while len(response) >= 3 and response[0] == NEGATIVE_RESPONSE and response[2] == RESPONSE_PENDING:
-                response = await self.transport.receive(P2_EXTENDED_TIMEOUT)
+            while _is_pending(response) or not _is_response_to(payload, response):
+                # Skip "response pending", and skip a stale response that does not match this request — one left on
+                # a shared response id by an earlier or cancelled transaction (e.g. a live poll that was stopped).
+                timeout = P2_EXTENDED_TIMEOUT if _is_pending(response) else self.timeout
+                response = await self.transport.receive(timeout)
         except Exception as e:  # Transport errors (timeouts, bus errors)
             return UdsResult(payload, None, str(e))
         return UdsResult(payload, response)

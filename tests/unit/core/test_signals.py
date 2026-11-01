@@ -33,6 +33,40 @@ def test_enumerated_signals_are_plotted_numerically(data_dir):
     assert tracker.series[key].values == [1.0]
 
 
+def frame(can_id, timestamp, extended=False, is_remote=False):
+    return can.Message(
+        arbitration_id=can_id, is_extended_id=extended, data=b'\x00', timestamp=timestamp, is_remote_frame=is_remote
+    )
+
+
+def test_interval_series_backfill_and_live_update():
+    tracker = SignalTracker()
+    key = tracker.track_interval(0x100, False)
+    assert key == 'Δt 100' and tracker.series[key].unit == 'ms'
+    # Backfill: 0x100 at 0, 10 ms, 30 ms; other identifiers and remote frames are ignored
+    history = [frame(0x100, 0.0), frame(0x200, 0.005), frame(0x100, 0.01, is_remote=True), frame(0x100, 0.03)]
+    tracker.backfill_interval(key, history)
+    assert tracker.series[key].values == pytest.approx([30.0])  # Only the two data frames: 0 -> 30 ms
+    # Live: the next 0x100 frame 20 ms later adds one Δt; another identifier does not
+    tracker.update(frame(0x300, 0.04), None)
+    tracker.update(frame(0x100, 0.05), None)
+    assert tracker.series[key].values == pytest.approx([30.0, 20.0])
+    assert tracker.drain_changed()
+
+
+def test_interval_key_distinguishes_extended_and_survives_signal_clear():
+    tracker = SignalTracker()
+    standard = tracker.track_interval(0x1A0, False)
+    extended = tracker.track_interval(0x1A0, True)
+    assert standard == 'Δt 1A0' and extended == 'Δt 000001A0' and standard != extended
+    tracker.untrack_all(fields=False)  # Clears database signals only; intervals (like fields) stay
+    assert set(tracker.tracked) == {standard, extended}
+    tracker.untrack_key(standard)
+    assert tracker.tracked == [extended] and tracker.intervals == {extended: (0x1A0, True)}
+    tracker.untrack_all()
+    assert tracker.tracked == [] and tracker.intervals == {}
+
+
 def test_series_window_and_trimming():
     series = SignalSeries(max_points=10)
     for i in range(25):

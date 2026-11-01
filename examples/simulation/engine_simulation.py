@@ -7,6 +7,10 @@ The panel sets the shared variables 'ignition' and 'target_speed'; the nodes rea
 from can_explorer.scripting import Node, on_message, on_signal, on_start, on_stop, on_variable
 
 IDLE_SPEED = 800
+AMBIENT_TEMP = 20.0  # Coolant temperature with the engine cold or off
+IDLE_TEMP = 75.0  # Coolant temperature once warm at idle
+MAX_TEMP = 95.0  # Coolant temperature under full load
+RATED_SPEED = 3600  # Speed at which the coolant reaches MAX_TEMP
 
 
 class Engine(Node):
@@ -16,7 +20,7 @@ class Engine(Node):
     def start(self):
         self.status = self.message('EngineData')
         self.speed = 0.0
-        self.temperature = 20.0
+        self.temperature = AMBIENT_TEMP
         self.every(0.1, self.update)
 
     def update(self):
@@ -25,8 +29,15 @@ class Engine(Node):
         if running:
             target = max(target, IDLE_SPEED)
         self.speed += (target - self.speed) * 0.2  # Follow the target smoothly
+        # Coolant moves toward an operating temperature that rises with engine power, and toward ambient when the
+        # engine is off; it lags, warming up faster than it cools down, so it falls off at idle or when switched off
         if running:
-            self.temperature = min(90.0, self.temperature + 0.2)
+            load = (self.speed - IDLE_SPEED) / (RATED_SPEED - IDLE_SPEED)
+            target_temp = IDLE_TEMP + (MAX_TEMP - IDLE_TEMP) * max(0.0, min(1.0, load))
+        else:
+            target_temp = AMBIENT_TEMP
+        rate = 0.03 if target_temp > self.temperature else 0.01  # Warms quicker than it cools
+        self.temperature += (target_temp - self.temperature) * rate
         self.status.EngineSpeed = round(self.speed)
         self.status.CoolantTemp = round(self.temperature)
         self.status.GearPosition = self.variables.get('gear', 'Neutral')  # Set by the Gearbox node

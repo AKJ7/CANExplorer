@@ -31,14 +31,15 @@
 - Remote buses: `can-server` shares the interfaces of e.g. a Raspberry Pi in a vehicle over the network
 - MQTT: publish decoded signals (and frames) to a broker for dashboards and home automation, from the application or
   `can-server`, and optionally send frames requested over MQTT
-- MCP: `can-mcp` exposes a bus to an AI agent over the Model Context Protocol — inspect identifiers, decode frames,
-  run the automatic signal analysis, correlate fields to a reference, promote results to a DBC, and optionally transmit
+- MCP: `can-mcp` exposes a bus to an AI agent over the Model Context Protocol — inspect identifiers, decode frames
+  and protocols, run the reverse-engineering analysis, correlate fields, promote results to a DBC, read trouble
+  codes over OBD-II/UDS, and optionally transmit; as tools, resources and prompts, behind permission tiers
 - Signal plots with zoom and pan over the whole buffer, two cursors with values and statistics, several signals per
   chart and CSV export
 - Reverse engineering: bit and byte statistics per identifier and a notch; automatic detection of checksums,
   counters, multiplexers and values; matching fields to database signals, CSV/GPS logs or polled OBD-II values;
-  grouping fields that carry the same signal across messages; event markers; and bit fields to plot without a
-  database or add to one
+  grouping fields that carry the same signal across messages; event markers; frame-interval (Δt) and per-byte
+  timing graphs; and bit fields to plot without a database or add to one
 
 **Recording and replay**
 - ASC, BLF, CSV, candump LOG, PEAK TRC, SQLite, ASAM MF4 and gzip compressed text logs
@@ -58,11 +59,15 @@
 **Diagnostics and protocols**
 - UDS over ISO-TP and the LIN transport layer: sessions, reset, data identifiers, security access with your own
   seed/key algorithm, DTCs, routines; CANdelaStudio CDD and ASAM ODX/PDX descriptions for named and decoded identifiers
+- OBD-II (SAE J1979): a dedicated page for the standard emissions diagnostics — scan for supported values, watch
+  them live, read and clear trouble codes, and read the VIN
 - ECU flashing over UDS (RequestDownload/TransferData) from Intel HEX, S-record or binary files, with progress
 - DoIP (Diagnostics over IP, ISO 13400-2): finds DoIP entities, connects with routing activation (optionally over
   TLS) and runs diagnostics and flashing over Ethernet; a simulated entity works without a vehicle
 - SOME/IP over automotive Ethernet: listens on UDP, discovers the services offered through SOME/IP-SD and shows the
   decoded messages; load a FIBEX file to deserialize the payloads into named signals
+- Automotive Ethernet capture: open a pcap file (or capture live on Linux) and decode the stack (Ethernet, VLAN,
+  IPv4/IPv6, UDP/TCP) and the protocols on top — SOME/IP, DoIP, gPTP and AVTP
 - UDS discovery: scan an ECU for the services, data identifiers, subfunctions and routines it exposes, classifying
   the answers, for reverse engineering diagnostics; and fuzz it with mutated requests, detecting hangs and crashes
 - Bus gateway: forward frames between two connections with filtering, identifier rewriting and rate limiting
@@ -70,6 +75,9 @@
   name from an A2L file, with simulated slaves for trying it without hardware
 - GMLAN (GMW3110) diagnostics for GM/Opel vehicles — data identifiers, modes, security access and trouble codes —
   over CAN, including single-wire (SWCAN, 33.3 kbit/s) buses; a simulated ECU works without hardware
+- GM Class 2 (SAE J1850 VPW) for the pre-CAN GM vehicles of 1996–2007 (e.g. the 99–06 P01/P59 PCMs): monitor the
+  10.4 kbit/s single-wire bus and run SAE J1979 diagnostics (PIDs, VIN, trouble codes) through an ELM327/OBDLink
+  adapter; a simulated ECU works without hardware
 - J1939: nodes with their address claims, DM1/DM2 trouble codes and lamps, clearing codes, requests and sending
   parameter groups by name with BAM or RTS/CTS
 - CANopen master: NMT, SDO access to object dictionaries from EDS/DCF files, PDO mappings with live values,
@@ -78,7 +86,7 @@
   PDO assignment and emergencies; real adapters need the `ethercat` extra, a simulated network works without
 - Physical I/O: switch the digital outputs of a USB I/O adapter (aio_usb) and watch its inputs and analogue values,
   from the tool or test scripts; needs the `io` extra, a simulated device works without
-- Decoding of ISO-TP, UDS, J1939, CANopen and LIN diagnostic frames in the trace
+- Decoding of ISO-TP, UDS, J1939, NMEA 2000 (marine, with Fast Packet), CANopen, LIN and J1587 frames in the trace
 - LIN master schedule tables
 
 **Simulation and test automation**
@@ -148,6 +156,7 @@ support and the Linux kernel drivers.
 | GVRET (`gvret`) | ESP32RET boards, Macchina M2 (M2RET), CANDue: SavvyCAN's GVRET protocol over USB serial or WiFi | Windows, Linux, macOS |
 | J2534 (`j2534`) | J2534 pass-thru devices: Mongoose, CarDAQ, OpenPort 2.0, Bosch, Autel …; 32-bit drivers through a bridge process | Windows |
 | ELM327 / OBDLink (`elm327`) | OBDLink MX+, LX, SX, EX and ELM327 compatible OBD adapters over USB, Bluetooth or WiFi, for diagnostics | Windows, Linux, macOS |
+| J1850 VPW / GM Class 2 (`elm327_vpw`) | GM "Class 2" 10.4 kbit/s single-wire bus of 1996–2007 GM vehicles, through an ELM327/OBDLink adapter (not CAN) | Windows, Linux, macOS |
 | python-can serial (`serial`) | Adapters with python-can's serial protocol | Windows, Linux, macOS |
 | Robotell (`robotell`) | Robotell USB-CAN | Windows, Linux, macOS |
 | Seeed Studio (`seeedstudio`) | USB-CAN Analyzer | Windows, Linux, macOS |

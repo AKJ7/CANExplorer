@@ -28,6 +28,7 @@ the first column. Install the vendor's driver or library for your adapter first;
 | *GvretBus* | `gvret` | Devices with SavvyCAN's GVRET protocol: ESP32RET boards, Macchina M2 (M2RET), CANDue (GVRET firmware) | Windows, Linux, macOS | None: a serial port, with `@1` for the device's second bus (`COM5@1`), or `socket://IP:23` for ESP32RET on WiFi (see [below](#gvret-devices)) | – |
 | *J2534Bus* | `j2534` | J2534 pass-thru devices: Drew Technologies Mongoose and CarDAQ, Tactrix OpenPort 2.0, J2534 drivers of Bosch, Autel, Kvaser, PEAK, Intrepid … (see [below](#j2534-pass-thru-devices)) | Windows | The device's J2534 (04.04) driver; 32-bit drivers run in the J2534 bridge ([below](#32-bit-drivers)) | – |
 | *Elm327Bus* | `elm327` | OBD adapters with the ELM327 command set: OBDLink MX+, LX, SX, EX and ELM327 compatibles, over USB, Bluetooth or WiFi; made for diagnostics, with limits (see [below](#elm327-and-obdlink-adapters)) | Windows, Linux, macOS | None: a serial port (`COM7`, `/dev/rfcomm0`), or `socket://IP:35000` for WiFi adapters | – |
+| *Elm327VpwBus* | `elm327_vpw` | **SAE J1850 VPW / GM Class 2** (not CAN): the 10.4 kbit/s bus of 1996–2007 GM vehicles, through an ELM327/OBDLink adapter (see [below](#gm-class-2-sae-j1850-vpw)) | Windows, Linux, macOS | None: the adapter's serial port, as for `elm327` | – |
 | *SerialBus* | `serial` | Adapters speaking python-can's own serial protocol | Windows, Linux, macOS | None: a serial port | – |
 | *robotellBus* | `robotell` | Robotell USB-CAN adapters | Windows, Linux, macOS | None: a serial port | – |
 | *SeeedBus* | `seeedstudio` | Seeed Studio USB-CAN Analyzer | Windows, Linux, macOS | None: a serial port | – |
@@ -140,6 +141,19 @@ These adapters are made for diagnostics, not as CAN interfaces:
   show sent frames; **Receive own messages** adds them to the trace locally.
 
 An adapter is used by one program at a time.
+
+## GM Class 2 (SAE J1850 VPW)
+
+*Elm327VpwBus* (`elm327_vpw`) opens a **GM "Class 2" / SAE J1850 VPW** bus — the 10.4 kbit/s single-wire bus of
+1996–2007 GM vehicles, not CAN — through an ELM327/OBDLink adapter put into protocol 2. The channel is the
+adapter's serial port, exactly as for the [ELM327 CAN interface](#elm327-and-obdlink-adapters) (USB, Bluetooth or
+`socket://IP:35000` for WiFi). The bitrate is fixed at 10.4 kbit/s.
+
+Each VPW frame is presented as a python-can frame whose extended identifier holds the three header bytes
+(priority, target, source) and whose data is the payload, so the trace, dashboard, reverse engineering and
+recording work on it like on any bus. Monitoring and diagnostics share the one adapter, which is half-duplex, so a
+frame on the bus during a diagnostic request is missed. See [J1850 VPW / GM Class 2](../user-guide/j1850.md) for
+the diagnostics page and scripting.
 
 ## Adapters through SocketCAN
 

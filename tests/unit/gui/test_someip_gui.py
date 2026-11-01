@@ -124,3 +124,37 @@ async def test_controller_decodes_payloads_with_fibex(qapp, data_dir):
         assert controller.description_file == ''
     finally:
         controller.shutdown()
+
+
+async def test_controller_decodes_payloads_with_arxml(qapp, data_dir):
+    import struct
+
+    from PyQt6.QtCore import QUrl
+
+    controller = SomeIpController()
+    try:
+        assert controller.load_description(QUrl.fromLocalFile(str(data_dir / 'someip.arxml'))) == ''
+        assert controller.description_file == 'someip.arxml'
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.bind(('127.0.0.1', 0))
+        port = sock.getsockname()[1]
+        sock.close()
+        assert controller.open(str(port), '') == ''
+        for _ in range(200):
+            if controller.is_open:
+                break
+            await asyncio.sleep(0.01)
+
+        sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sender.sendto(someip(0x1234, 0x8001, 0x02, struct.pack('>ff', 1.0, 2.0)), ('127.0.0.1', port))  # Target event
+        for _ in range(200):
+            if controller.message_count >= 1:
+                break
+            await asyncio.sleep(0.01)
+        sender.close()
+
+        row = controller.messages[0]
+        assert row['description'] == 'Target.x=1, Target.y=2'  # Decoded from the ARXML struct
+        assert row['service_name'] == 'RadarService'
+    finally:
+        controller.shutdown()

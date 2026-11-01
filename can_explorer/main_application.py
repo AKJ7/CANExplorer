@@ -23,6 +23,8 @@ from can_explorer.gui.application_metadata import ApplicationMetadata
 from can_explorer.gui.connection_manager import ConnectionManager
 from can_explorer.desktop import desktop_file_name
 from can_explorer.gui.signal_plot import register_qml_types
+from can_explorer.gui.bit_raster import register_bit_raster
+from can_explorer.gui.python_highlighter import register_python_highlighter
 
 logger = get_logger(__name__)
 
@@ -37,6 +39,8 @@ def create_qml_engine(
     # Controls drawn with the theme colours on every platform (the native styles cannot be recoloured)
     os.environ.setdefault('QT_QUICK_CONTROLS_STYLE', 'CanExplorerStyle')  # can_explorer/gui/qt/CanExplorerStyle
     register_qml_types()
+    register_bit_raster()
+    register_python_highlighter()
     engine = QQmlApplicationEngine()
     engine.setOutputWarningsToStandardError(False)
     engine.warnings.connect(on_warnings)

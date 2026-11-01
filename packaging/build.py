@@ -40,8 +40,9 @@ VERSION_MODULE = ROOT / 'can_explorer' / '_build_version.py'
 # Packages whose data files are read at runtime: the LDF grammar and the lark grammars it imports
 DATA_PACKAGES = ('ldfparser', 'lark')
 # python-can imports its interface backends by name at runtime, and pyserial its URL handlers (socket:// etc.), so
-# they are not found by import analysis
-DYNAMIC_PACKAGES = ('can.interfaces', 'serial.urlhandler')
+# they are not found by import analysis. uvicorn/h11 (the in-app MCP Agent server's HTTP transport) load their
+# protocol and loop implementations by name too, so they are force-included for the frozen build.
+DYNAMIC_PACKAGES = ('can.interfaces', 'serial.urlhandler', 'uvicorn', 'h11')
 # python-can backends that load their vendor driver when imported, so --collect-submodules skips them on a build machine
 # without that driver; named explicitly, they are bundled and load the driver on the user's machine
 DRIVER_MODULES = (

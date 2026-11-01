@@ -15,11 +15,13 @@ Its tabs:
 | Tab | Purpose |
 |---|---|
 | **Bits** | The bits and bytes of an identifier, the notch, and the bit field form |
+| **Activity** | A raster of every bit of one identifier across the whole capture, to see its structure at a glance |
 | **Automatic analysis** | Checksums, counters, multiplexers, values, states and flags of every identifier, found automatically |
 | **Reference signals** | The fields following a known value: a database signal, a CSV file (e.g. GPS) or OBD-II values |
 | **Markers** | The bits changing each time you mark that something happened |
 | **Related signals** | Fields carrying the same signal on several messages, grouped |
 | **Reaction** | Diff a baseline against an action to find what a control or an event changes on the bus |
+| **Console** | An interactive Python console over the captured frames, with the reverse-engineering primitives |
 
 The view works on live buses and on replayed log files. The bit statistics start when it is first opened,
 including the frames already in the trace, and follow the bus from then on; **Clear** in the trace toolbar and
@@ -56,6 +58,36 @@ fade — so you can watch the data flow and catch exactly when and how bits move
 - Scrub to the instant something happened and read off which bits and bytes changed into it.
 
 Leave replay (toggle **Replay** off, or select another identifier) to return the grid to the live, latest frame.
+
+## Activity map
+
+The **Activity** tab shows a bit-transition raster of the selected identifier: every bit of its payload across the
+whole capture at once, so its structure jumps out where the frame-at-a-time grid and replay cannot show it. Each
+**row is a bit** (byte 0 at the top, the most significant bit of each byte first) and each **column is a frame**
+over time; **Refresh** rebuilds it from the frames captured so far.
+
+A cell is blue for a steady 1, dark for a steady 0, and orange where the bit changed. The patterns name themselves:
+
+- a **counter** ramps as diagonal stripes, its low bits busier than its high bits;
+- a **constant** byte is flat (dark or blue);
+- a **physical value** drifts, its high bits slow and its low bits noisy;
+- a **toggle** (a flag, a blinker) is a column of orange that comes and goes;
+- a **multiplexer** switches whole regions of the payload on and off.
+
+Read off which bytes carry something and what kind, then switch to **Bits** to define the field or **Automatic
+analysis** to have it found.
+
+## Timing graphs
+
+Two buttons in the Bits toolbar plot the selected identifier on the [Signals](signal-plots.md) page, from the
+frames in the trace so far on:
+
+- **Plot Δt** graphs the **inter-frame interval** (the time between consecutive frames, in milliseconds) over
+  time. A flat line is a cyclic message; steps and spikes reveal gateways, bursts and event-triggered messages
+  (a frame sent only when something happens). The cursors, statistics (min/max/mean interval) and CSV export of
+  the signal plots all apply.
+- **Plot bytes** graphs **each payload byte** as a value over time, one chart per byte — a quick look at which
+  bytes move and how, without defining a bit field first.
 
 ## Finding the bits of an action: the notch
 
@@ -231,6 +263,30 @@ Having found the controlling message, confirm it by replaying that captured fram
 **Replay to bus…** or the transmit panel — replaying a real, observed message, not a guessed one.
 
 ![Capture reaction: a new identifier, a stepped nibble and a flipped bit found by diffing a baseline against an action](../assets/screenshots/reverse-reaction.png)
+
+## Scripting console
+
+The **Console** tab is an interactive Python console over the frames captured so far — an ad-hoc frame processor
+or field hunt with the same primitives the tools use, for when a point-and-click tool does not cut it. Type a
+snippet in the syntax-highlighted editor and press **Ctrl+Enter** (or **Run**); the value of a trailing expression
+is shown like a Python REPL, `print()` output is captured, and errors are reported instead of raised. Variables persist between
+runs; **Clear** empties the transcript and forgets them. Type `HELP` for the available names.
+
+In scope:
+
+- `messages` — the captured frames (`can.Message`); `frames` — `collect(messages)`, keyed by `(id, extended)`;
+  `analyses` and `fields` — the results of the **Automatic analysis** tab.
+- Helpers `ids()` and `frames_of(id)` (the identifier as an int or a hex string).
+- The `can_explorer.core.reverse` primitives: `collect`, `analyse`, `analyse_all`, `BitField`, `candidates`,
+  `signal_groups`, `correlate` and `read_reference_csv`.
+
+For example, `[(f.field.key, f.kind) for f in analyse(frames_of('100')).fields]` lists the fields found in `100`,
+and `{hex(i): len(f.payloads) for (i, e), f in frames.items()}` counts the frames of each identifier. This is the
+same scriptable surface the [MCP interface](mcp.md) exposes to an AI agent, at the keyboard.
+
+!!! note
+    The console runs Python in the application's own process — it is not a sandbox. It is for exploring your own
+    capture, so do not paste scripts you do not trust.
 
 ## Multiplexed fields
 
