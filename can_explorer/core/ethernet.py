@@ -9,12 +9,13 @@ stateless `decode()` dissects one frame; `StreamDecoder` decodes a sequence, rea
 
 import socket
 import struct
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Iterator, List, Optional, Sequence, Tuple
 
-from can_explorer.core import doip, someip
+from can_explorer.core import avtp_acf, doip, someip
 from can_explorer.core import gptp as ptp  # Aliased so it does not clash with the EthernetPacket.gptp field
+from can_explorer.core.protocols import nm
 
 # EtherTypes
 ETH_IPV4 = 0x0800
@@ -24,8 +25,22 @@ ETH_IPV6 = 0x86DD
 ETH_PTP = 0x88F7  # gPTP / IEEE 802.1AS
 ETH_AVTP = 0x22F0  # IEEE 1722
 ETH_LLDP = 0x88CC
+ETH_MACSEC = 0x88E5  # IEEE 802.1AE (MACsec)
+ETH_RTAG = 0xF1C1  # IEEE 802.1CB redundancy tag (FRER)
+ETH_MVRP = 0x88F5  # Multiple VLAN Registration Protocol (SRP/TSN)
+ETH_MMRP = 0x88F6  # Multiple MAC Registration Protocol
+ETH_MSRP = 0x22EA  # Multiple Stream Reservation Protocol (SRP, IEEE 802.1Qat)
 
-ETHERTYPE_NAMES = {ETH_ARP: 'ARP', ETH_PTP: 'gPTP', ETH_AVTP: 'AVTP', ETH_LLDP: 'LLDP'}
+ETHERTYPE_NAMES = {
+    ETH_ARP: 'ARP',
+    ETH_PTP: 'gPTP',
+    ETH_AVTP: 'AVTP',
+    ETH_LLDP: 'LLDP',
+    ETH_MACSEC: 'MACsec',
+    ETH_MVRP: 'MVRP',
+    ETH_MMRP: 'MMRP',
+    ETH_MSRP: 'MSRP',
+}
 
 PTP_MESSAGE_TYPES = {
     0x0: 'Sync',
@@ -45,8 +60,9 @@ AVTP_SUBTYPES = {
     0x02: 'AAF (audio)',
     0x03: 'CVF (compressed video)',
     0x04: 'CRF (clock reference)',
-    0x6E: 'NTSCF',
-    0x82: 'ADP (discovery)',
+    0x05: 'TSCF (control)',
+    0x6E: 'AEF (continuous)',
+    0x82: 'NTSCF (control)',
     0xFB: 'AECP',
     0xFC: 'ACMP',
     0xFE: 'MAAP',
@@ -67,6 +83,12 @@ DOIP_PAYLOAD_TYPES = {
     0x8003: 'diagnostic negative ack',
 }
 
+IGMP_TYPES = {0x11: 'membership query', 0x12: 'v1 report', 0x16: 'v2 report', 0x17: 'leave', 0x22: 'v3 report'}
+DNS_TYPES = {1: 'A', 2: 'NS', 5: 'CNAME', 12: 'PTR', 15: 'MX', 16: 'TXT', 28: 'AAAA', 33: 'SRV', 255: 'ANY'}
+DHCP_PORTS = {67, 68}
+DNS_PORT = 53
+MDNS_PORT = 5353
+
 
 class PcapError(ValueError):
     pass
@@ -76,6 +98,15 @@ class PcapError(ValueError):
 class RawPacket:
     timestamp: float
     data: bytes
+
+
+@dataclass
+class AvtpStreamRef:
+    """The stream identity of one AVTP stream frame (AAF/CVF/CRF/61883), for per-stream health tracking."""
+
+    subtype: int
+    stream_id: str  # 8-byte stream id, hex
+    sequence: int  # 8-bit AVTP sequence number
 
 
 @dataclass
@@ -97,6 +128,8 @@ class EthernetPacket:
     protocol: str = ''  # The highest recognised layer: 'SOME/IP', 'DoIP', 'gPTP', 'AVTP', 'ARP', 'UDP', …
     info: str = ''
     gptp: Optional[ptp.GptpMessage] = None  # The parsed gPTP message, for the time-sync summary
+    can_frames: List[avtp_acf.AcfCanFrame] = field(default_factory=list)  # CAN tunnelled in AVTP ACF (TSCF/NTSCF)
+    avtp: Optional[AvtpStreamRef] = None  # The stream id/sequence of an AVTP stream frame, for stream health
 
 
 # --- pcap file reading and writing (classic libpcap, Ethernet link type) ---
@@ -213,8 +246,9 @@ def _mac(data: bytes) -> str:
     return ':'.join(f'{byte:02x}' for byte in data)
 
 
-def decode(data: bytes, timestamp: float = 0.0, number: int = 0) -> EthernetPacket:
-    """Decode one Ethernet frame into an EthernetPacket (never raises; unknown layers are left blank)."""
+def decode(data: bytes, timestamp: float = 0.0, number: int = 0, nm_port: Optional[int] = None) -> EthernetPacket:
+    """Decode one Ethernet frame into an EthernetPacket (never raises; unknown layers are left blank). When
+    `nm_port` is given, UDP frames on that port are decoded as AUTOSAR UDP-NM (which has no standard port)."""
     packet = EthernetPacket(number=number, timestamp=timestamp, length=len(data))
     if len(data) < 14:
         packet.protocol = 'short'
@@ -222,20 +256,31 @@ def decode(data: bytes, timestamp: float = 0.0, number: int = 0) -> EthernetPack
     packet.dst_mac, packet.src_mac = _mac(data[0:6]), _mac(data[6:12])
     ethertype = struct.unpack('>H', data[12:14])[0]
     offset = 14
-    if ethertype == ETH_VLAN and len(data) >= 18:
-        packet.vlan = struct.unpack('>H', data[14:16])[0] & 0x0FFF
-        ethertype = struct.unpack('>H', data[16:18])[0]
-        offset = 18
+    rtag_sequence = None
+    # Peel 802.1Q VLAN tags and the 802.1CB redundancy tag (FRER) to reach the real EtherType
+    while True:
+        if ethertype == ETH_VLAN and len(data) >= offset + 4:
+            packet.vlan = struct.unpack('>H', data[offset : offset + 2])[0] & 0x0FFF
+            ethertype = struct.unpack('>H', data[offset + 2 : offset + 4])[0]
+            offset += 4
+        elif ethertype == ETH_RTAG and len(data) >= offset + 6:
+            rtag_sequence = struct.unpack('>H', data[offset + 2 : offset + 4])[0]  # reserved(2) + sequence(2)
+            ethertype = struct.unpack('>H', data[offset + 4 : offset + 6])[0]
+            offset += 6
+        else:
+            break
     try:
-        _decode_l3(packet, ethertype, data, offset)
+        _decode_l3(packet, ethertype, data, offset, nm_port)
     except (struct.error, IndexError, ValueError):
         pass
+    if rtag_sequence is not None:
+        packet.info = f'R-TAG {rtag_sequence}' + (f' · {packet.info}' if packet.info else '')
     if not packet.protocol:
         packet.protocol = packet.l4 or packet.l3 or ETHERTYPE_NAMES.get(ethertype, f'0x{ethertype:04X}')
     return packet
 
 
-def _decode_l3(packet: EthernetPacket, ethertype: int, data: bytes, offset: int) -> None:
+def _decode_l3(packet: EthernetPacket, ethertype: int, data: bytes, offset: int, nm_port: Optional[int] = None) -> None:
     if ethertype == ETH_PTP:
         packet.l3 = packet.protocol = 'gPTP'
         message = ptp.parse(data[offset:])
@@ -249,11 +294,23 @@ def _decode_l3(packet: EthernetPacket, ethertype: int, data: bytes, offset: int)
         return
     if ethertype == ETH_AVTP:
         packet.l3 = packet.protocol = 'AVTP'
-        packet.info = _avtp_info(data[offset:])
+        _decode_avtp(packet, data[offset:])
         return
     if ethertype == ETH_LLDP:
         packet.l3 = packet.protocol = 'LLDP'
         packet.info = _lldp_info(data[offset:])
+        return
+    if ethertype == ETH_MACSEC:
+        packet.l3 = packet.protocol = 'MACsec'
+        if len(data) >= offset + 6:
+            tci = data[offset]  # V, ES, SC, SCB, E, C, then 2-bit association number
+            packet_number = struct.unpack('>I', data[offset + 2 : offset + 6])[0]
+            encrypted = ' encrypted' if tci & 0x08 else ''  # E bit
+            packet.info = f'AN {tci & 0x03}, PN {packet_number}{encrypted}'
+        return
+    if ethertype in (ETH_MVRP, ETH_MMRP, ETH_MSRP):  # IEEE 802.1 (M)SRP / TSN stream reservation control
+        packet.l3 = packet.protocol = ETHERTYPE_NAMES[ethertype]
+        packet.info = 'stream reservation' if ethertype == ETH_MSRP else 'registration protocol'
         return
     if ethertype == ETH_ARP:
         packet.l3 = packet.protocol = 'ARP'
@@ -269,12 +326,12 @@ def _decode_l3(packet: EthernetPacket, ethertype: int, data: bytes, offset: int)
             )
         return
     if ethertype == ETH_IPV4:
-        _decode_ipv4(packet, data, offset)
+        _decode_ipv4(packet, data, offset, nm_port)
     elif ethertype == ETH_IPV6:
-        _decode_ipv6(packet, data, offset)
+        _decode_ipv6(packet, data, offset, nm_port)
 
 
-def _decode_ipv4(packet: EthernetPacket, data: bytes, offset: int) -> None:
+def _decode_ipv4(packet: EthernetPacket, data: bytes, offset: int, nm_port: Optional[int] = None) -> None:
     if len(data) < offset + 20:
         return
     packet.l3 = 'IPv4'
@@ -282,35 +339,50 @@ def _decode_ipv4(packet: EthernetPacket, data: bytes, offset: int) -> None:
     protocol = data[offset + 9]
     packet.src = socket.inet_ntoa(data[offset + 12 : offset + 16])
     packet.dst = socket.inet_ntoa(data[offset + 16 : offset + 20])
-    _decode_l4(packet, protocol, data, offset + ihl)
+    _decode_l4(packet, protocol, data, offset + ihl, nm_port)
 
 
-def _decode_ipv6(packet: EthernetPacket, data: bytes, offset: int) -> None:
+def _decode_ipv6(packet: EthernetPacket, data: bytes, offset: int, nm_port: Optional[int] = None) -> None:
     if len(data) < offset + 40:
         return
     packet.l3 = 'IPv6'
     next_header = data[offset + 6]
     packet.src = socket.inet_ntop(socket.AF_INET6, data[offset + 8 : offset + 24])
     packet.dst = socket.inet_ntop(socket.AF_INET6, data[offset + 24 : offset + 40])
-    _decode_l4(packet, next_header, data, offset + 40)
+    _decode_l4(packet, next_header, data, offset + 40, nm_port)
 
 
-def _decode_l4(packet: EthernetPacket, protocol: int, data: bytes, offset: int) -> None:
+def _decode_l4(packet: EthernetPacket, protocol: int, data: bytes, offset: int, nm_port: Optional[int] = None) -> None:
     if protocol == 17 and len(data) >= offset + 8:  # UDP
         packet.l4 = 'UDP'
         packet.src_port, packet.dst_port = struct.unpack('>HH', data[offset : offset + 4])
-        _decode_application(packet, data[offset + 8 :])
+        _decode_application(packet, data[offset + 8 :], nm_port)
     elif protocol == 6 and len(data) >= offset + 20:  # TCP
         packet.l4 = 'TCP'
         packet.src_port, packet.dst_port = struct.unpack('>HH', data[offset : offset + 4])
         data_offset = (data[offset + 12] >> 4) * 4
-        _decode_application(packet, data[offset + data_offset :])
-    elif protocol in (1, 58):
-        packet.l4 = packet.protocol = 'ICMPv6' if protocol == 58 else 'ICMP'
+        _decode_application(packet, data[offset + data_offset :], nm_port)
+    elif protocol == 1:
+        packet.l4 = packet.protocol = 'ICMP'
+    elif protocol == 58:  # ICMPv6; the multicast-listener (MLD) types are the IPv6 equivalent of IGMP
+        icmp_type = data[offset] if len(data) > offset else 0
+        packet.l4 = packet.protocol = 'MLD' if icmp_type in (130, 131, 132, 143) else 'ICMPv6'
+    elif protocol == 2:  # IGMP (IPv4 multicast group membership)
+        packet.l4 = packet.protocol = 'IGMP'
+        packet.info = IGMP_TYPES.get(data[offset] if len(data) > offset else 0, '')
+    elif protocol in (50, 51) and len(data) >= offset + 8:  # IPsec ESP / AH
+        packet.l4 = packet.protocol = 'IPsec ESP' if protocol == 50 else 'IPsec AH'
+        spi = struct.unpack('>I', data[offset : offset + 4] if protocol == 50 else data[offset + 4 : offset + 8])[0]
+        packet.info = f'SPI 0x{spi:08X}'
 
 
-def _decode_application(packet: EthernetPacket, payload: bytes) -> None:
+def _decode_application(packet: EthernetPacket, payload: bytes, nm_port: Optional[int] = None) -> None:
     ports = {packet.src_port, packet.dst_port}
+    if nm_port is not None and nm_port in ports:  # AUTOSAR UDP-NM: no standard port, so it is user-configured
+        summary = nm.describe(payload)
+        if summary is not None:
+            packet.protocol, packet.info = 'UDP-NM', summary
+            return
     if doip.PORT in ports or doip.TLS_PORT in ports:
         try:
             _version, payload_type, _body = doip.decode_message(payload)
@@ -325,9 +397,95 @@ def _decode_application(packet: EthernetPacket, payload: bytes) -> None:
             packet.protocol = 'SOME/IP'
             packet.info = ' | '.join(someip.describe(message) for message in messages[:3])
             return
+    if ports & DHCP_PORTS and len(payload) >= 1:
+        packet.protocol = 'DHCP'
+        packet.info = {1: 'request', 2: 'reply'}.get(payload[0], '')
+        return
+    if DNS_PORT in ports or MDNS_PORT in ports:
+        packet.protocol = 'mDNS' if MDNS_PORT in ports else 'DNS'
+        packet.info = _dns_summary(payload)
+        return
+
+
+def _dns_summary(payload: bytes) -> str:
+    """The first question of a DNS/mDNS message, e.g. 'query A host.local' or 'response'."""
+    if len(payload) < 12:
+        return ''
+    flags, questions = struct.unpack('>H', payload[2:4])[0], struct.unpack('>H', payload[4:6])[0]
+    kind = 'response' if flags & 0x8000 else 'query'
+    if questions == 0:
+        return kind
+    name, position = _dns_name(payload, 12)
+    if position + 2 > len(payload):
+        return kind
+    record_type = struct.unpack('>H', payload[position : position + 2])[0]
+    return f'{kind} {DNS_TYPES.get(record_type, str(record_type))} {name}'.rstrip()
+
+
+def _dns_name(payload: bytes, position: int) -> Tuple[str, int]:
+    """A DNS name read from `position` (no compression, as in a question); returns (name, position after it)."""
+    labels = []
+    while position < len(payload):
+        length = payload[position]
+        if length == 0:
+            return '.'.join(labels), position + 1
+        if length & 0xC0:  # A compression pointer ends the name for our purposes
+            return '.'.join(labels), position + 2
+        labels.append(payload[position + 1 : position + 1 + length].decode('ascii', 'replace'))
+        position += 1 + length
+    return '.'.join(labels), position
 
 
 _AVTP_STREAM_SUBTYPES = {0x00, 0x02, 0x03, 0x04}  # 61883/IIDC, AAF, CVF, CRF carry the common stream header
+_AVTP_MAAP_SUBTYPE = 0xFE
+MAAP_MESSAGE_TYPES = {1: 'probe', 2: 'defend', 3: 'announce'}  # IEEE 1722 MAAP dynamic address allocation
+
+
+def _decode_avtp(packet: EthernetPacket, payload: bytes) -> None:
+    """Fill in an AVTP (IEEE 1722) packet: the info summary, and for TSCF/NTSCF control frames the fieldbus frames
+    tunnelled in their ACF messages. CAN frames are attached to the packet so the CAN views can use them."""
+    packet.info = _avtp_info(payload)
+    if payload and payload[0] in _AVTP_STREAM_SUBTYPES and len(payload) >= 12:
+        packet.avtp = AvtpStreamRef(subtype=payload[0], stream_id=payload[4:12].hex(), sequence=payload[2])
+    if not (payload and avtp_acf.is_control_subtype(payload[0])):
+        return
+    contents = avtp_acf.decode_acf(payload)
+    if contents is None or not contents:
+        return
+    packet.can_frames = contents.can
+    packet.protocol = _acf_protocol(contents)
+    packet.info = f'{packet.info}: {_acf_summary(contents)}'
+
+
+def _acf_protocol(contents) -> str:
+    """The protocol label for a control frame: the specific bus when it carries only one, else generic ACF."""
+    kinds = [bool(contents.can), bool(contents.lin), bool(contents.flexray), bool(contents.other_types)]
+    if sum(kinds) == 1:
+        return (
+            'ACF-CAN'
+            if contents.can
+            else 'ACF-LIN'
+            if contents.lin
+            else 'ACF-FlexRay'
+            if contents.flexray
+            else 'AVTP ACF'
+        )
+    return 'AVTP ACF'
+
+
+def _acf_summary(contents) -> str:
+    """A short description of the frames tunnelled in one control frame."""
+    parts = []
+    for frame in contents.can[:4]:
+        identifier = f'{frame.can_id:08X}' if frame.extended else f'{frame.can_id:03X}'
+        kind = ' RTR' if frame.remote else (' FD' if frame.fd else '')
+        parts.append(f'CAN bus {frame.bus_id} {identifier}#{frame.data.hex().upper()}{kind}')
+    for frame in contents.lin[:4]:
+        parts.append(f'LIN bus {frame.bus_id} id {frame.frame_id:02X}#{frame.data.hex().upper()}')
+    for frame in contents.flexray[:4]:
+        parts.append(f'FlexRay bus {frame.bus_id} id {frame.frame_id} cyc {frame.cycle}#{frame.data.hex().upper()}')
+    parts += [f'ACF {avtp_acf.acf_type_name(acf_type)}' for acf_type in contents.other_types[:4]]
+    return ', '.join(parts)
 
 
 def _avtp_info(payload: bytes) -> str:
@@ -338,7 +496,12 @@ def _avtp_info(payload: bytes) -> str:
     subtype = payload[0]
     name = AVTP_SUBTYPES.get(subtype, f'subtype 0x{subtype:02X}')
     if subtype in _AVTP_STREAM_SUBTYPES and len(payload) >= 12:
-        return f'{name}, stream {payload[4:12].hex()}, seq {payload[2]}'
+        summary = f'{name}, stream {payload[4:12].hex()}, seq {payload[2]}'
+        detail = avtp_acf.describe_stream(payload)
+        return f'{summary} ({detail})' if detail else summary
+    if subtype == _AVTP_MAAP_SUBTYPE and len(payload) >= 2:
+        message_type = MAAP_MESSAGE_TYPES.get(payload[1] & 0x0F)
+        return f'{name} {message_type}' if message_type else name
     return name
 
 
@@ -478,13 +641,14 @@ class StreamDecoder:
     partial packets are marked as segments. Feed frames in capture order; it also tracks the SOME/IP services
     announced by Service Discovery (`services`)."""
 
-    def __init__(self) -> None:
+    def __init__(self, nm_port: Optional[int] = None) -> None:
         self._tcp: Dict[Tuple, _TcpStream] = {}
         self._tp = someip.SomeIpReassembler()
         self.services: Dict[Tuple[int, int], someip.Service] = {}
+        self.nm_port = nm_port
 
     def decode(self, data: bytes, timestamp: float = 0.0, number: int = 0) -> EthernetPacket:
-        packet = decode(data, timestamp, number)
+        packet = decode(data, timestamp, number, self.nm_port)
         stream = _l4_stream(data)
         if stream is not None:
             try:
@@ -536,6 +700,239 @@ class StreamDecoder:
             packet.info = ' | '.join(someip.describe(message) for message in completed[:3])
         else:
             packet.info = '[SOME/IP-TP segment]'
+
+
+# --- AVTP stream health (per-stream sequence-gap loss, from the 8-bit AVTP sequence number) ---
+
+
+@dataclass
+class AvtpStreamStat:
+    """Health of one AVTP stream across a capture, from its sequence numbers."""
+
+    stream_id: str
+    subtype: int
+    subtype_name: str
+    packets: int
+    lost: int  # Frames missing, inferred from gaps in the 8-bit sequence number
+    duplicates: int  # Repeated sequence numbers
+    reordered: int  # Frames arriving with an earlier sequence number (late/out of order)
+    first_timestamp: float
+    last_timestamp: float
+
+    @property
+    def expected(self) -> int:
+        """How many frames should have been seen (those received plus those inferred lost)."""
+        return self.packets + self.lost
+
+    @property
+    def loss_percent(self) -> float:
+        return 100.0 * self.lost / self.expected if self.expected else 0.0
+
+    @property
+    def rate_hz(self) -> float:
+        duration = self.last_timestamp - self.first_timestamp
+        return (self.packets - 1) / duration if duration > 0 else 0.0
+
+
+class _AvtpStreamAccumulator:
+    def __init__(self, ref: AvtpStreamRef, timestamp: float):
+        self.subtype = ref.subtype
+        self.packets = 0
+        self.lost = 0
+        self.duplicates = 0
+        self.reordered = 0
+        self.last_seq: Optional[int] = None
+        self.first_timestamp = timestamp
+        self.last_timestamp = timestamp
+
+    def add(self, sequence: int, timestamp: float) -> None:
+        self.packets += 1
+        self.last_timestamp = timestamp
+        if self.last_seq is not None:
+            delta = (sequence - self.last_seq) & 0xFF
+            if delta == 0:
+                self.duplicates += 1
+            elif delta <= 128:  # A forward step: delta-1 frames were skipped (0 when consecutive)
+                self.lost += delta - 1
+            else:  # A large backward step: a late / reordered frame, not a loss
+                self.reordered += 1
+                return  # Keep the highest sequence as the reference
+        self.last_seq = sequence
+
+
+def avtp_stream_stats(packets: Sequence['EthernetPacket']) -> List[AvtpStreamStat]:
+    """Per-stream AVTP health from a decoded capture: packets, inferred lost frames (gaps in the 8-bit sequence
+    number), duplicates, reordered frames and the average rate. Streams are keyed by stream id and subtype."""
+    accumulators: Dict[Tuple[str, int], _AvtpStreamAccumulator] = {}
+    for packet in packets:
+        if packet.avtp is None:
+            continue
+        key = (packet.avtp.stream_id, packet.avtp.subtype)
+        accumulator = accumulators.get(key)
+        if accumulator is None:
+            accumulator = accumulators[key] = _AvtpStreamAccumulator(packet.avtp, packet.timestamp)
+        accumulator.add(packet.avtp.sequence, packet.timestamp)
+    stats = [
+        AvtpStreamStat(
+            stream_id=stream_id,
+            subtype=subtype,
+            subtype_name=AVTP_SUBTYPES.get(subtype, f'0x{subtype:02X}'),
+            packets=accumulator.packets,
+            lost=accumulator.lost,
+            duplicates=accumulator.duplicates,
+            reordered=accumulator.reordered,
+            first_timestamp=accumulator.first_timestamp,
+            last_timestamp=accumulator.last_timestamp,
+        )
+        for (stream_id, subtype), accumulator in accumulators.items()
+    ]
+    return sorted(stats, key=lambda stat: (-stat.lost, stat.stream_id))
+
+
+# --- per-packet field dissection (a Wireshark-style tree for the details pane) ---
+
+_IP_PROTO_NAMES = {1: 'ICMP', 2: 'IGMP', 6: 'TCP', 17: 'UDP', 50: 'IPsec ESP', 51: 'IPsec AH', 58: 'ICMPv6'}
+
+
+@dataclass
+class DissectionField:
+    """One node in a packet's dissection tree: a labelled field, its rendered value, and the byte span it covers in
+    the frame (offset/length; both 0 when it maps to no single range). `children` holds the sub-fields."""
+
+    label: str
+    value: str = ''
+    offset: int = 0
+    length: int = 0
+    children: List['DissectionField'] = field(default_factory=list)
+
+    def add(self, label: str, value: str = '', offset: int = 0, length: int = 0) -> 'DissectionField':
+        child = DissectionField(label, value, offset, length)
+        self.children.append(child)
+        return child
+
+
+def dissect(data: bytes, timestamp: float = 0.0, number: int = 0, nm_port: Optional[int] = None) -> DissectionField:
+    """Dissect one Ethernet frame into a tree of fields, layer by layer (Ethernet, VLAN/R-TAG, IP, transport and
+    the recognised application protocol). Never raises; dissection stops at the first layer that will not parse."""
+    packet = decode(data, timestamp, number, nm_port)
+    summary = f'{len(data)} bytes, {packet.protocol}' if packet.protocol else f'{len(data)} bytes'
+    root = DissectionField('Frame', summary, 0, len(data))
+    try:
+        _dissect_ethernet(root, packet, data, nm_port)
+    except (struct.error, IndexError, ValueError):
+        pass
+    return root
+
+
+def _dissect_ethernet(root: DissectionField, packet: EthernetPacket, data: bytes, nm_port: Optional[int]) -> None:
+    if len(data) < 14:
+        return
+    eth = root.add('Ethernet II', f'{packet.src_mac} → {packet.dst_mac}', 0, 14)
+    eth.add('Destination', packet.dst_mac, 0, 6)
+    eth.add('Source', packet.src_mac, 6, 6)
+    ethertype = struct.unpack('>H', data[12:14])[0]
+    offset = 14
+    while True:
+        if ethertype == ETH_VLAN and len(data) >= offset + 4:
+            tci = struct.unpack('>H', data[offset : offset + 2])[0]
+            vlan = root.add('802.1Q VLAN', f'id {tci & 0x0FFF}', offset, 4)
+            vlan.add('Priority (PCP)', str((tci >> 13) & 0x07), offset, 2)
+            vlan.add('VLAN id', str(tci & 0x0FFF), offset, 2)
+            ethertype = struct.unpack('>H', data[offset + 2 : offset + 4])[0]
+            offset += 4
+        elif ethertype == ETH_RTAG and len(data) >= offset + 6:
+            sequence = struct.unpack('>H', data[offset + 2 : offset + 4])[0]
+            root.add('802.1CB R-TAG (FRER)', f'seq {sequence}', offset, 6)
+            ethertype = struct.unpack('>H', data[offset + 4 : offset + 6])[0]
+            offset += 6
+        else:
+            break
+    eth.add('EtherType', f'0x{ethertype:04X} ({ETHERTYPE_NAMES.get(ethertype, packet.l3 or "?")})', 12, 2)
+    _dissect_l3(root, packet, ethertype, data, offset, nm_port)
+
+
+def _dissect_l3(
+    root: DissectionField, packet: EthernetPacket, ethertype: int, data: bytes, offset: int, nm_port: Optional[int]
+) -> None:
+    if ethertype == ETH_ARP and len(data) >= offset + 28:
+        arp = root.add('ARP', packet.info, offset, 28)
+        opcode = struct.unpack('>H', data[offset + 6 : offset + 8])[0]
+        arp.add('Opcode', {1: 'request', 2: 'reply'}.get(opcode, str(opcode)), offset + 6, 2)
+        arp.add('Sender MAC', _mac(data[offset + 8 : offset + 14]), offset + 8, 6)
+        arp.add('Sender IP', socket.inet_ntoa(data[offset + 14 : offset + 18]), offset + 14, 4)
+        arp.add('Target MAC', _mac(data[offset + 18 : offset + 24]), offset + 18, 6)
+        arp.add('Target IP', socket.inet_ntoa(data[offset + 24 : offset + 28]), offset + 24, 4)
+        return
+    if ethertype == ETH_IPV4 and len(data) >= offset + 20:
+        ihl = (data[offset] & 0x0F) * 4
+        protocol = data[offset + 9]
+        node = root.add('IPv4', f'{packet.src} → {packet.dst}', offset, ihl)
+        node.add('Version / header length', f'4 / {ihl} bytes', offset, 1)
+        node.add('TTL', str(data[offset + 8]), offset + 8, 1)
+        node.add('Protocol', f'{protocol} ({_IP_PROTO_NAMES.get(protocol, "?")})', offset + 9, 1)
+        node.add('Source', packet.src, offset + 12, 4)
+        node.add('Destination', packet.dst, offset + 16, 4)
+        _dissect_l4(root, packet, protocol, data, offset + ihl, nm_port)
+        return
+    if ethertype == ETH_IPV6 and len(data) >= offset + 40:
+        next_header = data[offset + 6]
+        node = root.add('IPv6', f'{packet.src} → {packet.dst}', offset, 40)
+        node.add('Next header', f'{next_header} ({_IP_PROTO_NAMES.get(next_header, "?")})', offset + 6, 1)
+        node.add('Hop limit', str(data[offset + 7]), offset + 7, 1)
+        node.add('Source', packet.src, offset + 8, 16)
+        node.add('Destination', packet.dst, offset + 24, 16)
+        _dissect_l4(root, packet, next_header, data, offset + 40, nm_port)
+        return
+    if packet.l3:  # Non-IP upper layer: gPTP, AVTP, LLDP, MACsec, (M)SRP, …
+        leaf = root.add(packet.l3, packet.info, offset, len(data) - offset)
+        _dissect_frames(leaf, packet)
+        if packet.gptp is not None and len(data) > offset:
+            leaf.add('Message type', PTP_MESSAGE_TYPES.get(data[offset] & 0x0F, '?'), offset, 1)
+
+
+def _dissect_l4(
+    root: DissectionField, packet: EthernetPacket, protocol: int, data: bytes, offset: int, nm_port: Optional[int]
+) -> None:
+    if protocol == 17 and len(data) >= offset + 8:  # UDP
+        node = root.add('UDP', f'{packet.src_port} → {packet.dst_port}', offset, 8)
+        node.add('Source port', str(packet.src_port), offset, 2)
+        node.add('Destination port', str(packet.dst_port), offset + 2, 2)
+        length = struct.unpack('>H', data[offset + 4 : offset + 6])[0]
+        node.add('Length', str(length), offset + 4, 2)
+        end = min(offset + length, len(data)) if length >= 8 else len(data)
+        _dissect_app(root, packet, data[offset + 8 : end], nm_port)
+        return
+    if protocol == 6 and len(data) >= offset + 20:  # TCP
+        data_offset = (data[offset + 12] >> 4) * 4
+        node = root.add('TCP', f'{packet.src_port} → {packet.dst_port}', offset, data_offset)
+        node.add('Source port', str(packet.src_port), offset, 2)
+        node.add('Destination port', str(packet.dst_port), offset + 2, 2)
+        node.add('Sequence number', str(struct.unpack('>I', data[offset + 4 : offset + 8])[0]), offset + 4, 4)
+        _dissect_app(root, packet, data[offset + data_offset :], nm_port)
+        return
+    if packet.l4:  # ICMP, ICMPv6, IGMP, MLD, IPsec ESP/AH — summarised, no sub-fields
+        root.add(packet.l4, packet.info, offset, max(0, len(data) - offset))
+
+
+def _dissect_app(root: DissectionField, packet: EthernetPacket, payload: bytes, nm_port: Optional[int]) -> None:
+    protocol = packet.protocol
+    if not protocol or protocol in ('UDP', 'TCP'):
+        if payload:
+            root.add('Data', f'{len(payload)} bytes', 0, len(payload))
+        return
+    app = root.add(protocol, packet.info)
+    if protocol == 'SOME/IP':
+        for message in someip.parse_messages(payload)[:8]:
+            app.add('Message', someip.describe(message))
+    else:
+        _dissect_frames(app, packet)
+
+
+def _dissect_frames(node: DissectionField, packet: EthernetPacket) -> None:
+    """List the CAN frames tunnelled in an AVTP ACF control frame, when present."""
+    for frame in packet.can_frames[:16]:
+        identifier = f'{frame.can_id:08X}' if frame.extended else f'{frame.can_id:03X}'
+        node.add(f'CAN bus {frame.bus_id}', f'{identifier}#{frame.data.hex().upper()}')
 
 
 def interfaces() -> List[str]:

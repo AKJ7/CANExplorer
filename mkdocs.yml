@@ -51,6 +51,7 @@ nav:
       - Comparing recordings: user-guide/compare-recordings.md
       - Several buses: user-guide/multi-bus.md
       - Bus gateway: user-guide/bus-gateway.md
+      - Restbus simulation: user-guide/restbus.md
       - Remote buses: user-guide/remote-buses.md
       - MCP interface: user-guide/mcp.md
       - MQTT: user-guide/mqtt.md

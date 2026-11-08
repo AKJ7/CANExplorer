@@ -10,6 +10,8 @@ ColumnLayout {
     id: root
     readonly property var eth: connectionManager.ethernet
     readonly property string pageTitle: eth.capturing ? qsTr("capturing") : (eth.file_name || qsTr("no capture"))
+    property int selectedNumber: 0  // Packet selected for the details pane
+    readonly property var detailRows: selectedNumber > 0 && eth.count > 0 ? eth.dissect(selectedNumber) : []
     spacing: Theme.spacing
 
     RowLayout {
@@ -28,7 +30,7 @@ ColumnLayout {
             visible: eth.interfaces.length > 0
             Layout.preferredWidth: 140
             ToolTip.visible: hovered
-            ToolTip.text: qsTr("Interface to capture live from (needs Linux and root/CAP_NET_RAW)")
+            ToolTip.text: qsTr("Interface to capture live from (needs libpcap/Npcap and capture privileges)")
         }
         Button {
             text: eth.capturing ? qsTr("Stop") : qsTr("Capture")
@@ -51,6 +53,13 @@ ColumnLayout {
             onClicked: saveDialog.open()
         }
         Button {
+            text: qsTr("Export CAN log…")
+            enabled: eth.can_frame_count > 0 && !eth.capturing
+            ToolTip.visible: hovered
+            ToolTip.text: qsTr("Save the CAN frames tunnelled in AVTP ACF (TSCF/NTSCF) as a CAN log to replay in a connection")
+            onClicked: saveCanDialog.open()
+        }
+        Button {
             text: qsTr("Clear")
             enabled: eth.count > 0 && !eth.capturing
             onClicked: eth.clear()
@@ -61,6 +70,17 @@ ColumnLayout {
             text: eth.filter
             onTextEdited: eth.set_filter(text)
             Layout.preferredWidth: 220
+        }
+        TextField {
+            id: nmPortField
+            placeholderText: qsTr("UDP-NM port")
+            text: eth.nm_port > 0 ? eth.nm_port : ""
+            inputMethodHints: Qt.ImhDigitsOnly
+            validator: IntValidator { bottom: 0; top: 65535 }
+            onEditingFinished: eth.set_nm_port(parseInt(text) || 0)
+            Layout.preferredWidth: 110
+            ToolTip.visible: hovered
+            ToolTip.text: qsTr("UDP port carrying AUTOSAR UDP-NM (it has no standard port); set it to decode NM frames")
         }
         Item { Layout.fillWidth: true }
         BusyIndicator { running: eth.busy; visible: running; Layout.preferredHeight: 28; Layout.preferredWidth: 28 }
@@ -73,6 +93,11 @@ ColumnLayout {
             visible: eth.count > 0
             text: qsTr("%1 packets").arg(eth.count.toLocaleString(Qt.locale(), "f", 0))
             tint: Theme.accent
+        }
+        Pill {
+            visible: eth.can_frame_count > 0
+            text: qsTr("%1 ACF-CAN").arg(eth.can_frame_count.toLocaleString(Qt.locale(), "f", 0))
+            tint: Theme.chart[2]
         }
     }
 
@@ -213,6 +238,52 @@ ColumnLayout {
         }
     }
 
+    // AVTP stream health (per-stream sequence loss)
+    Card {
+        id: avtpCard
+        title: qsTr("AVTP streams")
+        visible: eth.has_avtp_streams
+        Layout.fillWidth: true
+        Layout.preferredHeight: avtpColumn.implicitHeight + 2 * Theme.spacing
+
+        ColumnLayout {
+            id: avtpColumn
+            anchors.fill: parent
+            spacing: 4
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 16
+                Repeater {
+                    model: [qsTr("Stream"), qsTr("Format"), qsTr("Packets"), qsTr("Lost"), qsTr("Loss"), qsTr("Rate")]
+                    Label {
+                        required property int index
+                        required property var modelData
+                        text: modelData
+                        color: Theme.muted
+                        font.pixelSize: 11
+                        Layout.preferredWidth: index === 0 ? 170 : 80
+                        Layout.fillWidth: index === 1
+                    }
+                }
+            }
+            Repeater {
+                model: eth.avtp_streams
+                RowLayout {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    spacing: 16
+                    Label { text: modelData.stream; color: Theme.text; font.family: "monospace"; font.pixelSize: 12; Layout.preferredWidth: 170; elide: Text.ElideRight }
+                    Label { text: modelData.format; color: Theme.accent; font.pixelSize: 12; Layout.fillWidth: true; elide: Text.ElideRight }
+                    Label { text: modelData.packets; color: Theme.text; font.family: "monospace"; font.pixelSize: 12; Layout.preferredWidth: 80 }
+                    Label { text: modelData.lost; color: modelData.lost > 0 ? Theme.danger : Theme.text; font.family: "monospace"; font.pixelSize: 12; Layout.preferredWidth: 80 }
+                    Label { text: modelData.loss; color: modelData.lost > 0 ? Theme.danger : Theme.muted; font.family: "monospace"; font.pixelSize: 12; Layout.preferredWidth: 80 }
+                    Label { text: modelData.rate; color: Theme.muted; font.family: "monospace"; font.pixelSize: 12; Layout.preferredWidth: 80 }
+                }
+            }
+        }
+    }
+
     // Packets
     Card {
         title: qsTr("Packets")
@@ -252,7 +323,10 @@ ColumnLayout {
                     required property int index
                     width: packetList.width
                     height: 24
-                    color: index % 2 ? Theme.alpha(Theme.cardAlt, 0.5) : "transparent"
+                    color: modelData.number === root.selectedNumber
+                        ? Theme.alpha(Theme.accent, 0.25)
+                        : (index % 2 ? Theme.alpha(Theme.cardAlt, 0.5) : "transparent")
+                    MouseArea { anchors.fill: parent; onClicked: root.selectedNumber = modelData.number }
                     RowLayout {
                         anchors.fill: parent
                         spacing: 12
@@ -262,6 +336,45 @@ ColumnLayout {
                         Label { text: modelData.protocol; font.pixelSize: 12; color: Theme.accent; Layout.preferredWidth: 90; elide: Text.ElideRight }
                         Label { text: modelData.length; font.family: "monospace"; font.pixelSize: 12; color: Theme.muted; Layout.preferredWidth: 50 }
                         Label { text: modelData.info; font.pixelSize: 12; color: Theme.text; elide: Text.ElideRight; Layout.fillWidth: true }
+                    }
+                }
+            }
+
+            // Packet details — the field-by-field dissection of the selected packet
+            Rectangle {
+                visible: root.detailRows.length > 0
+                Layout.fillWidth: true
+                Layout.preferredHeight: 200
+                color: Theme.alpha(Theme.cardAlt, 0.4)
+                radius: Theme.radius
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 6
+                    spacing: 2
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Label {
+                            text: qsTr("Packet %1 details").arg(root.selectedNumber)
+                            color: Theme.muted; font.bold: true; font.pixelSize: 12
+                            Layout.fillWidth: true
+                        }
+                        Button { text: qsTr("Close"); flat: true; onClicked: root.selectedNumber = 0 }
+                    }
+                    ListView {
+                        id: detailList
+                        clip: true
+                        model: root.detailRows
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        ScrollBar.vertical: ScrollBar {}
+                        delegate: RowLayout {
+                            required property var modelData
+                            width: detailList.width
+                            spacing: 8
+                            Item { Layout.preferredWidth: modelData.depth * 16 }
+                            Label { text: modelData.label; color: Theme.accent; font.family: "monospace"; font.pixelSize: 12 }
+                            Label { text: modelData.value; color: Theme.text; font.pixelSize: 12; Layout.fillWidth: true; elide: Text.ElideRight }
+                        }
                     }
                 }
             }
@@ -286,5 +399,14 @@ ColumnLayout {
         defaultSuffix: "pcap"
         nameFilters: [qsTr("pcap files (*.pcap)")]
         onAccepted: statusLabel.show(eth.export_pcap(selectedFile))
+    }
+
+    FileDialog {
+        id: saveCanDialog
+        title: qsTr("Save the tunnelled CAN frames as a log")
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "asc"
+        nameFilters: [qsTr("CAN log files (*.asc *.blf *.log *.csv *.trc)")]
+        onAccepted: statusLabel.show(eth.export_can_log(selectedFile))
     }
 }

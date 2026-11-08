@@ -11,6 +11,7 @@ from can_explorer.core.sources import BusConfig, LiveSource
 from can_explorer.core.xcp import XcpSlaveSimulator
 from can_explorer.gui.application_metadata import ApplicationMetadata
 from can_explorer.gui.connection_manager import ConnectionManager
+from can_explorer.gui.help import HelpController
 from can_explorer.main_application import create_qml_engine
 
 DATA = Path(__file__).resolve().parents[1] / 'data'
@@ -127,7 +128,11 @@ async def test_read_and_write_raw_address(manager, channel, xcp_slave):
 async def test_xcp_page_renders_without_warnings(manager, channel, xcp_slave, qapp):
     warnings = []
     engine = create_qml_engine(
-        {'metadata': ApplicationMetadata(parent=qapp), 'connectionManager': manager},
+        {
+            'metadata': ApplicationMetadata(parent=qapp),
+            'connectionManager': manager,
+            'helpController': HelpController(parent=qapp),
+        },
         lambda errors: warnings.extend(error.toString() for error in errors),
     )
 

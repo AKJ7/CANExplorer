@@ -52,7 +52,7 @@ class BitRaster(QQuickPaintedItem):
         self._image = None  # Rebuild on the next paint
         self.update()
 
-    @pyqtProperty("QVariantList", notify=style_changed)
+    @pyqtProperty('QVariantList', notify=style_changed)
     def colors(self):
         return self._colors
 
@@ -118,7 +118,7 @@ class BitRaster(QQuickPaintedItem):
         painter.setFont(font)
         if self._image is None:
             painter.setPen(self._text_color)
-            painter.drawText(plot, Qt.AlignmentFlag.AlignCenter, "No frames for this identifier yet")
+            painter.drawText(plot, Qt.AlignmentFlag.AlignCenter, 'No frames for this identifier yet')
             return
 
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, False)  # Crisp cells
@@ -143,12 +143,12 @@ class BitRaster(QQuickPaintedItem):
         painter.drawText(
             QRectF(plot.left(), plot.bottom() + 2, plot.width(), MARGIN_BOTTOM - 2),
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop,
-            "frame 0",
+            'frame 0',
         )
         painter.drawText(
             QRectF(plot.left(), plot.bottom() + 2, plot.width(), MARGIN_BOTTOM - 2),
             Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop,
-            f"{raster.frames:,}",
+            f'{raster.frames:,}',
         )
 
 
@@ -158,5 +158,5 @@ _registered = False
 def register_bit_raster() -> None:
     global _registered
     if not _registered:
-        qmlRegisterType(BitRaster, "CanExplorer.Plots", 1, 0, "BitRaster")
+        qmlRegisterType(BitRaster, 'CanExplorer.Plots', 1, 0, 'BitRaster')
         _registered = True

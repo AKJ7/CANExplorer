@@ -21,6 +21,7 @@ from dataclasses import dataclass, field as dataclass_field
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 import can
+import numpy as np
 
 from can_explorer.core.reverse.checksums import find_checksums
 from can_explorer.core.reverse.fields import BitField, _from_motorola_index, _motorola_index
@@ -105,12 +106,27 @@ class _Data:
         self.little = [int.from_bytes(payload, 'little') for payload in payloads]
         self.big = [int.from_bytes(payload, 'big') for payload in payloads]
         self.payloads = list(payloads)
+        # One bit per column, frame per row. Column i is bit i of the little-endian integer (byte i // 8, bit i % 8),
+        # matching self.little, so counting flips down a column is the same as the integer-XOR walk it replaces.
+        if payloads:
+            matrix = np.frombuffer(b''.join(payloads), dtype=np.uint8).reshape(len(payloads), self.length)
+            self.bits = np.unpackbits(matrix, axis=1, bitorder='little')
+        else:
+            self.bits = np.zeros((0, self.size), dtype=np.uint8)
 
     def subset(self, indices: Sequence[int]) -> '_Data':
         return _Data([self.payloads[index] for index in indices])
 
     def __len__(self) -> int:
         return len(self.little)
+
+    def flips(self, rows: Optional[np.ndarray] = None) -> np.ndarray:
+        """Per bit, the number of frame-to-frame transitions that changed it (over `rows` of the bit matrix, in the
+        given order, or all frames)."""
+        bits = self.bits if rows is None else self.bits[rows]
+        if len(bits) < 2:
+            return np.zeros(self.size, dtype=np.int64)
+        return np.count_nonzero(bits[1:] != bits[:-1], axis=0)
 
     def raw(self, field: BitField) -> List[int]:
         """Unsigned raw values of a field."""
@@ -122,16 +138,13 @@ class _Data:
         return [(value >> shift) & mask for value in self.big]
 
     def rates(self, mask: int = -1) -> List[float]:
-        """Per bit, the share of frame-to-frame transitions changing it."""
-        counts = [0] * self.size
-        for previous, value in zip(self.little, self.little[1:], strict=False):
-            difference = (previous ^ value) & mask
-            while difference:
-                lowest = difference & -difference
-                counts[lowest.bit_length() - 1] += 1
-                difference ^= lowest
+        """Per bit, the share of frame-to-frame transitions changing it (0 for bits excluded by `mask`)."""
+        counts = self.flips()
+        if mask != -1:
+            keep = np.array([(mask >> bit) & 1 for bit in range(self.size)], dtype=bool)
+            counts = np.where(keep, counts, 0)
         transitions = max(1, len(self.little) - 1)
-        return [count / transitions for count in counts]
+        return (counts / transitions).tolist()
 
 
 def _signed(values: List[int], length: int) -> List[int]:
@@ -397,21 +410,16 @@ def _multiplexer(data: _Data, key: IdKey, excluded: Set[int]) -> Optional[Tuple[
             if changes < 0.3 * (len(raw) - 1):
                 continue
             others = [bit for bit in range(data.size) if bit not in excluded and bit not in candidate.bits]
-            within = [0] * data.size
+            within = np.zeros(data.size, dtype=np.int64)
             transitions = 0
-            little = data.little
             for indices in groups.values():
                 if len(indices) < MUX_MIN_GROUP:
                     continue
                 transitions += len(indices) - 1
-                for a, b in zip(indices, indices[1:], strict=False):
-                    difference = little[a] ^ little[b]
-                    while difference:
-                        lowest = difference & -difference
-                        within[lowest.bit_length() - 1] += 1
-                        difference ^= lowest
+                within += data.flips(np.asarray(indices))
             if transitions == 0:
                 continue
+            within = within.tolist()
             # Bits changing at random within the groups too (e.g. the low byte of a fast signal) tell nothing
             informative = [bit for bit in others if overall[bit] > 0.05 and within[bit] / transitions < 0.4]
             if not informative:

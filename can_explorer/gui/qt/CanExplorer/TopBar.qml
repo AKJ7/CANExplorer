@@ -12,8 +12,10 @@ Rectangle {
     // Shown instead of the connection, e.g. "Database editor"
     property string title: ""
     property var notifications: []
+    property bool sidebarCollapsed: false
 
     signal clearNotifications()
+    signal toggleSidebar()
 
     color: Theme.background
     implicitHeight: 72
@@ -66,9 +68,19 @@ Rectangle {
 
     RowLayout {
         anchors.fill: parent
-        anchors.leftMargin: 28
+        anchors.leftMargin: 16
         anchors.rightMargin: 20
         spacing: 14
+
+        // Collapse or reveal the sidebar (also Ctrl+\): ⇤ pushes it shut, ⇥ reveals it
+        WindowButton {
+            text: root.sidebarCollapsed ? "▢" : "◧"
+            hoverColor: Theme.alpha(Theme.text, 0.12)
+            onClicked: root.toggleSidebar()
+            ToolTip.visible: hovered
+            ToolTip.delay: 600
+            ToolTip.text: root.sidebarCollapsed ? qsTr("Show sidebar (Ctrl+\\)") : qsTr("Hide sidebar (Ctrl+\\)")
+        }
 
         // The breadcrumb and the filter shrink (eliding) when the window is narrow
         Label {
@@ -142,6 +154,15 @@ Rectangle {
             ToolTip.visible: hovered
             ToolTip.text: qsTr("CANExplorer %1 is available").arg(connectionManager.updates.version)
             onClicked: Actions.checkForUpdates.trigger()
+        }
+
+        // Help for the current view
+        ToolButton {
+            text: "?"
+            font.pixelSize: 18
+            ToolTip.visible: hovered
+            ToolTip.text: qsTr("Help for this view (F1)")
+            onClicked: Actions.help.trigger()
         }
 
         // Notifications

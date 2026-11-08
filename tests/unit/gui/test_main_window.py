@@ -7,6 +7,7 @@ from PyQt6.QtCore import QCoreApplication, QEvent, QObject
 
 from can_explorer.gui.application_metadata import ApplicationMetadata
 from can_explorer.gui.connection_manager import ConnectionManager
+from can_explorer.gui.help import HelpController
 from can_explorer.main_application import create_qml_engine
 
 
@@ -15,8 +16,9 @@ def window(qapp, qtbot):
     warnings = []
     metadata = ApplicationMetadata(parent=qapp)
     manager = ConnectionManager(parent=qapp)
+    help_controller = HelpController(parent=qapp)
     engine = create_qml_engine(
-        {'metadata': metadata, 'connectionManager': manager},
+        {'metadata': metadata, 'connectionManager': manager, 'helpController': help_controller},
         lambda errors: warnings.extend(error.toString() for error in errors),
     )
     yield engine, manager, warnings
@@ -76,6 +78,7 @@ def test_dashboard_pages_and_themes_render_without_warnings(window, qtbot):
         'xcp',
         'gmlan',
         'simulation',
+        'restbus',
         'tests',
     ]
     for page in pages:
@@ -407,6 +410,117 @@ def test_sidebar_resizing_and_dialog_dragging(window, qtbot):
     assert (round(dialog.property('x')), round(dialog.property('y'))) == (round(x), round(y))
     dialog.close()
     qtbot.wait(100)
+    assert warnings == []
+
+
+def test_sidebar_collapse(window, qtbot):
+    from PyQt6 import sip
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtQuick import QQuickWindow
+    from PyQt6.QtTest import QTest
+
+    engine, manager, warnings = window
+    view = sip.cast(engine.rootObjects()[0], QQuickWindow)
+    view.resize(1200, 800)
+    view.show()
+    qtbot.wait(100)
+    sidebar = next(item for item in _visual_items(view) if item.metaObject().className().startswith('Sidebar'))
+    assert round(sidebar.width()) == 232
+
+    QTest.keyClick(view, Qt.Key.Key_Backslash, Qt.KeyboardModifier.ControlModifier)  # Collapse to the icon rail
+    qtbot.waitUntil(lambda: round(sidebar.width()) == 64)
+    assert manager.app_state.sidebar_collapsed() is True
+    # The logo and the view icons stay visible on the rail (only the text labels are hidden).
+    logo = next(item for item in _visual_items(view) if item.metaObject().className().startswith('Logo'))
+    assert logo.isVisible() and logo.width() > 0
+
+    QTest.keyClick(view, Qt.Key.Key_Backslash, Qt.KeyboardModifier.ControlModifier)  # Reveal, back to its width
+    qtbot.waitUntil(lambda: round(sidebar.width()) == 232)
+    assert manager.app_state.sidebar_collapsed() is False
+    assert warnings == []
+
+
+def test_help_panel_opens_and_renders(window, qtbot):
+    engine, _, warnings = window
+    help_controller = engine.rootContext().contextProperty('helpController')
+
+    # A page with an admonition, images and cross-links exercises the Markdown rendering path.
+    help_controller.open('user-guide/trace-and-overview.md')
+    qtbot.wait(150)
+    assert help_controller.property('visible') is True
+    assert help_controller.property('title') == 'Trace and overview'
+
+    help_controller.navigate('user-guide/ethernet.md')
+    qtbot.wait(50)
+    assert help_controller.property('can_go_back') is True
+    help_controller.back()
+    assert help_controller.property('path') == 'user-guide/trace-and-overview.md'
+
+    help_controller.close()
+    qtbot.wait(50)
+    assert help_controller.property('visible') is False
+    assert warnings == []
+
+
+def test_welcome_page_on_title_click(window, qtbot):
+    from PyQt6 import sip
+    from PyQt6.QtCore import QPoint, Qt
+    from PyQt6.QtQuick import QQuickWindow
+    from PyQt6.QtTest import QTest
+
+    engine, manager, warnings = window
+    view = sip.cast(engine.rootObjects()[0], QQuickWindow)
+    view.resize(1200, 800)
+    view.show()
+    qtbot.wait(100)
+    root = engine.rootObjects()[0]
+    welcome = next(item for item in _visual_items(view) if item.metaObject().className().startswith('WelcomeView'))
+
+    manager.add_connection({'name': 'Bus', 'interface': 'VirtualBus', 'channel': f'qml-{uuid.uuid4().hex}'})
+    qtbot.wait(100)
+    assert not welcome.property('visible')  # The connection is shown, not the welcome page
+
+    # Click the logo/title in the sidebar header
+    QTest.mouseClick(view, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, QPoint(40, 40))
+    qtbot.wait(50)
+    assert root.property('tool') == 'welcome' and welcome.property('visible')
+
+    # Adding another connection leaves the welcome page and shows the new connection
+    manager.add_connection({'name': 'Bus2', 'interface': 'VirtualBus', 'channel': f'qml-{uuid.uuid4().hex}'})
+    qtbot.wait(100)
+    assert root.property('tool') == '' and not welcome.property('visible')
+    assert warnings == []
+
+
+def test_switch_connection_shortcuts(window, qtbot):
+    from PyQt6 import sip
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtQuick import QQuickWindow
+    from PyQt6.QtTest import QTest
+
+    engine, manager, warnings = window
+    view = sip.cast(engine.rootObjects()[0], QQuickWindow)
+    view.resize(1200, 800)
+    view.show()
+    for name in ('A', 'B', 'C'):
+        manager.add_connection({'name': name, 'interface': 'VirtualBus', 'channel': f'qml-{uuid.uuid4().hex}'})
+    qtbot.wait(100)
+    view.setProperty('selectedIndex', 0)
+    view.setProperty('tool', 'multi-bus')  # Switching also leaves any open tool
+
+    ctrl = Qt.KeyboardModifier.ControlModifier
+    QTest.keyClick(view, Qt.Key.Key_PageDown, ctrl)  # Next connection
+    qtbot.waitUntil(lambda: view.property('selectedIndex') == 1)
+    assert view.property('tool') == ''
+
+    QTest.keyClick(view, Qt.Key.Key_PageDown, ctrl)
+    qtbot.waitUntil(lambda: view.property('selectedIndex') == 2)
+
+    QTest.keyClick(view, Qt.Key.Key_PageDown, ctrl)  # Wraps past the last to the first
+    qtbot.waitUntil(lambda: view.property('selectedIndex') == 0)
+
+    QTest.keyClick(view, Qt.Key.Key_PageUp, ctrl)  # Previous wraps to the last
+    qtbot.waitUntil(lambda: view.property('selectedIndex') == 2)
     assert warnings == []
 
 
@@ -843,6 +957,13 @@ def test_command_palette_and_language(window, qtbot):
     titles = set(commands())
     assert {('View', 'Bus health'), ('Tool', 'Compare recordings'), ('Theme', 'Dark')} <= titles
     assert {('Command', 'New Connection…'), ('Connection', 'Connect Vehicle'), ('Language', 'Deutsch')} <= titles
+    assert ('Command', 'Collapse the sidebar') in titles  # The Ctrl+\ shortcut is offered too
+
+    # Connection-switching commands appear once there is more than one connection
+    assert not {('Connection', 'Next connection'), ('Connection', 'Previous connection')} & titles
+    manager.add_connection({'name': 'Trailer', 'interface': 'VirtualBus', 'channel': f'qml-{uuid.uuid4().hex}'})
+    qtbot.wait(50)
+    assert {('Connection', 'Next connection'), ('Connection', 'Previous connection')} <= set(commands())
 
     palette = next(
         item for item in root.findChildren(QObject) if item.metaObject().className().startswith('CommandPalette')

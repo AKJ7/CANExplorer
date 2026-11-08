@@ -35,6 +35,21 @@ def udp_frame(src_ip, dst_ip, sport, dport, payload):
     )
 
 
+def ipv4_frame(src_ip, dst_ip, protocol, payload):
+    return eth(
+        '11:22:33:44:55:66', 'aa:bb:cc:dd:ee:ff', ethernet.ETH_IPV4, ipv4(src_ip, dst_ip, protocol, payload) + payload
+    )
+
+
+def ipv6_frame(src_ip, dst_ip, next_header, payload):
+    header = (
+        struct.pack('>IHBB', 0x60000000, len(payload), next_header, 64)
+        + socket.inet_pton(socket.AF_INET6, src_ip)
+        + socket.inet_pton(socket.AF_INET6, dst_ip)
+    )
+    return eth('11:22:33:44:55:66', 'aa:bb:cc:dd:ee:ff', ethernet.ETH_IPV6, header + payload)
+
+
 SOMEIP = struct.pack('>IIIBBBB', (0x1234 << 16) | 0x0045, 8, 0, 0x01, 0x01, 0x00, 0x00)  # Request, no payload
 
 
@@ -59,6 +74,36 @@ def test_decode_gptp_and_avtp():
     assert avtp.protocol == 'AVTP' and 'AAF' in avtp.info and 'stream' in avtp.info
 
 
+def test_decode_acf_can_over_avtp():
+    # An ACF_CAN message (0x01), 6 quadlets = 24 bytes: 16-byte header + an 8-byte CAN payload, EFF set.
+    acf = bytearray(24)
+    acf[0], acf[1] = (0x01 << 1) | (6 >> 8), 6 & 0xFF
+    acf[2] = 1 << 3  # eff
+    struct.pack_into('>I', acf, 12, 0x1ABCDEF)
+    acf[16:24] = bytes(range(8))
+    tscf = bytearray(24)  # TSCF (0x05) version-0 header
+    tscf[0] = 0x05
+    struct.pack_into('>H', tscf, 20, len(acf))  # stream_data_length
+    packet = ethernet.decode(eth('91:e0:f0:00:00:01', '00:11:22:33:44:55', ethernet.ETH_AVTP, bytes(tscf) + bytes(acf)))
+    assert packet.protocol == 'ACF-CAN' and '1ABCDEF' in packet.info
+    (frame,) = packet.can_frames
+    assert frame.can_id == 0x1ABCDEF and frame.extended and frame.data == bytes(range(8))
+
+
+def test_decode_acf_lin_over_avtp():
+    # An ACF_LIN message (0x03), 4 quadlets = 16 bytes: 12-byte header + a 4-byte LIN payload.
+    acf = bytearray(16)
+    acf[0], acf[1] = (0x03 << 1) | (4 >> 8), 4 & 0xFF
+    acf[3] = 0x3C  # lin identifier
+    acf[12:16] = b'\xde\xad\xbe\xef'
+    tscf = bytearray(24)
+    tscf[0] = 0x05
+    struct.pack_into('>H', tscf, 20, len(acf))
+    packet = ethernet.decode(eth('91:e0:f0:00:00:01', '00:11:22:33:44:55', ethernet.ETH_AVTP, bytes(tscf) + bytes(acf)))
+    assert packet.protocol == 'ACF-LIN' and 'LIN' in packet.info and 'DEADBEEF' in packet.info
+    assert packet.can_frames == []  # LIN is not fed to the CAN views
+
+
 def test_decode_arp_and_vlan():
     arp = (
         struct.pack('>HHBBH', 1, 0x0800, 6, 4, 1)
@@ -79,7 +124,7 @@ def test_decode_arp_and_vlan():
 
 
 def test_plain_udp_is_not_mistaken_for_someip():
-    packet = ethernet.decode(udp_frame('10.0.0.1', '10.0.0.2', 1234, 53, b'\x00\x01hello world payload'))
+    packet = ethernet.decode(udp_frame('10.0.0.1', '10.0.0.2', 1234, 12345, b'\x00\x01hello world payload'))
     assert packet.protocol == 'UDP' and packet.l4 == 'UDP'
 
 
@@ -206,3 +251,166 @@ def test_stream_decoder_tracks_services():
     service = decoder.services[(0x1234, 0x0001)]
     assert service.major_version == 2 and service.minor_version == 7
     assert '192.168.1.5:30509/UDP' in service.endpoints
+
+
+def test_decode_dhcp():
+    packet = ethernet.decode(udp_frame('0.0.0.0', '255.255.255.255', 68, 67, b'\x01' + bytes(20)))
+    assert packet.protocol == 'DHCP' and packet.info == 'request'
+
+
+def test_decode_dns_and_mdns():
+    question = b'\x04host\x05local\x00\x00\x01\x00\x01'  # host.local, type A, class IN
+    header = struct.pack('>HHHHHH', 0x1234, 0x0100, 1, 0, 0, 0)  # query, 1 question
+    packet = ethernet.decode(udp_frame('10.0.0.1', '10.0.0.2', 40000, 53, header + question))
+    assert packet.protocol == 'DNS' and packet.info == 'query A host.local'
+    mdns = ethernet.decode(udp_frame('10.0.0.1', '224.0.0.251', 5353, 5353, header + question))
+    assert mdns.protocol == 'mDNS'
+
+
+def test_decode_igmp():
+    packet = ethernet.decode(ipv4_frame('10.0.0.1', '224.0.0.1', 2, b'\x11\x64' + bytes(6)))
+    assert packet.protocol == 'IGMP' and packet.info == 'membership query'
+
+
+def test_decode_ipsec_esp():
+    packet = ethernet.decode(ipv4_frame('10.0.0.1', '10.0.0.2', 50, struct.pack('>I', 0xDEADBEEF) + bytes(8)))
+    assert packet.protocol == 'IPsec ESP' and packet.info == 'SPI 0xDEADBEEF'
+
+
+def test_decode_mld():
+    packet = ethernet.decode(ipv6_frame('fe80::1', 'ff02::16', 58, bytes([143]) + bytes(20)))
+    assert packet.protocol == 'MLD'
+
+
+def test_decode_macsec():
+    sectag = bytes([0x0C, 0x00]) + struct.pack('>I', 42)  # TCI with E+C bits, SL 0, PN 42
+    packet = ethernet.decode(eth('11:22:33:44:55:66', 'aa:bb:cc:dd:ee:ff', ethernet.ETH_MACSEC, sectag + bytes(16)))
+    assert packet.protocol == 'MACsec' and 'PN 42' in packet.info and 'encrypted' in packet.info
+
+
+def test_decode_srp_protocols():
+    assert (
+        ethernet.decode(eth('01:80:c2:00:00:21', 'aa:bb:cc:dd:ee:ff', ethernet.ETH_MSRP, bytes(8))).protocol == 'MSRP'
+    )
+    assert (
+        ethernet.decode(eth('01:80:c2:00:00:21', 'aa:bb:cc:dd:ee:ff', ethernet.ETH_MVRP, bytes(8))).protocol == 'MVRP'
+    )
+
+
+def test_decode_rtag_wraps_inner_frame():
+    arp = (
+        struct.pack('>HHBBH', 1, 0x0800, 6, 4, 1)
+        + bytes(6)
+        + socket.inet_aton('10.0.0.1')
+        + bytes(6)
+        + socket.inet_aton('10.0.0.2')
+    )
+    rtag = (
+        bytes([0, 0]) + struct.pack('>H', 7) + struct.pack('>H', ethernet.ETH_ARP)
+    )  # reserved, seq 7, inner EtherType
+    packet = ethernet.decode(eth('ff:ff:ff:ff:ff:ff', 'aa:bb:cc:dd:ee:ff', ethernet.ETH_RTAG, rtag + arp))
+    assert packet.protocol == 'ARP' and packet.info.startswith('R-TAG 7')
+
+
+def test_decode_maap():
+    maap = bytes([0xFE, 0x01]) + bytes(20)  # MAAP subtype, message type 1 = probe
+    packet = ethernet.decode(eth('91:e0:f0:00:00:01', 'aa:bb:cc:dd:ee:ff', ethernet.ETH_AVTP, maap))
+    assert packet.protocol == 'AVTP' and packet.info == 'MAAP probe'
+
+
+def test_decode_udp_nm_with_configured_port():
+    payload = bytes([0x05, 0x01, 0xAA, 0xBB])  # node 0x05, control = RepeatMessage, user data
+    frame = udp_frame('10.0.0.1', '10.0.0.2', 40000, 49152, payload)
+    assert ethernet.decode(frame).protocol == 'UDP'  # Not NM without a configured port
+    packet = ethernet.decode(frame, nm_port=49152)
+    assert packet.protocol == 'UDP-NM'
+    assert packet.info.startswith('NM node 0x05') and 'RepeatMessage' in packet.info
+    # The StreamDecoder carries the port too.
+    assert ethernet.StreamDecoder(nm_port=49152).decode(frame).protocol == 'UDP-NM'
+
+
+def _arp_payload(opcode, sender_ip, target_ip):
+    return (
+        struct.pack('>HHBBH', 1, 0x0800, 6, 4, opcode)
+        + bytes.fromhex('aabbccddeeff')
+        + socket.inet_aton(sender_ip)
+        + bytes(6)
+        + socket.inet_aton(target_ip)
+    )
+
+
+def _child(node, label):
+    return next(child for child in node.children if child.label == label)
+
+
+def test_dissect_ipv4_udp_someip():
+    frame = udp_frame('10.0.0.1', '10.0.0.2', 30490, 30490, SOMEIP)
+    root = ethernet.dissect(frame)
+    assert [child.label for child in root.children] == ['Ethernet II', 'IPv4', 'UDP', 'SOME/IP']
+    eth_node = _child(root, 'Ethernet II')
+    assert _child(eth_node, 'Source').value == 'aa:bb:cc:dd:ee:ff'
+    ipv4_node = _child(root, 'IPv4')
+    assert _child(ipv4_node, 'Destination').value == '10.0.0.2'
+    assert _child(ipv4_node, 'Protocol').value.startswith('17')
+    udp_node = _child(root, 'UDP')
+    assert _child(udp_node, 'Destination port').value == '30490'
+    # The byte span is recorded so the GUI can highlight it: the IPv4 source sits 12 bytes into the IP header.
+    assert _child(ipv4_node, 'Source').offset == 14 + 12 and _child(ipv4_node, 'Source').length == 4
+
+
+def test_dissect_arp():
+    frame = eth('ff:ff:ff:ff:ff:ff', 'aa:bb:cc:dd:ee:ff', ethernet.ETH_ARP, _arp_payload(1, '10.0.0.1', '10.0.0.2'))
+    root = ethernet.dissect(frame)
+    arp_node = _child(root, 'ARP')
+    assert _child(arp_node, 'Opcode').value == 'request'
+    assert _child(arp_node, 'Sender IP').value == '10.0.0.1'
+    assert _child(arp_node, 'Target IP').value == '10.0.0.2'
+
+
+def _avtp_stream_frame(subtype, stream_id, sequence):
+    """An AVTP stream frame (common stream header): subtype, sequence and 8-byte stream id."""
+    payload = bytes([subtype, 0, sequence & 0xFF, 0]) + stream_id + bytes(12)
+    return eth('91:e0:f0:00:00:01', 'aa:bb:cc:dd:ee:ff', ethernet.ETH_AVTP, payload)
+
+
+def test_avtp_stream_stats_detects_loss():
+    sid = bytes.fromhex('0011223344556677')
+    frames = [
+        ethernet.decode(_avtp_stream_frame(0x02, sid, seq), timestamp=i * 0.1) for i, seq in enumerate([0, 1, 2, 5, 6])
+    ]
+    (stat,) = ethernet.avtp_stream_stats(frames)
+    assert stat.stream_id == '0011223344556677' and stat.subtype_name.startswith('AAF')
+    assert stat.packets == 5 and stat.lost == 2  # sequence 3 and 4 missing
+    assert stat.expected == 7 and abs(stat.loss_percent - 100 * 2 / 7) < 0.01
+    assert stat.rate_hz > 0
+
+
+def test_avtp_stream_stats_duplicates_reorder_and_wrap():
+    sid = bytes.fromhex('aabbccddeeff0011')
+    frames = [ethernet.decode(_avtp_stream_frame(0x02, sid, seq)) for seq in (254, 255, 0, 0, 5, 2)]
+    (stat,) = ethernet.avtp_stream_stats(frames)
+    # 254->255->0 wrap cleanly; 0->0 duplicate; 0->5 loses 1..4 (4 lost); 5->2 is a late/reordered frame.
+    assert stat.packets == 6 and stat.lost == 4 and stat.duplicates == 1 and stat.reordered == 1
+
+
+def test_avtp_stream_stats_separates_streams():
+    a, b = bytes.fromhex('1111111111111111'), bytes.fromhex('2222222222222222')
+    frames = [
+        ethernet.decode(_avtp_stream_frame(0x02, a, 0)),
+        ethernet.decode(_avtp_stream_frame(0x03, b, 10)),
+        ethernet.decode(_avtp_stream_frame(0x02, a, 1)),
+        ethernet.decode(udp_frame('10.0.0.1', '10.0.0.2', 1, 2, b'x')),  # non-AVTP ignored
+    ]
+    stats = {stat.stream_id: stat for stat in ethernet.avtp_stream_stats(frames)}
+    assert set(stats) == {a.hex(), b.hex()}
+    assert stats[a.hex()].packets == 2 and stats[b.hex()].subtype == 0x03
+
+
+def test_dissect_vlan_tagged_frame():
+    inner = struct.pack('>H', ethernet.ETH_ARP) + _arp_payload(2, '10.0.0.9', '10.0.0.1')
+    tci = (3 << 13) | 100  # priority 3, VLAN 100
+    frame = eth('ff:ff:ff:ff:ff:ff', 'aa:bb:cc:dd:ee:ff', ethernet.ETH_VLAN, struct.pack('>H', tci) + inner)
+    root = ethernet.dissect(frame)
+    vlan_node = _child(root, '802.1Q VLAN')
+    assert _child(vlan_node, 'VLAN id').value == '100'
+    assert [child.label for child in root.children] == ['Ethernet II', '802.1Q VLAN', 'ARP']

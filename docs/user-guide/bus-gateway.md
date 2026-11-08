@@ -53,10 +53,12 @@ from can_explorer.core.gateway import Gateway, GatewayRule
 
 sessions = {'A': session_a, 'B': session_b}
 gateway = Gateway(sessions.get)
-gateway.set_rules([
-    GatewayRule('powertrain', 'A', 'B', MessageFilter.parse('100-2FF')),
-    GatewayRule('obd', 'A', 'B', MessageFilter.parse('7DF'), new_id=0x600, min_interval=0.1),
-])
+gateway.set_rules(
+    [
+        GatewayRule('powertrain', 'A', 'B', MessageFilter.parse('100-2FF')),
+        GatewayRule('obd', 'A', 'B', MessageFilter.parse('7DF'), new_id=0x600, min_interval=0.1),
+    ]
+)
 gateway.start()
 ...
 print(gateway.rules[0].forwarded, gateway.rules[0].dropped)

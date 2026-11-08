@@ -4,11 +4,14 @@ import pytest
 
 from can_explorer.core.someip_serialization import (
     ArrayType,
+    BitSubfield,
+    Bitfield,
     Scalar,
     SerializationError,
     SomeIpDescription,
     StringType,
     Struct,
+    UnionType,
     deserialize,
     flatten,
 )
@@ -66,6 +69,68 @@ def test_too_short_payload_raises():
         deserialize(b'\x01', Struct('S', [Scalar('a', 'uint32')]))
     with pytest.raises(SerializationError):
         Scalar('x', 'not_a_type')
+
+
+def _tag(wire_type, data_id):
+    return ((wire_type << 12) | data_id).to_bytes(2, 'big')
+
+
+def test_tlv_optional_members_absent_and_out_of_order():
+    s = Struct(
+        'S',
+        [
+            Scalar('speed', 'uint16', data_id=1),
+            Scalar('mode', 'uint8', data_id=2),
+            StringType('name', 'utf-8', length_field_bits=32, data_id=3),
+        ],
+    )
+    # mode (wire 0) comes before speed (wire 1); name (id 3) is omitted entirely.
+    payload = _tag(0, 2) + bytes([0x07]) + _tag(1, 1) + bytes([0x0F, 0xA0])
+    assert deserialize(payload, s) == {'mode': 0x07, 'speed': 0x0FA0}
+
+
+def test_tlv_skips_unknown_member():
+    s = Struct('S', [Scalar('speed', 'uint16', data_id=1)])
+    unknown = _tag(5, 9) + bytes([3]) + b'\xaa\xbb\xcc'  # wire type 5: a 1-byte length field, id 9 not in the model
+    payload = unknown + _tag(1, 1) + bytes([0x12, 0x34])
+    assert deserialize(payload, s) == {'speed': 0x1234}
+
+
+def test_tlv_complex_member_bounded_by_its_length():
+    inner = Struct('inner', [Scalar('a', 'uint8'), Scalar('b', 'uint8')], data_id=5)
+    s = Struct('S', [inner])
+    # wire type 6 (2-byte length) says 3 bytes; the struct reads 2, the extra 0x99 is bounded out.
+    payload = _tag(6, 5) + (3).to_bytes(2, 'big') + bytes([0x01, 0x02, 0x99])
+    assert deserialize(payload, s) == {'inner': {'a': 1, 'b': 2}}
+
+
+def test_union_selects_member_and_skips_padding():
+    union = UnionType('u', [Scalar('as_int', 'uint32'), Scalar('as_byte', 'uint8')])
+    s = Struct('S', [union])
+    as_int = (4).to_bytes(4, 'big') + (1).to_bytes(4, 'big') + (0x11223344).to_bytes(4, 'big')
+    assert deserialize(as_int, s) == {'u': {'as_int': 0x11223344}}
+    as_byte = (4).to_bytes(4, 'big') + (2).to_bytes(4, 'big') + bytes([0x7F, 0, 0, 0])  # 3 padding bytes
+    assert deserialize(as_byte, s) == {'u': {'as_byte': 0x7F}}
+    null = (0).to_bytes(4, 'big') + (0).to_bytes(4, 'big')  # type 0 = null
+    assert deserialize(null, s) == {'u': {}}
+
+
+def test_bitfield_unpacks_msb_first():
+    bitfield = Bitfield(
+        'flags',
+        'uint16',
+        [BitSubfield('version', 4), BitSubfield('count', 10), BitSubfield('ready', 1), BitSubfield('err', 1)],
+    )
+    s = Struct('S', [bitfield])
+    value = (0x3 << 12) | (5 << 2) | (1 << 1) | 0
+    decoded = deserialize(value.to_bytes(2, 'big'), s)
+    assert decoded == {'flags': {'version': 3, 'count': 5, 'ready': 1, 'err': 0}}
+    assert flatten(decoded) == {'flags.version': 3, 'flags.count': 5, 'flags.ready': 1, 'flags.err': 0}
+
+
+def test_bitfield_signed_subfield():
+    bitfield = Bitfield('b', 'uint8', [BitSubfield('hi', 4), BitSubfield('lo', 4, signed=True)])
+    assert deserialize(bytes([0x2F]), Struct('S', [bitfield])) == {'b': {'hi': 2, 'lo': -1}}
 
 
 def test_description_decode():

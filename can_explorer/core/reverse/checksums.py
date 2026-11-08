@@ -8,7 +8,9 @@ sums likewise, with the difference instead.
 
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Callable, List, Optional, Sequence, Tuple
+
+import numpy as np
 
 MIN_FRAMES = 20
 MIN_MATCH = 0.98  # Share of the frames that must match (a few corrupted or late frames are tolerated)
@@ -75,40 +77,42 @@ class ChecksumMatch:
         return f'{self.algorithm}, constant 0x{self.constant:02X}'
 
 
-def _algorithms() -> List[Tuple[str, Callable[[Sequence[int]], int], Callable[[int, int], int]]]:
-    """(name, function of the other bytes, how the checksum byte and the function's result give the constant)."""
+# (name, function of the other-byte columns, how the checksum byte and the result give the constant, is a CRC).
+# Each works on a whole column of frames at once: `function` takes the (frames, other-bytes) matrix and returns one
+# value per frame, and `constant_of` combines the per-frame checksum byte and result into the per-frame constant.
+_BatchAlgorithm = Tuple[str, Callable[[np.ndarray], np.ndarray], Callable[[np.ndarray, np.ndarray], np.ndarray], bool]
+
+
+def _batch_algorithms() -> List[_BatchAlgorithm]:
     xor = lambda value, result: value ^ result  # noqa: E731
 
-    def crc(algorithm: Crc8):
-        table = _table(algorithm.polynomial, algorithm.reflected)
+    def crc(algorithm: Crc8) -> Callable[[np.ndarray], np.ndarray]:
+        table = np.asarray(_table(algorithm.polynomial, algorithm.reflected), dtype=np.uint8)
 
-        def compute(data: Sequence[int]) -> int:
-            value = 0
-            for byte in data:
-                value = table[value ^ byte]
+        def compute(columns: np.ndarray) -> np.ndarray:
+            value = np.zeros(columns.shape[0], dtype=np.uint8)
+            for index in range(columns.shape[1]):
+                value = table[value ^ columns[:, index]]
             return value
 
         return compute
 
-    def xor_all(data: Sequence[int]) -> int:
-        value = 0
-        for byte in data:
-            value ^= byte
-        return value
+    def summed(columns: np.ndarray) -> np.ndarray:
+        return (columns.sum(axis=1, dtype=np.int64) & 0xFF).astype(np.int64)
 
-    result = [(algorithm.name, crc(algorithm), xor) for algorithm in CRCS]
-    result.append(('XOR of the bytes', xor_all, xor))
-    result.append(('Sum of the bytes', lambda data: sum(data) & 0xFF, lambda value, result: (value - result) & 0xFF))
-    result.append(('Inverted sum', lambda data: sum(data) & 0xFF, lambda value, result: (value + result) & 0xFF))
+    result: List[_BatchAlgorithm] = [(algorithm.name, crc(algorithm), xor, True) for algorithm in CRCS]
+    result.append(
+        ('XOR of the bytes', lambda columns: np.bitwise_xor.reduce(columns, axis=1).astype(np.int64), xor, False)
+    )
+    result.append(('Sum of the bytes', summed, lambda value, result: (value - result) & 0xFF, False))
+    result.append(('Inverted sum', summed, lambda value, result: (value + result) & 0xFF, False))
     return result
 
 
-def _dominant(values: List[int]) -> Tuple[int, float]:
-    counts: Dict[int, int] = {}
-    for value in values:
-        counts[value] = counts.get(value, 0) + 1
-    value, count = max(counts.items(), key=lambda item: item[1])
-    return value, count / len(values)
+def _dominant(values: np.ndarray) -> Tuple[int, float]:
+    uniques, counts = np.unique(values, return_counts=True)
+    index = int(np.argmax(counts))
+    return int(uniques[index]), int(counts[index]) / len(values)
 
 
 def find_checksums(payloads: Sequence[bytes], sample: int = 400) -> List[ChecksumMatch]:
@@ -121,41 +125,47 @@ def find_checksums(payloads: Sequence[bytes], sample: int = 400) -> List[Checksu
     if len(payloads) < MIN_FRAMES or not payloads[0]:
         return []
     length = len(payloads[0])
-    changing = [len({payload[index] for payload in payloads}) > 1 for index in range(length)]
-    algorithms = _algorithms()
+    matrix = np.frombuffer(b''.join(payloads), dtype=np.uint8).reshape(len(payloads), length)
+    changing = [bool((matrix[:, index] != matrix[0, index]).any()) for index in range(length)]
+    algorithms = _batch_algorithms()
     matches = []
     for byte in range(length):
         others = [index for index in range(length) if index != byte]
         changing_others = sum(changing[index] for index in others)
         if not changing[byte] or changing_others == 0:
             continue
-        data = [[payload[index] for index in others] for payload in payloads]
-        targets = [payload[byte] for payload in payloads]
-        for name, function, constant_of in algorithms:
-            if changing_others < 2 and not name.startswith('CRC'):
+        columns = matrix[:, others]
+        targets = matrix[:, byte].astype(np.int64)
+        for name, function, constant_of, is_crc in algorithms:
+            if changing_others < 2 and not is_crc:
                 continue
-            constants = [constant_of(target, function(row)) for target, row in zip(targets, data, strict=True)]
+            constants = np.asarray(constant_of(targets, function(columns).astype(np.int64)))
             constant, share = _dominant(constants)
             if share >= MIN_MATCH:
                 matches.append(ChecksumMatch(byte, name, constant, share=share))
                 break
             # AUTOSAR E2E profile 2: the data ID depends on the counter in the low nibble of another byte
-            found = _per_counter(constants, payloads, others) if name.startswith('CRC') else None
+            found = _per_counter(constants, matrix, others) if is_crc else None
             if found is not None:
                 matches.append(ChecksumMatch(byte, name, None, counter_byte=found, share=1.0))
                 break
     return matches
 
 
-def _per_counter(constants: List[int], payloads: List[bytes], others: List[int]) -> Optional[int]:
+def _per_counter(constants: np.ndarray, matrix: np.ndarray, others: List[int]) -> Optional[int]:
     for index in others:
-        groups: Dict[int, set] = {}
-        sizes: Dict[int, int] = {}
-        for constant, payload in zip(constants, payloads, strict=True):
-            counter = payload[index] & 0x0F
-            groups.setdefault(counter, set()).add(constant)
-            sizes[counter] = sizes.get(counter, 0) + 1
-        if len(groups) >= 4 and min(sizes.values()) >= 3 and all(len(values) == 1 for values in groups.values()):
-            if len({next(iter(values)) for values in groups.values()}) > 1:
-                return index
+        counter = matrix[:, index] & 0x0F
+        sizes: List[int] = []
+        representatives: List[int] = []
+        consistent = True
+        for value in np.unique(counter):
+            members = constants[counter == value]
+            distinct = np.unique(members)
+            if len(distinct) != 1:
+                consistent = False
+                break
+            sizes.append(len(members))
+            representatives.append(int(distinct[0]))
+        if consistent and len(sizes) >= 4 and min(sizes) >= 3 and len(set(representatives)) > 1:
+            return index
     return None

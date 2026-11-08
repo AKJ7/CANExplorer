@@ -7,8 +7,10 @@ SOMEIP-SERVICE-INTERFACE-DEPLOYMENT, which carries the SOME/IP service id and th
 the interface. This reader resolves those references and the data types (via SW-BASE-TYPE and
 IMPLEMENTATION-DATA-TYPE) and builds the serialization model.
 
-A subset is supported: scalars, fixed and variable arrays, strings and nested structures. Unions, optional (TLV)
-members, bit fields and application data types are not read; an argument whose type uses one is simply not decoded.
+A subset is supported: scalars, fixed and variable arrays, strings, nested structures and unions (an
+IMPLEMENTATION-DATA-TYPE with CATEGORY UNION). Optional (TLV) members, bit fields and application data types are
+not read from ARXML; the serialization core supports TLV and bit fields for hand-built descriptions, and the FIBEX
+reader reads TLV data IDs. An argument whose type uses an unsupported construct is simply not decoded.
 """
 
 from pathlib import Path
@@ -24,6 +26,7 @@ from can_explorer.core.someip_serialization import (
     SomeIpDescription,
     StringType,
     Struct,
+    UnionType,
 )
 
 # SW-BASE-TYPE size (bits) -> serialization scalar base, by encoding
@@ -91,11 +94,13 @@ class _Reader:
             return self.datatype(target, name) if target is not None else None
         if category == 'STRING':
             return StringType(name, 'utf-8')
-        if category == 'STRUCTURE':
+        if category in ('STRUCTURE', 'UNION'):
             members = [
                 self._member(child) for child in element.findall('SUB-ELEMENTS/IMPLEMENTATION-DATA-TYPE-ELEMENT')
             ]
-            return Struct(name, members) if all(member is not None for member in members) and members else None
+            if not members or not all(member is not None for member in members):
+                return None
+            return UnionType(name, members) if category == 'UNION' else Struct(name, members)
         if category == 'ARRAY':
             elements = element.findall('SUB-ELEMENTS/IMPLEMENTATION-DATA-TYPE-ELEMENT')
             if not elements:

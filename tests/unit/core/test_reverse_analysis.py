@@ -102,6 +102,26 @@ def test_find_checksums():
     assert find_checksums([bytes([1, 2])] * 5) == []  # Too few frames
 
 
+# The vectorised bit matrix behind the analysis
+
+
+def test_data_bit_matrix_and_rates():
+    from can_explorer.core.reverse.analysis import _Data
+
+    # Column i of the bit matrix is bit i of the little-endian integer (byte i // 8, bit i % 8).
+    data = _Data([b'\x01\x00', b'\x00\x80', b'\x01\x00'])
+    assert data.bits[0].tolist() == [1] + [0] * 7 + [0] * 8  # 0x0001: only bit 0 set
+    assert data.bits[1].tolist() == [0] * 15 + [1]  # 0x8000: only bit 15 set
+    # Per-bit transition counts and shares, computed by hand: bits 0 and 15 flip in both transitions.
+    assert data.flips().tolist() == [2] + [0] * 14 + [2]
+    assert data.rates() == [1.0] + [0.0] * 14 + [1.0]
+    # A mask zeroes the share of the bits it excludes (here every bit but bit 15).
+    assert data.rates(mask=1 << 15) == [0.0] * 15 + [1.0]
+    # Fewer than two frames: no transitions.
+    assert _Data([b'\xff']).rates() == [0.0] * 8
+    assert _Data([]).rates() == []
+
+
 # Classification and analysis
 
 

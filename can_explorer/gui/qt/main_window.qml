@@ -27,12 +27,42 @@ ApplicationWindow {
     // "doip", "someip", "ethernet" or "gateway"
     property string tool: ""
     property bool closeConfirmed: false
+    property int connectionCount: 0  // Tracks additions, to leave the welcome page when a connection is added
     // Dragged with the handle on the right edge of the sidebar
     property int sidebarWidth: Theme.sidebarWidth
     readonly property int maximumSidebarWidth: Math.min(connectionManager.app_state.max_sidebar_width, width / 2)
+    // Hidden entirely when collapsed (toggled from the top bar or Ctrl+\); the state is remembered
+    property bool sidebarCollapsed: false
+    // Icon-only rail width: wide enough for the 38px avatar plus the delegates' 12px horizontal padding each side
+    readonly property int collapsedSidebarWidth: 64
+    // True only while a collapse/reveal is animating, so the width animation does not also affect drag-resizing
+    property bool sidebarAnimating: false
+
+    function toggleSidebar() {
+        sidebarAnimating = true
+        sidebarCollapsed = !sidebarCollapsed
+        connectionManager.app_state.set_sidebar_collapsed(sidebarCollapsed)
+    }
 
     function currentView() {
         return tool === "" ? currentConnectionView : tool === "multi-bus" ? multiBusView : null
+    }
+
+    // Switch to the next (delta = +1) or previous (delta = -1) open connection, wrapping around, and leave any tool
+    // so the connection's view is shown. Used by the Ctrl+Tab / Ctrl+PageDown shortcuts.
+    function switchConnection(delta) {
+        const count = connectionManager.connections.length
+        if (count === 0)
+            return
+        const next = currentIndex < 0 ? (delta > 0 ? 0 : count - 1)
+                                      : (currentIndex + delta + count) % count
+        mainWindow.selectedIndex = next
+        mainWindow.tool = ""
+    }
+
+    // The help page that matches what is on screen (a tool, or the current connection view's page)
+    function currentHelpKey() {
+        return tool !== "" ? tool : (currentConnectionView ? currentConnectionView.page : "")
     }
 
     // Everything the command palette offers, for the current state of the window
@@ -46,10 +76,16 @@ ApplicationWindow {
             [Actions.openWorkspace, "Ctrl+Shift+O"], [Actions.saveWorkspace, "Ctrl+S"],
             [Actions.saveWorkspaceAs, "Ctrl+Shift+S"], [Actions.editDatabase, ""], [Actions.convertDatabase, ""],
             [Actions.copy, "Ctrl+C"], [Actions.selectAll, "Ctrl+A"], [Actions.preferences, ""],
-            [Actions.checkForUpdates, ""], [Actions.about, ""], [Actions.exit, "Ctrl+Q"],
+            [Actions.help, "F1"], [Actions.checkForUpdates, ""], [Actions.about, ""], [Actions.exit, "Ctrl+Q"],
         ]
         for (const [action, shortcut] of actions)
             add(qsTr("Command"), label(action), () => action.trigger(), shortcut, action.enabled)
+        add(qsTr("Command"), mainWindow.sidebarCollapsed ? qsTr("Reveal the sidebar") : qsTr("Collapse the sidebar"),
+            () => mainWindow.toggleSidebar(), "Ctrl+\\")
+        if (connectionManager.connections.length > 1) {
+            add(qsTr("Connection"), qsTr("Next connection"), () => mainWindow.switchConnection(1), "Ctrl+Tab")
+            add(qsTr("Connection"), qsTr("Previous connection"), () => mainWindow.switchConnection(-1), "Ctrl+Shift+Tab")
+        }
         const connection = mainWindow.currentConnection
         const view = mainWindow.currentConnectionView
         if (connection && view) {
@@ -111,6 +147,7 @@ ApplicationWindow {
 
     Component.onCompleted: {
         sidebarWidth = connectionManager.app_state.sidebar_width()
+        sidebarCollapsed = connectionManager.app_state.sidebar_collapsed()
         const geometry = connectionManager.app_state.window_geometry()
         if (geometry.length === 4) {
             x = geometry[0]
@@ -129,7 +166,12 @@ ApplicationWindow {
     }
 
     // The actions have no menu bar to register their shortcuts
+    Shortcut { sequence: "Ctrl+\\"; onActivated: mainWindow.toggleSidebar() }
     Shortcut { sequences: ["Ctrl+K", "Ctrl+Shift+P"]; onActivated: Actions.commandPalette.trigger() }
+    Shortcut { sequences: [StandardKey.HelpContents]; onActivated: Actions.help.trigger() }
+    // Switch between open connections (next / previous), like browser tabs
+    Shortcut { sequences: ["Ctrl+Tab", "Ctrl+PgDown"]; onActivated: mainWindow.switchConnection(1) }
+    Shortcut { sequences: ["Ctrl+Shift+Tab", "Ctrl+PgUp"]; onActivated: mainWindow.switchConnection(-1) }
     Shortcut { sequences: [StandardKey.New]; onActivated: Actions.newConnection.trigger() }
     Shortcut { sequences: [StandardKey.Open]; onActivated: Actions.openLogFile.trigger() }
     Shortcut { sequences: [StandardKey.Close]; enabled: Actions.closeConnection.enabled; onActivated: Actions.closeConnection.trigger() }
@@ -247,6 +289,7 @@ ApplicationWindow {
             pages: mainWindow.currentConnectionView ? mainWindow.currentConnectionView.pages : []
             currentPage: mainWindow.currentConnectionView ? mainWindow.currentConnectionView.page : ""
             currentTool: mainWindow.tool
+            collapsed: mainWindow.sidebarCollapsed
             onConnectionSelected: index => {
                 mainWindow.selectedIndex = index
                 mainWindow.tool = ""
@@ -256,9 +299,22 @@ ApplicationWindow {
                 mainWindow.tool = ""
             }
             onToolSelected: tool => mainWindow.tool = tool
+            onHomeSelected: mainWindow.tool = "welcome"
+            clip: true
             Layout.fillHeight: true
-            Layout.preferredWidth: Math.max(connectionManager.app_state.min_sidebar_width,
-                                            Math.min(mainWindow.maximumSidebarWidth, mainWindow.sidebarWidth))
+            Layout.minimumWidth: 0
+            Layout.preferredWidth: mainWindow.sidebarCollapsed ? mainWindow.collapsedSidebarWidth
+                : Math.max(connectionManager.app_state.min_sidebar_width,
+                           Math.min(mainWindow.maximumSidebarWidth, mainWindow.sidebarWidth))
+            // Animate only the collapse/reveal; drag-resizing stays immediate (sidebarAnimating is false then)
+            Behavior on Layout.preferredWidth {
+                enabled: mainWindow.sidebarAnimating
+                NumberAnimation {
+                    duration: 180
+                    easing.type: Easing.OutCubic
+                    onRunningChanged: if (!running) mainWindow.sidebarAnimating = false
+                }
+            }
         }
 
         ColumnLayout {
@@ -286,9 +342,12 @@ ApplicationWindow {
                     : mainWindow.tool === "ethernet" ? ethernetView.pageTitle
                     : mainWindow.tool === "gateway" ? gatewayView.pageTitle
                     : mainWindow.tool === "multi-bus" ? multiBusView.pageTitle
-                    : mainWindow.currentConnectionView ? mainWindow.currentConnectionView.pageTitle : ""
+                    : (mainWindow.tool === "" && mainWindow.currentConnectionView)
+                        ? mainWindow.currentConnectionView.pageTitle : ""
                 notifications: mainWindow.notifications
                 onClearNotifications: mainWindow.notifications = []
+                sidebarCollapsed: mainWindow.sidebarCollapsed
+                onToggleSidebar: mainWindow.toggleSidebar()
                 Layout.fillWidth: true
             }
 
@@ -387,7 +446,8 @@ ApplicationWindow {
             }
 
             WelcomeView {
-                visible: mainWindow.tool === "" && connectionManager.connections.length === 0
+                visible: mainWindow.tool === "welcome"
+                    || (mainWindow.tool === "" && connectionManager.connections.length === 0)
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.margins: 24
@@ -439,6 +499,7 @@ ApplicationWindow {
         width: 8
         height: parent.height
         z: 50
+        visible: !mainWindow.sidebarCollapsed
         readonly property bool engaged: sidebarHover.hovered || sidebarDrag.active
 
         Rectangle {
@@ -566,6 +627,10 @@ ApplicationWindow {
         }
         function onConnections_changed() {
             mainWindow.selectedIndex = connectionManager.connections.length - 1
+            // A connection was just added (e.g. from the welcome page): show it instead of the welcome page
+            if (mainWindow.tool === "welcome" && connectionManager.connections.length > mainWindow.connectionCount)
+                mainWindow.tool = ""
+            mainWindow.connectionCount = connectionManager.connections.length
         }
     }
 
@@ -573,6 +638,13 @@ ApplicationWindow {
         target: Actions.about
         function onTriggered() {
             aboutDialog.open();
+        }
+    }
+
+    Connections {
+        target: Actions.help
+        function onTriggered() {
+            helpController.open_tool(mainWindow.currentHelpKey())
         }
     }
 
@@ -704,6 +776,12 @@ ApplicationWindow {
         id: commandPalette
         parent: Overlay.overlay
         provider: mainWindow.paletteCommands
+    }
+
+    HelpView {
+        id: helpView
+        parent: Overlay.overlay
+        controller: helpController
     }
 
     Connections {

@@ -27,6 +27,7 @@ the first column. Install the vendor's driver or library for your adapter first;
 | *slcanBus* | `slcan` | Lawicel CANUSB, CANable with slcan firmware, USBtin, … (serial adapters with the slcan protocol) | Windows, Linux, macOS | None: a serial port (`COM3`, `/dev/ttyACM0`); FD-capable slcan firmware also takes a data bitrate | ✓ |
 | *GvretBus* | `gvret` | Devices with SavvyCAN's GVRET protocol: ESP32RET boards, Macchina M2 (M2RET), CANDue (GVRET firmware) | Windows, Linux, macOS | None: a serial port, with `@1` for the device's second bus (`COM5@1`), or `socket://IP:23` for ESP32RET on WiFi (see [below](#gvret-devices)) | – |
 | *J2534Bus* | `j2534` | J2534 pass-thru devices: Drew Technologies Mongoose and CarDAQ, Tactrix OpenPort 2.0, J2534 drivers of Bosch, Autel, Kvaser, PEAK, Intrepid … (see [below](#j2534-pass-thru-devices)) | Windows | The device's J2534 (04.04) driver; 32-bit drivers run in the J2534 bridge ([below](#32-bit-drivers)) | – |
+| *Rp1210Bus* | `rp1210` | TMC RP1210 heavy-duty (truck, bus, off-highway) adapters: Nexiq USB-Link, DG Technologies DPA 5, Noregon DLA+, Cummins INLINE … (see [below](#rp1210-heavy-duty-adapters)) | Windows | The adapter's RP1210 driver; the driver is 32-bit, so run CANExplorer as 32-bit Python ([below](#rp1210-heavy-duty-adapters)) | – |
 | *Elm327Bus* | `elm327` | OBD adapters with the ELM327 command set: OBDLink MX+, LX, SX, EX and ELM327 compatibles, over USB, Bluetooth or WiFi; made for diagnostics, with limits (see [below](#elm327-and-obdlink-adapters)) | Windows, Linux, macOS | None: a serial port (`COM7`, `/dev/rfcomm0`), or `socket://IP:35000` for WiFi adapters | – |
 | *Elm327VpwBus* | `elm327_vpw` | **SAE J1850 VPW / GM Class 2** (not CAN): the 10.4 kbit/s bus of 1996–2007 GM vehicles, through an ELM327/OBDLink adapter (see [below](#gm-class-2-sae-j1850-vpw)) | Windows, Linux, macOS | None: the adapter's serial port, as for `elm327` | – |
 | *SerialBus* | `serial` | Adapters speaking python-can's own serial protocol | Windows, Linux, macOS | None: a serial port | – |
@@ -54,7 +55,8 @@ field. The drivers of *CANalystIIBus*, *GsUsbBus*, *slcanBus*, *robotellBus*, *S
 *NicanBus* cannot list their channels: type the channel (e.g. the serial port) instead. *GvretBus* lists the USB
 serial ports, and *Elm327Bus* the USB and Bluetooth serial ports; whether a port has such a device is only known
 when it is opened. *J2534Bus* lists the registered J2534 drivers with CAN that CANExplorer can load, itself or
-through the J2534 bridge. LIN buses use *SocketcanBus* with a LIN driver; see [LIN](../user-guide/lin.md).
+through the J2534 bridge. *Rp1210Bus* lists the installed RP1210 drivers that offer the CAN protocol, read from
+`RP121032.INI`. LIN buses use *SocketcanBus* with a LIN driver; see [LIN](../user-guide/lin.md).
 
 ## GVRET devices
 
@@ -106,6 +108,30 @@ The bus runs at the connection's bitrate, if the device supports it, and receive
 the device's timestamps. **Receive own messages** uses the device's loopback. J2534 04.04 has no listen only mode,
 no CAN FD and no error frames. A device is used by one program at a time.
 
+## RP1210 heavy-duty adapters
+
+*Rp1210Bus* opens a CAN bus through a TMC **RP1210** adapter — the data-link adapters of the heavy-duty world
+(trucks, buses, agricultural and construction equipment): the Nexiq USB-Link, DG Technologies DPA 5, Noregon DLA+,
+Cummins INLINE and others. These are the adapters you reach a J1939 bus with; CANExplorer uses their RP1210 CAN
+protocol, so you see the raw frames (decode them with the [J1939 protocol](../user-guide/j1939.md) decoder).
+
+The channel is the driver's API name and a device id, `API:DeviceID`:
+
+| Channel | Bus |
+|---|---|
+| `NULN2R32:1` | Device 1 of a Nexiq USB-Link 2 (the API name is the driver's, from `RP121032.INI`) |
+| `DGDPA5MA:1` | Device 1 of a DG Technologies DPA 5 |
+| `NULN2R32` | The driver's first device (the id may be left off) |
+
+**Detect** lists the installed drivers and their devices, read from `RP121032.INI` in the Windows directory and
+each vendor's own `<API>.INI`. The bus runs at the connection's bitrate and receives 11 and 29 bit identifiers;
+**Receive own messages** adds sent frames locally. RP1210 (04.00) here is classic CAN only — no CAN FD, no
+listen-only mode.
+
+RP1210 drivers are **32-bit** Windows DLLs. A 64-bit program cannot load them, so to use an RP1210 adapter run
+CANExplorer as 32-bit Python (from [python.org](https://www.python.org/downloads/windows/), *Windows installer
+(32-bit)*); opening an adapter from a 64-bit build says so plainly.
+
 ## ELM327 and OBDLink adapters
 
 *Elm327Bus* opens the CAN bus at a vehicle's OBD port through an OBD adapter with the ELM327 command set: the
@@ -117,12 +143,14 @@ use a CAN interface.
 |---|---|
 | `COM4`, `/dev/ttyUSB0`, `/dev/cu.usbserial-…` | A USB adapter (OBDLink SX, EX) |
 | `COM7`, `/dev/rfcomm0`, `/dev/cu.OBDLinkMXP-STN-SPP` | A Bluetooth adapter (OBDLink MX+, LX), paired with the computer |
+| `bt://00:11:22:33:44:55` | A Bluetooth adapter by its address, with no serial port to bind first (Linux only) |
 | `socket://192.168.0.10:35000` | A WiFi adapter (its address and port) |
 
 **Bluetooth**: pair the adapter in the system's Bluetooth settings first. Windows then creates a serial port
-(*Standard Serial over Bluetooth link*, use the outgoing one), macOS a `/dev/cu.…` device. On Linux, bind the
-paired adapter to a serial port with `sudo rfcomm bind 0 <adapter address>` and open `/dev/rfcomm0`. Bluetooth Low
-Energy adapters, such as the OBDLink CX, are not supported.
+(*Standard Serial over Bluetooth link*, use the outgoing one), macOS a `/dev/cu.…` device. On Linux, either bind the
+paired adapter to a serial port with `sudo rfcomm bind 0 <adapter address>` and open `/dev/rfcomm0`, or skip that and
+give the address directly as `bt://<address>` (optionally `bt://<address>/<channel>`; CANExplorer opens an RFCOMM
+connection itself). Bluetooth Low Energy adapters, such as the OBDLink CX, are not supported.
 
 The adapter is found at 115200, 38400 or 9600 baud; *serial_baudrate* sets one. It is reset when the connection
 opens and runs at the connection's bitrate: 500 kbit/s divided by a whole number (500, 250, 125, 100, 83.3, 50 …

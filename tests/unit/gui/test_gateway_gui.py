@@ -7,6 +7,7 @@ from PyQt6.QtCore import QCoreApplication, QEvent
 
 from can_explorer.gui.application_metadata import ApplicationMetadata
 from can_explorer.gui.connection_manager import ConnectionManager
+from can_explorer.gui.help import HelpController
 from can_explorer.main_application import create_qml_engine
 
 
@@ -110,7 +111,11 @@ async def test_gateway_tool_renders_without_warnings(manager, qapp):
     a_channel, b_channel = f'r-{uuid.uuid4().hex}', f'r-{uuid.uuid4().hex}'
     warnings = []
     engine = create_qml_engine(
-        {'metadata': ApplicationMetadata(parent=qapp), 'connectionManager': manager},
+        {
+            'metadata': ApplicationMetadata(parent=qapp),
+            'connectionManager': manager,
+            'helpController': HelpController(parent=qapp),
+        },
         lambda errors: warnings.extend(error.toString() for error in errors),
     )
 

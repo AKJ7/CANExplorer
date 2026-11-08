@@ -200,3 +200,32 @@ def test_new_and_read_only_formats(data_dir, tmp_path):
     assert not arxml.writable
     with pytest.raises(DatabaseFormatError, match='Cannot write .arxml'):
         arxml.save()
+    # ...but a read-only database can always be output in a writable format (Save as).
+    output = tmp_path / 'from_arxml.dbc'
+    arxml.save(output)
+    assert arxml.writable and arxml.path == output and DatabaseEditor(output).messages
+
+
+def test_edit_refreshes_only_the_changed_message(monkeypatch):
+    """An edit must validate (refresh) only the message it changed, not every message in the database: a full
+    database.refresh() on each edit froze the UI on large databases."""
+    from cantools.database.can import Message
+
+    editor = DatabaseEditor()
+    for i in range(50):
+        name = editor.add_message(f'Message_{i}', frame_id=0x100 + i)
+        editor.add_signal(name)
+
+    refreshed = []
+    original = Message.refresh
+    monkeypatch.setattr(
+        Message, 'refresh', lambda self, *a, **k: refreshed.append(self.name) or original(self, *a, **k)
+    )
+
+    editor.update_signal('Message_10', editor.message('Message_10').signals[0].name, length=4)
+    assert refreshed == ['Message_10']  # Only the edited message, not all 50
+
+    refreshed.clear()
+    editor.add_message('Extra', frame_id=0x600)
+    # The new message is refreshed (by its constructor and the edit), but none of the existing 50
+    assert refreshed and all(name == 'Extra' for name in refreshed)

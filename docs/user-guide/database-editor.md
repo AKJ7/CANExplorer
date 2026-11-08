@@ -15,13 +15,14 @@ database** in the toolbar of a connection, which opens the database the connecti
 | BUSMASTER DBF (`.dbf`) | ✓ | ✓ |
 | Kayak KCD (`.kcd`) | ✓ | ✓ |
 | PCAN Symbol (`.sym`) | ✓ | ✓ |
-| AUTOSAR ARXML (`.arxml`) | ✓ | Save as one of the CAN formats above |
+| AUTOSAR ARXML (`.arxml`) | ✓ | Save as one of the CAN formats above (DBC is suggested) |
 | LIN description file (`.ldf`) | ✓ | ✓ (see [LIN databases](#lin-databases)) |
 
 **New ▾** creates an empty CAN or LIN database. CANdelaStudio diagnostic descriptions (CDD) cannot be edited.
 
 **Save** writes back to the opened file; **Save as…** writes another file, in the format of its extension, which
-also converts the database. When the format cannot hold everything, the editor lists what was left out under
+also converts the database. A read-only format (ARXML) has no in-place Save: **Save** and **Save as…** open the
+Save-as dialog with a writable name suggested (the same file as a `.dbc`), so an edited ARXML is never a dead end. When the format cannot hold everything, the editor lists what was left out under
 *Notes*, for example several senders of a message in a DBF file, or senders and receivers in a SYM file.
 **Revert** reloads the file and discards the changes. An orange dot next to the file name and next to *Database
 editor* in the sidebar marks unsaved changes; opening another file, creating a new one or quitting asks before

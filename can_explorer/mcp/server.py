@@ -81,7 +81,7 @@ def build_mcp(service: CanService) -> MCPServer:  # noqa: C901 - a flat list of 
 
     @mcp.tool()
     async def decode_protocol(protocol: str, identifier: str, data: str, extended: bool = False) -> Dict[str, Any]:
-        """Interpret a payload with a protocol decoder (J1939, "NMEA 2000", CANopen, ISO-TP, UDS, LIN, J1587),
+        """Interpret a payload with a protocol decoder (J1939, J1939-22, "NMEA 2000", CANopen, ISO-TP, UDS, KWP2000, LIN, J1587, NM, SecOC),
         without a database. Sends nothing."""
         return service.decode_protocol(protocol, identifier, data, extended)
 
@@ -336,36 +336,36 @@ def build_mcp(service: CanService) -> MCPServer:  # noqa: C901 - a flat list of 
     async def reverse_engineer_identifier(identifier: str) -> str:
         """Guide: reverse-engineer the signals of one identifier."""
         return (
-            f"Reverse-engineer identifier {identifier} on the CAN bus.\n"
-            f"1. Call timing to see how often {identifier} is sent (periodic or event-triggered).\n"
-            f"2. Call analyze_identifier for {identifier} to find its fields (counters, checksums, values, flags).\n"
-            "3. Use capture_reaction (after I do an action) or correlate (against a known reference) to pin down "
-            "what a field means.\n"
-            "4. Summarise the fields you found with their bit positions and likely meaning, and offer to "
-            "promote_to_dbc."
+            f'Reverse-engineer identifier {identifier} on the CAN bus.\n'
+            f'1. Call timing to see how often {identifier} is sent (periodic or event-triggered).\n'
+            f'2. Call analyze_identifier for {identifier} to find its fields (counters, checksums, values, flags).\n'
+            '3. Use capture_reaction (after I do an action) or correlate (against a known reference) to pin down '
+            'what a field means.\n'
+            '4. Summarise the fields you found with their bit positions and likely meaning, and offer to '
+            'promote_to_dbc.'
         )
 
     @mcp.prompt()
     async def diagnose_trouble_codes() -> str:
         """Guide: read and explain the vehicle's trouble codes."""
         return (
-            "Diagnose the vehicle over OBD-II.\n"
-            "1. Call obd_status for the MIL state and code count, and obd_vin for the vehicle.\n"
-            "2. Call obd_dtcs (stored) and obd_dtcs(pending=true) to list the trouble codes.\n"
-            "3. Explain each code in plain language, its likely causes and severity.\n"
-            "4. Read relevant live values with obd_read (e.g. coolant temperature, engine load) to support the "
-            "diagnosis. Only clear codes with obd_clear if I explicitly ask."
+            'Diagnose the vehicle over OBD-II.\n'
+            '1. Call obd_status for the MIL state and code count, and obd_vin for the vehicle.\n'
+            '2. Call obd_dtcs (stored) and obd_dtcs(pending=true) to list the trouble codes.\n'
+            '3. Explain each code in plain language, its likely causes and severity.\n'
+            '4. Read relevant live values with obd_read (e.g. coolant temperature, engine load) to support the '
+            'diagnosis. Only clear codes with obd_clear if I explicitly ask.'
         )
 
     @mcp.prompt()
     async def find_signal(description: str) -> str:
         """Guide: find which field carries a described signal."""
         return (
-            f"Find the field on the bus that represents: {description}.\n"
-            "If a reference series is available (a database signal, a CSV log, or values I give you), call "
-            "correlate with it. Otherwise use related_signals to find fields that move together, and timing and "
-            "analyze_identifier to narrow down candidates. Report the identifier, bit field, and fitted scale and "
-            "offset of the best match."
+            f'Find the field on the bus that represents: {description}.\n'
+            'If a reference series is available (a database signal, a CSV log, or values I give you), call '
+            'correlate with it. Otherwise use related_signals to find fields that move together, and timing and '
+            'analyze_identifier to narrow down candidates. Report the identifier, bit field, and fitted scale and '
+            'offset of the best match.'
         )
 
     return mcp

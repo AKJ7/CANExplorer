@@ -65,9 +65,12 @@
 - DoIP (Diagnostics over IP, ISO 13400-2): finds DoIP entities, connects with routing activation (optionally over
   TLS) and runs diagnostics and flashing over Ethernet; a simulated entity works without a vehicle
 - SOME/IP over automotive Ethernet: listens on UDP, discovers the services offered through SOME/IP-SD and shows the
-  decoded messages; load a FIBEX file to deserialize the payloads into named signals
-- Automotive Ethernet capture: open a pcap file (or capture live on Linux) and decode the stack (Ethernet, VLAN,
-  IPv4/IPv6, UDP/TCP) and the protocols on top — SOME/IP, DoIP, gPTP and AVTP
+  decoded messages; load a FIBEX or ARXML file to deserialize the payloads into named signals
+- Automotive Ethernet capture: open a pcap/pcapng file (or capture live on Linux), dissect each packet field by
+  field, and decode the stack (Ethernet, VLAN, 802.1CB R-TAG, IPv4/IPv6, ARP, ICMP, IGMP/MLD, UDP/TCP) and the
+  protocols on top — SOME/IP, DoIP, gPTP, LLDP, the SRP/TSN control protocols (MVRP/MSRP/MMRP), MACsec, IPsec,
+  DHCP/DNS/mDNS and UDP-NM, and AVTP (IEEE 1722): audio/video streams, and CAN, LIN and FlexRay tunnelled over
+  Ethernet via ACF (exportable as a CAN log)
 - UDS discovery: scan an ECU for the services, data identifiers, subfunctions and routines it exposes, classifying
   the answers, for reverse engineering diagnostics; and fuzz it with mutated requests, detecting hangs and crashes
 - Bus gateway: forward frames between two connections with filtering, identifier rewriting and rate limiting
@@ -86,18 +89,22 @@
   PDO assignment and emergencies; real adapters need the `ethercat` extra, a simulated network works without
 - Physical I/O: switch the digital outputs of a USB I/O adapter (aio_usb) and watch its inputs and analogue values,
   from the tool or test scripts; needs the `io` extra, a simulated device works without
-- Decoding of ISO-TP, UDS, J1939, NMEA 2000 (marine, with Fast Packet), CANopen, LIN and J1587 frames in the trace
+- Decoding of ISO-TP, UDS, KWP2000, J1939, J1939-22 (J1939 on CAN FD), NMEA 2000 (marine, with Fast Packet),
+  CANopen, LIN, J1587, AUTOSAR Network Management and SecOC frames in the trace
 - LIN master schedule tables
 
 **Simulation and test automation**
 - Simulated ECUs written in Python, controlled from QML panels
+- Restbus simulation: transmit a connection's database messages periodically at their cycle times — with per-message
+  signal values and node exclusion — so an ECU on the bench sees the rest of the bus
 - ECU test scripts with checks, timing measurements and UDS requests; pass/fail verdicts in the Tests view or
   headless with `can-test`, with HTML, JUnit and Markdown reports for CI; parametrised test cases and requirement
   traceability
 
 **Workspace**
 - Connections, databases, filters, plots and scripts saved in one workspace file
-- Dashboard-style interface with six colour themes, a command palette (Ctrl+K) and English, German, French, Chinese and Japanese texts
+- Dashboard-style interface with a collapsible sidebar, a wide choice of light and dark colour themes, a command
+  palette (Ctrl+K), in-app help (F1) and English, German, French, Chinese and Japanese texts
 
 See the [documentation](https://akj7.github.io/CANExplorer/) for a guide to every feature.
 
@@ -119,7 +126,7 @@ With [uv](https://docs.astral.sh/uv/getting-started/installation/) and Python 3.
 ```bash
 git clone https://github.com/AKJ7/CANExplorer.git
 cd CANExplorer
-uv sync                  # Add --extra mf4 for ASAM MF4 log files (installs asammdf, numpy and pandas),
+uv sync                  # Add --extra mf4 for ASAM MF4 log files (installs asammdf and pandas),
                          # --extra ethercat for EtherCAT adapters (installs pysoem),
                          # --extra io for USB I/O adapters (installs pyusb and libusb)
 uv run canexplorer
@@ -155,6 +162,7 @@ support and the Linux kernel drivers.
 | slcan (`slcan`) | Lawicel CANUSB, CANable (slcan firmware), USBtin and other serial slcan adapters | Windows, Linux, macOS |
 | GVRET (`gvret`) | ESP32RET boards, Macchina M2 (M2RET), CANDue: SavvyCAN's GVRET protocol over USB serial or WiFi | Windows, Linux, macOS |
 | J2534 (`j2534`) | J2534 pass-thru devices: Mongoose, CarDAQ, OpenPort 2.0, Bosch, Autel …; 32-bit drivers through a bridge process | Windows |
+| RP1210 (`rp1210`) | TMC RP1210 heavy-duty (truck/bus/off-highway) adapters: Nexiq USB-Link, DG DPA 5, Noregon DLA+, Cummins INLINE …; 32-bit Windows drivers | Windows |
 | ELM327 / OBDLink (`elm327`) | OBDLink MX+, LX, SX, EX and ELM327 compatible OBD adapters over USB, Bluetooth or WiFi, for diagnostics | Windows, Linux, macOS |
 | J1850 VPW / GM Class 2 (`elm327_vpw`) | GM "Class 2" 10.4 kbit/s single-wire bus of 1996–2007 GM vehicles, through an ELM327/OBDLink adapter (not CAN) | Windows, Linux, macOS |
 | python-can serial (`serial`) | Adapters with python-can's serial protocol | Windows, Linux, macOS |
@@ -194,7 +202,7 @@ In the application, connect to a *VirtualBus*, load `examples/simulation/vehicle
 
 ```bash
 uv run pytest                                  # Tests (headless Qt, python-can virtual buses)
-uv run ruff check . && uv run black --check .  # Lint and formatting
+uv run ruff check . && uv run ruff format --check .  # Lint and formatting
 uv run --group docs mkdocs serve               # Documentation preview on http://127.0.0.1:8000
 uv run python packaging/build.py --archive     # Standalone bundle in dist/ (--backend nuitka to compile)
 uv run python packaging/installer.py           # Installers of the platform in dist/installers

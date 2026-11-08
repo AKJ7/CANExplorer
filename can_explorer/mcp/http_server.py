@@ -72,7 +72,13 @@ class InAppMcpServer:
 
         mcp = build_mcp(self.service)
         app = TokenAuth(mcp.streamable_http_app(host=self.host, streamable_http_path=self.path), self.token)
-        config = uvicorn.Config(app, host=self.host, port=self.port, log_level='warning', lifespan='on')
+        # log_config=None stops uvicorn from running its own logging.config.dictConfig. Its default config builds a
+        # colour formatter whose __init__ calls sys.stdout.isatty(); in a windowed Windows build stdout is None, so
+        # that raises and dictConfig re-wraps it as "Unable to configure formatter 'default'", failing the start. We
+        # have our own logging set up (sys.log_handler), so uvicorn need not configure any.
+        config = uvicorn.Config(
+            app, host=self.host, port=self.port, log_level='warning', lifespan='on', log_config=None
+        )
         self._server = uvicorn.Server(config)
         self._server.install_signal_handlers = lambda: None  # Qt owns the signals; do not touch them
         self._task = asyncio.ensure_future(self._server.serve())

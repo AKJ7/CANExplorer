@@ -615,7 +615,7 @@ async def test_canopen_page(manager, channel):
         assert canopen.sdo_write('1017', '0', '200') == ''
         await wait_until(lambda: not canopen.busy)
         assert node.values[(0x1017, 0)] == (200).to_bytes(2, 'little')
-        assert canopen.sdo_write('1017', '0', 'fast') == 'UNSIGNED16 needs a number, got \'fast\''
+        assert canopen.sdo_write('1017', '0', 'fast') == "UNSIGNED16 needs a number, got 'fast'"
         assert canopen.sdo_write('1000', '0', '1') == ''
         await wait_until(lambda: not canopen.busy)
         assert canopen.log[-1] == {'text': 'SDO abort 0x06010002: Attempt to write a read only object', 'error': True}

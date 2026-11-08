@@ -228,7 +228,7 @@ def linux_appimage(bundle: Path) -> Path:
         _copy_bundle(bundle, appdir / 'usr' / 'lib' / 'canexplorer')
         apprun = appdir / 'AppRun'
         apprun.write_text(
-            '#!/bin/sh\n' 'HERE="$(dirname "$(readlink -f "$0")")"\n' f'exec "$HERE/usr/lib/canexplorer/{NAME}" "$@"\n'
+            f'#!/bin/sh\nHERE="$(dirname "$(readlink -f "$0")")"\nexec "$HERE/usr/lib/canexplorer/{NAME}" "$@"\n'
         )
         apprun.chmod(0o755)
         (appdir / f'{APP_ID}.desktop').write_text(desktop_entry([NAME]))

@@ -74,7 +74,7 @@ VIN, a serial number and two DTCs, accepts security access with the key algorith
 from can_explorer.core.doip import DoipClient, discover
 from can_explorer.core.uds import UdsClient
 
-entities = await discover()                      # [DoipEntity(host='169.254.12.3', vin='WDB…', logical_address=0x1000, …)]
+entities = await discover()  # [DoipEntity(host='169.254.12.3', vin='WDB…', logical_address=0x1000, …)]
 async with DoipClient(entities[0].host, source_address=0x0E00) as client:
     with client.transport(0x1001) as transport:
         uds = UdsClient(transport)
@@ -90,7 +90,7 @@ from can_explorer.core.doip import DoipEntitySimulator
 from can_explorer.core.simulation import UdsServer
 
 simulator = DoipEntitySimulator(targets={0x1001: UdsServer(), 0x1002: UdsServer()})
-await simulator.start()                          # On 127.0.0.1 and a free port: simulator.port
+await simulator.start()  # On 127.0.0.1 and a free port: simulator.port
 async with DoipClient(simulator.host, simulator.port) as client:
     ...
 await simulator.stop()

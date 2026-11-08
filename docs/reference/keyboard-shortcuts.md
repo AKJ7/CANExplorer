@@ -5,6 +5,9 @@ Shortcuts follow the conventions of the platform; on macOS use ++cmd++ instead o
 | Shortcut | Action |
 |---|---|
 | ++ctrl+k++, ++ctrl+shift+p++ | Command palette: run any command, open any view, tool or connection, switch the theme or the language |
+| ++f1++ | Open the in-app help for the current view |
+| ++ctrl+backslash++ | Collapse or reveal the sidebar |
+| ++ctrl+tab++ / ++ctrl+shift+tab++, ++ctrl+pgdown++ / ++ctrl+pgup++ | Switch to the next / previous open connection |
 | ++ctrl+n++ | New connection |
 | ++ctrl+o++ | Replay a log file |
 | ++ctrl+w++ | Close the current connection |

@@ -42,6 +42,7 @@ from can_explorer.gui.doip import DoipController
 from can_explorer.gui.ethernet import EthernetController
 from can_explorer.gui.someip import SomeIpController
 from can_explorer.gui.gateway import GatewayController
+from can_explorer.gui.restbus import RestbusController
 from can_explorer.gui.ethercat import EtherCatController
 from can_explorer.gui.physical_io import PhysicalIoController
 from can_explorer.gui.canopen import CanOpenController
@@ -154,6 +155,7 @@ class CanConnection(QObject):
         self._bus_health = BusHealthController(self, parent=self)
         self._reverse = ReverseController(self, parent=self)
         self._simulation = SimulationController(self, parent=self)
+        self._restbus = RestbusController(self, parent=self)
         self._mqtt = MqttController(self, parent=self)
         self._mcp_server = McpServerController(self, parent=self)
         self._tests = TestController(self, parent=self)
@@ -383,6 +385,7 @@ class CanConnection(QObject):
         self._obd.shutdown()
         self._diagnostics.shutdown()
         self._simulation.shutdown()
+        self._restbus.shutdown()
         self._reverse.shutdown()
         self._mcp_server.shutdown()
         self.session.stop()
@@ -592,6 +595,7 @@ class CanConnection(QObject):
 
     def _database_changed(self):
         self._simulation.database_changed()
+        self._restbus.database_changed()
         self._trace.refresh_descriptions()
         self._overview.refresh_descriptions()
         self.database_changed.emit()
@@ -753,6 +757,10 @@ class CanConnection(QObject):
     @pyqtProperty(QObject, constant=True)
     def simulation(self) -> SimulationController:
         return self._simulation
+
+    @pyqtProperty(QObject, constant=True)
+    def restbus(self) -> RestbusController:
+        return self._restbus
 
     @pyqtProperty(QObject, constant=True)
     def mqtt(self) -> MqttController:

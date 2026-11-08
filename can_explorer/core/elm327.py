@@ -3,7 +3,9 @@ ELM327 command set, such as the OBDLink MX+, LX, SX and EX (STN chips) and ELM32
 
 The channel is the serial port: a USB port (`COM4`, `/dev/ttyUSB0`), the serial port of a paired Bluetooth
 adapter (`COM7`, `/dev/rfcomm0`, `/dev/cu.OBDLinkMXP-STN-SPP`), or a WiFi adapter with pyserial's URL syntax
-(`socket://192.168.0.10:35000`). Bluetooth Low Energy adapters (OBDLink CX) are not supported.
+(`socket://192.168.0.10:35000`). A classic Bluetooth adapter can also be opened directly by its address with
+`bt://AA:BB:CC:DD:EE:FF` (Linux, over RFCOMM; see elm327_bluetooth.py). Bluetooth Low Energy adapters (OBDLink CX)
+use a different protocol and are not supported.
 
 These adapters are made for diagnostics, not as CAN interfaces, so the bus is limited:
 - The adapter monitors the bus (`AT MA`) and prints every frame as text; the serial link carries a few hundred
@@ -179,11 +181,16 @@ class Elm327Bus(can.BusABC):
         self._tx_extended: Optional[bool] = None
         self._header: List[str] = []
         self._closed = False
+        from can_explorer.core import elm327_bluetooth
+
         try:
-            self._serial = serial.serial_for_url(
-                self.port, baudrate=serial_baudrate or SERIAL_BAUDRATES[0], timeout=0.02
-            )
-        except (serial.SerialException, ValueError) as e:
+            if elm327_bluetooth.is_bluetooth_channel(self.port):
+                self._serial = elm327_bluetooth.RfcommSerial(self.port, timeout=0.02)
+            else:
+                self._serial = serial.serial_for_url(
+                    self.port, baudrate=serial_baudrate or SERIAL_BAUDRATES[0], timeout=0.02
+                )
+        except (serial.SerialException, ValueError, OSError) as e:
             raise can.CanInitializationError(f'Could not open {self.port}: {e}') from e
         try:
             self._initialise(serial_baudrate, timeout)
@@ -262,7 +269,7 @@ class Elm327Bus(can.BusABC):
         return True
 
     def _initialise(self, serial_baudrate: Optional[int], timeout: float) -> None:
-        if serial_baudrate or '://' in self.port:
+        if serial_baudrate or '://' in self.port or getattr(self._serial, 'is_bluetooth', False):
             baudrates: Tuple[int, ...] = (self._serial.baudrate,)
         else:
             baudrates = SERIAL_BAUDRATES

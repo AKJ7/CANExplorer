@@ -10,7 +10,7 @@ from can_explorer.core.session import BusSession
 from can_explorer.core.sources import BusConfig, LiveSource
 from can_explorer.scripting import ScriptError, ScriptRuntime
 
-ENGINE_SCRIPT = '''
+ENGINE_SCRIPT = """
 from can_explorer.scripting import Node, on_message, on_signal, on_start, on_stop, on_variable
 
 
@@ -56,7 +56,7 @@ class Dashboard(Node):
     def speed(self, value, msg):
         self.speeds.append(value)
         self.variables['displayed_speed'] = value
-'''
+"""
 
 
 async def wait_until(predicate, timeout=3.0):
@@ -132,7 +132,7 @@ async def test_nodes_do_not_receive_their_own_frames(simulation):
         write(
             tmp_path,
             'echo.py',
-            '''
+            """
             from can_explorer.scripting import Node, on_message, on_start
 
             class Echo(Node):
@@ -144,7 +144,7 @@ async def test_nodes_do_not_receive_their_own_frames(simulation):
                 @on_message()
                 def any_frame(self, msg):
                     self.seen.append(msg.id)
-            ''',
+            """,
         )
     )
     runtime.start()
@@ -160,7 +160,7 @@ async def test_errors_are_contained(simulation):
         write(
             tmp_path,
             'faulty.py',
-            '''
+            """
             from can_explorer.scripting import Node, on_message, on_start
 
             class Faulty(Node):
@@ -179,7 +179,7 @@ async def test_errors_are_contained(simulation):
 
                 def send_unknown(self):
                     self.send('NoSuchMessage', Value=1)
-            ''',
+            """,
         )
     )
     runtime.start()
@@ -237,7 +237,7 @@ async def test_start_requires_open_session(data_dir):
         runtime.start()
 
 
-GATEWAY_SCRIPT = '''
+GATEWAY_SCRIPT = """
 from can_explorer.scripting import Gateway, Node, on_message, on_signal
 
 
@@ -267,7 +267,7 @@ class BodyWatcher(Node):
     def request(self, msg):
         self.requests.append(msg.data)
         self.send(0x7E8, [1, 2, 3], bus='Body')  # Answered on the body bus
-'''
+"""
 
 
 async def test_gateway_and_nodes_on_other_buses(data_dir, tmp_path):

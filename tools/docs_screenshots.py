@@ -570,6 +570,91 @@ async def gateway_scenario():
     window.setProperty('tool', '')
 
 
+async def ethernet_scenario():
+    """The Ethernet capture tool on a saved automotive-Ethernet capture: the decoded packet list, the protocol
+    breakdown and the field-by-field details of a selected packet (opened by clicking a row)."""
+    eth = manager.ethernet
+    window.setProperty('tool', 'ethernet')
+    eth.open_pcap(QUrl.fromLocalFile(str(DATA / 'automotive.pcap')))
+    while eth.busy or eth.count == 0:
+        await asyncio.sleep(0.02)
+    # Select a SOME/IP packet so the details pane shows a full Ethernet → IP → UDP → SOME/IP dissection.
+    number = next((row['number'] for row in eth.packets if row['protocol'] == 'SOME/IP'), 1)
+    view = [item for item in items('EthernetView') if item.isVisible()][0]
+    view.setProperty('selectedNumber', number)
+    await shot('ethernet', 0.6)
+    view.setProperty('selectedNumber', 0)
+    eth.clear()
+    window.setProperty('tool', '')
+
+
+async def someip_scenario():
+    """The live SOME/IP tool: services from Service Discovery and decoded messages, with a FIBEX loaded so payloads
+    — including an optional/TLV struct and a union — show as named signals. Fed over loopback UDP (no real ECU)."""
+    import socket as _socket
+    import struct
+
+    def message(service, method, message_type, payload=b''):
+        length = 8 + len(payload)
+        return struct.pack('>IIIBBBB', (service << 16) | method, length, 0x00010001, 1, 1, message_type, 0) + payload
+
+    def ipv4_option(address, port):
+        body = b'\x00' + _socket.inet_aton(address) + b'\x00\x11' + port.to_bytes(2, 'big')
+        return len(body).to_bytes(2, 'big') + bytes([0x04]) + body
+
+    def offer_entry(service, instance, minor=0):
+        return (
+            bytes([0x01, 0, 0, 0x10])
+            + service.to_bytes(2, 'big')
+            + instance.to_bytes(2, 'big')
+            + bytes([1])
+            + (3).to_bytes(3, 'big')
+            + minor.to_bytes(4, 'big')
+        )
+
+    def sd(entries, options, flags=0xC0):
+        return (
+            bytes([flags, 0, 0, 0])
+            + len(entries).to_bytes(4, 'big')
+            + entries
+            + len(options).to_bytes(4, 'big')
+            + options
+        )
+
+    def tag(wire_type, data_id):
+        return ((wire_type << 12) | data_id).to_bytes(2, 'big')
+
+    someip = manager.someip
+    window.setProperty('tool', 'someip')
+    probe = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+    probe.bind(('127.0.0.1', 0))
+    port = probe.getsockname()[1]
+    probe.close()
+    error = someip.open(str(port), '')
+    assert not error, error
+    while not someip.is_open:
+        await asyncio.sleep(0.02)
+    someip.load_description(QUrl.fromLocalFile(str(DATA / 'someip.fibex')))
+
+    config_tlv = tag(1, 1) + b'\x0f\xa0' + tag(0, 2) + b'\x01'  # ConfigEvent: speed=4000, mode=1 (optional/TLV)
+    reading_union = (2).to_bytes(4, 'big') + (1).to_bytes(4, 'big') + b'\x01\x2c'  # ReadingEvent union: as_count=300
+    datagrams = [
+        message(0xFFFF, 0x8100, 0x02, sd(offer_entry(0x1234, 0x0001), ipv4_option('192.168.0.10', 30509))),
+        message(0x1234, 0x8001, 0x02, b'\x0f\xa0'),  # SpeedEvent: speed=4000
+        message(0x1234, 0x8006, 0x02, config_tlv),  # ConfigEvent: optional/TLV members
+        message(0x1234, 0x8005, 0x02, reading_union),  # ReadingEvent: a union
+        message(0x1234, 0x0045, 0x00, b'\x02'),  # GetSpeed request
+    ]
+    sender = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+    for datagram in datagrams:
+        sender.sendto(datagram, ('127.0.0.1', port))
+        await asyncio.sleep(0.05)
+    await shot('someip', 0.6)
+    someip.close()
+    sender.close()
+    window.setProperty('tool', '')
+
+
 async def scenario():
     OUT.mkdir(parents=True, exist_ok=True)
     await shot('welcome', 0.5)
@@ -858,6 +943,8 @@ async def scenario():
     await obd_scenario()
     await j1850_scenario()
     await gateway_scenario()
+    await someip_scenario()
+    await ethernet_scenario()
 
     await reverse_engineering_scenario()
 

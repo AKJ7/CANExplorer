@@ -9,6 +9,11 @@ ColumnLayout {
     id: root
     readonly property var editor: connectionManager.database_editor
     readonly property bool lin: editor.kind === "lin"
+    // Read the (expensive) message and issue lists from the controller once per change and reuse the result for the
+    // list, its count and the search filter, instead of re-reading the property from every binding and on every
+    // search keystroke.
+    readonly property var allMessages: editor.messages
+    readonly property var allIssues: editor.issues
     readonly property var message: editor.message
     readonly property var signal: editor.signals.find(item => item.name === editor.current_signal) || null
     readonly property int signalIndex: editor.signals.findIndex(item => item.name === editor.current_signal)
@@ -158,6 +163,7 @@ ColumnLayout {
                 enabled: root.editor.open && (root.editor.dirty || !root.editor.writable)
                 onClicked: {
                     if (!root.editor.writable) {
+                        saveDialog.selectedFile = root.editor.suggested_save_file
                         saveDialog.open()
                         return
                     }
@@ -168,7 +174,10 @@ ColumnLayout {
             Button {
                 text: qsTr("Save as…")
                 enabled: root.editor.open
-                onClicked: saveDialog.open()
+                onClicked: {
+                    saveDialog.selectedFile = root.editor.suggested_save_file
+                    saveDialog.open()
+                }
             }
             Button {
                 text: qsTr("Revert")
@@ -234,7 +243,7 @@ ColumnLayout {
 
         // Messages
         Card {
-            title: (root.lin ? qsTr("Frames (%1)") : qsTr("Messages (%1)")).arg(root.editor.messages.length)
+            title: (root.lin ? qsTr("Frames (%1)") : qsTr("Messages (%1)")).arg(root.allMessages.length)
             Layout.preferredWidth: 330
             Layout.fillHeight: true
             headerItems: [
@@ -267,7 +276,7 @@ ColumnLayout {
                     id: messageList
                     clip: true
                     spacing: 4
-                    model: root.editor.messages.filter(item => {
+                    model: root.allMessages.filter(item => {
                         const query = messageSearch.text.trim().toLowerCase()
                         return !query || item.name.toLowerCase().includes(query) || item.id.toLowerCase().includes(query)
                     })
@@ -336,7 +345,7 @@ ColumnLayout {
                 spacing: Theme.spacing
 
                 Card {
-                    visible: root.editor.messages.length === 0
+                    visible: root.allMessages.length === 0
                     Layout.fillWidth: true
                     Layout.preferredHeight: 80
                     Label {
@@ -724,16 +733,16 @@ ColumnLayout {
 
                 // Problems and notes
                 Card {
-                    visible: root.editor.issues.length > 0 || root.editor.notes.length > 0
-                    title: root.editor.issues.length > 0 ? qsTr("Problems (%1)").arg(root.editor.issues.length) : qsTr("Notes")
+                    visible: root.allIssues.length > 0 || root.editor.notes.length > 0
+                    title: root.allIssues.length > 0 ? qsTr("Problems (%1)").arg(root.allIssues.length) : qsTr("Notes")
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 60 + (root.editor.issues.length + root.editor.notes.length) * 24
+                    Layout.preferredHeight: 60 + (root.allIssues.length + root.editor.notes.length) * 24
 
                     ColumnLayout {
                         anchors.fill: parent
                         spacing: 4
                         Repeater {
-                            model: root.editor.issues
+                            model: root.allIssues
                             Label {
                                 required property string modelData
                                 text: "● " + modelData

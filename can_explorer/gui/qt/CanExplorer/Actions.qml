@@ -21,6 +21,7 @@ Item {
     property alias saveWorkspaceAs: saveWorkspaceAsAction
     property alias commandPalette: commandPaletteAction
     property alias checkForUpdates: checkForUpdatesAction
+    property alias help: helpAction
 
     // Open a database file in the editor (e.g. the one of a connection)
     signal editDatabaseFile(string path)
@@ -40,6 +41,13 @@ Item {
         id: aboutAction
         text: qsTr("&About")
         icon.name: "help-about"
+    }
+
+    Action {
+        id: helpAction
+        text: qsTr("&Help")
+        icon.name: "help-contents"
+        shortcut: StandardKey.HelpContents
     }
 
     Action {

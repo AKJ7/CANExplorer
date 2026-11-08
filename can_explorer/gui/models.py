@@ -1,3 +1,4 @@
+import time
 from array import array
 from bisect import bisect_left
 from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Set, Tuple
@@ -9,6 +10,7 @@ from PyQt6.QtCore import (
     QModelIndex,
     QObject,
     Qt,
+    QTimer,
     pyqtProperty,
     pyqtSignal,
     pyqtSlot,
@@ -23,6 +25,40 @@ from can_explorer.core.trace_store import TraceStore
 ALIGN_LEFT = Qt.AlignmentFlag.AlignLeft
 ALIGN_RIGHT = Qt.AlignmentFlag.AlignRight
 ALIGN_CENTER = Qt.AlignmentFlag.AlignHCenter
+
+
+def _parse_hex_color(color: str) -> Tuple[int, int, int]:
+    """'#rrggbb' (or '#rgb') to an (r, g, b) tuple; mid-grey on anything unparseable."""
+    text = color.lstrip('#')
+    try:
+        if len(text) == 3:
+            return int(text[0] * 2, 16), int(text[1] * 2, 16), int(text[2] * 2, 16)
+        if len(text) >= 6:
+            return int(text[0:2], 16), int(text[2:4], 16), int(text[4:6], 16)
+    except ValueError:
+        pass
+    return (128, 128, 128)
+
+
+def _lerp_color(start: Tuple[int, int, int], end: Tuple[int, int, int], fraction: float) -> str:
+    fraction = max(0.0, min(1.0, fraction))
+    r, g, b = (round(s + (e - s) * fraction) for s, e in zip(start, end, strict=True))
+    return f'#{r:02x}{g:02x}{b:02x}'
+
+
+def _fade_byte_markup(byte: int, fraction: float, highlight: Tuple[int, int, int], text: Tuple[int, int, int]) -> str:
+    """HTML for one data byte at fade `fraction` (0 = just changed, 1 = fully cooled): the colour is interpolated
+    from the highlight colour to the text colour, and the byte is bold while still fresh."""
+    if fraction >= 1.0:
+        return f'{byte:02X}'  # Fully cooled: inherit the plain text colour of the cell
+    color = _lerp_color(highlight, text, fraction)
+    hexbyte = f'{byte:02X}'
+    return (
+        f'<font color="{color}"><b>{hexbyte}</b></font>'
+        if fraction < 0.5
+        else f'<font color="{color}">{hexbyte}</font>'
+    )
+
 
 TEXT_ALIGNMENT_ROLE = Qt.ItemDataRole.TextAlignmentRole
 RICH_TEXT_ROLE = Qt.ItemDataRole.UserRole + 1
@@ -371,6 +407,15 @@ class OverviewModel(FrameTableModel):
         self._sort_column = -1  # -1: by identifier
         self._sort_descending = False
         self._highlight_color = ''
+        self._text_color = ''  # The cell's normal text colour, for interpolating the fade
+        self._fade = False
+        self._fade_window = 1.5  # Seconds for a changed byte to cool from the highlight back to the text colour
+        self._glow: Dict[IdKey, List[float]] = {}  # Per-byte monotonic time of last change, while fade is on
+        self._newest_glow = 0.0
+        self._clock = time.monotonic  # Indirection so tests can supply a deterministic clock
+        self._fade_timer = QTimer(self)
+        self._fade_timer.setInterval(66)  # ~15 Hz repaint while bytes are cooling
+        self._fade_timer.timeout.connect(self._tick_fade)
 
     # Highlighting
 
@@ -389,7 +434,19 @@ class OverviewModel(FrameTableModel):
         str, get_highlight_color, set_highlight_color, notify=highlight_color_changed
     )  # Colour of changed bytes, e.g. '#f39c12'; bold only when empty
 
-    def _format_data(self, data: bytes, changed: Iterable[bool]) -> str:
+    def _format_data(self, data: bytes, changed: Iterable[bool], key: Optional[IdKey] = None) -> str:
+        glow = self._glow.get(key) if self._fade and key is not None else None
+        if glow is not None and self._highlight_color and self._text_color:
+            now = self._clock()
+            highlight = _parse_hex_color(self._highlight_color)
+            text = _parse_hex_color(self._text_color)
+            parts = []
+            for index, byte in enumerate(data):
+                stamped = glow[index] if index < len(glow) else 0.0
+                fraction = 1.0 if stamped <= 0.0 else min(1.0, (now - stamped) / self._fade_window)
+                parts.append(_fade_byte_markup(byte, fraction, highlight, text))
+            return ' '.join(parts)
+        # Instant highlight (fade off, or colours/glow not yet available): changed bytes in the highlight colour
         if self._highlight_color:
             marked = f'<font color="{self._highlight_color}"><b>{{:02X}}</b></font>'
         else:
@@ -398,6 +455,60 @@ class OverviewModel(FrameTableModel):
             marked.format(byte) if is_changed else f'{byte:02X}'
             for byte, is_changed in zip(data, changed, strict=False)
         )
+
+    # Fade mode: changed bytes glow and cool over a window, rather than a binary highlight
+
+    def get_text_color(self) -> str:
+        return self._text_color
+
+    def set_text_color(self, color: str) -> None:
+        self._text_color = color
+
+    text_color = pyqtProperty(str, get_text_color, set_text_color)
+
+    fade_changed = pyqtSignal()
+
+    def get_fade(self) -> bool:
+        return self._fade
+
+    fade = pyqtProperty(bool, get_fade, notify=fade_changed)
+
+    @pyqtSlot(bool)
+    def set_fade(self, on: bool) -> None:
+        """Turn the fading change-highlight on or off."""
+        on = bool(on)
+        if on == self._fade:
+            return
+        self._fade = on
+        self._glow.clear()  # Start fresh: bytes light up as they change from now on
+        if on:
+            self._fade_timer.start()
+        else:
+            self._fade_timer.stop()
+        self._repaint_data()
+        self.fade_changed.emit()
+
+    def _repaint_data(self) -> None:
+        if self._keys:
+            column = self.DATA_COLUMN
+            self.dataChanged.emit(self.index(0, column), self.index(len(self._keys) - 1, column))
+
+    def _stamp_glow(self, key: IdKey, changed: Tuple[bool, ...], now: float) -> None:
+        glow = self._glow.get(key)
+        if glow is None or len(glow) != len(changed):
+            glow = self._glow[key] = [0.0] * len(changed)
+        for index, is_changed in enumerate(changed):
+            if is_changed:
+                glow[index] = now
+        self._newest_glow = now
+
+    def _tick_fade(self) -> None:
+        if not self._fade:
+            self._fade_timer.stop()
+            return
+        self._repaint_data()
+        if self._clock() - self._newest_glow > self._fade_window:
+            self._fade_timer.stop()  # Everything has cooled; stop repainting until the next change
 
     # Sorting
 
@@ -500,7 +611,7 @@ class OverviewModel(FrameTableModel):
             case 5:
                 return str(msg.dlc)
             case 6:
-                return self._format_data(msg.data, entry.changed)
+                return self._format_data(msg.data, entry.changed, self._keys[row])
             case 7:
                 return self._describe(frame)
         return ''
@@ -528,6 +639,14 @@ class OverviewModel(FrameTableModel):
         if added:
             self.rebuild()
             return
+        if self._fade and changed:
+            now = self._clock()
+            for key in changed:
+                entry = self._statistics.entries.get(key)
+                if entry is not None:
+                    self._stamp_glow(key, entry.changed, now)
+            if not self._fade_timer.isActive():
+                self._fade_timer.start()
         if changed and self._sort_column in self.VOLATILE_COLUMNS:
             self._reorder()
         rows = sorted(row for row in map(self._rows_by_key.get, changed) if row is not None)

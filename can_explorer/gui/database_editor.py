@@ -13,7 +13,13 @@ from can_explorer.core.database_editor import (
     EditError,
     format_choices,
 )
-from can_explorer.core.database_io import READ_SUFFIXES, WRITE_SUFFIXES, DatabaseFormatError
+from can_explorer.core.database_io import (
+    DEFAULT_WRITE_SUFFIX,
+    READ_SUFFIXES,
+    WRITE_SUFFIXES,
+    DatabaseFormatError,
+    output_suffix,
+)
 from can_explorer.core.ldf_editor import LIN_SPEEDS, LdfEditor
 from can_explorer.sys.log_handler import get_logger
 
@@ -54,6 +60,11 @@ class DatabaseEditorController(QObject):
         self._message = ''
         self._signal = ''
         self._notes: List[str] = []  # Warnings of the last load or save
+        # The message-list and issue-list rows are expensive to build for a large database and are read by several
+        # QML bindings on every change (and on every search keystroke); cache them and rebuild only when an edit
+        # actually changes the content, not on selection changes or searches.
+        self._messages_cache: Optional[List[Dict[str, Any]]] = None
+        self._issues_cache: Optional[List[str]] = None
 
     # Files
 
@@ -110,7 +121,25 @@ class DatabaseEditorController(QObject):
     def notes(self) -> List[str]:
         return list(self._notes)
 
+    @pyqtProperty(QUrl, notify=changed)
+    def suggested_save_file(self) -> QUrl:
+        """The file to prefill the Save-as dialog with, so a read-only format is never a dead end: the opened file
+        with a writable extension (ARXML → DBC), next to the source; 'Untitled' in the home folder for a new one."""
+        if self._editor is None:
+            return QUrl()
+        path = self._editor.path
+        folder = path.parent if path else Path.home()
+        stem = path.stem if path else 'Untitled'
+        suffix = '.ldf' if self.lin else output_suffix(path.suffix if path else '')
+        return QUrl.fromLocalFile(str(folder / f'{stem}{suffix}'))
+
+    def _invalidate(self) -> None:
+        """Drop the cached message and issue rows; the next read rebuilds them."""
+        self._messages_cache = None
+        self._issues_cache = None
+
     def _set_editor(self, editor: DatabaseEditor | LdfEditor, notes: List[str]) -> None:
+        self._invalidate()
         self._editor, self._notes = editor, notes
         names = self._message_names()
         self._message = names[0] if names else ''
@@ -151,7 +180,11 @@ class DatabaseEditorController(QObject):
             return f'Could not open {path.name}: {e}'
         notes = list(editor.warnings)
         if not editor.writable:
-            notes.append(f'{path.suffix.upper()[1:]} files cannot be written; use "Save as" to save the changes')
+            formats = ', '.join(suffix.upper()[1:] for suffix in WRITE_SUFFIXES)
+            notes.append(
+                f'{path.suffix.upper()[1:]} files cannot be written; use "Save as" to save the changes as '
+                f'{formats} (a {DEFAULT_WRITE_SUFFIX.upper()[1:]} name is suggested)'
+            )
         self._set_editor(editor, notes)
         return ''
 
@@ -196,6 +229,11 @@ class DatabaseEditorController(QObject):
     def messages(self) -> List[Dict[str, Any]]:
         if self._editor is None:
             return []
+        if self._messages_cache is None:
+            self._messages_cache = self._build_messages()
+        return self._messages_cache
+
+    def _build_messages(self) -> List[Dict[str, Any]]:
         if self.lin:
             return [
                 {
@@ -238,7 +276,11 @@ class DatabaseEditorController(QObject):
 
     @pyqtProperty('QStringList', notify=changed)
     def issues(self) -> List[str]:
-        return self._editor.issues() if self._editor else []
+        if self._editor is None:
+            return []
+        if self._issues_cache is None:
+            self._issues_cache = self._editor.issues()
+        return self._issues_cache
 
     @pyqtProperty('QStringList', constant=True)
     def byte_orders(self) -> List[str]:
@@ -378,6 +420,7 @@ class DatabaseEditorController(QObject):
             edit()
         except (EditError, ValueError) as e:
             return str(e)
+        self._invalidate()
         self.changed.emit()
         self.selection_changed.emit()
         return ''

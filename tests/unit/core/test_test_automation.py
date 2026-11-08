@@ -244,7 +244,7 @@ def test_command_line(tmp_path, capsys):
     assert can_test(args[:1] + ['--report', str(tmp_path / 'report.txt')]) == 2
 
 
-PARAMETRISED = '''
+PARAMETRISED = """
 from can_explorer.testing import TestModule, testcase
 
 
@@ -266,7 +266,7 @@ class Limits(TestModule):
     @testcase
     async def plain(self, t):
         t.skip('not today')
-'''
+"""
 
 
 async def test_parameters_and_requirements(tmp_path):

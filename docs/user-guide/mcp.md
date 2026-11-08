@@ -125,32 +125,32 @@ import asyncio
 from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 
-URL = "http://127.0.0.1:57205/mcp"      # from the Agent… dialog
-TOKEN = "WWPkEFJO7GXuAQJR1tCarQ"        # from the Agent… dialog
+URL = 'http://127.0.0.1:57205/mcp'  # from the Agent… dialog
+TOKEN = 'WWPkEFJO7GXuAQJR1tCarQ'  # from the Agent… dialog
 
 
 async def main():
-    headers = {"Authorization": f"Bearer {TOKEN}"}
+    headers = {'Authorization': f'Bearer {TOKEN}'}
     async with streamablehttp_client(URL, headers=headers) as (read, write, _):
         async with ClientSession(read, write) as session:
             await session.initialize()
 
             tools = await session.list_tools()
-            print("tools:", [tool.name for tool in tools.tools])
+            print('tools:', [tool.name for tool in tools.tools])
 
-            status = await session.call_tool("bus_status", {})
+            status = await session.call_tool('bus_status', {})
             print(status.content[0].text)
 
             # Every identifier seen, with direction, count and cycle time
-            identifiers = await session.call_tool("list_identifiers", {})
+            identifiers = await session.call_tool('list_identifiers', {})
             print(identifiers.content[0].text)
 
             # Reverse-engineer one identifier's fields
-            analysis = await session.call_tool("analyze_identifier", {"identifier": "1A0"})
+            analysis = await session.call_tool('analyze_identifier', {'identifier': '1A0'})
             print(analysis.content[0].text)
 
             # Resources can be read directly, like documents
-            resource = await session.read_resource("can://status")
+            resource = await session.read_resource('can://status')
             print(resource.contents[0].text)
 
 
@@ -169,15 +169,15 @@ from mcp.client.stdio import stdio_client
 
 async def main():
     params = StdioServerParameters(
-        command="can-mcp",
-        args=["-i", "virtual", "-c", "test", "--allow-diagnostics"],
+        command='can-mcp',
+        args=['-i', 'virtual', '-c', 'test', '--allow-diagnostics'],
     )
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
 
             # Read the vehicle's stored trouble codes over OBD-II (needs --allow-diagnostics)
-            dtcs = await session.call_tool("obd_dtcs", {})
+            dtcs = await session.call_tool('obd_dtcs', {})
             print(dtcs.content[0].text)
 
 
@@ -214,7 +214,7 @@ A tool that is not enabled is not even offered to the agent, so it cannot be cal
 | `list_identifiers` | Every identifier seen, with direction, count, cycle time, last data and database name |
 | `get_frames` | Recent frames (optionally of one identifier), decoded into signals |
 | `decode_frame` | Decode a payload you supply with the loaded database (sends nothing) |
-| `decode_protocol` | Interpret a payload with a protocol decoder (J1939, NMEA 2000, CANopen, ISO-TP, UDS, LIN, J1587) |
+| `decode_protocol` | Interpret a payload with a protocol decoder (J1939, J1939-22, NMEA 2000, CANopen, ISO-TP, UDS, KWP2000, LIN, J1587, NM, SecOC) |
 | `timing` | Inter-frame timing per identifier: cycle time, jitter, periodic vs event-triggered (`series` for the Δt over time) |
 | `analyze_identifier` | Automatic field analysis (checksums, counters, multiplexers, physical values, states, flags) |
 | `bit_activity` | Raw per-bit behaviour of one identifier (how often each bit is set and flips) and a per-byte summary |

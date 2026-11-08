@@ -34,7 +34,7 @@ uv run python packaging/build.py --archive --j2534-bridge build/j2534-bridge-pyt
 The release bundles contain MQTT (the `mqtt` extra, synced with `--extra mqtt`).
 
 MF4 log files are only supported when asammdf is installed in the build environment. The release bundles are
-built without it to keep them small (it adds numpy and pandas); to include it, sync with `--extra mf4` before
+built without it to keep them small (it adds pandas); to include it, sync with `--extra mf4` before
 building.
 
 ## Snap

@@ -112,6 +112,16 @@ def test_sym(data_dir):
 # Conversion
 
 
+def test_every_readable_format_has_a_writable_output():
+    """Every readable (hence editable) format can be output: a writable format maps to itself, a read-only one
+    (ARXML) falls back to the default writable format, so no editable database is ever a dead end."""
+    from can_explorer.core.database_io import READ_SUFFIXES, WRITE_SUFFIXES, output_suffix
+
+    assert all(output_suffix(suffix) in WRITE_SUFFIXES for suffix in READ_SUFFIXES)
+    assert output_suffix('.kcd') == '.kcd' and output_suffix('.arxml') == '.dbc'
+    assert output_suffix('.ARXML') == '.dbc'  # Case-insensitive
+
+
 @pytest.mark.parametrize('suffix', ['.dbc', '.dbf', '.kcd', '.sym'])
 def test_multi_bus_conversion_warns_or_selects_a_bus(data_dir, tmp_path, suffix):
     report = convert_database(data_dir / 'example.arxml', tmp_path / f'all{suffix}')

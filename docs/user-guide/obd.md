@@ -57,22 +57,22 @@ from can_explorer.core.uds import UdsClient
 
 async def main():
     # Open the OBD-II bus (a 500 kbit/s CAN bus); use the interface and channel of your adapter
-    session = BusSession(LiveSource(BusConfig("socketcan", "can0")))
+    session = BusSession(LiveSource(BusConfig('socketcan', 'can0')))
     session.start()
     # Requests go to the functional address 7DF, answers come from 7E8 (the first ECU)
     obd = ObdClient(UdsClient(IsoTpClient(session, FUNCTIONAL_REQUEST, ECU_RESPONSE)))
 
-    print("VIN:", await obd.read_vin())
+    print('VIN:', await obd.read_vin())
     status = await obd.status()
-    print("MIL on:", status.mil_on, "stored DTCs:", status.dtc_count)
+    print('MIL on:', status.mil_on, 'stored DTCs:', status.dtc_count)
 
-    for pid in await obd.supported_pids():          # The PIDs this ECU offers
+    for pid in await obd.supported_pids():  # The PIDs this ECU offers
         value = await obd.read_value(pid)
         if value is not None:
-            print(f"  {value.name}: {value.value:g} {value.unit}")
+            print(f'  {value.name}: {value.value:g} {value.unit}')
 
-    print("stored:", [dtc.code for dtc in await obd.read_dtcs()])
-    print("pending:", [dtc.code for dtc in await obd.read_dtcs(pending=True)])
+    print('stored:', [dtc.code for dtc in await obd.read_dtcs()])
+    print('pending:', [dtc.code for dtc in await obd.read_dtcs(pending=True)])
     session.stop()
 
 

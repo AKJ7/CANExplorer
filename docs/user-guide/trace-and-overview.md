@@ -68,6 +68,11 @@ The overview has one row per identifier and direction, sorted by identifier.
 | Cycle [ms] | Time since the previous frame of the identifier |
 | Data [hex] | Latest data; bytes that differ from the previous frame of the identifier are highlighted in **bold orange** (the warning colour of the theme) |
 
+Tick **Fade changes** in the toolbar for a live "activity" view: each changed byte lights up in the highlight
+colour and then **cools back to the normal text colour over about a second**, so a byte that keeps changing stays
+bright while a byte that changed once fades away. It makes it easy to see which bytes are active while you operate
+the vehicle — wiggle a control and watch the responsible bytes glow.
+
 Click a column header to sort the overview by that column, click it again to reverse the order, and a third time
 to return to the identifier order. The sorted column is marked with ▲ or ▼. Rows move as their values change
 (e.g. when sorted by count), and selected rows stay selected.

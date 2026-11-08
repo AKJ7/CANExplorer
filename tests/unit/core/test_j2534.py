@@ -345,7 +345,7 @@ def test_bridge_start_failures():
         j2534.BridgeDriver(('/does/not/exist/bridge',), 'x.dll')
 
 
-STUB = r'''
+STUB = r"""
 #include <stdint.h>
 #include <string.h>
 typedef uint32_t U;
@@ -374,7 +374,7 @@ int32_t PassThruWriteMsgs(U ch, MSG *msg, U *num, U timeout) {
   return 0; }
 int32_t PassThruReadVersion(U dev, char *fw, char *dll, char *api) { strcpy(fw, "FW 9"); strcpy(dll, "Stub 1"); strcpy(api, "04.04"); return 0; }
 int32_t PassThruGetLastError(char *e) { strcpy(e, "stub error"); return 0; }
-'''
+"""
 
 
 @pytest.mark.skipif(sys.platform == 'win32' or shutil.which('gcc') is None, reason='Builds a J2534 stub with gcc')

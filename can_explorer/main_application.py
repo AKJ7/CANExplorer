@@ -21,6 +21,7 @@ from can_explorer.util.gui import get_res_path
 from can_explorer.gui.translations import TranslationManager
 from can_explorer.gui.application_metadata import ApplicationMetadata
 from can_explorer.gui.connection_manager import ConnectionManager
+from can_explorer.gui.help import HelpController
 from can_explorer.desktop import desktop_file_name
 from can_explorer.gui.signal_plot import register_qml_types
 from can_explorer.gui.bit_raster import register_bit_raster
@@ -60,6 +61,7 @@ class MainApplication(QApplication):
         self.setDesktopFileName(desktop_file_name())  # Lets Linux desktops match the window to its desktop entry
         self.metadata = ApplicationMetadata(parent=self)
         self.connection_manager = ConnectionManager(parent=self)
+        self.help = HelpController(parent=self)
         qInstallMessageHandler(self._message_handler)
         # Installed before the window is loaded, so its texts are translated from the start
         self.translations = TranslationManager(self)
@@ -67,7 +69,7 @@ class MainApplication(QApplication):
         self.translations.set_language(app_state.language)
         app_state.language_changed.connect(self._language_changed)
         self._qml_engine = create_qml_engine(
-            {'metadata': self.metadata, 'connectionManager': self.connection_manager},
+            {'metadata': self.metadata, 'connectionManager': self.connection_manager, 'helpController': self.help},
             self._on_qml_warnings,
         )
         self._qml_engine.quit.connect(self.quit)

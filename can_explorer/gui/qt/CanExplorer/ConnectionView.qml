@@ -29,8 +29,9 @@ ColumnLayout {
      .concat(connection.protocol === "CANopen" ? [{ key: "canopen", title: qsTr("CANopen"), icon: "⚙" }] : [])
      .concat(connection.is_lin ? [{ key: "lin", title: qsTr("LIN Schedule"), icon: "⏱" }] : [])
      .concat(connection.can_transmit ? [{ key: "simulation", title: qsTr("Simulation"), icon: "▶" }] : [])
+     .concat(connection.can_transmit ? [{ key: "restbus", title: qsTr("Restbus"), icon: "⤭" }] : [])
      .concat(connection.can_transmit ? [{ key: "tests", title: qsTr("Tests"), icon: "✓" }] : [])
-    readonly property var pageKeys: ["dashboard", "trace", "overview", "signals", "health", "reverse", "diagnostics", "obd", "flash", "uds-scan", "xcp", "gmlan", "j1850", "j1939", "canopen", "lin", "simulation", "tests"]
+    readonly property var pageKeys: ["dashboard", "trace", "overview", "signals", "health", "reverse", "diagnostics", "obd", "flash", "uds-scan", "xcp", "gmlan", "j1850", "j1939", "canopen", "lin", "simulation", "restbus", "tests"]
     property string page: "dashboard"
     readonly property string pageTitle: (pages.find(item => item.key === page) || pages[0]).title
     readonly property bool tablePage: page === "trace" || page === "overview"
@@ -41,6 +42,12 @@ ColumnLayout {
         target: root.connection.overview
         property: "highlight_color"
         value: String(Theme.warning)
+    }
+    // The normal text colour, so a changed byte can fade from the highlight colour back to it
+    Binding {
+        target: root.connection.overview
+        property: "text_color"
+        value: String(Theme.text)
     }
 
     readonly property var currentTable: page === "trace" ? traceTable : page === "overview" ? overviewTable : null
@@ -153,6 +160,15 @@ ColumnLayout {
             visible: root.page === "trace"
             text: qsTr("Auto-scroll")
             checked: true
+        }
+        CheckBox {
+            id: fadeBox
+            visible: root.page === "overview"
+            text: qsTr("Fade changes")
+            checked: root.connection.overview.fade
+            onToggled: root.connection.overview.set_fade(checked)
+            ToolTip.visible: hovered
+            ToolTip.text: qsTr("Changed bytes glow and cool over a second, so you can watch which bytes are active")
         }
 
         Item { Layout.fillWidth: true }
@@ -334,6 +350,15 @@ ColumnLayout {
                 anchors.fill: parent
                 active: root.connection.can_transmit
                 sourceComponent: SimulationView {
+                    connection: root.connection
+                }
+            }
+        }
+        Card {
+            Loader {
+                anchors.fill: parent
+                active: root.connection.can_transmit
+                sourceComponent: RestbusView {
                     connection: root.connection
                 }
             }

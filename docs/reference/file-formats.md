@@ -19,8 +19,8 @@ the extension.
 Every format can be recorded, exported, replayed and replayed on a bus. Timestamps are kept, so replays reproduce
 the original timing.
 
-MF4 support uses the [asammdf](https://asammdf.readthedocs.io/) package, which brings numpy and pandas along and
-is therefore optional:
+MF4 support uses the [asammdf](https://asammdf.readthedocs.io/) package, which brings pandas along and is
+therefore optional:
 
 ```bash
 uv sync --extra mf4

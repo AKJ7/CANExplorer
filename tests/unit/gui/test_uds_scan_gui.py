@@ -9,6 +9,7 @@ from can_explorer.core.simulation import UdsEcuSimulator, UdsServer
 from can_explorer.core.sources import BusConfig, LiveSource
 from can_explorer.gui.application_metadata import ApplicationMetadata
 from can_explorer.gui.connection_manager import ConnectionManager
+from can_explorer.gui.help import HelpController
 from can_explorer.main_application import create_qml_engine
 
 
@@ -132,7 +133,11 @@ async def test_scan_errors_before_connecting(manager, channel):
 async def test_uds_scan_page_renders_without_warnings(manager, channel, ecu, qapp):
     warnings = []
     engine = create_qml_engine(
-        {'metadata': ApplicationMetadata(parent=qapp), 'connectionManager': manager},
+        {
+            'metadata': ApplicationMetadata(parent=qapp),
+            'connectionManager': manager,
+            'helpController': HelpController(parent=qapp),
+        },
         lambda errors: warnings.extend(error.toString() for error in errors),
     )
 

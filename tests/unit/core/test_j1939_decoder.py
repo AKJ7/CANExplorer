@@ -36,3 +36,28 @@ def test_out_of_order_transport_data():
 
 def test_standard_frames_are_ignored():
     assert J1939Decoder().describe(can.Message(arbitration_id=0x100, is_extended_id=False)) is None
+
+
+def test_j1939_22_single_pg_on_can_fd():
+    from can_explorer.core.protocols.j1939 import J1939_22Decoder
+
+    decoder = J1939_22Decoder()
+    # An ordinary PG (CCVS1) on a 20-byte CAN FD frame decodes like J1939
+    fd = can.Message(arbitration_id=0x18FEF100, is_extended_id=True, is_fd=True, data=bytes(range(20)))
+    assert decoder.describe(fd) == 'PGN 0x0FEF1 CCVS1 SA=0x00 DA=0xFF P6'
+
+
+def test_j1939_22_multi_pg_and_fd_transport_are_labelled():
+    from can_explorer.core.protocols.j1939 import J1939_22Decoder
+
+    decoder = J1939_22Decoder()
+    multi = can.Message(
+        arbitration_id=(6 << 26) | (0x2500 << 8) | 0x00, is_extended_id=True, is_fd=True, data=bytes(32)
+    )
+    assert (
+        decoder.describe(multi)
+        == 'PGN 0x02500 Multi-PG SA=0x00 DA=0x00 P6: multiplexed PGs, 32 bytes (contained PGs not expanded)'
+    )
+    tp = can.Message(arbitration_id=(6 << 26) | (0x4D00 << 8) | 0x00, is_extended_id=True, is_fd=True, data=bytes(16))
+    assert 'FD.TP.CM' in decoder.describe(tp) and '(not reassembled)' in decoder.describe(tp)
+    assert decoder.describe(can.Message(arbitration_id=0x100, is_extended_id=False, data=bytes(2))) is None
