@@ -35,6 +35,8 @@ LAUNCHER = ROOT / 'packaging' / 'launcher.py'
 ICONS = ROOT / 'packaging' / 'icons'  # Generated from docs/assets/logo.png by tools/make_icons.py
 QML_DIR = ROOT / 'can_explorer' / 'gui' / 'qt'
 RESOURCES_DIR = ROOT / 'can_explorer' / 'resources'  # Desktop entry icons
+DOCS_DIR = ROOT / 'docs'  # Bundled for the in-app help (can_explorer.core.help)
+DOCS_TARGET = 'can_explorer/resources/help/docs'
 DISTRIBUTION = 'can-explorer'
 VERSION_MODULE = ROOT / 'can_explorer' / '_build_version.py'
 # Packages whose data files are read at runtime: the LDF grammar and the lark grammars it imports
@@ -86,6 +88,8 @@ def build_pyinstaller() -> Path:
         f'{QML_DIR}{os.pathsep}can_explorer/gui/qt',
         '--add-data',
         f'{RESOURCES_DIR}{os.pathsep}can_explorer/resources',
+        '--add-data',
+        f'{DOCS_DIR}{os.pathsep}{DOCS_TARGET}',
         # The application version is read from the package metadata
         '--copy-metadata',
         DISTRIBUTION,
@@ -179,6 +183,7 @@ def build_nuitka(onefile: bool) -> Path:
         '--include-qt-plugins=qml',
         f'--include-data-dir={QML_DIR}=can_explorer/gui/qt',
         f'--include-data-dir={RESOURCES_DIR}=can_explorer/resources',
+        f'--include-data-dir={DOCS_DIR}={DOCS_TARGET}',
         '--include-module=can_explorer._build_version',
         *(f'--include-package={package}' for package in DYNAMIC_PACKAGES),
         *(f'--include-module={module}' for module in INTERFACE_MODULES),

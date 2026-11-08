@@ -12,11 +12,13 @@ Rectangle {
     property var pages: []
     property string currentPage: ""
     property string currentTool: ""
+    property bool collapsed: false  // Icon-only rail: labels hidden, glyphs and the logo shown
 
     signal toolSelected(string tool)
 
     signal connectionSelected(int index)
     signal pageSelected(string page)
+    signal homeSelected()  // The logo/title clicked: show the welcome page
 
     color: Theme.surface
     implicitWidth: Theme.sidebarWidth
@@ -29,6 +31,7 @@ Rectangle {
     }
 
     component SectionLabel: Label {
+        visible: !root.collapsed
         color: Theme.muted
         font.pixelSize: 11
         font.bold: true
@@ -46,6 +49,9 @@ Rectangle {
         Layout.fillWidth: true
         implicitHeight: 42
         hoverEnabled: true
+        // When collapsed, the label is hidden, so name the item in a tooltip (instances may override this)
+        ToolTip.text: item.text
+        ToolTip.visible: root.collapsed && item.hovered
 
         background: Rectangle {
             color: item.active ? Theme.alpha(Theme.accent, 0.14)
@@ -64,10 +70,12 @@ Rectangle {
                 color: item.active ? Theme.accent : Theme.muted
                 font.pixelSize: 15
                 horizontalAlignment: Text.AlignHCenter
-                Layout.preferredWidth: 20
-                Layout.leftMargin: 8
+                Layout.preferredWidth: root.collapsed ? -1 : 20
+                Layout.fillWidth: root.collapsed
+                Layout.leftMargin: root.collapsed ? 0 : 8
             }
             Label {
+                visible: !root.collapsed
                 text: item.text
                 color: item.active ? Theme.accent : Theme.text
                 font.bold: item.active
@@ -75,7 +83,7 @@ Rectangle {
                 Layout.fillWidth: true
             }
             Rectangle {
-                visible: item.dotColor !== Qt.color("transparent")
+                visible: !root.collapsed && item.dotColor !== Qt.color("transparent")
                 width: 8
                 height: 8
                 radius: 4
@@ -89,14 +97,20 @@ Rectangle {
         anchors.fill: parent
         spacing: 2
 
-        // Logo; also moves the window, which has no title bar
+        // Logo and title; clicking shows the welcome page, dragging moves the window (which has no title bar)
         RowLayout {
             DragHandler {
                 target: null
                 onActiveChanged: if (active) root.Window.window.startSystemMove()
             }
+            TapHandler {
+                onTapped: root.homeSelected()
+            }
+            HoverHandler {
+                cursorShape: Qt.PointingHandCursor
+            }
             Layout.fillWidth: true
-            Layout.leftMargin: 24
+            Layout.leftMargin: root.collapsed ? Math.max(0, Math.round((root.width - 34) / 2)) : 24
             Layout.topMargin: 24
             Layout.bottomMargin: 12
             spacing: 12
@@ -105,6 +119,7 @@ Rectangle {
                 Layout.preferredHeight: 34
             }
             Label {
+                visible: !root.collapsed
                 text: metadata.name
                 color: Theme.text
                 font.pixelSize: 19
@@ -129,8 +144,9 @@ Rectangle {
 
                 RowLayout {
                     Layout.fillWidth: true
-                    Layout.rightMargin: 12
+                    Layout.rightMargin: root.collapsed ? 0 : 12
                     SectionLabel { text: qsTr("CONNECTIONS"); Layout.fillWidth: true }
+                    Item { Layout.fillWidth: root.collapsed }  // Centre the button on the collapsed rail
                     ToolButton {
                         text: "+"
                         font.pixelSize: 18
@@ -139,6 +155,7 @@ Rectangle {
                         ToolTip.text: Actions.newConnection.text.replace("&", "")
                         onClicked: Actions.newConnection.trigger()
                     }
+                    Item { Layout.fillWidth: root.collapsed }
                 }
 
                 Repeater {
@@ -165,7 +182,7 @@ Rectangle {
                 }
 
                 SectionLabel {
-                    visible: root.pages.length > 0
+                    visible: !root.collapsed && root.pages.length > 0
                     text: qsTr("VIEWS")
                 }
 
@@ -274,13 +291,14 @@ Rectangle {
             onClicked: Actions.about.trigger()
             background: Item {}
             contentItem: RowLayout {
-                spacing: 12
+                spacing: root.collapsed ? 0 : 12  // No gaps on the narrow rail, so the avatar stays centred
+                Item { Layout.fillWidth: root.collapsed }  // Centre the avatar on the collapsed rail (equal padding)
                 Rectangle {
                     width: 38
                     height: 38
                     radius: 19
                     color: Theme.accent
-                    Layout.leftMargin: 8
+                    Layout.leftMargin: root.collapsed ? 0 : 8
                     Label {
                         anchors.centerIn: parent
                         text: "CE"
@@ -289,6 +307,7 @@ Rectangle {
                     }
                 }
                 ColumnLayout {
+                    visible: !root.collapsed
                     spacing: 0
                     Label { text: metadata.name; color: Theme.text; font.bold: true }
                     Label { text: qsTr("Version %1").arg(metadata.version); color: Theme.muted; font.pixelSize: 12 }

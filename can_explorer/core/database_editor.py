@@ -90,6 +90,7 @@ class DatabaseEditor:
         self.warnings: List[str] = []
         self.dirty = False
         self._defer = 0  # >0 while a deferred() block batches changes and holds back validation
+        self._deferred: set = set()  # Messages touched inside a deferred() block, to validate when it ends
         if path is None:
             self.database = Database()
         else:
@@ -141,12 +142,17 @@ class DatabaseEditor:
     # Changes
 
     def _changed(self, message: Optional[Message] = None) -> None:
+        # Validate (refresh) only the message that changed, not every message in the database: a full
+        # database.refresh() is O(number of messages) and was run on every edit, which froze the UI on large
+        # databases. The editor does not use cantools' name/frame-id lookup dictionaries, so they need not be
+        # rebuilt here; a loaded database validates non-strictly (overlaps become issues), a new one strictly.
         self.dirty = True
-        if self._defer:  # Inside a deferred() block: validate once when it ends, not on every step
+        if message is None:
             return
-        if message is not None:
-            message.refresh(strict=False)
-        self.database.refresh()
+        if self._defer:  # Inside a deferred() block: validate once when it ends, not on every step
+            self._deferred.add(message)
+            return
+        message.refresh(self.database._strict)
 
     @contextmanager
     def deferred(self) -> Iterator[None]:
@@ -159,7 +165,9 @@ class DatabaseEditor:
         finally:
             self._defer -= 1
         if not self._defer:
-            self._changed()
+            messages, self._deferred = self._deferred, set()
+            for message in messages:
+                message.refresh(self.database._strict)
 
     @staticmethod
     def _check_name(name: str, what: str) -> str:

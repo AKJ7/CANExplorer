@@ -18,7 +18,7 @@ from can_explorer.testing import TestModule, testcase
 class EngineTests(TestModule):
     """Engine control unit: cyclic status and speed control."""
 
-    async def setup(self, t):                      # Before the first test case of the module
+    async def setup(self, t):  # Before the first test case of the module
         t.variables['ignition'] = False
 
     @testcase
@@ -31,7 +31,7 @@ class EngineTests(TestModule):
         t.variables['target_speed'] = 3000
         rpm = await t.expect_signal('EngineData.EngineSpeed', lambda rpm: rpm > 2900, timeout=4)
         t.log('reached', rpm, 'rpm')
-        await t.expect_signal('EngineData.GearPosition', 'Second')   # Value table texts work too
+        await t.expect_signal('EngineData.GearPosition', 'Second')  # Value table texts work too
 
 
 class GearboxTests(TestModule):
@@ -39,7 +39,7 @@ class GearboxTests(TestModule):
     async def obd_vehicle_speed(self, t):
         t.send(0x7DF, [0x02, 0x01, 0x0D, 0, 0, 0, 0, 0])
         response = await t.expect_message(0x7E8, timeout=0.5)
-        t.require(response is not None, 'response received')       # Ends the test case when it fails
+        t.require(response is not None, 'response received')  # Ends the test case when it fails
         t.check_equal(response.data[1:3], bytes([0x41, 0x0D]), 'positive response')
 ```
 
@@ -86,10 +86,11 @@ Frames the test sent itself are never seen.
 
 ```python
 @testcase(params=[800, 2000, 4000])
-async def engine_reaches(self, t, speed): ...           # engine_reaches[800], engine_reaches[2000], ...
+async def engine_reaches(self, t, speed): ...  # engine_reaches[800], engine_reaches[2000], ...
+
 
 @testcase(params=[{'target': 1500, 'gear': 'First'}, {'target': 3000, 'gear': 'Second'}], ids=['low', 'high'])
-async def gear_for_speed(self, t, target, gear): ...    # gear_for_speed[low], gear_for_speed[high]
+async def gear_for_speed(self, t, target, gear): ...  # gear_for_speed[low], gear_for_speed[high]
 ```
 
 A dict is passed as keyword arguments, a tuple as positional arguments, anything else as one argument after `t`.

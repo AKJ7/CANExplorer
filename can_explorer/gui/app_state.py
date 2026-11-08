@@ -10,19 +10,38 @@ from can_explorer.sys.log_handler import get_logger
 logger = get_logger(__name__)
 
 MAX_RECENT = 10
-# Must match the palettes of Theme.qml
+# Must match the palettes of Theme.qml. Listed alphabetically; this is the order shown in the theme picker.
 THEMES = (
+    'Amethyst',
+    'Aquarius',
+    'Beach',
+    'Beach Towels',
+    'Beautiful Blues',
+    'Blueberry',
+    'Bumblebee',
+    'Cappuccino',
+    'Cyberpunk',
     'Dark',
-    'Purple',
+    'Dracula',
+    'Ember',
+    'Forest',
+    'High Contrast',
+    'Light',
+    'Lollipop',
+    'Metro',
+    'Midnight Plum',
+    'Moonlight',
     'Nord',
     'Ocean',
-    'Forest',
-    'Light',
-    'Dracula',
-    'Solarized Dark',
-    'High Contrast',
-    'Cyberpunk',
+    'Pastel Rainbow',
+    'Pink Gold',
+    'Prism',
+    'Purple',
+    'Purple Skyline',
+    'Rainbow',
     'Rosé',
+    'Solarized Dark',
+    'Space Gray',
 )
 # Hidden themes: valid and persisted, but kept out of the theme list until unlocked. 'Spirit' (the red diamond)
 # is unlocked by the seven havens easter egg in the About dialog (see awaken_spirit).
@@ -256,6 +275,16 @@ class AppState(QObject):
     def set_sidebar_width(self, width: int) -> None:
         low, high = SIDEBAR_WIDTH_RANGE
         self._settings.setValue('window/sidebar_width', max(low, min(high, int(width))))
+        self._settings.sync()
+
+    @pyqtSlot(result=bool)
+    def sidebar_collapsed(self) -> bool:
+        """Whether the sidebar is collapsed (read when the window opens)."""
+        return str(self._settings.value('window/sidebar_collapsed', False)).lower() in ('true', '1')
+
+    @pyqtSlot(bool)
+    def set_sidebar_collapsed(self, collapsed: bool) -> None:
+        self._settings.setValue('window/sidebar_collapsed', bool(collapsed))
         self._settings.sync()
 
     # MQTT

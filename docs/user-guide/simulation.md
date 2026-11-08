@@ -40,21 +40,21 @@ class Engine(Node):
     @on_start
     def start(self):
         self.status = self.message('EngineData')  # Signal values of a database message
-        self.every(0.1, self.send_status)         # Timer, stopped with the simulation
+        self.every(0.1, self.send_status)  # Timer, stopped with the simulation
 
     def send_status(self):
         self.status.EngineSpeed = self.variables.get('target_speed', 800)
         self.send(self.status)
 
-    @on_message('EngineControl', 0x7DF)          # Database names and/or identifiers
+    @on_message('EngineControl', 0x7DF)  # Database names and/or identifiers
     def received(self, msg):
         self.log(msg.name, msg.signals)
 
-    @on_signal('VehicleSpeed', 'WheelSpeed')      # When a decoded value changes
+    @on_signal('VehicleSpeed', 'WheelSpeed')  # When a decoded value changes
     def speed(self, value, msg):
         self.variables['speed'] = value
 
-    @on_variable('ignition')                      # When a shared variable changes
+    @on_variable('ignition')  # When a shared variable changes
     def ignition(self, on):
         self.log('ignition', on)
 
@@ -74,11 +74,11 @@ class Engine(Node):
 Nodes receive the frames of the other nodes and of the bus, but not their own. Sending:
 
 ```python
-self.send(self.status)                       # A MessageBuffer from self.message(name)
-self.send('EngineData', EngineSpeed=1000)    # By name; other signals keep their initial value
-self.send(0x123, b'\x01\x02')                # Raw data; extended identifiers above 0x7FF
+self.send(self.status)  # A MessageBuffer from self.message(name)
+self.send('EngineData', EngineSpeed=1000)  # By name; other signals keep their initial value
+self.send(0x123, b'\x01\x02')  # Raw data; extended identifiers above 0x7FF
 self.send(0x18FEF100, [1, 2], extended=True, fd=True)
-self.send(0x10, remote=True)                 # Remote frame (a header on LIN)
+self.send(0x10, remote=True)  # Remote frame (a header on LIN)
 ```
 
 The complete Python API is in the [scripting API reference](../reference/scripting-api.md).

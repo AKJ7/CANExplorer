@@ -1,6 +1,6 @@
 [project]
 name = "can-explorer"
-version = "1.6.0"
+version = "1.7.0"
 description = "Monitor, analyse, diagnose, simulate and test CAN, CAN FD and LIN buses"
 authors = [{ name = "AKJ7", email = "akj123429@gmail.com" }]
 license = "MIT"
@@ -32,6 +32,7 @@ dependencies = [
     "PyQt6~=6.9.0",
     "python-can[serial]",
     "cantools",
+    "numpy>=1.22",  # Vectorises the reverse-engineering bit analysis (core/reverse/analysis.py)
     "qasync",
     "pydantic-settings",  # Settings from options, environment variables and .env files
     # can-server and its client (RemoteBus); click for the can-server command line
@@ -67,6 +68,8 @@ elm327 = "can_explorer.core.elm327:Elm327Bus"
 elm327_vpw = "can_explorer.core.elm327_vpw:Elm327VpwBus"
 # J2534 pass-thru devices (SAE J2534-1 04.04 drivers), usable as python-can interface "j2534"
 j2534 = "can_explorer.core.j2534:J2534Bus"
+# TMC RP1210 heavy-duty adapters (Nexiq, DG DPA, Noregon, …), usable as python-can interface "rp1210"
+rp1210 = "can_explorer.core.rp1210:Rp1210Bus"
 
 [project.optional-dependencies]
 mf4 = [
@@ -93,7 +96,6 @@ mqtt = [
 [dependency-groups]
 dev = [
     "rust-just",
-    "black",
     "mypy",
     "pre-commit",
     "docutils",
@@ -133,11 +135,6 @@ python_functions = "test_*"
 testpaths = "tests"
 asyncio_mode = "auto"
 
-[tool.black]
-line-length = 120
-include = ".pyi?$"
-skip-string-normalization = true
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -145,9 +142,17 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["can_explorer", "can_server"]
 
+# Ship the documentation inside the package so the in-app help (can_explorer.core.help) can read it.
+[tool.hatch.build.targets.wheel.force-include]
+"docs" = "can_explorer/resources/help/docs"
+
 [tool.ruff]
 line-length = 120
 target-version = "py310"
+
+[tool.ruff.format]
+# Match the project's style (the former black config used skip-string-normalization with single quotes)
+quote-style = "single"
 
 [tool.ruff.lint]
 select = ["E9", "F", "B"]

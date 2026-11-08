@@ -46,6 +46,20 @@
               <fx:PARAMETER ID="ep_name"><fx:SHORT-NAME>name</fx:SHORT-NAME><fx:DATATYPE-REF ID-REF="dt_name"/><fx:POSITION>0</fx:POSITION></fx:PARAMETER>
             </fx:PARAMETERS>
           </fx:EVENT>
+          <fx:EVENT ID="e_reading">
+            <fx:SHORT-NAME>ReadingEvent</fx:SHORT-NAME>
+            <fx:EVENT-IDENTIFIER>32773</fx:EVENT-IDENTIFIER>
+            <fx:PARAMETERS>
+              <fx:PARAMETER ID="ep_reading"><fx:SHORT-NAME>reading</fx:SHORT-NAME><fx:DATATYPE-REF ID-REF="dt_reading"/><fx:POSITION>0</fx:POSITION></fx:PARAMETER>
+            </fx:PARAMETERS>
+          </fx:EVENT>
+          <fx:EVENT ID="e_config">
+            <fx:SHORT-NAME>ConfigEvent</fx:SHORT-NAME>
+            <fx:EVENT-IDENTIFIER>32774</fx:EVENT-IDENTIFIER>
+            <fx:PARAMETERS>
+              <fx:PARAMETER ID="ep_config"><fx:SHORT-NAME>config</fx:SHORT-NAME><fx:DATATYPE-REF ID-REF="dt_config"/><fx:POSITION>0</fx:POSITION></fx:PARAMETER>
+            </fx:PARAMETERS>
+          </fx:EVENT>
         </fx:EVENTS>
       </fx:SERVICE-INTERFACE>
     </fx:SERVICE-INTERFACES>
@@ -75,6 +89,22 @@
         <fx:COMPLEX-DATATYPE-CLASS>ARRAY</fx:COMPLEX-DATATYPE-CLASS>
         <fx:MEMBERS>
           <fx:MEMBER ID="am_e"><fx:SHORT-NAME>e</fx:SHORT-NAME><fx:DATATYPE-REF ID-REF="dt_u16"/><fx:POSITION>0</fx:POSITION></fx:MEMBER>
+        </fx:MEMBERS>
+      </fx:DATATYPE>
+      <fx:DATATYPE ID="dt_reading" xsi:type="fx:COMPLEX-DATATYPE-TYPE">
+        <fx:SHORT-NAME>Reading</fx:SHORT-NAME>
+        <fx:COMPLEX-DATATYPE-CLASS>UNION</fx:COMPLEX-DATATYPE-CLASS>
+        <fx:MEMBERS>
+          <fx:MEMBER ID="um_count"><fx:SHORT-NAME>as_count</fx:SHORT-NAME><fx:DATATYPE-REF ID-REF="dt_u16"/><fx:POSITION>0</fx:POSITION></fx:MEMBER>
+          <fx:MEMBER ID="um_temp"><fx:SHORT-NAME>as_temp</fx:SHORT-NAME><fx:DATATYPE-REF ID-REF="dt_s16"/><fx:POSITION>1</fx:POSITION></fx:MEMBER>
+        </fx:MEMBERS>
+      </fx:DATATYPE>
+      <fx:DATATYPE ID="dt_config" xsi:type="fx:COMPLEX-DATATYPE-TYPE">
+        <fx:SHORT-NAME>Config</fx:SHORT-NAME>
+        <fx:COMPLEX-DATATYPE-CLASS>STRUCTURE</fx:COMPLEX-DATATYPE-CLASS>
+        <fx:MEMBERS>
+          <fx:MEMBER ID="cm_speed"><fx:SHORT-NAME>speed</fx:SHORT-NAME><fx:DATATYPE-REF ID-REF="dt_u16"/><fx:POSITION>0</fx:POSITION><fx:DATA-ID>1</fx:DATA-ID></fx:MEMBER>
+          <fx:MEMBER ID="cm_mode"><fx:SHORT-NAME>mode</fx:SHORT-NAME><fx:DATATYPE-REF ID-REF="dt_u8"/><fx:POSITION>1</fx:POSITION><fx:DATA-ID>2</fx:DATA-ID></fx:MEMBER>
         </fx:MEMBERS>
       </fx:DATATYPE>
     </fx:DATATYPES>

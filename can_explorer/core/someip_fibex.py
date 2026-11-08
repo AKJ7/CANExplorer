@@ -3,10 +3,13 @@ payloads can be deserialized into named signals (see someip_serialization.py).
 
 A subset is supported: service interfaces with their methods (input and return parameters) and events, and the
 data types they use — scalars (through a CODING's base data type), fixed and dynamic arrays, length-prefixed and
-fixed strings, and nested structures. Unions, optional (TLV) members and bit fields are not read; a message whose
-type uses one is simply not decoded. ARXML SOME/IP service interfaces are a separate format and not read here.
+fixed strings, nested structures and unions (COMPLEX-DATATYPE-CLASS UNION). Optional (TLV) members are read from
+a member's DATA-ID, so a member carrying one is decoded as a tagged, optional field. Bit fields have no standard
+FIBEX representation and are not auto-read (the serialization core supports them for hand-built descriptions).
+ARXML SOME/IP service interfaces are a separate format and not read here.
 """
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Dict, List, Optional
 from xml.etree import ElementTree
@@ -19,6 +22,7 @@ from can_explorer.core.someip_serialization import (
     SomeIpDescription,
     StringType,
     Struct,
+    UnionType,
 )
 
 # FIBEX / ASAM base data type -> the serialization scalar base
@@ -116,10 +120,17 @@ class _Reader:
     def _complex(self, element: ElementTree.Element, name: str, attributes) -> Optional[DataType]:
         kind = (_text(element, 'COMPLEX-DATATYPE-CLASS') or 'STRUCTURE').upper()
         members = self._members(element)
-        if kind == 'STRUCTURE':
-            built = [self.datatype(self.index[ref], member_name, member) for member_name, ref, member in members]
-            if any(item is None for item in built):
+        if kind in ('STRUCTURE', 'UNION'):
+            built = self._build_members(members)
+            if built is None:
                 return None
+            if kind == 'UNION':
+                return UnionType(
+                    name,
+                    built,
+                    length_field_bits=_int(element, 'UNION-LENGTH-FIELD-SIZE') or 32,
+                    type_field_bits=_int(element, 'UNION-TYPE-SELECTOR-FIELD-SIZE') or 32,
+                )
             return Struct(name, built, length_field_bits=_struct_length(element))
         if kind == 'TYPEDEF' and members:  # A named alias of a single type
             member_name, ref, member = members[0]
@@ -132,6 +143,17 @@ class _Reader:
             count, length_bits = _array_shape(element, attributes)
             return ArrayType(name, element_type, length_field_bits=length_bits, fixed_count=count)
         return None
+
+    def _build_members(self, members) -> Optional[List[DataType]]:
+        """Build each member's type, attaching a DATA-ID (SOME/IP TLV tag) when the member carries one."""
+        built: List[DataType] = []
+        for member_name, ref, member in members:
+            item = self.datatype(self.index[ref], member_name, member)
+            if item is None:
+                return None
+            data_id = _int(member, 'DATA-ID')
+            built.append(replace(item, data_id=data_id) if data_id is not None else item)
+        return built
 
     def _members(self, element: ElementTree.Element):
         members = []

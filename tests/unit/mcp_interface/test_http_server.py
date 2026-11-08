@@ -62,3 +62,38 @@ async def test_in_app_server_is_loopback_and_token_gated():
     finally:
         await server.stop()
         session.stop()
+
+
+async def test_in_app_server_disables_uvicorn_log_config(monkeypatch):
+    """A windowed Windows build has no console, so sys.stdout is None. uvicorn's default log config builds a colour
+    formatter whose __init__ calls sys.stdout.isatty(); with no stdout that raises and logging.config.dictConfig
+    re-wraps it as "Unable to configure formatter 'default'", so selecting an MCP (agent) tier failed to start the
+    server. The server must therefore pass log_config=None so uvicorn configures no logging of its own."""
+    pytest.importorskip('mcp')
+
+    import uvicorn
+
+    from can_explorer.mcp.http_server import InAppMcpServer
+    from can_explorer.mcp.service import CanService
+
+    captured = {}
+
+    class _ConfigSpy(uvicorn.Config):
+        def __init__(self, *args, **kwargs):
+            captured.update(kwargs)
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(uvicorn, 'Config', _ConfigSpy)
+    # Emulate the windowed-Windows console: no stdout for uvicorn's formatter to probe. With log_config left at its
+    # default this very construction raises ValueError('Unable to configure formatter ...'); log_config=None avoids it.
+    monkeypatch.setattr('sys.stdout', None)
+
+    session = BusSession(LiveSource(BusConfig('virtual', f'mcp-{uuid.uuid4().hex}')))
+    session.start()
+    server = InAppMcpServer(CanService.attach(session))
+    try:
+        await server.start()  # Must not raise "Unable to configure formatter 'default'"
+        assert 'log_config' in captured and captured['log_config'] is None
+    finally:
+        await server.stop()
+        session.stop()

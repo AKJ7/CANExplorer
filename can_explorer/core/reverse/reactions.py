@@ -11,6 +11,7 @@ from dataclasses import dataclass, field as dataclass_field
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 import can
+import numpy as np
 
 from can_explorer.core.reverse.analysis import IdFrames, IdKey, collect
 from can_explorer.core.reverse.fields import BitField
@@ -59,20 +60,18 @@ class ReactionReport:
 
 
 def _bit_flips(payloads: List[bytes]) -> Dict[int, int]:
-    """Per bit, how many times it changed from one frame to the next (only bits that changed appear)."""
-    flips: Dict[int, int] = {}
-    previous = None
-    for payload in payloads:
-        value = int.from_bytes(payload, 'little')
-        if previous is not None:
-            difference = value ^ previous
-            while difference:
-                lowest = difference & -difference
-                bit = lowest.bit_length() - 1
-                flips[bit] = flips.get(bit, 0) + 1
-                difference ^= lowest
-        previous = value
-    return flips
+    """Per bit, how many times it changed from one frame to the next (only bits that changed appear).
+
+    Frames are padded to the longest with zero bytes (as ``int.from_bytes`` treats missing high bits as 0) and the
+    frame-to-frame transitions are counted down each bit column at once.
+    """
+    length = max((len(payload) for payload in payloads), default=0)
+    if len(payloads) < 2 or length == 0:
+        return {}
+    matrix = np.frombuffer(b''.join(bytes(p).ljust(length, b'\x00') for p in payloads), dtype=np.uint8)
+    bits = np.unpackbits(matrix.reshape(len(payloads), length), axis=1, bitorder='little')
+    counts = np.count_nonzero(bits[1:] != bits[:-1], axis=0)
+    return {int(bit): int(counts[bit]) for bit in np.nonzero(counts)[0]}
 
 
 def _bit(payload: bytes, bit: int) -> int:

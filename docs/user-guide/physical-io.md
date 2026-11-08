@@ -56,10 +56,10 @@ e.g. to switch the ignition before a test:
 ```python
 from can_explorer.core.physical_io import LineConfig, list_devices, open_device
 
-print(list_devices())                        # [('aio:0042', 'aio_usb I/O adapter 0042'), ('simulated', …)]
+print(list_devices())  # [('aio:0042', 'aio_usb I/O adapter 0042'), ('simulated', …)]
 io = open_device('aio:0042')
 io.configure_line(0, LineConfig(output=True))
-io.set_outputs(mask=0b1, values=0b1)         # Line 0 high: ignition on
+io.set_outputs(mask=0b1, values=0b1)  # Line 0 high: ignition on
 status = io.read_status()
 print(status.level(4), status.analog_volts(io.info, reference=3.3))
 io.close()

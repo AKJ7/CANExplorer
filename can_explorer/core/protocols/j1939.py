@@ -146,3 +146,44 @@ class J1939Decoder:
             detail = self._payload(session.pgn, bytes(payload))
             return f'{text} — {detail}' if detail else text
         return f'TP.DT #{sequence}/{session.packets}'
+
+
+# SAE J1939-22 (J1939-FD) PGNs (values from the open python-can-j1939 project)
+PGN_MULTI_PG = 0x2500  # Multiplexed PG container: several parameter groups in one CAN FD frame
+PGN_FD_TP_CM = 0x4D00  # FD transport protocol, connection management
+PGN_FD_TP_DT = 0x4E00  # FD transport protocol, data transfer
+J1939_22_PGN_NAMES = {PGN_MULTI_PG: 'Multi-PG', PGN_FD_TP_CM: 'FD.TP.CM', PGN_FD_TP_DT: 'FD.TP.DT'}
+
+
+class J1939_22Decoder(J1939Decoder):
+    """Passive SAE J1939-22 (J1939-FD) decoder: J1939 carried on CAN FD. Ordinary single-PG frames decode exactly
+    like J1939 (on the longer FD payload); the FD transport protocol (FD.TP) and the multiplexed-PG (Multi-PG)
+    frames are recognised and labelled.
+
+    Expanding a Multi-PG frame into its contained PGs, and reassembling FD.TP messages, needs the C-PG / FD-TP byte
+    layout of the SAE J1939-22 standard (which is not public); until that is confirmed those frames are recognised
+    but their payload is shown as raw bytes rather than split into the individual parameter groups.
+    """
+
+    name = 'J1939-22'
+
+    @staticmethod
+    def pgn_label(pgn: int) -> str:
+        name = J1939_22_PGN_NAMES.get(pgn) or PGN_NAMES.get(pgn)
+        return f'PGN 0x{pgn:05X}' + (f' {name}' if name else '')
+
+    def describe(self, msg: can.Message) -> Optional[str]:
+        if not msg.is_extended_id:
+            return None
+        j1939_id = J1939Id.from_can_id(msg.arbitration_id)
+        if j1939_id.pgn in (PGN_MULTI_PG, PGN_FD_TP_CM, PGN_FD_TP_DT):
+            header = (
+                f'{self.pgn_label(j1939_id.pgn)} SA=0x{j1939_id.source_address:02X} '
+                f'DA=0x{j1939_id.destination_address:02X} P{j1939_id.priority}'
+            )
+            if j1939_id.pgn == PGN_MULTI_PG:
+                detail = f'multiplexed PGs, {len(msg.data)} bytes (contained PGs not expanded)'
+            else:
+                detail = f'FD transport, {len(msg.data)} bytes (not reassembled)'
+            return f'{header}: {detail}'
+        return super().describe(msg)

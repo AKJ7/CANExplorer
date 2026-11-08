@@ -7,7 +7,7 @@ def kinds(text):
 
 
 def test_keywords_names_numbers():
-    spans = kinds("for pid in ids():  # loop")
+    spans = kinds('for pid in ids():  # loop')
     assert spans['for'] == 'keyword' and spans['in'] == 'keyword'
     assert spans['ids'] == 'name'
     assert spans['# loop'] == 'comment'
@@ -24,7 +24,7 @@ def test_strings_hide_keywords_and_hashes():
 
 
 def test_numbers_including_hex_and_float():
-    spans = kinds("v = 0x1A0 + 3.5e2")
+    spans = kinds('v = 0x1A0 + 3.5e2')
     assert spans['0x1A0'] == 'number' and spans['3.5e2'] == 'number'
 
 

@@ -266,7 +266,7 @@ def resolve_channel(channel: str) -> J2534Device:
         'Install a 32-bit Python (python.org, "Windows installer (32-bit)") for the J2534 bridge, or use the '
         'CANExplorer installer, which contains it.'
         if device.machine == X86
-        else 'Ask the vendor for a driver of CANExplorer\'s architecture.'
+        else "Ask the vendor for a driver of CANExplorer's architecture."
     )
     raise can.CanInitializationError(
         f'The J2534 driver of {device.name} ({device.library}) is {_architecture(device.machine)}; CANExplorer is '

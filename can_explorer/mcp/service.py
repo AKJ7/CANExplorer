@@ -675,7 +675,7 @@ class CanService:
     # Protocol decoding and more reverse engineering
 
     def decode_protocol(self, protocol: str, identifier: Any, data: str, extended: bool = False) -> Dict[str, Any]:
-        """Interpret a frame with a protocol decoder (J1939, NMEA 2000, CANopen, ISO-TP, UDS, LIN, J1587), without
+        """Interpret a frame with a protocol decoder (J1939, J1939-22, NMEA 2000, CANopen, ISO-TP, UDS, KWP2000, LIN, J1587, NM, SecOC), without
         a database. Sends nothing."""
         if protocol not in PROTOCOL_DECODERS:
             return {'error': f'Unknown protocol {protocol!r}; use one of {", ".join(PROTOCOL_DECODERS)}'}

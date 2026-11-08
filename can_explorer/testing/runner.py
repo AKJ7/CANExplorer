@@ -185,7 +185,9 @@ def load_test_script(path: str | Path) -> LoadedTestScript:
                 args, kwargs = (
                     ((), dict(param))
                     if isinstance(param, dict)
-                    else (tuple(param), {}) if isinstance(param, tuple) else ((param,), {})
+                    else (tuple(param), {})
+                    if isinstance(param, tuple)
+                    else ((param,), {})
                 )
                 case = TestCaseInfo(
                     info.name,

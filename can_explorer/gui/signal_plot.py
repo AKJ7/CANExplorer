@@ -1,6 +1,7 @@
 import math
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
+import numpy as np
 from PyQt6.QtCore import QObject, QPointF, QRectF, Qt, pyqtProperty, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
 from PyQt6.QtQml import qmlRegisterType
@@ -15,6 +16,25 @@ TIME_TICKS = 6
 
 def _format(value: float) -> str:
     return f'{value:.6g}'
+
+
+def _min_max_columns(
+    times: np.ndarray, values: np.ndarray, start: float, x_scale: float
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Reduce a series to the min and max value of each pixel column. Returns (column, minimum, maximum) arrays,
+    the columns ascending. `times` must be sorted; non-finite values are dropped. Columns are
+    `int((time - start) * x_scale)`, so a point just left of the window keeps its negative column."""
+    finite = np.isfinite(values)
+    times, values = times[finite], values[finite]
+    if times.size == 0:
+        empty = np.empty(0)
+        return empty.astype(np.int64), empty, empty
+    columns = ((times - start) * x_scale).astype(np.int64)  # Non-decreasing, since times are sorted
+    change = np.empty(columns.size, dtype=bool)
+    change[0] = True
+    np.not_equal(columns[1:], columns[:-1], out=change[1:])
+    segments = np.nonzero(change)[0]
+    return columns[segments], np.minimum.reduceat(values, segments), np.maximum.reduceat(values, segments)
 
 
 def _nice_step(span: float, ticks: int) -> float:
@@ -171,12 +191,15 @@ class SignalPlot(QQuickPaintedItem):
         start, end = self._view.time_range()
         if end <= start:
             end = start + 1
-        windows = [(key, data, *data.window(start, end)) for key, data in series]
+        windows = []
+        for key, data in series:
+            times, values = data.window(start, end)
+            windows.append((key, data, np.asarray(times, dtype=float), np.asarray(values, dtype=float)))
         ranges = {}
         for key, _, _, values in windows:
-            finite = [value for value in values if math.isfinite(value)]
-            if finite:
-                ranges[key] = (min(finite), max(finite))
+            finite = values[np.isfinite(values)]
+            if finite.size:
+                ranges[key] = (float(finite.min()), float(finite.max()))
         if not ranges:
             painter.setPen(self._text_color)
             painter.drawText(plot, Qt.AlignmentFlag.AlignCenter, 'No data in this time range')
@@ -222,36 +245,27 @@ class SignalPlot(QQuickPaintedItem):
         self._draw_cursors(painter, plot, start, end)
 
     @staticmethod
-    def _path(plot: QRectF, times, values, start: float, end: float, low: float, high: float) -> QPainterPath:
-        """Min/max per pixel column."""
+    def _path(plot: QRectF, times: np.ndarray, values: np.ndarray, start: float, end: float, low: float, high: float):
+        """Min/max per pixel column, drawn min then max."""
         x_scale = plot.width() / (end - start)
         y_scale = plot.height() / (high - low)
+        columns, column_min, column_max = _min_max_columns(times, values, start, x_scale)
         path = QPainterPath()
-        column, column_min, column_max, first_point = None, 0.0, 0.0, True
-
-        def flush():
-            nonlocal first_point
-            x = plot.left() + column
-            for value in (column_min, column_max) if column_min != column_max else (column_min,):
-                point = QPointF(x, plot.bottom() - (value - low) * y_scale)
-                if first_point:
+        left, bottom = plot.left(), plot.bottom()
+        xs = left + columns
+        y_min = bottom - (column_min - low) * y_scale
+        y_max = bottom - (column_max - low) * y_scale
+        first = True
+        for index in range(columns.size):
+            x = xs[index]
+            points = (y_min[index],) if column_min[index] == column_max[index] else (y_min[index], y_max[index])
+            for y in points:
+                point = QPointF(x, y)
+                if first:
                     path.moveTo(point)
-                    first_point = False
+                    first = False
                 else:
                     path.lineTo(point)
-
-        for timestamp, value in zip(times, values, strict=True):
-            if not math.isfinite(value):
-                continue
-            pixel = int((timestamp - start) * x_scale)
-            if pixel != column:
-                if column is not None:
-                    flush()
-                column, column_min, column_max = pixel, value, value
-            else:
-                column_min, column_max = min(column_min, value), max(column_max, value)
-        if column is not None:
-            flush()
         return path
 
     def _draw_time_axis(self, painter: QPainter, plot: QRectF, start: float, end: float) -> None:

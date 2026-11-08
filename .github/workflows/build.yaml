@@ -25,7 +25,7 @@ jobs:
       - name: Ruff
         run: uv run ruff check .
       - name: Black
-        run: uv run black --check .
+        run: uv run ruff format --check .
 
   test:
     name: Test (${{ matrix.os }}, Python ${{ matrix.python }})

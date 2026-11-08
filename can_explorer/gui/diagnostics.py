@@ -376,8 +376,10 @@ class DiagnosticsController(QObject):
         request = bytes([0x31, control_type, identifier >> 8, identifier & 0xFF]) + payload
         return self._service(
             request,
-            lambda response: f'Routine 0x{identifier:04X} {ROUTINE_CONTROL_TYPES.get(control_type)}'
-            + (f': {format_hex(response[4:])}' if len(response) > 4 else ''),
+            lambda response: (
+                f'Routine 0x{identifier:04X} {ROUTINE_CONTROL_TYPES.get(control_type)}'
+                + (f': {format_hex(response[4:])}' if len(response) > 4 else '')
+            ),
         )
 
     @pyqtSlot(bool)

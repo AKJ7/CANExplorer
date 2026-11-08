@@ -42,10 +42,15 @@ are decoded with their own parameters. The format is chosen by the file extensio
 FIBEX).
 
 A subset of each is read: service interfaces with their methods (input and return parameters) and events, and the
-data types they use — scalars, fixed and dynamic arrays, length-prefixed and fixed strings, and nested structures.
-From ARXML the SOME/IP service/method/event ids come from the `SOMEIP-SERVICE-INTERFACE-DEPLOYMENT` elements, which
-reference the service interfaces. Unions, optional (TLV) members and bit fields are not read; a message whose type
-uses one keeps its generic description.
+data types they use — scalars, fixed and dynamic arrays, length-prefixed and fixed strings, nested structures and
+**unions**. From ARXML the SOME/IP service/method/event ids come from the `SOMEIP-SERVICE-INTERFACE-DEPLOYMENT`
+elements, which reference the service interfaces.
+
+**Optional (TLV) members** are decoded: where a FIBEX member carries a SOME/IP **data ID**, the struct is read as
+tag/length/value, so members may be absent, arrive out of order, or be unknown to the description (unknown ones are
+skipped). The decoder also handles **unions** (a length, a type selector, then the selected member) and **bit
+fields** (several named sub-fields packed into one integer); unions are read from FIBEX and ARXML, while bit fields
+and ARXML TLV data IDs are supported by the decoder for scripts but not auto-derived from the description files.
 
 The live SOME/IP tool reads UDP. SOME/IP carried over **TCP** (reassembled across segments) and **SOME/IP-TP**
 segmented messages are decoded when you open a capture in the [Ethernet capture](ethernet.md) tool.
@@ -54,5 +59,7 @@ segmented messages are decoded when you open a capture in the [Ethernet capture]
 
 AUTOSAR **E2E** protection (the CRC and sequence counter that guard a PDU against corruption, loss, repetition and
 reordering) is available as a library for scripts — `can_explorer.core.e2e` provides the AUTOSAR CRC routines
-(`crc8`, `crc8h2f`, `crc16`, `crc32`, `crc32p4`) and E2E **Profile 2** protect/check. Validating a live PDU needs
-its E2E configuration (profile, Data IDs, offset) from the ARXML, which the UI does not read yet.
+(`crc8`, `crc8h2f`, `crc16`, `crc32`, `crc32p4`) and the **Profile 2**, **Profile 5** and **Profile 22**
+protect/check functions (each in its default header position, verified against the worked examples in the AUTOSAR
+E2E Protocol Specification). Validating a live PDU needs its E2E configuration (profile, Data IDs, offset) from the
+ARXML, which the UI does not read yet.

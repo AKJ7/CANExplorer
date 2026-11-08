@@ -11,10 +11,19 @@ from can_explorer.core import dbf
 
 READ_SUFFIXES = ('.dbc', '.dbf', '.kcd', '.sym', '.arxml')
 WRITE_SUFFIXES = ('.dbc', '.dbf', '.kcd', '.sym')
+DEFAULT_WRITE_SUFFIX = WRITE_SUFFIXES[0]  # '.dbc': the output format for read-only sources such as ARXML
 
 
 class DatabaseFormatError(ValueError):
     pass
+
+
+def output_suffix(source_suffix: str) -> str:
+    """A writable format for a database that was read from `source_suffix`: the same format when it can be written
+    back, otherwise the default writable format. This guarantees that every readable (hence editable) format has an
+    output path — a read-only format such as ARXML is saved as DBC rather than being a dead end."""
+    suffix = source_suffix.lower()
+    return suffix if suffix in WRITE_SUFFIXES else DEFAULT_WRITE_SUFFIX
 
 
 def _suffix(path: Path, supported: Tuple[str, ...], action: str) -> str:
@@ -91,8 +100,7 @@ class ConversionReport:
 
     def summary(self) -> str:
         text = (
-            f'Converted {self.source.name} to {self.destination.name}: '
-            f'{self.messages} messages, {self.signals} signals'
+            f'Converted {self.source.name} to {self.destination.name}: {self.messages} messages, {self.signals} signals'
         )
         if self.warnings:
             text += f', {len(self.warnings)} warnings:\n' + '\n'.join(f'- {warning}' for warning in self.warnings)

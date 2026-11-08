@@ -1,15 +1,17 @@
-"""The Ethernet capture tool for QML: open a pcap file (or capture live, on Linux) and show the decoded packets
-(see can_explorer.core.ethernet). Not tied to a CAN connection — it is a standalone network tool."""
+"""The Ethernet capture tool for QML: open a pcap file (or capture live, cross-platform via libpcap/Npcap) and show
+the decoded packets (see can_explorer.core.ethernet). Not tied to a CAN connection — it is a standalone network
+tool."""
 
 import asyncio
 import socket
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Union
 
+import can
 from PyQt6.QtCore import QObject, QTimer, QUrl, pyqtProperty, pyqtSignal, pyqtSlot
 
-from can_explorer.core import ethernet, gptp
+from can_explorer.core import ethernet, gptp, log_formats, pcap_live
 from can_explorer.sys.log_handler import get_logger
 
 logger = get_logger(__name__)
@@ -57,6 +59,29 @@ class LiveCapture:
             self._socket = None
 
 
+class PcapLiveCapture:
+    """Cross-platform live capture through libpcap/Npcap (can_explorer.core.pcap_live). The capture runs on a
+    background thread; frames are handed back to the asyncio loop with call_soon_threadsafe."""
+
+    def __init__(self, interface: str, on_packet: Callable[[float, bytes], None]):
+        self._loop = asyncio.get_running_loop()
+        self._on_packet = on_packet
+        self._capture = pcap_live.PcapCapture(interface, self._deliver)
+
+    def _deliver(self, timestamp: float, data: bytes) -> None:
+        # Called from the capture thread; marshal the frame onto the event loop.
+        try:
+            self._loop.call_soon_threadsafe(self._on_packet, timestamp, data)
+        except RuntimeError:
+            pass  # The event loop is shutting down
+
+    def start(self) -> None:
+        self._capture.start()
+
+    def stop(self) -> None:
+        self._capture.stop()
+
+
 class EthernetController(QObject):
     """Opens pcap files and (on Linux) captures live, decoding automotive Ethernet traffic."""
 
@@ -72,8 +97,9 @@ class EthernetController(QObject):
         self._status = ''
         self._file = ''
         self._busy = False
-        self._capture: Optional[LiveCapture] = None
-        self._decoder = ethernet.StreamDecoder()  # Reassembles SOME/IP over TCP and SOME/IP-TP across packets
+        self._capture: Optional[Union[LiveCapture, PcapLiveCapture]] = None
+        self._nm_port: Optional[int] = None  # AUTOSAR UDP-NM has no standard port; the user sets it
+        self._decoder = ethernet.StreamDecoder(self._nm_port)  # Reassembles SOME/IP over TCP and SOME/IP-TP
         self._base_time: Optional[float] = None
         self._timer = QTimer(self)
         self._timer.setInterval(REFRESH_INTERVAL_MS)
@@ -104,7 +130,8 @@ class EthernetController(QObject):
 
     @pyqtProperty('QStringList', constant=True)
     def interfaces(self) -> List[str]:
-        return ethernet.interfaces()
+        # libpcap/Npcap lists the capturable devices on any platform; fall back to the OS interface names.
+        return pcap_live.list_interfaces() if pcap_live.available() else ethernet.interfaces()
 
     @pyqtProperty(str, notify=changed)
     def filter(self) -> str:
@@ -115,6 +142,53 @@ class EthernetController(QObject):
         self._filter = text.strip()
         self.changed.emit()
         self.data_changed.emit()
+
+    @pyqtProperty(int, notify=changed)
+    def nm_port(self) -> int:
+        return self._nm_port or 0
+
+    @pyqtSlot(int)
+    def set_nm_port(self, port: int) -> None:
+        """Set the UDP port carrying AUTOSAR UDP-NM (0 to disable), then re-decode the loaded capture."""
+        new_port = port if port > 0 else None
+        if new_port == self._nm_port:
+            return
+        self._nm_port = new_port
+        self.changed.emit()
+        if self._raw and self._capture is None and not self._busy:
+            asyncio.ensure_future(self._redecode())
+
+    async def _redecode(self) -> None:
+        """Re-run the decoder over the already-loaded raw packets (after the UDP-NM port changed)."""
+        self._busy, self._status = True, 'Re-decoding…'
+        self.changed.emit()
+        decoder = ethernet.StreamDecoder(self._nm_port)
+        raw = self._raw
+        decoded = await asyncio.to_thread(
+            lambda: [decoder.decode(packet.data, packet.timestamp, index + 1) for index, packet in enumerate(raw)]
+        )
+        self._decoder, self._decoded = decoder, decoded
+        self._status, self._busy = f'{len(decoded):,} packets', False
+        self.changed.emit()
+        self.data_changed.emit()
+
+    @pyqtSlot(int, result='QVariantList')
+    def dissect(self, number: int) -> List[Dict[str, Any]]:
+        """The field-by-field dissection of the packet with this number, flattened to rows carrying a tree `depth`,
+        a `label` and a `value`, for the details pane."""
+        if not 1 <= number <= len(self._raw):
+            return []
+        raw = self._raw[number - 1]
+        tree = ethernet.dissect(raw.data, raw.timestamp, number, self._nm_port)
+        rows: List[Dict[str, Any]] = []
+
+        def walk(node: ethernet.DissectionField, depth: int) -> None:
+            rows.append({'depth': depth, 'label': node.label, 'value': node.value})
+            for child in node.children:
+                walk(child, depth + 1)
+
+        walk(tree, 0)
+        return rows
 
     @pyqtProperty(int, notify=data_changed)
     def count(self) -> int:
@@ -136,6 +210,33 @@ class EthernetController(QObject):
         """A time-sync (gPTP / 802.1AS) summary of the capture: grandmaster, clocks, Sync rate and intervals."""
         messages = [packet.gptp for packet in self._decoded if packet.gptp is not None]
         return gptp.summarize(messages).as_dict() if messages else {}
+
+    @pyqtProperty(int, notify=data_changed)
+    def can_frame_count(self) -> int:
+        """How many CAN frames are tunnelled in AVTP ACF (TSCF/NTSCF) across the capture."""
+        return sum(len(packet.can_frames) for packet in self._decoded)
+
+    @pyqtProperty(bool, notify=data_changed)
+    def has_avtp_streams(self) -> bool:
+        return any(packet.avtp is not None for packet in self._decoded)
+
+    @pyqtProperty('QVariantList', notify=data_changed)
+    def avtp_streams(self) -> List[Dict[str, Any]]:
+        """Per-stream AVTP health (packets, inferred lost frames, loss %, rate) for the stream-health table."""
+        rows = []
+        for stat in ethernet.avtp_stream_stats(self._decoded):
+            rows.append(
+                {
+                    'stream': stat.stream_id,
+                    'format': stat.subtype_name,
+                    'packets': stat.packets,
+                    'lost': stat.lost,
+                    'loss': f'{stat.loss_percent:.1f}%',
+                    'issues': stat.duplicates + stat.reordered,
+                    'rate': f'{stat.rate_hz:.0f} Hz' if stat.rate_hz else '',
+                }
+            )
+        return rows
 
     @pyqtProperty(bool, notify=data_changed)
     def has_someip(self) -> bool:
@@ -211,7 +312,7 @@ class EthernetController(QObject):
         return ''
 
     async def _open_pcap(self, path: str) -> None:
-        decoder = ethernet.StreamDecoder()
+        decoder = ethernet.StreamDecoder(self._nm_port)
         try:
             raw = await asyncio.to_thread(lambda: list(ethernet.read_pcap(path))[:MAX_PACKETS])
             decoded = await asyncio.to_thread(
@@ -232,18 +333,25 @@ class EthernetController(QObject):
 
     @pyqtSlot(str, result=str)
     def start_capture(self, interface: str) -> str:
-        """Start capturing live on an interface (Linux). Returns an error, or ''."""
+        """Start capturing live on an interface. Uses libpcap/Npcap when available (Linux/macOS/Windows), else the
+        Linux AF_PACKET socket. Returns an error, or ''."""
         if self._capture is not None:
             return ''
         if not interface:
             return 'Choose an interface'
         self.clear()
-        self._decoder = ethernet.StreamDecoder()
-        capture = LiveCapture(interface, self._on_live_packet)
+        self._decoder = ethernet.StreamDecoder(self._nm_port)
+        capture: Union[LiveCapture, PcapLiveCapture]
+        if pcap_live.available():
+            capture = PcapLiveCapture(interface, self._on_live_packet)
+        elif hasattr(socket, 'AF_PACKET'):
+            capture = LiveCapture(interface, self._on_live_packet)
+        else:
+            return 'Live capture needs libpcap (Linux/macOS) or Npcap (Windows); install it, or open a saved pcap'
         try:
             capture.start()
         except (OSError, PermissionError) as e:
-            return f'Could not capture on {interface}: {e} (root/CAP_NET_RAW may be needed)'
+            return f'Could not capture on {interface}: {e} (root/CAP_NET_RAW, BPF access, or Npcap may be needed)'
         self._capture = capture
         self._file = f'live: {interface}'
         self._status = 'Capturing…'
@@ -279,7 +387,7 @@ class EthernetController(QObject):
     def clear(self) -> None:
         self._raw = []
         self._decoded = []
-        self._decoder = ethernet.StreamDecoder()
+        self._decoder = ethernet.StreamDecoder(self._nm_port)
         self._base_time = None
         if self._capture is None:
             self._file = ''
@@ -299,6 +407,29 @@ class EthernetController(QObject):
         except OSError as e:
             return f'Could not write {Path(path).name}: {e}'
         return f'Saved {len(self._raw):,} packets to {Path(path).name}'
+
+    @pyqtSlot(QUrl, result=str)
+    def export_can_log(self, url: QUrl) -> str:
+        """Save the CAN frames tunnelled in AVTP ACF (TSCF/NTSCF) to a CAN log file, so they can be opened or
+        replayed in a CAN connection and run through the ordinary CAN views. Returns a message."""
+        path = url.toLocalFile() if url.isLocalFile() else url.toString()
+        if not log_formats.is_log_file(path):
+            return log_formats.unsupported_message(path)
+        frames = [(packet.timestamp, frame) for packet in self._decoded for frame in packet.can_frames]
+        if not frames:
+            return 'No tunnelled CAN frames to save'
+        try:
+            with can.Logger(path) as writer:
+                for timestamp, frame in frames:
+                    message = frame.to_message(timestamp)
+                    try:
+                        writer.on_message_received(message)
+                    except Exception:  # Some writers (e.g. BLF) reject an unexpected channel; drop it and retry
+                        message.channel = None
+                        writer.on_message_received(message)
+        except (OSError, ValueError) as e:
+            return f'Could not write {Path(path).name}: {e}'
+        return f'Saved {len(frames):,} CAN frames to {Path(path).name}'
 
     def shutdown(self) -> None:
         self.stop_capture()

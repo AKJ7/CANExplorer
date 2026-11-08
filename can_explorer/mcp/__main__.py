@@ -78,7 +78,11 @@ async def _serve(service: CanService, server) -> None:
     tier = (
         'send'
         if service.allow_send
-        else 'control' if service.allow_control else 'diagnostics' if service.allow_diagnostics else 'read-only'
+        else 'control'
+        if service.allow_control
+        else 'diagnostics'
+        if service.allow_diagnostics
+        else 'read-only'
     )
     where = 'connected' if service.connected else 'not connected (the agent will connect)'
     logger.info('CANExplorer MCP server ready (%s, %s)', tier, where)

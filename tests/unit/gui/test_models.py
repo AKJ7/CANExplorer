@@ -161,6 +161,57 @@ def test_overview_refreshes_only_changed_rows(qapp):
     assert '<b>' not in QGuiApplication.clipboard().text()
 
 
+def test_fade_colour_helpers():
+    from can_explorer.gui.models import _fade_byte_markup, _lerp_color, _parse_hex_color
+
+    assert _parse_hex_color('#f39c12') == (0xF3, 0x9C, 0x12)
+    assert _parse_hex_color('#abc') == (0xAA, 0xBB, 0xCC)
+    assert _parse_hex_color('nonsense') == (128, 128, 128)
+    assert _lerp_color((0, 0, 0), (255, 255, 255), 0.0) == '#000000'
+    assert _lerp_color((0, 0, 0), (255, 255, 255), 1.0) == '#ffffff'
+    assert _lerp_color((0, 0, 0), (200, 0, 0), 0.5) == '#640000'
+    # A fresh change is bold in the highlight colour; a fully cooled byte is plain text.
+    hi, text = (0xFF, 0x00, 0x00), (0x20, 0x20, 0x20)
+    assert _fade_byte_markup(0xAB, 0.0, hi, text) == '<font color="#ff0000"><b>AB</b></font>'
+    assert _fade_byte_markup(0xAB, 1.0, hi, text) == 'AB'
+    assert '<b>' not in _fade_byte_markup(0xAB, 0.7, hi, text)  # Past halfway: no longer bold
+
+
+def test_overview_fade_mode(qapp):
+    statistics = IdStatistics()
+    model = OverviewModel(statistics)
+    model.highlight_color = '#ff0000'
+    model.text_color = '#202020'
+    clock = {'now': 100.0}
+    model._clock = lambda: clock['now']  # Deterministic clock for the fade ages
+
+    statistics.update(frame(0x100, b'\x01\x02', timestamp=1.0))
+    model.refresh(*statistics.drain_changes())
+    model.set_fade(True)
+    assert model.fade
+
+    # Byte 1 changes 0x02 -> 0x03 at t=100; byte 0 stays 0x01.
+    statistics.update(frame(0x100, b'\x01\x03', timestamp=1.1))
+    model.refresh(*statistics.drain_changes())
+    fresh = cell(model, 0, 6)
+    assert fresh.startswith('01 ') and '<b>03</b>' in fresh  # stable byte plain, changed byte glowing+bold
+    assert cell(model, 0, 6, RICH_TEXT_ROLE) is True
+
+    # Half a window later the changed byte has cooled past bold but is still coloured.
+    clock['now'] = 100.0 + model._fade_window * 0.75
+    midway = cell(model, 0, 6)
+    assert '<b>' not in midway and '<font' in midway
+
+    # After the full window, everything is plain again.
+    clock['now'] = 100.0 + model._fade_window + 0.1
+    assert cell(model, 0, 6) == '01 03'
+
+    # Turning fade off reverts to the instant "differs from previous frame" highlight (byte 1 still differs).
+    model.set_fade(False)
+    assert not model.fade
+    assert cell(model, 0, 6) == '01 <font color="#ff0000"><b>03</b></font>'
+
+
 def test_overview_highlight_color(qapp):
     statistics = IdStatistics()
     model = OverviewModel(statistics)

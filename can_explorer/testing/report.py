@@ -124,7 +124,9 @@ def to_html(report: TestReport) -> str:
             mark = (
                 ''
                 if step.passed is None
-                else '<span class="ok">✔</span> ' if step.passed else '<span class="nok">✘</span> '
+                else '<span class="ok">✔</span> '
+                if step.passed
+                else '<span class="nok">✘</span> '
             )
             parts.append(
                 f'<tr><td class="time">{step.time:.3f} s</td><td class="kind">{html.escape(step.kind)}</td>'

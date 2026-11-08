@@ -58,3 +58,52 @@ def test_profile2_requires_sixteen_ids():
 
     with pytest.raises(ValueError, match='16 entries'):
         e2e.Profile2([1, 2, 3])
+
+
+def test_profile5_matches_autosar_example():
+    # AUTOSAR PRS_E2EProtocol §6.8.5, Table 6.53: DataID 0x1234, offset 0, 8-byte PDU with 5 data bytes (all zero),
+    # counter 0 -> CRC bytes 0x1c 0xca (little endian).
+    profile = e2e.Profile5(0x1234)
+    protected = profile.protect(bytes(8), counter=0)
+    assert protected[0] == 0x1C and protected[1] == 0xCA and protected[2] == 0x00
+    result = profile.check(protected)
+    assert result.ok and result.counter == 0 and result.crc == 0xCA1C
+
+
+def test_profile5_round_trip_and_tamper():
+    profile = e2e.Profile5(0x0A0B)
+    payload = bytes([0x00, 0x00, 0x00, 0xDE, 0xAD, 0xBE, 0xEF])  # bytes 0-1 CRC, byte 2 counter
+    protected = profile.protect(payload, counter=200)
+    assert protected[2] == 200 and profile.check(protected).ok
+    tampered = bytearray(protected)
+    tampered[4] ^= 0xFF
+    assert not profile.check(bytes(tampered)).ok
+    wrong_counter = bytearray(protected)
+    wrong_counter[2] = 201  # The counter is covered by the CRC, so changing it alone fails the check
+    assert not profile.check(bytes(wrong_counter)).ok
+    assert not profile.check(b'\x00\x00').ok  # Too short
+
+
+def test_profile22_matches_autosar_example():
+    # AUTOSAR PRS_E2EProtocol §6.13.5, Table 6.101: DataIDList 0x01..0x10, 8-byte PDU of zeros.
+    profile = e2e.Profile22(list(range(0x01, 0x11)))
+    for counter, expected_crc in ((1, 0x1B), (2, 0x98), (0, 0x0E), (15, 0xCD)):
+        protected = profile.protect(bytes(8), counter=counter)
+        assert protected[0] == expected_crc and protected[1] & 0x0F == counter & 0x0F
+        assert profile.check(protected).ok
+
+
+def test_profile22_round_trip_and_tamper():
+    profile = e2e.Profile22(list(range(0x20, 0x30)))
+    protected = profile.protect(bytes([0x00, 0x00, 0x11, 0x22, 0x33]), counter=7)
+    assert protected[1] & 0x0F == 7 and profile.check(protected).ok
+    tampered = bytearray(protected)
+    tampered[3] ^= 0xFF
+    assert not profile.check(bytes(tampered)).ok
+
+
+def test_profile22_requires_sixteen_ids():
+    import pytest
+
+    with pytest.raises(ValueError, match='16 entries'):
+        e2e.Profile22([1, 2, 3])

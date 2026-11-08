@@ -6,6 +6,137 @@ All notable changes to CANExplorer are documented in this file. The format follo
 CANExplorer follows [semantic versioning](https://semver.org/) from 1.0.0 on. Between `0.0.1` and `1.0.0`, the
 development stages are listed by date and commit, newest first.
 
+## [Unreleased]
+
+## [1.7.0] – 2026-11-08
+
+### Added
+
+- **Fade-highlight mode in the Overview.** Tick **Fade changes** and each changed byte glows in the highlight
+  colour and cools back to the text colour over about a second, so you can watch which bytes are active while you
+  operate the vehicle (rather than only seeing which bytes differ from the one previous frame).
+- **Cross-platform live capture** in the Ethernet capture tool. Live capture now works on **Linux, macOS and
+  Windows** through libpcap (Npcap on Windows), via a dependency-free ctypes wrapper (`core/pcap_live.py`); on Linux
+  it falls back to the previous `AF_PACKET` socket when libpcap is absent. The interface list comes from libpcap
+  where available. (Capture still needs privileges — root/`CAP_NET_RAW`, BPF access or Npcap.)
+- **AVTP stream health** in the Ethernet capture tool: an **AVTP streams** card listing each stream (by stream id
+  and format) with its packet count, **lost frames** (inferred from gaps in the 8-bit AVTP sequence number), loss %
+  and average rate. Sequence wrap-around, duplicates and reordered frames are accounted for separately.
+- **More E2E profiles.** `can_explorer.core.e2e` now implements AUTOSAR E2E **Profile 5** (CRC16, 8-bit counter,
+  implicit 16-bit Data ID) and **Profile 22** (Profile-2 layout with the CRC8H2F polynomial), alongside Profile 2 —
+  each verified against the worked examples in the AUTOSAR E2E Protocol Specification.
+- **Per-packet field dissection** in the Ethernet capture tool: click a packet to open a details pane with its
+  field-by-field breakdown layer by layer — Ethernet, VLAN/R-TAG, IPv4/IPv6, UDP/TCP and the recognised application
+  protocol (SOME/IP messages, AVTP-ACF tunnelled CAN frames), each row recording the byte span it covers.
+- **AVTP stream formats decoded** in the Ethernet capture tool: **AAF** (audio — format, sample rate, channels, bit
+  depth), **CVF** (compressed video — format and codec: MJPEG/H.264/H.265) and **CRF** (clock reference — type, base
+  frequency, timestamp interval) header fields, following the open COVESA Open1722 version-0 layouts. The media
+  payload itself is not decoded.
+- **AUTOSAR UDP-NM decoding** in the Ethernet capture tool: set the **UDP-NM port** (UDP-NM has no standard port) and
+  matching frames are decoded as **UDP-NM**, showing the source node, control-bit-vector flags and requested partial
+  networks; the capture is re-decoded when the port changes.
+- **Fuller SOME/IP payload deserialization**: **optional (TLV) members** (tag/length/value — members may be absent,
+  out of order, or unknown and skipped), **unions** and **bit fields**. Unions are read from FIBEX and ARXML and TLV
+  data IDs from FIBEX; the decoder itself also supports bit fields and ARXML TLV for hand-built descriptions.
+- **Broader automotive-Ethernet decoding** in the Ethernet capture tool: the **SRP/TSN** stream-reservation control
+  protocols (MVRP, MSRP, MMRP) and the 802.1CB **R-TAG** (FRER) redundancy tag; **MACsec** (802.1AE) and **IPsec**
+  ESP/AH; **IGMP** and **MLD** multicast membership; and the infrastructure protocols **DHCP** and **DNS/mDNS**
+  (with the queried name). AVTP **MAAP** address-allocation messages are named with their probe/defend/announce
+  type.
+
+- **Restbus simulation.** A new **Restbus** view on every connection that can transmit sends the connection's
+  database messages periodically at their cycle times, so an ECU on the bench sees the rest of the bus. Choose which
+  messages to send (cyclic ones are on by default, with All / None / Cyclic-only), optionally exclude the node you
+  are testing, set a default cycle for event messages, and edit each message's signal values (even while running).
+  The view follows the connection's database as it is loaded or changed. Message counters and E2E/CRC checksums are
+  not computed (documented in the view's page).
+- **Clicking the CANExplorer logo/title in the sidebar returns to the welcome page**, from any connection or tool.
+- **Keyboard shortcuts to switch between open connections** — **Ctrl+Tab** / **Ctrl+Shift+Tab** (or
+  **Ctrl+PageDown** / **Ctrl+PageUp**) cycle to the next or previous connection, wrapping around, like browser tabs.
+- **Editing a read-only database is no longer a dead end.** ARXML can be read but not written; the database editor
+  now points **Save** and **Save as…** at the Save-as dialog with a writable file name suggested (the same file as
+  a `.dbc`), so every database that can be edited can always be saved in a writable format (DBC, DBF, KCD or SYM).
+- **In-app help.** The user guide is now available inside the app — press **F1** or the **?** button in the top
+  bar for the page that matches the current view, or open **Help** from the menu. The help panel has a table of
+  contents for the user guide, full-text search, back/forward navigation and a link to the online docs, and scales
+  screenshots to fit the panel. It is served from the very same Markdown as the
+  [documentation website](https://akj7.github.io/CANExplorer/) (bundled with the app), so the two never diverge.
+- **The sidebar can now be collapsed to an icon rail** — the logo and the connection/view/tool icons stay visible
+  (labels hidden, names shown as tooltips), giving the views more width without losing navigation. Toggle it with
+  the button at the left of the top bar or with **Ctrl+\\**; the state is remembered between sessions.
+- **Fieldbus tunnelled over automotive Ethernet (IEEE 1722 ACF)** — the Ethernet capture tool decodes the frames
+  carried in AVTP Acyclic Control Format messages (TSCF and NTSCF carriers): **CAN / CAN FD** (`ACF_CAN`,
+  `ACF_CAN_BRIEF`, labelled **ACF-CAN**), **LIN** (`ACF_LIN`, **ACF-LIN**) and **FlexRay** (`ACF_FlexRay`,
+  **ACF-FlexRay**), summarised with the bus id and each frame's identifier/data; other ACF types are named but not
+  expanded. **Export CAN log…** saves the tunnelled CAN frames to a CAN log file (`.asc`, `.blf`, `.log`, …) so they
+  can be replayed through the ordinary CAN views, plots and reverse-engineering tools. The byte layouts follow the
+  open COVESA Open1722 implementation of IEEE 1722-2016, cross-checked against AUTOSAR; only what those open sources
+  pin down is expanded (see the Ethernet tool's documented limits).
+- **KWP2000 decoder** — a new connection/`decode_protocol` protocol for Keyword Protocol 2000 (ISO 14230), the
+  diagnostic protocol that preceded UDS (vehicles from roughly 1996–2006): the same ISO-TP transport and
+  request/response convention as UDS, with the older ISO 14230-3 service set and response codes.
+- **J1939-22 (J1939-FD) decoder** — a new protocol for J1939 on CAN FD: single-PG frames decode like J1939 on the
+  longer FD payload, and the FD transport (FD.TP) and multiplexed-PG (Multi-PG) frames are recognised and labelled.
+  (Expanding a Multi-PG frame into its contained PGs and reassembling FD.TP need the byte layout from the paywalled
+  SAE J1939-22 standard, so those frames are labelled but not yet expanded.)
+- **Network Management (NM) decoder** — a new connection/`decode_protocol` protocol that decodes AUTOSAR NM PDUs
+  (the format shared by CAN-NM and UDP-NM): the source node id, the control-bit flags (Repeat Message, Active
+  Wakeup, Sleep Ready, Partial-Network Learning) and the requested partial-network clusters. Useful for seeing who
+  keeps a bus awake and which partial networks are requested.
+- **Secure Onboard Communication (SecOC)** — a new protocol that splits a secured PDU into the authentic payload,
+  the truncated freshness value and the truncated MAC, plus a library (`can_explorer.core.secoc`) with a
+  self-contained **CMAC/AES-128** (verified against the NIST SP 800-38B and FIPS-197 test vectors) and the SecOC
+  generate/verify operations — the authentication counterpart to the E2E (CRC) library.
+- **RP1210 adapter support** — a new `rp1210` interface for TMC RP1210 heavy-duty (truck, bus, off-highway)
+  adapters: the Nexiq USB-Link, DG Technologies DPA 5, Noregon DLA+, Cummins INLINE and others. It enumerates the
+  installed drivers from `RP121032.INI` (and each vendor's INI) and opens their CAN protocol. RP1210 drivers are
+  32-bit Windows DLLs, so CANExplorer must run as 32-bit Python to use them; it says so if it cannot load one.
+- **ELM327 over Bluetooth without binding a serial port** — an ELM327/OBDLink channel may now be a Bluetooth
+  address, `bt://AA:BB:CC:DD:EE:FF` (optionally `…/<channel>`), and CANExplorer opens the RFCOMM connection itself
+  instead of needing `rfcomm bind` first. Linux only; on Windows and macOS use the adapter's serial port as before.
+- **Many more colour themes**, selectable in the preferences. First **Bumblebee** (a bright honey-yellow light
+  theme with black-and-amber accents), **Pink Gold** (a soft rose-pink light theme with gold accents) and
+  **Amethyst** (a vivid deep-violet background with a full-spectrum chart palette). A theme is now treated as light
+  or dark by its background's luminance, so light-background themes get the light-mode adjustments automatically.
+  Then fifteen more adapted from a collection of beautiful colour palettes: the dark **Beautiful Blues**,
+  **Blueberry**, **Midnight Plum**, **Purple Skyline**, **Moonlight**, **Lollipop**, **Space Gray**, **Cappuccino**,
+  **Ember**, **Metro** and **Prism**, and the light **Beach Towels**, **Beach**, **Pastel Rainbow** and
+  **Aquarius**. Each theme's chart palette carries six distinguishable hues so overlaid signals stay legible even
+  when the source palette is near-monochrome. Finally **Rainbow**, whose chart palette is the seven canonical
+  rainbow colours (ROYGBIV) in order on a deep neutral base. The theme picker now lists all themes alphabetically.
+
+### Changed
+
+- **Code formatting and linting now use [Ruff](https://docs.astral.sh/ruff/) alone** (`ruff format`) instead of
+  Black; the style is unchanged (single quotes, 120-column lines). Contributors need only Ruff, and CI checks the
+  formatting with `ruff format --check`.
+- **The automatic reverse-engineering analysis is roughly 3–4× faster.** The bit analysis now works on the
+  payloads as a NumPy matrix: the per-bit change counts (the bulk of the multiplexer search and of the field split),
+  and the per-frame CRC/XOR/sum checksum search, are computed in one vectorised pass instead of walking the bits of
+  every frame in Python. The results are unchanged. NumPy is now a core dependency.
+- **More of the reverse-engineering and plotting work is vectorised with NumPy, with unchanged results.** Signal
+  plots reduce each series to one min/max per pixel column in a single pass (much faster redraws on long captures);
+  reference correlation samples and scores every candidate field as arrays (about 10× faster); and the
+  stimulus–response diff counts bit transitions in one pass. (The bit-transition raster was already optimal and is
+  unchanged.)
+
+### Fixed
+
+- **The database editor no longer freezes on large databases.** Editing (adding, removing or changing a message
+  or signal) revalidated *every* message in the database on each edit; it now revalidates only the message that
+  changed. Searching, and every edit, rebuilt the whole message and issue lists in several places (search did it on
+  every keystroke); the lists are now built once per change and reused, and the search filters the cached list. On
+  a database of 500+ messages, searching, adding, removing and saving are now responsive instead of pausing for a
+  couple of seconds.
+- **Corrected two AVTP (IEEE 1722) subtype labels** in the Ethernet capture tool: subtype `0x82` is **NTSCF**
+  (it was mislabelled "ADP") and `0x6E` is **AEF (continuous)** (it was mislabelled "NTSCF"), matching the IEEE
+  1722 subtype assignments.
+- **Starting a connection's in-app MCP server no longer fails with "Unable to configure formatter 'default'" on
+  Windows.** In a windowed build there is no console, so `sys.stdout` is `None` and uvicorn's default logging
+  configuration — a colour formatter that probes `sys.stdout` — could not be built, which surfaced as that error
+  when choosing an MCP (agent) permission tier. The in-app server now starts uvicorn with its own logging
+  configuration disabled and relies on the application's logging instead.
+
 ## [1.6.0] – 2026-10-31
 
 ### Added
@@ -734,7 +865,9 @@ Called "Milestone 0.1.0" in the commit message and the README roadmap.
 - Qt Widgets user interface: main window, new connection dialog, about dialog and a raw CAN frame table.
 - Pipenv based project setup, VS Code development container, Dockerfile and a CI workflow skeleton.
 
-[1.6.0]: https://github.com/AKJ7/CANExplorer/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/AKJ7/CANExplorer/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/AKJ7/CANExplorer/compare/v1.6.0...v1.7.0
+[1.6.0]: https://github.com/AKJ7/CANExplorer/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/AKJ7/CANExplorer/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/AKJ7/CANExplorer/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/AKJ7/CANExplorer/compare/v1.2.0...v1.3.0

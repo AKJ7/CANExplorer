@@ -64,8 +64,8 @@ times, paired and differing frames, the first difference with both payloads and 
 from can_explorer.core.compare import compare, read_recording, summary_csv
 
 a, b = read_recording('before.asc'), read_recording('after.asc')
-comparison = compare(a, b)                           # align='id' or 'sequence', database=… adds signal values
-print(comparison.counts())                           # {'only_a': …, 'only_b': …, 'changed': …, 'same': …}
+comparison = compare(a, b)  # align='id' or 'sequence', database=… adds signal values
+print(comparison.counts())  # {'only_a': …, 'only_b': …, 'changed': …, 'same': …}
 for difference in comparison.ids:
     print(difference.status, hex(difference.key[0]))
 open('diff.csv', 'w').write(summary_csv(comparison))

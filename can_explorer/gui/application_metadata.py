@@ -12,7 +12,6 @@ logger = get_logger(__name__)
 
 
 class ApplicationMetadata(QObject):
-
     CONFIG = {'final': True, 'constant': True}
 
     def __init__(self, parent: QObject):

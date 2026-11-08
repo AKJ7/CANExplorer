@@ -9,12 +9,12 @@ reference's unit, and the best time lag (within ±max_lag) is searched for the b
 import csv
 import math
 import re
-from bisect import bisect_right
 from dataclasses import dataclass, field as dataclass_field
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
 import can
+import numpy as np
 
 from can_explorer.core.reverse.analysis import IdAnalysis, IdFrames, IdKey
 from can_explorer.core.reverse.fields import BitField, _motorola_index
@@ -161,71 +161,91 @@ def candidates(frames: Dict[IdKey, IdFrames], analyses: Sequence[IdAnalysis] = (
 
 
 class _Sampler:
-    """The frames of one identifier (optionally of one multiplexer value), sampled at times."""
+    """The frames of one identifier (optionally of one multiplexer value), sampled at times.
+
+    The payloads are kept as a byte matrix (frames × longest) so a field's value in every sample is extracted in
+    one vectorised pass. The extraction reproduces the former per-frame integer arithmetic exactly, including that a
+    Motorola field is read from the frame's end (``int.from_bytes(payload, 'big')`` is right-aligned), so it depends
+    on each frame's own length.
+    """
 
     def __init__(self, item: IdFrames, multiplexer: Optional[BitField], mux_value: Optional[int]):
         times, payloads = item.times, item.payloads
         if multiplexer is not None:
             pairs = [(t, p) for t, p in zip(times, payloads, strict=True) if multiplexer.raw(p) == mux_value]
             times, payloads = [t for t, _ in pairs], [p for _, p in pairs]
-        self.times = times
-        self.lengths = [len(payload) for payload in payloads]
-        self.little = [int.from_bytes(payload, 'little') for payload in payloads]
-        self.big = [int.from_bytes(payload, 'big') for payload in payloads]
+        self.times = np.asarray(times, dtype=float)
+        self.lengths = np.asarray([len(payload) for payload in payloads], dtype=np.int64)
+        self.maxlen = int(self.lengths.max()) if len(payloads) else 0
+        if payloads and self.maxlen:
+            joined = b''.join(bytes(payload).ljust(self.maxlen, b'\x00') for payload in payloads)
+            self.bytes = np.frombuffer(joined, dtype=np.uint8).reshape(len(payloads), self.maxlen).astype(np.int64)
+        else:
+            self.bytes = np.zeros((len(payloads), 0), dtype=np.int64)
 
-    def indices(self, times: Sequence[float], lag: float) -> List[Optional[int]]:
-        result = []
-        for time in times:
-            index = bisect_right(self.times, time + lag) - 1
-            result.append(index if index >= 0 and time + lag - self.times[index] <= STALE else None)
-        return result
+    def indices(self, times: Sequence[float], lag: float) -> np.ndarray:
+        """The frame index to sample at each time (the last frame at or before time + lag, within STALE), or -1."""
+        wanted = np.asarray(times, dtype=float) + lag
+        if self.times.size == 0:
+            return np.full(wanted.size, -1, dtype=np.int64)
+        index = np.searchsorted(self.times, wanted, side='right') - 1
+        has = index >= 0
+        safe = np.where(has, index, 0)
+        fresh = has & (wanted - self.times[safe] <= STALE)
+        return np.where(fresh, index, -1)
 
-    def values(self, field: BitField, indices: Sequence[Optional[int]]) -> List[Optional[int]]:
-        mask = (1 << field.length) - 1
-        sign = 1 << (field.length - 1)
-        result: List[Optional[int]] = []
-        for index in indices:
-            if index is None:
-                result.append(None)
-                continue
-            size = self.lengths[index] * 8
-            if field.byte_order == 'little_endian':
-                if field.start + field.length > size:
-                    result.append(None)
-                    continue
-                value = (self.little[index] >> field.start) & mask
-            else:
-                first = _motorola_index(field.start)
-                if first + field.length > size:
-                    result.append(None)
-                    continue
-                value = (self.big[index] >> (size - first - field.length)) & mask
-            if field.signed and value & sign:
-                value -= 1 << field.length
-            result.append(value)
-        return result
+    def values(self, field: BitField, indices: np.ndarray) -> np.ndarray:
+        """The raw field value at each index as a float array, NaN where the index is -1 or the field does not fit."""
+        indices = np.asarray(indices, dtype=np.int64)
+        if indices.size == 0 or self.maxlen == 0:
+            return np.full(indices.size, np.nan)
+        present = indices >= 0
+        safe = np.where(present, indices, 0)
+        sizes = self.lengths[safe] * 8
+        length, mask = field.length, (1 << field.length) - 1
+        if field.byte_order == 'little_endian':
+            start = field.start
+            fits = present & (start + length <= sizes)
+            byte0 = start // 8
+            local = np.zeros(indices.size, dtype=np.int64)
+            for offset in range((start % 8 + length + 7) // 8):
+                column = byte0 + offset
+                if column < self.maxlen:
+                    local += self.bytes[safe, column] << (8 * offset)
+            raw = (local >> (start % 8)) & mask
+        else:
+            first = _motorola_index(field.start)
+            fits = present & (first + length <= sizes)
+            shift = sizes - first - length  # Bit offset into int.from_bytes(payload, 'big'); depends on the frame
+            big_byte0, big_offset = shift // 8, shift % 8  # The byte of that big-endian integer the value starts in
+            local = np.zeros(indices.size, dtype=np.int64)
+            for offset in range((7 + length + 7) // 8):
+                # Big-endian integer byte (big_byte0 + offset) is payload byte (length_bytes - 1 - that)
+                column = self.lengths[safe] - 1 - (big_byte0 + offset)
+                in_range = (column >= 0) & (column < self.maxlen)
+                local += np.where(in_range, self.bytes[safe, np.where(in_range, column, 0)] << (8 * offset), 0)
+            raw = (local >> big_offset) & mask
+        if field.signed:
+            raw = np.where(raw & (1 << (length - 1)), raw - (1 << length), raw)
+        return np.where(fits, raw.astype(float), np.nan)
 
 
-def _pearson(xs: Sequence[float], ys: Sequence[float]) -> Optional[float]:
-    n = len(xs)
-    if n < MIN_SAMPLES:
+def _pearson(xs: np.ndarray, ys: np.ndarray) -> Optional[float]:
+    if len(xs) < MIN_SAMPLES:
         return None
-    mean_x, mean_y = sum(xs) / n, sum(ys) / n
-    sxx = sum((x - mean_x) ** 2 for x in xs)
-    syy = sum((y - mean_y) ** 2 for y in ys)
+    dx, dy = xs - xs.mean(), ys - ys.mean()
+    sxx, syy = float(np.dot(dx, dx)), float(np.dot(dy, dy))
     if sxx == 0 or syy == 0:
         return None
-    sxy = sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys, strict=True))
-    return sxy / math.sqrt(sxx * syy)
+    return float(np.dot(dx, dy)) / math.sqrt(sxx * syy)
 
 
-def _fit(xs: Sequence[float], ys: Sequence[float]) -> Tuple[float, float]:
+def _fit(xs: np.ndarray, ys: np.ndarray) -> Tuple[float, float]:
     """Least squares y = scale * x + offset."""
-    n = len(xs)
-    mean_x, mean_y = sum(xs) / n, sum(ys) / n
-    sxx = sum((x - mean_x) ** 2 for x in xs)
-    scale = sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys, strict=True)) / sxx
-    return scale, mean_y - scale * mean_x
+    mean_x, mean_y = xs.mean(), ys.mean()
+    dx = xs - mean_x
+    scale = float(np.dot(dx, ys - mean_y) / np.dot(dx, dx))
+    return scale, float(mean_y) - scale * float(mean_x)
 
 
 def _round(value: float) -> float:
@@ -259,21 +279,23 @@ def correlate(
         if key in frames and key not in reference.exclude:
             groups.setdefault((key, candidate.multiplexer, candidate.mux_value), []).append(candidate)
     samplers = {group: _Sampler(frames[group[0]], group[1], group[2]) for group in groups}
+    reference_times = np.asarray(reference.times, dtype=float)
+    reference_values = np.asarray(reference.values, dtype=float)
 
     def score(group, candidate: Candidate, lag: float, indices=None):
         sampler = samplers[group]
-        indices = indices if indices is not None else sampler.indices(reference.times, lag)
+        indices = indices if indices is not None else sampler.indices(reference_times, lag)
         values = sampler.values(candidate.field, indices)
-        pairs = [(value, ref) for value, ref in zip(values, reference.values, strict=True) if value is not None]
-        if len(pairs) < MIN_SAMPLES:
+        valid = np.isfinite(values)
+        if int(valid.sum()) < MIN_SAMPLES:
             return None
-        xs, ys = [float(value) for value, _ in pairs], [ref for _, ref in pairs]
+        xs, ys = values[valid], reference_values[valid]
         correlation = _pearson(xs, ys)
         return None if correlation is None else (correlation, xs, ys)
 
     first: List[Tuple[float, Tuple, Candidate]] = []
     for group, members in groups.items():
-        indices = samplers[group].indices(reference.times, 0.0)
+        indices = samplers[group].indices(reference_times, 0.0)
         for candidate in members:
             result = score(group, candidate, 0.0, indices)
             if result is not None:

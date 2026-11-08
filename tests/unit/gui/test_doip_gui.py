@@ -118,6 +118,7 @@ async def test_doip_tool_renders_without_warnings(qapp, qtbot):
 
     from can_explorer.gui.application_metadata import ApplicationMetadata
     from can_explorer.gui.connection_manager import ConnectionManager
+    from can_explorer.gui.help import HelpController
     from can_explorer.main_application import create_qml_engine
 
     async def settle(predicate=lambda: True):
@@ -129,7 +130,11 @@ async def test_doip_tool_renders_without_warnings(qapp, qtbot):
     warnings = []
     manager = ConnectionManager(parent=qapp)
     engine = create_qml_engine(
-        {'metadata': ApplicationMetadata(parent=qapp), 'connectionManager': manager},
+        {
+            'metadata': ApplicationMetadata(parent=qapp),
+            'connectionManager': manager,
+            'helpController': HelpController(parent=qapp),
+        },
         lambda errors: warnings.extend(error.toString() for error in errors),
     )
     root = engine.rootObjects()[0]

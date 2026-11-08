@@ -72,6 +72,20 @@
             </IMPLEMENTATION-DATA-TYPE-ELEMENT>
           </SUB-ELEMENTS>
         </IMPLEMENTATION-DATA-TYPE>
+        <IMPLEMENTATION-DATA-TYPE>
+          <SHORT-NAME>Reading</SHORT-NAME>
+          <CATEGORY>UNION</CATEGORY>
+          <SUB-ELEMENTS>
+            <IMPLEMENTATION-DATA-TYPE-ELEMENT>
+              <SHORT-NAME>as_byte</SHORT-NAME>
+              <TYPE-TREF DEST="IMPLEMENTATION-DATA-TYPE">/Datatypes/uint8</TYPE-TREF>
+            </IMPLEMENTATION-DATA-TYPE-ELEMENT>
+            <IMPLEMENTATION-DATA-TYPE-ELEMENT>
+              <SHORT-NAME>as_word</SHORT-NAME>
+              <TYPE-TREF DEST="IMPLEMENTATION-DATA-TYPE">/Datatypes/uint16</TYPE-TREF>
+            </IMPLEMENTATION-DATA-TYPE-ELEMENT>
+          </SUB-ELEMENTS>
+        </IMPLEMENTATION-DATA-TYPE>
       </ELEMENTS>
     </AR-PACKAGE>
     <AR-PACKAGE>
@@ -101,6 +115,10 @@
               <SHORT-NAME>Target</SHORT-NAME>
               <TYPE-TREF DEST="IMPLEMENTATION-DATA-TYPE">/Datatypes/Position</TYPE-TREF>
             </VARIABLE-DATA-PROTOTYPE>
+            <VARIABLE-DATA-PROTOTYPE>
+              <SHORT-NAME>Level</SHORT-NAME>
+              <TYPE-TREF DEST="IMPLEMENTATION-DATA-TYPE">/Datatypes/Reading</TYPE-TREF>
+            </VARIABLE-DATA-PROTOTYPE>
           </EVENTS>
         </SERVICE-INTERFACE>
       </ELEMENTS>
@@ -124,6 +142,11 @@
               <SHORT-NAME>TargetDeployment</SHORT-NAME>
               <EVENT-REF DEST="VARIABLE-DATA-PROTOTYPE">/Services/RadarService/Target</EVENT-REF>
               <EVENT-ID>32769</EVENT-ID>
+            </SOMEIP-EVENT-DEPLOYMENT>
+            <SOMEIP-EVENT-DEPLOYMENT>
+              <SHORT-NAME>LevelDeployment</SHORT-NAME>
+              <EVENT-REF DEST="VARIABLE-DATA-PROTOTYPE">/Services/RadarService/Level</EVENT-REF>
+              <EVENT-ID>32770</EVENT-ID>
             </SOMEIP-EVENT-DEPLOYMENT>
           </EVENT-DEPLOYMENTS>
         </SOMEIP-SERVICE-INTERFACE-DEPLOYMENT>

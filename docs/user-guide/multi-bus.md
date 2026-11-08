@@ -52,10 +52,10 @@ from can_explorer.scripting import Gateway
 
 
 class BodyGateway(Gateway):
-    source = 'Powertrain'              # '' is the simulation's own connection
+    source = 'Powertrain'  # '' is the simulation's own connection
     target = 'Body'
-    ids = ['EngineData', 0x3E0]        # Identifiers or database names; None forwards everything
-    both_directions = False            # Also forward these identifiers from Body to Powertrain
+    ids = ['EngineData', 0x3E0]  # Identifiers or database names; None forwards everything
+    both_directions = False  # Also forward these identifiers from Body to Powertrain
 
     def transform(self, msg, to_bus):  # Optional: change or drop (return None) frames on the way
         frame = super().transform(msg, to_bus)

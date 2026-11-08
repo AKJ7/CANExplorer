@@ -5,8 +5,10 @@ IEEE floats, fixed and length-prefixed strings, fixed and dynamic arrays, and ne
 (FIBEX, see someip_fibex.py) is read into this model; the deserializer walks a payload against it.
 
 Byte order is per scalar (big endian by default). Dynamic arrays and strings carry a length field giving the size
-of their content in bytes; structs may carry a length field for extensibility. Optional (TLV) members are not
-handled yet.
+of their content in bytes; structs may carry a length field for extensibility. Unions carry a length and a type
+selector; bit fields pack several named sub-fields into one integer. Optional (TLV) members are supported: when a
+struct's members carry data IDs, the payload is parsed as tag/length/value, so members may be absent or out of
+order and unknown members are skipped.
 """
 
 from dataclasses import dataclass, field as dataclass_field
@@ -31,11 +33,16 @@ class SerializationError(ValueError):
     pass
 
 
+# Every serialization type carries an optional `data_id`. It is metadata, used only by the enclosing struct: when
+# any member of a struct has one, that struct is deserialized in TLV (tag/length/value) mode (see `_struct_tlv`).
+
+
 @dataclass(frozen=True)
 class Scalar:
     name: str
     base: str  # A key of BASE_SIZES
     byte_order: str = 'big'  # 'big' or 'little'
+    data_id: Optional[int] = None
 
     def __post_init__(self):
         if self.base not in BASE_SIZES:
@@ -48,6 +55,7 @@ class StringType:
     encoding: str = 'utf-8'  # 'utf-8' or 'utf-16'
     length_field_bits: int = 32  # 0 for a fixed-length string
     fixed_length: int = 0  # Bytes, when length_field_bits == 0
+    data_id: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -56,6 +64,38 @@ class ArrayType:
     element: 'DataType'
     length_field_bits: int = 32  # 0 for a fixed-length array
     fixed_count: int = 0  # Elements, when length_field_bits == 0
+    data_id: Optional[int] = None
+
+
+@dataclass(frozen=True)
+class BitSubfield:
+    """One named field inside a Bitfield: `width` bits, extracted MSB-first from the base integer."""
+
+    name: str
+    width: int
+    signed: bool = False
+
+
+@dataclass(frozen=True)
+class Bitfield:
+    """Several named sub-fields packed into one integer base (e.g. a uint16 split into flags), MSB-first."""
+
+    name: str
+    base: str  # An unsigned key of BASE_SIZES giving the container width
+    fields: List[BitSubfield] = dataclass_field(default_factory=list)
+    byte_order: str = 'big'
+    data_id: Optional[int] = None
+
+
+@dataclass(frozen=True)
+class UnionType:
+    """A SOME/IP union: a length field, a 1-based type selector (0 = null), then the selected member's value."""
+
+    name: str
+    members: List['DataType'] = dataclass_field(default_factory=list)
+    length_field_bits: int = 32
+    type_field_bits: int = 32
+    data_id: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -63,9 +103,10 @@ class Struct:
     name: str
     members: List['DataType'] = dataclass_field(default_factory=list)
     length_field_bits: int = 0  # Optional length prefix for extensibility
+    data_id: Optional[int] = None
 
 
-DataType = Union[Scalar, StringType, ArrayType, Struct]
+DataType = Union[Scalar, StringType, ArrayType, Bitfield, UnionType, Struct]
 
 
 class _Reader:
@@ -95,6 +136,10 @@ def _deserialize(reader: _Reader, data_type: DataType) -> Any:
         return _string(reader, data_type)
     if isinstance(data_type, ArrayType):
         return _array(reader, data_type)
+    if isinstance(data_type, Bitfield):
+        return _bitfield(reader, data_type)
+    if isinstance(data_type, UnionType):
+        return _union(reader, data_type)
     if isinstance(data_type, Struct):
         return _struct(reader, data_type)
     raise SerializationError(f'Unsupported type {data_type!r}')
@@ -143,16 +188,82 @@ def _array(reader: _Reader, array: ArrayType) -> List[Any]:
     return items
 
 
+def _bitfield(reader: _Reader, bitfield: Bitfield) -> Dict[str, Any]:
+    size = BASE_SIZES[bitfield.base]
+    value = int.from_bytes(reader.take(size), bitfield.byte_order)
+    result: Dict[str, Any] = {}
+    bit = size * 8
+    for sub in bitfield.fields:
+        bit -= sub.width
+        if bit < 0:
+            raise SerializationError(f'Bit field {bitfield.name!r} overflows its {bitfield.base} container')
+        field_value = (value >> bit) & ((1 << sub.width) - 1)
+        if sub.signed and sub.width and field_value >> (sub.width - 1):
+            field_value -= 1 << sub.width
+        result[sub.name] = field_value
+    return result
+
+
+def _union(reader: _Reader, union: UnionType) -> Dict[str, Any]:
+    length = reader.uint(union.length_field_bits) if union.length_field_bits else None
+    type_index = reader.uint(union.type_field_bits) if union.type_field_bits else 0
+    end = reader.pos + length if length is not None else None
+    result: Dict[str, Any] = {}
+    if 1 <= type_index <= len(union.members):  # type 0 (null) and out-of-range selectors decode to nothing
+        member = union.members[type_index - 1]
+        result[member.name] = _deserialize(reader, member)
+    if end is not None:
+        if end > len(reader.data):
+            raise SerializationError('Union longer than the payload')
+        reader.pos = end  # Skip any padding to the union's declared length
+    return result
+
+
+# SOME/IP TLV wire types: the length (in bytes) of a tagged member's value, or None when it is taken from the
+# member's own definition (wire type 4). Types 0-3 are fixed base-type sizes; 5/6/7 carry a 1/2/4-byte length.
+def _tlv_length(reader: _Reader, wire_type: int) -> Optional[int]:
+    if wire_type <= 3:
+        return 1 << wire_type  # 1, 2, 4 or 8 bytes
+    if wire_type == 4:
+        return None
+    return reader.uint({5: 8, 6: 16, 7: 32}[wire_type])
+
+
+def _struct_tlv(reader: _Reader, struct: Struct, end: Optional[int]) -> Dict[str, Any]:
+    """Deserialize a struct whose members carry data IDs as tag/length/value: a 16-bit tag (wire type + data id)
+    before each member, so members may be absent or out of order and unknown members are skipped."""
+    by_id = {member.data_id: member for member in struct.members if member.data_id is not None}
+    limit = end if end is not None else len(reader.data)
+    result: Dict[str, Any] = {}
+    while reader.pos + 2 <= limit:
+        tag = reader.uint(16)
+        wire_type, data_id = (tag >> 12) & 0x07, tag & 0x0FFF
+        length = _tlv_length(reader, wire_type)
+        member = by_id.get(data_id)
+        if length is None:  # Wire type 4: length comes from the member definition, so an unknown id is unresolvable
+            if member is None:
+                break
+            result[member.name] = _deserialize(reader, member)
+            continue
+        block = reader.take(length)
+        if member is not None:
+            result[member.name] = _deserialize(_Reader(block), member)
+    return result
+
+
 def _struct(reader: _Reader, struct: Struct) -> Dict[str, Any]:
     end = None
     if struct.length_field_bits:
         length = _read_length(reader, struct.length_field_bits)
         end = reader.pos + length
-    result: Dict[str, Any] = {}
-    for member in struct.members:
-        if end is not None and reader.pos >= end:
-            break  # A newer sender added members this description does not know
-        result[member.name] = _deserialize(reader, member)
+    if any(member.data_id is not None for member in struct.members):
+        result = _struct_tlv(reader, struct, end)
+    else:
+        result = {}
+        for member in struct.members:
+            if end is not None and reader.pos >= end:
+                break  # A newer sender added members this description does not know
+            result[member.name] = _deserialize(reader, member)
     if end is not None:
         reader.pos = end
     return result
