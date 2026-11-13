@@ -22,6 +22,7 @@ from can_explorer.gui.translations import TranslationManager
 from can_explorer.gui.application_metadata import ApplicationMetadata
 from can_explorer.gui.connection_manager import ConnectionManager
 from can_explorer.gui.help import HelpController
+from can_explorer.gui.file_picker import FilePicker
 from can_explorer.desktop import desktop_file_name
 from can_explorer.gui.signal_plot import register_qml_types
 from can_explorer.gui.bit_raster import register_bit_raster
@@ -46,6 +47,8 @@ def create_qml_engine(
     engine.setOutputWarningsToStandardError(False)
     engine.warnings.connect(on_warnings)
     engine.addImportPath(str(get_res_path('.')))
+    # Backs the FileChooser QML type (Qt Quick's FileDialog can crash, see gui/file_picker.py)
+    engine.rootContext().setContextProperty('filePicker', FilePicker(parent=engine))
     for name, value in context.items():
         engine.rootContext().setContextProperty(name, value)
     engine.load(str(get_res_path('main_window.qml')))

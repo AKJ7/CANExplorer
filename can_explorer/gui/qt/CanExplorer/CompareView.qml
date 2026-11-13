@@ -1,6 +1,5 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import QtQuick.Dialogs 6.2
 import QtQuick.Layouts 1.15
 import CanExplorer 1.0
 
@@ -340,26 +339,26 @@ ColumnLayout {
         }
     }
 
-    FileDialog {
+    FileChooser {
         id: fileDialog
         title: root.openingSide === "a" ? qsTr("Recording A") : qsTr("Recording B")
-        fileMode: FileDialog.OpenFile
+        fileMode: FileChooser.OpenFile
         nameFilters: root.compare.file_filters
         onAccepted: root.show(root.compare.open_file(root.openingSide, selectedFile), true)
     }
 
-    FileDialog {
+    FileChooser {
         id: databaseDialog
         title: qsTr("Signal database")
-        fileMode: FileDialog.OpenFile
+        fileMode: FileChooser.OpenFile
         nameFilters: [qsTr("Signal databases (*.dbc *.dbf *.kcd *.sym *.arxml *.ldf)"), qsTr("All files (*)")]
         onAccepted: root.show(root.compare.load_database(selectedFile), true)
     }
 
-    FileDialog {
+    FileChooser {
         id: exportDialog
         title: qsTr("Export comparison")
-        fileMode: FileDialog.SaveFile
+        fileMode: FileChooser.SaveFile
         defaultSuffix: "csv"
         nameFilters: [qsTr("CSV files (*.csv)")]
         onAccepted: {

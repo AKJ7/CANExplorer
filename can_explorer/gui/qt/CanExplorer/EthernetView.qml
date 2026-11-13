@@ -1,6 +1,5 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import QtQuick.Dialogs 6.2
 import QtQuick.Layouts 1.15
 import CanExplorer 1.0
 
@@ -381,7 +380,7 @@ ColumnLayout {
         }
     }
 
-    FileDialog {
+    FileChooser {
         id: openDialog
         title: qsTr("Open a pcap capture")
         nameFilters: [qsTr("pcap files (*.pcap *.cap)"), qsTr("All files (*)")]
@@ -392,19 +391,19 @@ ColumnLayout {
         }
     }
 
-    FileDialog {
+    FileChooser {
         id: saveDialog
         title: qsTr("Save the packets")
-        fileMode: FileDialog.SaveFile
+        fileMode: FileChooser.SaveFile
         defaultSuffix: "pcap"
         nameFilters: [qsTr("pcap files (*.pcap)")]
         onAccepted: statusLabel.show(eth.export_pcap(selectedFile))
     }
 
-    FileDialog {
+    FileChooser {
         id: saveCanDialog
         title: qsTr("Save the tunnelled CAN frames as a log")
-        fileMode: FileDialog.SaveFile
+        fileMode: FileChooser.SaveFile
         defaultSuffix: "asc"
         nameFilters: [qsTr("CAN log files (*.asc *.blf *.log *.csv *.trc)")]
         onAccepted: statusLabel.show(eth.export_can_log(selectedFile))

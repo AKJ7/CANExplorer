@@ -1,6 +1,5 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import QtQuick.Dialogs 6.2
 import QtQuick.Layouts 1.15
 import CanExplorer 1.0
 
@@ -345,10 +344,10 @@ RowLayout {
         }
     }
 
-    FileDialog {
+    FileChooser {
         id: scriptDialog
         title: qsTr("Load test script")
-        fileMode: FileDialog.OpenFile
+        fileMode: FileChooser.OpenFile
         nameFilters: [qsTr("Python test scripts (*.py)")]
         onAccepted: {
             const error = root.tests.load_script(selectedFile)
@@ -357,12 +356,12 @@ RowLayout {
         }
     }
 
-    FileDialog {
+    FileChooser {
         id: reportDialog
         title: qsTr("Export test report")
-        fileMode: FileDialog.SaveFile
+        fileMode: FileChooser.SaveFile
         nameFilters: [qsTr("HTML report (*.html)"), qsTr("JUnit XML (*.xml)")]
-        defaultSuffix: selectedNameFilter.extensions.length > 0 ? selectedNameFilter.extensions[0] : "html"
+        defaultSuffix: "html"
         onAccepted: {
             const message = root.tests.export_report(selectedFile)
             root.show(message, message.startsWith("Could"))

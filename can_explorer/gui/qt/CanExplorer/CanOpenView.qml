@@ -1,6 +1,5 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import QtQuick.Dialogs 6.2
 import QtQuick.Layouts 1.15
 import CanExplorer 1.0
 
@@ -438,10 +437,10 @@ ColumnLayout {
         }
     }
 
-    FileDialog {
+    FileChooser {
         id: dictionaryDialog
         title: qsTr("Object dictionary")
-        fileMode: FileDialog.OpenFile
+        fileMode: FileChooser.OpenFile
         nameFilters: [qsTr("CANopen device descriptions (*.eds *.dcf)"), qsTr("All files (*)")]
         onAccepted: root.report(root.canopen.load_dictionary(selectedFile))
     }

@@ -1,6 +1,5 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import QtQuick.Dialogs 6.2
 import QtQuick.Layouts 1.15
 
 
@@ -52,10 +51,10 @@ Dialog {
         }
     }
 
-    FileDialog {
+    FileChooser {
         id: fileDialog
         title: qsTr("Open log file")
-        fileMode: FileDialog.OpenFile
+        fileMode: FileChooser.OpenFile
         nameFilters: connectionManager.log_file_filters
         onAccepted: dialog.selectedFile = selectedFile
     }

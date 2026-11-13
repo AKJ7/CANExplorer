@@ -98,6 +98,7 @@ computer.
 | `gui/bushealth.py` | Bus health page of a connection |
 | `gui/reverse.py`, `gui/reverse_tools.py` | Reverse engineering page of a connection; its analysis, reference and marker tools (run in a worker thread) |
 | `gui/translations.py` | Translations from Qt Linguist files |
+| `gui/file_picker.py`, `core/file_dialog_filters.py` | File open/save dialogs of the QML views (the `FileChooser` QML type, shown with QtWidgets' `QFileDialog`); the default suffix of a name filter |
 | `gui/plot_view.py`, `gui/signal_plot.py` | Time range, cursors and charts of the signal plots; plot item (QQuickPaintedItem) |
 | `gui/app_state.py` | Persistent settings (QSettings) |
 | `gui/qt/CanExplorer/` | QML views, dialogs and dashboard components; `Theme.qml` holds the colours of the themes, `GlassPanel.qml` the frosted glass of dialogs, menus and popups |

@@ -8,6 +8,16 @@ development stages are listed by date and commit, newest first.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Opening a file dialog no longer crashes the application on Linux desktops without a native file dialog**
+  ([#17](https://github.com/AKJ7/CANExplorer/issues/17)). On a bare Wayland compositor or X11 window manager, Qt
+  Quick's file dialog fell back to a QML implementation that cannot load from the PyQt6 wheels (they do not ship
+  the `Qt.labs.folderlistmodel` module it needs), and Qt then crashed with a segmentation fault — for example on
+  **Key file…** in Diagnostics, but equally on every other open or save dialog. All file dialogs are now shown with
+  QtWidgets' `QFileDialog`: the desktop's own dialog where there is one, Qt's built-in dialog otherwise. Save
+  dialogs still add the chosen format's extension when none is typed.
+
 ## [1.7.0] – 2026-11-08
 
 ### Added

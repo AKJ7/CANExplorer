@@ -69,6 +69,11 @@ settings can be passed on the command line, see [Command line](../reference/comm
     makes Qt applications abort with *Settings schema 'org.gnome.settings-daemon.plugins.xsettings' does not
     contain a key named 'antialiasing'*. CANExplorer removes these variables at startup, so it starts normally.
 
+!!! note "File dialogs on Linux"
+    File dialogs use your desktop's own dialog where Qt provides one (GNOME and KDE, or any desktop through
+    `xdg-desktop-portal` with `QT_QPA_PLATFORMTHEME=xdgdesktopportal`). On other desktops, such as a bare Wayland
+    compositor or an X11 window manager, Qt's built-in file dialog is shown instead.
+
 ## Desktop menu entry (Linux)
 
 On Windows and macOS the application carries its icon, so it appears with the logo on the desktop, in the start

@@ -1,6 +1,5 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import QtQuick.Dialogs 6.2
 import QtQuick.Layouts 1.15
 import CanExplorer 1.0
 
@@ -238,10 +237,10 @@ ColumnLayout {
         Layout.fillHeight: true
     }
 
-    FileDialog {
+    FileChooser {
         id: fileDialog
         title: qsTr("Firmware file")
-        fileMode: FileDialog.OpenFile
+        fileMode: FileChooser.OpenFile
         nameFilters: [
             qsTr("Firmware files (*.hex *.ihex *.ihx *.s19 *.s28 *.s37 *.srec *.mot *.bin)"),
             qsTr("All files (*)"),

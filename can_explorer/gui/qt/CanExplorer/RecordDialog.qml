@@ -1,6 +1,5 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import QtQuick.Dialogs 6.2
 import QtQuick.Layouts 1.15
 import CanExplorer 1.0
 
@@ -156,12 +155,12 @@ Dialog {
         }
     }
 
-    FileDialog {
+    FileChooser {
         id: fileDialog
         title: qsTr("Record to file")
-        fileMode: FileDialog.SaveFile
+        fileMode: FileChooser.SaveFile
         nameFilters: connectionManager.log_file_filters.slice(1)
-        defaultSuffix: selectedNameFilter.extensions.length > 0 ? selectedNameFilter.extensions[0] : "blf"
+        defaultSuffix: "blf"
         onAccepted: dialog.selectedFile = selectedFile
     }
 }
