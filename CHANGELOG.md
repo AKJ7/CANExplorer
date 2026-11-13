@@ -8,6 +8,32 @@ development stages are listed by date and commit, newest first.
 
 ## [Unreleased]
 
+## [1.7.1] – 2026-11-13
+
+### Added
+
+- **Crash reports.** When CANExplorer crashes (e.g. a segmentation fault inside Qt), it now leaves a report with
+  the Python stack of every thread and a header with the CANExplorer, Python, PyQt and Qt versions, the operating
+  system and the Qt platform and theme. At the next start a warning names the file (`crash.previous.log` in
+  `~/.local/state/CANExplorer` on Linux, `%LOCALAPPDATA%\CANExplorer` on Windows, `~/Library/Logs/CANExplorer` on
+  macOS) to attach to a bug report. The cause of an exception that makes PyQt abort is recorded too. A run that
+  exits normally leaves no report.
+- **The About dialog confirms the copy.** **Copy to Clipboard** now shows *Copied to clipboard* next to the button
+  for a moment.
+
+### Fixed
+
+- **Opening a file dialog no longer crashes the application on Linux desktops without a native file dialog**
+  ([#17](https://github.com/AKJ7/CANExplorer/issues/17)). On a bare Wayland compositor or X11 window manager, Qt
+  Quick's file dialog fell back to a QML implementation that cannot load from the PyQt6 wheels (they do not ship
+  the `Qt.labs.folderlistmodel` module it needs), and Qt then crashed with a segmentation fault — for example on
+  **Key file…** in Diagnostics, but equally on every other open or save dialog. All file dialogs are now shown with
+  QtWidgets' `QFileDialog`: the desktop's own dialog where there is one, Qt's built-in dialog otherwise. Save
+  dialogs still add the chosen format's extension when none is typed.
+- **The simulated DoIP entity starts reliably on Windows.** It listened on a free TCP port and then bound UDP to
+  the same number, which Windows can refuse (*WinError 10013*) when the port lies in a range reserved for UDP;
+  it now tries other free ports until both bind. A failed start no longer leaves the TCP port open.
+
 ## [1.7.0] – 2026-11-08
 
 ### Added
@@ -865,7 +891,8 @@ Called "Milestone 0.1.0" in the commit message and the README roadmap.
 - Qt Widgets user interface: main window, new connection dialog, about dialog and a raw CAN frame table.
 - Pipenv based project setup, VS Code development container, Dockerfile and a CI workflow skeleton.
 
-[Unreleased]: https://github.com/AKJ7/CANExplorer/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/AKJ7/CANExplorer/compare/v1.7.1...HEAD
+[1.7.1]: https://github.com/AKJ7/CANExplorer/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/AKJ7/CANExplorer/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/AKJ7/CANExplorer/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/AKJ7/CANExplorer/compare/v1.4.0...v1.5.0

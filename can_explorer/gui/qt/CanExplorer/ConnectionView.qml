@@ -1,6 +1,5 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import QtQuick.Dialogs 6.2
 import QtQuick.Layouts 1.15
 import CanExplorer 1.0
 
@@ -467,23 +466,23 @@ ColumnLayout {
         onActivated: findBar.toggleBookmarks()
     }
 
-    FileDialog {
+    FileChooser {
         id: exportDialog
         title: qsTr("Export trace")
-        fileMode: FileDialog.SaveFile
+        fileMode: FileChooser.SaveFile
         nameFilters: connectionManager.log_file_filters.slice(1)
-        // The suffix of the chosen format when none is typed (e.g. "asc.gz")
-        defaultSuffix: selectedNameFilter.extensions.length > 0 ? selectedNameFilter.extensions[0] : "asc"
+        // When none is typed, the suffix of the chosen format (e.g. "asc.gz"), else this one
+        defaultSuffix: "asc"
         onAccepted: {
             const selection = traceTable.selectionModel.hasSelection ? traceTable.selectionModel : null
             statusLabel.show(root.connection.export_trace(selectedFile, selection))
         }
     }
 
-    FileDialog {
+    FileChooser {
         id: databaseDialog
         title: qsTr("Load signal database")
-        fileMode: FileDialog.OpenFile
+        fileMode: FileChooser.OpenFile
         nameFilters: connectionManager.database_file_filters
         onAccepted: root.connection.load_database(selectedFile)
     }

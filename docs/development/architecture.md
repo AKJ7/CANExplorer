@@ -98,10 +98,11 @@ computer.
 | `gui/bushealth.py` | Bus health page of a connection |
 | `gui/reverse.py`, `gui/reverse_tools.py` | Reverse engineering page of a connection; its analysis, reference and marker tools (run in a worker thread) |
 | `gui/translations.py` | Translations from Qt Linguist files |
+| `gui/file_picker.py`, `core/file_dialog_filters.py` | File open/save dialogs of the QML views (the `FileChooser` QML type, shown with QtWidgets' `QFileDialog`); the default suffix of a name filter |
 | `gui/plot_view.py`, `gui/signal_plot.py` | Time range, cursors and charts of the signal plots; plot item (QQuickPaintedItem) |
 | `gui/app_state.py` | Persistent settings (QSettings) |
 | `gui/qt/CanExplorer/` | QML views, dialogs and dashboard components; `Theme.qml` holds the colours of the themes, `GlassPanel.qml` the frosted glass of dialogs, menus and popups |
 | `gui/qt/CanExplorerStyle/` | Qt Quick Controls style drawing buttons, inputs, dialogs, menus etc. with the theme colours (Fusion for the rest) |
-| `sys/config.py`, `sys/environment.py` | Application settings; clean-up of snap environments |
+| `sys/config.py`, `sys/environment.py`, `sys/crash_log.py` | Application settings; clean-up of snap environments; crash reports (`faulthandler` writing to a per-user file, kept when the run crashed) |
 | `can_server/` | `can-server`: shares local CAN interfaces over WebSocket |
 | `can_explorer/mcp/` | `can-mcp`: exposes a bus to an agent over the Model Context Protocol (`service.py` the logic, `server.py` the MCP tools) |

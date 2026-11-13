@@ -1,6 +1,5 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import QtQuick.Dialogs 6.2
 import QtQuick.Layouts 1.15
 import CanExplorer 1.0
 
@@ -217,18 +216,18 @@ SplitView {
         }
     }
 
-    FileDialog {
+    FileChooser {
         id: scriptDialog
         title: qsTr("Load simulation script")
-        fileMode: FileDialog.OpenFile
+        fileMode: FileChooser.OpenFile
         nameFilters: [qsTr("Python scripts (*.py)")]
         onAccepted: root.simulation.load_script(selectedFile)
     }
 
-    FileDialog {
+    FileChooser {
         id: panelDialog
         title: qsTr("Add panel")
-        fileMode: FileDialog.OpenFile
+        fileMode: FileChooser.OpenFile
         nameFilters: [qsTr("QML panels (*.qml)")]
         onAccepted: root.report(root.simulation.add_panel(selectedFile))
     }

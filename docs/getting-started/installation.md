@@ -69,6 +69,11 @@ settings can be passed on the command line, see [Command line](../reference/comm
     makes Qt applications abort with *Settings schema 'org.gnome.settings-daemon.plugins.xsettings' does not
     contain a key named 'antialiasing'*. CANExplorer removes these variables at startup, so it starts normally.
 
+!!! note "File dialogs on Linux"
+    File dialogs use your desktop's own dialog where Qt provides one (GNOME and KDE, or any desktop through
+    `xdg-desktop-portal` with `QT_QPA_PLATFORMTHEME=xdgdesktopportal`). On other desktops, such as a bare Wayland
+    compositor or an X11 window manager, Qt's built-in file dialog is shown instead.
+
 ## Desktop menu entry (Linux)
 
 On Windows and macOS the application carries its icon, so it appears with the logo on the desktop, in the start
@@ -148,3 +153,19 @@ sudo ip link set sllin0 up
 ```
 
 Then create a connection with bus type **LIN**, interface *SocketcanBus* and channel `sllin0`. See [LIN](../user-guide/lin.md).
+
+## If CANExplorer crashes
+
+When CANExplorer crashes (for example with a segmentation fault inside Qt), it leaves a crash report: the Python
+stack of every thread at the moment of the crash, below a header with the CANExplorer, Python, PyQt and Qt
+versions, the operating system and the Qt platform and theme in use. At the next start, CANExplorer logs a warning
+with the path of the report. Please attach it to your [bug report](https://github.com/AKJ7/CANExplorer/issues).
+
+| Platform | Crash report |
+|---|---|
+| Linux | `~/.local/state/CANExplorer/crash.previous.log` (or under `$XDG_STATE_HOME`) |
+| Windows | `%LOCALAPPDATA%\CANExplorer\crash.previous.log` |
+| macOS | `~/Library/Logs/CANExplorer/crash.previous.log` |
+
+The report only exists after a crash: a run that exits normally deletes it. The next crash replaces the previous
+report.

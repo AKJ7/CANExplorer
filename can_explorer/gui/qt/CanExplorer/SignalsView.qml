@@ -1,6 +1,5 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import QtQuick.Dialogs 6.2
 import QtQuick.Layouts 1.15
 import CanExplorer 1.0
 import CanExplorer.Plots 1.0
@@ -334,10 +333,10 @@ SplitView {
         }
     }
 
-    FileDialog {
+    FileChooser {
         id: exportDialog
         title: qsTr("Export plotted signals")
-        fileMode: FileDialog.SaveFile
+        fileMode: FileChooser.SaveFile
         nameFilters: [qsTr("CSV files (*.csv)")]
         defaultSuffix: "csv"
         onAccepted: root.status = root.view.export_csv(selectedFile, !root.view.follow)

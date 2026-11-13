@@ -1174,3 +1174,26 @@ def test_j1850_class2_connection_gates_its_page(window, qtbot):
     finally:
         adapter.close()
     assert warnings == []
+
+
+def test_about_dialog_confirms_the_copy_to_clipboard(window, qtbot):
+    from PyQt6.QtGui import QGuiApplication
+
+    engine, _, warnings = window
+    root = engine.rootObjects()[0]
+    dialog = next(o for o in root.findChildren(QObject) if o.metaObject().className().startswith('AboutDialog'))
+    dialog.open()
+    label = dialog.findChild(QObject, 'copiedLabel')
+    button = next(o for o in dialog.findChildren(QObject) if o.property('text') == 'Copy to Clipboard')
+    assert label.property('text') == 'Copied to clipboard' and not label.property('shown')
+    QGuiApplication.clipboard().clear()
+    button.clicked.emit()
+    assert label.property('shown')
+    assert QGuiApplication.clipboard().text().startswith('CANExplorer (v')
+    qtbot.waitUntil(lambda: not label.property('shown'), timeout=5000)  # Hidden again after a moment
+    button.clicked.emit()
+    dialog.close()
+    dialog.open()
+    assert not label.property('shown')  # Not left over when the dialog is opened again
+    dialog.close()
+    assert warnings == []

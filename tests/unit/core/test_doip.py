@@ -174,3 +174,44 @@ async def test_simulator_rejects_unknown_udp_requests(simulator):
     assert await asyncio.wait_for(received, 1.0) == (0x02, GENERIC_NACK, b'\x01')
     transport.close()
     assert VEHICLE_ANNOUNCEMENT == 0x0004
+
+
+def _fail_udp_binds(monkeypatch, failures: int) -> list:
+    """Make the next `failures` UDP binds fail as a port reserved for UDP does on Windows (WinError 10013)."""
+    loop = asyncio.get_running_loop()
+    original, ports = loop.create_datagram_endpoint, []
+
+    async def create_datagram_endpoint(factory, local_addr=None, **kwargs):
+        ports.append(local_addr[1])
+        if len(ports) <= failures:
+            raise PermissionError(10013, 'An attempt was made to access a socket in a way forbidden')
+        return await original(factory, local_addr=local_addr, **kwargs)
+
+    monkeypatch.setattr(loop, 'create_datagram_endpoint', create_datagram_endpoint)
+    return ports
+
+
+async def test_simulator_retries_a_free_port_the_udp_bind_refuses(monkeypatch):
+    ports = _fail_udp_binds(monkeypatch, failures=2)
+    simulator = DoipEntitySimulator()
+    await simulator.start()
+    try:
+        assert len(ports) == 3 and simulator.port == ports[-1] == simulator.entity.port
+        assert simulator._server.sockets[0].getsockname()[1] == simulator.port  # TCP and UDP on the same port
+        entities = await discover(simulator.host, simulator.port, timeout=0.3)
+        assert [entity.vin for entity in entities] == [simulator.entity.vin]
+    finally:
+        await simulator.stop()
+
+
+async def test_simulator_on_a_given_port_does_not_retry(monkeypatch):
+    import socket
+
+    with socket.socket() as sock:
+        sock.bind(('127.0.0.1', 0))
+        port = sock.getsockname()[1]
+    ports = _fail_udp_binds(monkeypatch, failures=1)
+    simulator = DoipEntitySimulator(port=port)
+    with pytest.raises(PermissionError):
+        await simulator.start()
+    assert ports == [port] and not simulator.running

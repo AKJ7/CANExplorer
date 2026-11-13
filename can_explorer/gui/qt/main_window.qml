@@ -1,6 +1,5 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import QtQuick.Dialogs 6.2
 import QtQuick.Layouts 1.15
 import QtQuick.Window 2.15
 import CanExplorer 1.0
@@ -209,18 +208,18 @@ ApplicationWindow {
             mainWindow.notify(error)
     }
 
-    FileDialog {
+    FileChooser {
         id: openWorkspaceDialog
         title: qsTr("Open workspace")
-        fileMode: FileDialog.OpenFile
+        fileMode: FileChooser.OpenFile
         nameFilters: connectionManager.workspace_filters
         onAccepted: mainWindow.openWorkspace(() => connectionManager.open_workspace(selectedFile))
     }
 
-    FileDialog {
+    FileChooser {
         id: saveWorkspaceDialog
         title: qsTr("Save workspace")
-        fileMode: FileDialog.SaveFile
+        fileMode: FileChooser.SaveFile
         nameFilters: connectionManager.workspace_filters
         defaultSuffix: "cxw"
         onAccepted: mainWindow.saveWorkspace(selectedFile)

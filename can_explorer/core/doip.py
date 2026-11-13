@@ -35,6 +35,7 @@ CONTROL_TIMEOUT = 2.0
 # A_DoIP_Diagnostic_Message: the acknowledgement of a diagnostic message
 DIAGNOSTIC_ACK_TIMEOUT = 2.0
 DISCOVERY_TIMEOUT = 2.0
+SIMULATOR_PORT_ATTEMPTS = 20  # Free ports tried by the simulated entity before giving up
 
 # Payload types
 GENERIC_NACK = 0x0000
@@ -728,11 +729,24 @@ class DoipEntitySimulator:
 
     async def start(self) -> None:
         loop = asyncio.get_running_loop()
-        self._server = await asyncio.start_server(self._serve, self.host, self.port)
-        self.port = self._server.sockets[0].getsockname()[1]
-        self._udp, _ = await loop.create_datagram_endpoint(
-            lambda: _SimulatorUdp(self), local_addr=(self.host, self.port)
-        )
+        # Port 0: the OS picks a free TCP port, but the same number may be taken or reserved for UDP (Windows
+        # excludes port ranges per protocol: WinError 10013), so pick another until both bind
+        attempts = SIMULATOR_PORT_ATTEMPTS if self.port == 0 else 1
+        for attempt in range(attempts):
+            server = await asyncio.start_server(self._serve, self.host, self.port)
+            port = server.sockets[0].getsockname()[1]
+            try:
+                self._udp, _ = await loop.create_datagram_endpoint(
+                    lambda: _SimulatorUdp(self), local_addr=(self.host, port)
+                )
+            except OSError:
+                server.close()
+                await server.wait_closed()
+                if attempt == attempts - 1:
+                    raise
+                continue
+            self._server, self.port = server, port
+            break
         self.entity = DoipEntity(
             self.host,
             self.entity.vin,

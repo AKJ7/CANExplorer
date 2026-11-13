@@ -1,6 +1,5 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import QtQuick.Dialogs 6.2
 import QtQuick.Layouts 1.15
 import CanExplorer 1.0
 
@@ -1070,20 +1069,20 @@ ColumnLayout {
         setText: (name, text) => root.editor.set_schedule_text(name, text)
     }
 
-    FileDialog {
+    FileChooser {
         id: openDialog
         title: qsTr("Open signal database")
-        fileMode: FileDialog.OpenFile
+        fileMode: FileChooser.OpenFile
         nameFilters: root.editor.open_filters
         onAccepted: root.openFile(selectedFile)
     }
 
-    FileDialog {
+    FileChooser {
         id: saveDialog
         title: qsTr("Save signal database as")
-        fileMode: FileDialog.SaveFile
+        fileMode: FileChooser.SaveFile
         nameFilters: root.editor.save_filters
-        defaultSuffix: selectedNameFilter.extensions.length > 0 ? selectedNameFilter.extensions[0] : "dbc"
+        defaultSuffix: "dbc"
         onAccepted: {
             const error = root.editor.save_as(selectedFile)
             root.show(error || qsTr("Saved %1").arg(root.editor.file_name), error.length > 0)

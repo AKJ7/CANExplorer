@@ -1,6 +1,5 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import QtQuick.Dialogs 6.2
 import QtQuick.Layouts 1.15
 import CanExplorer 1.0
 
@@ -319,18 +318,18 @@ ColumnLayout {
         }
     }
 
-    FileDialog {
+    FileChooser {
         id: descriptionDialog
         title: qsTr("ECU diagnostic description")
-        fileMode: FileDialog.OpenFile
+        fileMode: FileChooser.OpenFile
         nameFilters: [qsTr("CANdelaStudio descriptions (*.cdd)"), qsTr("All files (*)")]
         onAccepted: root.report(root.diagnostics.load_description(selectedFile))
     }
 
-    FileDialog {
+    FileChooser {
         id: keyFileDialog
         title: qsTr("Seed/key algorithm")
-        fileMode: FileDialog.OpenFile
+        fileMode: FileChooser.OpenFile
         nameFilters: [qsTr("Python files (*.py)")]
         onAccepted: root.diagnostics.set_key_file(selectedFile)
     }

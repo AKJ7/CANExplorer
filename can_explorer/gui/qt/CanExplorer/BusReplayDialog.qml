@@ -1,6 +1,5 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import QtQuick.Dialogs 6.2
 import QtQuick.Layouts 1.15
 import CanExplorer 1.0
 
@@ -93,10 +92,10 @@ Dialog {
         }
     }
 
-    FileDialog {
+    FileChooser {
         id: fileDialog
         title: qsTr("Log file to replay on the bus")
-        fileMode: FileDialog.OpenFile
+        fileMode: FileChooser.OpenFile
         nameFilters: connectionManager.log_file_filters
         onAccepted: dialog.selectedFile = selectedFile
     }

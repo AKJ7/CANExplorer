@@ -66,3 +66,4 @@ RecordDialog 1.0 RecordDialog.qml
 MqttDialog 1.0 MqttDialog.qml
 McpServerDialog 1.0 McpServerDialog.qml
 singleton Theme 1.0 Theme.qml
+FileChooser 1.0 FileChooser.qml

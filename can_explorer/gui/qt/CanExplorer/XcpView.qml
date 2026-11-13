@@ -1,6 +1,5 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import QtQuick.Dialogs 6.2
 import QtQuick.Layouts 1.15
 import CanExplorer 1.0
 
@@ -318,10 +317,10 @@ ColumnLayout {
         }
     }
 
-    FileDialog {
+    FileChooser {
         id: a2lDialog
         title: qsTr("A2L file")
-        fileMode: FileDialog.OpenFile
+        fileMode: FileChooser.OpenFile
         nameFilters: [qsTr("A2L files (*.a2l)"), qsTr("All files (*)")]
         onAccepted: root.report(root.xcp.load_a2l(selectedFile))
     }

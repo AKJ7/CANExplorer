@@ -1,6 +1,5 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import QtQuick.Dialogs 6.2
 import QtQuick.Layouts 1.15
 
 
@@ -76,10 +75,10 @@ Dialog {
         }
     }
 
-    FileDialog {
+    FileChooser {
         id: sourceDialog
         title: qsTr("Database to convert")
-        fileMode: FileDialog.OpenFile
+        fileMode: FileChooser.OpenFile
         nameFilters: connectionManager.database_file_filters
         onAccepted: {
             dialog.source = selectedFile
@@ -92,10 +91,10 @@ Dialog {
         }
     }
 
-    FileDialog {
+    FileChooser {
         id: destinationDialog
         title: qsTr("Write converted database")
-        fileMode: FileDialog.SaveFile
+        fileMode: FileChooser.SaveFile
         nameFilters: connectionManager.database_output_filters
         onAccepted: dialog.destination = selectedFile
     }

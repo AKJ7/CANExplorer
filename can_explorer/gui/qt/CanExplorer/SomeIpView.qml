@@ -1,6 +1,5 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
-import QtQuick.Dialogs 6.2
 import QtQuick.Layouts 1.15
 import CanExplorer 1.0
 
@@ -191,7 +190,7 @@ ColumnLayout {
         }
     }
 
-    FileDialog {
+    FileChooser {
         id: fibexDialog
         title: qsTr("Load SOME/IP description")
         nameFilters: [qsTr("SOME/IP descriptions (*.fibex *.arxml *.xml)"), qsTr("All files (*)")]
