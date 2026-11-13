@@ -14,6 +14,11 @@ Dialog {
     // The seven havens easter egg: seven clicks on the logo awaken the hidden red diamond "Spirit" theme.
     property int spiritClicks: 0
     onOpened: spiritClicks = 0
+    // Before the dialog shows, so a confirmation from the last time is not seen again
+    onAboutToShow: {
+        copiedTimer.stop()
+        copiedLabel.shown = false
+    }
 
     ColumnLayout {
         spacing: 12
@@ -76,9 +81,28 @@ Dialog {
             font.italic: true
         }
 
-        Button {
-            text: qsTr("Copy to Clipboard")
-            onClicked: metadata.copy_app_info_to_clipboard()
+        RowLayout {
+            spacing: 12
+
+            Button {
+                text: qsTr("Copy to Clipboard")
+                onClicked: {
+                    metadata.copy_app_info_to_clipboard()
+                    copiedLabel.shown = true
+                    copiedTimer.restart()
+                }
+            }
+            // Confirms the copy for a moment, then fades out
+            Label {
+                id: copiedLabel
+                objectName: "copiedLabel"
+                text: qsTr("Copied to clipboard")
+                color: Theme.muted
+                property bool shown: false
+                opacity: shown ? 1 : 0
+                Behavior on opacity { NumberAnimation { duration: 250 } }
+                Timer { id: copiedTimer; interval: 2500; onTriggered: copiedLabel.shown = false }
+            }
         }
     }
 }

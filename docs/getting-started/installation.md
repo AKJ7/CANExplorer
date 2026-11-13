@@ -153,3 +153,19 @@ sudo ip link set sllin0 up
 ```
 
 Then create a connection with bus type **LIN**, interface *SocketcanBus* and channel `sllin0`. See [LIN](../user-guide/lin.md).
+
+## If CANExplorer crashes
+
+When CANExplorer crashes (for example with a segmentation fault inside Qt), it leaves a crash report: the Python
+stack of every thread at the moment of the crash, below a header with the CANExplorer, Python, PyQt and Qt
+versions, the operating system and the Qt platform and theme in use. At the next start, CANExplorer logs a warning
+with the path of the report. Please attach it to your [bug report](https://github.com/AKJ7/CANExplorer/issues).
+
+| Platform | Crash report |
+|---|---|
+| Linux | `~/.local/state/CANExplorer/crash.previous.log` (or under `$XDG_STATE_HOME`) |
+| Windows | `%LOCALAPPDATA%\CANExplorer\crash.previous.log` |
+| macOS | `~/Library/Logs/CANExplorer/crash.previous.log` |
+
+The report only exists after a crash: a run that exits normally deletes it. The next crash replaces the previous
+report.

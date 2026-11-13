@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 from PyQt6.QtCore import QMetaObject, QObject, QUrl
 from PyQt6.QtQml import QQmlComponent, QQmlEngine
@@ -46,15 +47,15 @@ def test_save_file_appends_the_chosen_filters_suffix(qapp, tmp_path):
     filters = ['ASC files (*.asc)', 'Compressed ASC files (*.asc.gz)']
     run = FakeRun(str(tmp_path / 'trace'), name_filter=filters[1])
     url = FilePicker(run=run).save_file('Export trace', filters, 'blf')
-    assert url.toLocalFile() == str(tmp_path / 'trace.asc.gz')
+    assert Path(url.toLocalFile()) == tmp_path / 'trace.asc.gz'  # Qt uses '/' on Windows too
     assert run.dialog.acceptMode() == QFileDialog.AcceptMode.AcceptSave
 
 
 def test_save_file_falls_back_to_the_default_suffix_and_keeps_a_typed_one(qapp, tmp_path):
     picker = FilePicker(run=FakeRun(str(tmp_path / 'trace')))
-    assert picker.save_file('Save', ['All files (*)'], 'csv').toLocalFile() == str(tmp_path / 'trace.csv')
+    assert Path(picker.save_file('Save', ['All files (*)'], 'csv').toLocalFile()) == tmp_path / 'trace.csv'
     picker = FilePicker(run=FakeRun(str(tmp_path / 'trace.blf')))
-    assert picker.save_file('Save', ['ASC files (*.asc)'], 'asc').toLocalFile() == str(tmp_path / 'trace.blf')
+    assert Path(picker.save_file('Save', ['ASC files (*.asc)'], 'asc').toLocalFile()) == tmp_path / 'trace.blf'
 
 
 QML = b"""
