@@ -236,6 +236,12 @@ in `can_explorer/gui/qt`, and Qt and asyncio share one event loop through
 [development guide](https://akj7.github.io/CANExplorer/development/) covers the architecture, testing,
 packaging and contributing.
 
+## Sponsor this project
+
+CANExplorer is free and open source, developed in spare time. If it saves you time on the bench or replaces a tool
+you would otherwise pay for, consider [sponsoring its development on GitHub](https://github.com/sponsors/AKJ7).
+Sponsorships pay for adapters to test against and time for new protocols and features.
+
 ## License
 
 MIT, as declared in [pyproject.toml](pyproject.toml).
