@@ -15,6 +15,7 @@ import ldfparser
 from lark.exceptions import LarkError
 
 from can_explorer.core.database_editor import NAME_PATTERN, EditError
+from can_explorer.core.edit_history import UndoableEditor
 from can_explorer.core.ldf_writer import encoding_value_text, ldf_text, parse_ldf_text, schedule_entry_text
 
 MAX_UNCONDITIONAL_ID = 0x3B  # Frame identifiers 0x3C and above are diagnostic or reserved
@@ -66,13 +67,15 @@ def _names(value: Any) -> List[str]:
     return [name.strip() for name in value or [] if name and name.strip()]
 
 
-class LdfEditor:
+class LdfEditor(UndoableEditor):
+    """Edits the LDF data (a dict, as ldfparser reads it). Undo (core/edit_history.py) keeps a copy of it per state:
+    LIN databases are small."""
+
     kind = 'lin'
 
     def __init__(self, path: Optional[str | Path] = None):
         self.path: Optional[Path] = None
         self.warnings: List[str] = []
-        self.dirty = False
         if path is None:
             self.data = copy.deepcopy(NEW_LDF)
         else:
@@ -84,6 +87,30 @@ class LdfEditor:
         for key in ('signals', 'frames', 'schedule_tables', 'signal_encoding_types', 'signal_representations'):
             self.data.setdefault(key, [])
         self.data.setdefault('nodes', {}).setdefault('slaves', [])
+        self._init_history()
+
+    # Undo
+
+    def _capture(self) -> Dict[str, Any]:
+        return copy.deepcopy(self.data)
+
+    def _restore(self, state: Dict[str, Any]) -> None:
+        self.data = copy.deepcopy(state)  # The recorded state stays as it is when the data is changed again
+
+    def _same(self, first: Dict[str, Any], second: Dict[str, Any]) -> bool:
+        return first == second
+
+    @property
+    def dirty(self) -> bool:
+        return self.data != self._saved_state  # Without copying the data first
+
+    def changed_message(self, first: Dict[str, Any], second: Dict[str, Any]) -> Optional[str]:
+        """The name of a frame that differs between two states (as in `second`), to select it."""
+        before = {frame['name']: frame for frame in first.get('frames', [])}
+        for frame in second.get('frames', []):
+            if before.get(frame['name']) != frame:
+                return frame['name']
+        return None
 
     # Files
 
@@ -112,11 +139,12 @@ class LdfEditor:
             check.unlink(missing_ok=True)
             raise EditError(f'The database is not valid and was not saved: {e}') from e
         os.replace(check, target)
-        self.path, self.dirty = target, False
+        self.path = target
+        self._mark_saved()
         return list(self.warnings)
 
     def _changed(self) -> None:
-        self.dirty = True
+        """Called after each change; unsaved changes are found by comparing with the saved state (`dirty`)."""
 
     # Header and nodes
 

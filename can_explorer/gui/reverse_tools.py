@@ -39,6 +39,9 @@ KIND_NAMES = {
     'flag': 'Flag',
     'constant': 'Constant',
     'unknown': 'Unknown',
+    'freshness': 'SecOC freshness',
+    'mac': 'SecOC MAC',
+    'random': 'Random (MAC?)',
 }
 
 
@@ -131,7 +134,10 @@ class AnalysisController(_Tool):
         started = time.perf_counter()
         try:
             analyses = await asyncio.to_thread(
-                analyse_all, frames, lambda done, total: setattr(self, '_progress', (done, total))
+                analyse_all,
+                frames,
+                lambda done, total: setattr(self, '_progress', (done, total)),
+                self.reverse.session.decoder.secured_pdus,  # SecOC freshness and MAC at the ARXML's bits
             )
         finally:
             self._progress_timer.stop()
@@ -595,7 +601,9 @@ class RelatedController(_Tool):
         messages = await self.reverse.snapshot()
         frames = await asyncio.to_thread(collect, messages)
         frames = {key: item for key, item in frames.items() if not is_obd_identifier(key)}
-        analyses = self.reverse.analyses or await asyncio.to_thread(analyse_all, frames)
+        analyses = self.reverse.analyses or await asyncio.to_thread(
+            analyse_all, frames, None, self.reverse.session.decoder.secured_pdus
+        )
         self._status = 'Correlating the value fields with each other…'
         self.changed.emit()
         self._groups = await asyncio.to_thread(signal_groups, frames, analyses, min_correlation, max_lag)

@@ -196,6 +196,26 @@
   gap: 0.4em;
 }
 
+/* Material draws buttons in the primary colour, which is the header's near-black here: invisible on the page.
+   Outlined in purple, and the visitor's platform (md-button--primary, set by releases.js) filled. */
+[data-md-color-scheme="slate"] .md-typeset .md-button {
+  color: var(--dracula-purple);
+  background-color: var(--dracula-darker);
+  border-color: var(--dracula-purple);
+}
+
+[data-md-color-scheme="slate"] .md-typeset .md-button--primary {
+  color: var(--dracula-background);
+  background-color: var(--dracula-purple);
+  border-color: var(--dracula-purple);
+}
+
+[data-md-color-scheme="slate"] .md-typeset .md-button:is(:hover, :focus) {
+  color: var(--dracula-background);
+  background-color: var(--dracula-pink);
+  border-color: var(--dracula-pink);
+}
+
 .md-typeset .download-note {
   font-size: 0.75rem;
   color: var(--dracula-comment);

@@ -234,3 +234,52 @@ async def test_stop_notifies_that_running_became_false(manager, channel):
     await wait_until(lambda: not scan.running, timeout=3)
     await asyncio.sleep(0.05)  # Let the task's done-callback run
     assert running_at_emit and running_at_emit[-1] is False
+
+
+class _LockedDidServer(UdsServer):
+    """Answers DID 0xF1A0 only once a security level is unlocked."""
+
+    def _read_did(self, request):
+        if request[1:3] == b'\xf1\xa0' and self.unlocked_level is None:
+            return self._negative(0x22, 0x33)
+        return super()._read_did(request)
+
+
+async def test_scan_unlocks_a_security_level_first(manager, channel, tmp_path):
+    from PyQt6.QtCore import QUrl
+
+    session = BusSession(LiveSource(BusConfig('virtual', channel)))
+    session.start()
+    simulator = UdsEcuSimulator(session, server=_LockedDidServer(dids={0xF190: b'WDB123', 0xF1A0: b'SECRET'}))
+    simulator.start()
+    try:
+        connection = open_connection(manager, channel)
+        scan = connection.uds_scan
+        options = {'kind': 'dids', 'start': 'F1A0', 'end': 'F1A0', 'timeout_ms': 150}
+
+        rows = await run_scan(scan, options)
+        assert [row['category'] for row in rows.values()] == ['security'] and scan.note == ''
+
+        assert 'Diagnostics view' in scan.start({**options, 'security_level': '1'})  # No key algorithm yet
+        key_file = tmp_path / 'key.py'
+        key_file.write_text('def compute_key(level, seed):\n    return bytes(b ^ 0xFF for b in seed)\n')
+        connection.diagnostics.set_key_file(QUrl.fromLocalFile(str(key_file)))
+        assert 'odd' in scan.start({**options, 'security_level': '2'})
+
+        unlocking = {**options, 'enter_session': '3', 'security_level': '1'}  # Extended session, then unlock
+        rows = await run_scan(scan, unlocking)
+        assert scan.state == 'done' and scan.note == 'Security level 0x01 unlocked'
+        [row] = rows.values()
+        assert row['category'] == 'positive' and row['response'].startswith('62 F1 A0')
+
+        key_file.write_text('def compute_key(level, seed):\n    return b"\\x00\\x00"\n')  # A wrong key
+        connection.diagnostics.set_key_file(QUrl.fromLocalFile(str(key_file)))
+        simulator.server.unlocked_level = None
+        await run_scan(scan, unlocking)
+        assert scan.state == 'failed' and scan.scanned == 0
+        assert scan.note.startswith('Security access to level 0x01 failed, nothing probed')
+        scan.clear()
+        assert scan.note == ''
+    finally:
+        simulator.stop()
+        session.stop()

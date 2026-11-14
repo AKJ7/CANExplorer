@@ -18,7 +18,7 @@ T.TextField {
 
     color: control.enabled ? Theme.text : Theme.alpha(Theme.text, 0.4)
     selectionColor: Theme.accent
-    selectedTextColor: "white"
+    selectedTextColor: Theme.onAccent
     placeholderTextColor: Theme.muted
     verticalAlignment: TextInput.AlignVCenter
 

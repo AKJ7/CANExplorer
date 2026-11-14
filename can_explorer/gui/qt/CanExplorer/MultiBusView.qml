@@ -66,6 +66,9 @@ ColumnLayout {
             text: qsTr("Auto-scroll")
             checked: true
         }
+        TimeFormatBox {
+            id: timeFormatBox
+        }
         TextField {
             placeholderText: qsTr("Filter, e.g. 100-1FF !123 ext rx")
             text: root.multiBus.filter_text
@@ -96,7 +99,7 @@ ColumnLayout {
             id: table
             anchors.fill: parent
             model: root.multiBus.trace
-            columnWidths: [110, 110, 40, 70, 90, 40, 200, 0]
+            columnWidths: [timeFormatBox.columnWidth, 110, 40, 70, 90, 40, 200, 0]
             autoScroll: autoScrollBox.checked && !root.multiBus.paused
         }
     }

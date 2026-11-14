@@ -195,7 +195,7 @@ The server is read-only by default. Each flag (or each dialog tier) grants the o
 
 | Flag / tier | Adds | Tools |
 |---|---|---|
-| *(none)* / `read-only` | Connecting, inspection and reverse engineering (reads files, sends nothing) | `bus_status`, `list_interfaces`, `connect`, `disconnect`, `list_identifiers`, `get_frames`, `decode_frame`, `decode_protocol`, `timing`, `analyze_identifier`, `bit_activity`, `extract_field`, `related_signals`, `capture_reaction`, `mark`, `clear_markers`, `reaction_at_markers`, `correlate`, `promote_to_dbc`, `load_database`, `unload_database` |
+| *(none)* / `read-only` | Connecting, inspection and reverse engineering (reads files, sends nothing) | `bus_status`, `list_interfaces`, `connect`, `disconnect`, `list_identifiers`, `get_frames`, `decode_frame`, `decode_protocol`, `timing`, `analyze_identifier`, `bit_activity`, `extract_field`, `related_signals`, `capture_reaction`, `mark`, `clear_markers`, `reaction_at_markers`, `correlate`, `promote_to_dbc`, `load_database`, `unload_database`, `secoc_status` |
 | `--allow-diagnostics` / `diagnostics` | Safe diagnostic **reads** (they put a request on the bus) | `query_obd`, `obd_status`, `obd_dtcs`, `obd_vin`, `obd_supported`, `obd_read`, `uds_read_did`, `uds_read_dtcs` |
 | `--allow-control` / `control` | **Active** diagnostics (changes ECU state) | `obd_clear`, `uds_reset`, `uds_routine`, `uds_request` |
 | `--allow-send` / `send` | Arbitrary transmit | `send_frame`, `send_message` |
@@ -214,9 +214,9 @@ A tool that is not enabled is not even offered to the agent, so it cannot be cal
 | `list_identifiers` | Every identifier seen, with direction, count, cycle time, last data and database name |
 | `get_frames` | Recent frames (optionally of one identifier), decoded into signals |
 | `decode_frame` | Decode a payload you supply with the loaded database (sends nothing) |
-| `decode_protocol` | Interpret a payload with a protocol decoder (J1939, J1939-22, NMEA 2000, CANopen, ISO-TP, UDS, KWP2000, LIN, J1587, NM, SecOC) |
+| `decode_protocol` | Interpret a payload with a protocol decoder (J1939, J1939-22, NMEA 2000, CANopen, ISO-TP, UDS, KWP2000, K-Line, LIN, J1587, NM, SecOC) |
 | `timing` | Inter-frame timing per identifier: cycle time, jitter, periodic vs event-triggered (`series` for the Δt over time) |
-| `analyze_identifier` | Automatic field analysis (checksums, counters, multiplexers, physical values, states, flags) |
+| `analyze_identifier` | Automatic field analysis (checksums, counters, multiplexers, physical values, states, flags, SecOC freshness values and MACs) |
 | `bit_activity` | Raw per-bit behaviour of one identifier (how often each bit is set and flips) and a per-byte summary |
 | `extract_field` | Decode a candidate bit range (byte order, sign, scaling) over time without a database, to test a hypothesis |
 | `related_signals` | Groups of fields that carry the same signal across the bus |
@@ -225,6 +225,7 @@ A tool that is not enabled is not even offered to the agent, so it cannot be cal
 | `correlate` | Rank fields by how well they follow a reference (a database signal, a CSV column, or an inline series) |
 | `promote_to_dbc` | Write the found fields — or field specs you supply (`fields=[…]`) — as signals to a DBC, creating their messages |
 | `load_database` / `unload_database` | Load a DBC/ARXML/KCD/SYM/DBF for decoding, or forget it (back to raw bytes) |
+| `secoc_status` | The SecOC secured PDUs of an ARXML and the outcome of their live checks (ok, MAC and freshness errors) and the key store entry used — never a key. `can-mcp` uses the key store unlocked with `CANEXPLORER_KEYSTORE_PASSWORD` |
 
 **Diagnostics** (`--allow-diagnostics`; the control tools need `--allow-control`):
 

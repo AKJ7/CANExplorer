@@ -18,8 +18,11 @@ uv run python packaging/build.py --backend nuitka --onefile  # Single executable
 `--archive` also zips the bundle to `dist/CANExplorer-<version>-<platform>-<arch>[-nuitka].zip`.
 
 Both builds include the QML files, the Qt QML modules, the grammar files of ldfparser and lark, and all python-can
-interface modules (which python-can imports by name at run time). Nuitka cannot relate the package metadata of an
-editable install to the package, so the build writes the version into a generated module instead.
+interface modules (which python-can imports by name at run time). The build writes `can_explorer/_build_version.py`
+(removed afterwards) with the version, the commit (from git, else `GITHUB_SHA`), the build date (UTC, or
+`SOURCE_DATE_EPOCH` for reproducible builds) and the backend; the About dialog, the crash report and the system
+report show them (`can_explorer/build_info.py`). Nuitka also takes the version from it, as it cannot relate the
+package metadata of an editable install to the package.
 
 On Windows, `--j2534-bridge PYTHON` also builds the [J2534 bridge](../reference/interfaces.md#32-bit-drivers)
 with a 32-bit Python, which needs PyInstaller, into `j2534-bridge32/` of the bundle. The release workflow creates

@@ -37,10 +37,13 @@ Without it, MF4 is not offered in the file dialogs and opening an `.mf4` file ex
 | `.arxml` | AUTOSAR system description 3.x and 4.x | ✓ | | cantools |
 | `.kcd` | Kayak network definition | ✓ | ✓ | cantools |
 | `.sym` | PEAK PCAN Symbol 6.0 | ✓ | ✓ | cantools |
-| `.ldf` | LIN description file 1.3–2.2A | ✓ | | ldfparser |
+| `.ldf` | LIN description file 1.3–2.2A | ✓ | ✓ ¹ | ldfparser (read), CANExplorer (write) |
 | `.cdd` | Vector CANdelaStudio diagnostic description | ✓ | | CANExplorer |
 | `.odx`, `.odx-d` | ASAM ODX diagnostic description | ✓ | | CANExplorer |
 | `.pdx` | Packaged ODX (ZIP of ODX documents) | ✓ | | CANExplorer |
+
+¹ Saved by the [database editor](../user-guide/database-editor.md#lin-databases); `can-db-convert` does not convert
+to or from LDF.
 
 ### BUSMASTER DBF
 

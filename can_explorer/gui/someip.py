@@ -2,17 +2,28 @@
 shows the decoded messages. It owns a SomeIpMonitor running on the event loop."""
 
 import asyncio
+import json
 from typing import Any, Dict, List, Optional
 
-from PyQt6.QtCore import QObject, QTimer, QUrl, pyqtProperty, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QObject, QSettings, QTimer, QUrl, pyqtProperty, pyqtSignal, pyqtSlot
 
 from can_explorer.core.someip import DEFAULT_SD_MULTICAST, DEFAULT_SD_PORT, SomeIpMonitor, describe
 from can_explorer.core.someip_arxml import ArxmlError, load_arxml
+from can_explorer.core.someip_e2e import (
+    PROFILES,
+    SomeIpE2eChecker,
+    SomeIpE2eConfig,
+    SomeIpE2eError,
+    load_configs,
+    save_configs,
+)
 from can_explorer.core.someip_fibex import FibexError, load_fibex
 from can_explorer.core.someip_serialization import SomeIpDescription
 from can_explorer.sys.log_handler import get_logger
 
 logger = get_logger(__name__)
+
+E2E_SETTINGS_KEY = 'someip/e2e'  # The E2E protections, as JSON
 
 REFRESH_INTERVAL_MS = 250
 MAX_ROWS = 1000  # Messages shown in the table (the monitor keeps more)
@@ -46,9 +57,12 @@ class SomeIpController(QObject):
 
     changed = pyqtSignal()  # Open, closed or error
     data_changed = pyqtSignal()  # Services or messages
+    e2e_changed = pyqtSignal()  # The E2E protections
 
-    def __init__(self, parent: Optional[QObject] = None):
+    def __init__(self, settings: Optional[QSettings] = None, parent: Optional[QObject] = None):
         super().__init__(parent)
+        self._settings = settings
+        self._e2e: List[SomeIpE2eConfig] = self._load_e2e()
         self._monitor: Optional[SomeIpMonitor] = None
         self._error = ''
         self._ports = str(DEFAULT_SD_PORT)
@@ -100,6 +114,7 @@ class SomeIpController(QObject):
         self._ports, self._multicast = ports_text, multicast
         self._error = ''
         self._monitor = SomeIpMonitor()
+        self._monitor.e2e = self.e2e_checker()
         asyncio.ensure_future(self._open(ports, multicast.strip() or None))
         return ''
 
@@ -182,6 +197,89 @@ class SomeIpController(QObject):
 
     # Data
 
+    # E2E protections
+
+    def _load_e2e(self) -> List[SomeIpE2eConfig]:
+        if self._settings is None:
+            return []
+        try:
+            data = json.loads(str(self._settings.value(E2E_SETTINGS_KEY, '[]')))
+            return [SomeIpE2eConfig.from_dict(entry) for entry in data]
+        except (ValueError, SomeIpE2eError) as e:
+            logger.warning(f'Ignoring the saved SOME/IP E2E protections: {e}')
+            return []
+
+    def _set_e2e(self, configs: List[SomeIpE2eConfig]) -> None:
+        SomeIpE2eChecker(configs)  # Raises on duplicates
+        self._e2e = sorted(configs, key=lambda config: config.key)
+        if self._settings is not None:
+            self._settings.setValue(E2E_SETTINGS_KEY, json.dumps([config.as_dict() for config in self._e2e]))
+        if self._monitor is not None:
+            self._monitor.e2e = self.e2e_checker()  # From now on; messages received before keep their result
+        self.e2e_changed.emit()
+        self.data_changed.emit()
+
+    def e2e_checker(self) -> Optional[SomeIpE2eChecker]:
+        """A checker of the configured protections (with its own counter state), None without protections."""
+        return SomeIpE2eChecker(self._e2e) if self._e2e else None
+
+    @pyqtProperty('QVariantList', notify=e2e_changed)
+    def e2e_protections(self) -> List[Dict[str, Any]]:
+        return [
+            {
+                'id': f'{config.service_id:04X}.{config.method_id:04X}',
+                'name': config.name,
+                'profile': config.profile,
+                'data_id': f'0x{config.data_id:X}',
+                'offset': config.offset,
+                'max_delta_counter': config.max_delta_counter,
+            }
+            for config in self._e2e
+        ]
+
+    @pyqtProperty('QVariantList', constant=True)
+    def e2e_profiles(self) -> List[int]:
+        return list(PROFILES)
+
+    @pyqtSlot('QVariantMap', result=str)
+    def add_e2e(self, options: Dict[str, Any]) -> str:
+        """Options: service_id, method_id, data_id (hex), profile, offset (bits, default 64), max_delta_counter,
+        name. A protection of the same method replaces the old one. Returns an error, or ''."""
+        try:
+            entry = {key: value for key, value in options.items() if value not in ('', None)}
+            for key in ('service_id', 'method_id', 'data_id'):
+                text = str(entry.get(key, '')).strip()
+                if text and not text.lower().startswith('0x'):
+                    entry[key] = '0x' + text  # Ids are typed in hex, as shown
+            config = SomeIpE2eConfig.from_dict(entry)
+            self._set_e2e([existing for existing in self._e2e if existing.key != config.key] + [config])
+        except SomeIpE2eError as e:
+            return str(e)
+        return ''
+
+    @pyqtSlot(int)
+    def remove_e2e(self, index: int):
+        if 0 <= index < len(self._e2e):
+            self._set_e2e(self._e2e[:index] + self._e2e[index + 1 :])
+
+    @pyqtSlot(QUrl, result=str)
+    def import_e2e(self, url: QUrl) -> str:
+        """Replace the protections with those of a JSON file. Returns an error, or ''."""
+        try:
+            self._set_e2e(load_configs(url.toLocalFile() if url.isLocalFile() else url.toString()))
+        except SomeIpE2eError as e:
+            return str(e)
+        return ''
+
+    @pyqtSlot(QUrl, result=str)
+    def export_e2e(self, url: QUrl) -> str:
+        path = url.toLocalFile() if url.isLocalFile() else url.toString()
+        try:
+            save_configs(path, self._e2e)
+        except OSError as e:
+            return f'Cannot write {path}: {e}'
+        return ''
+
     @pyqtProperty(int, notify=data_changed)
     def message_count(self) -> int:
         return self._monitor.total if self._monitor is not None else 0
@@ -218,7 +316,9 @@ class SomeIpController(QObject):
                     'id': f'{message.service_id:04X}.{message.method_id:04X}',
                     'type': message.message_type_name,
                     'length': len(message.payload),
-                    'description': self._signals_text(message) or describe(message),
+                    'description': (self._signals_text(message) or describe(message))
+                    + (f' [{received.e2e}]' if received.e2e else ''),
+                    'e2e_failed': any(word in received.e2e for word in ('ERROR', 'REPEATED', 'WRONG SEQUENCE')),
                     'service_name': (
                         '' if self._description is None else self._description.service_names.get(message.service_id, '')
                     ),

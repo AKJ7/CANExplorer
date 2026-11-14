@@ -1,6 +1,6 @@
 [project]
 name = "can-explorer"
-version = "1.7.1"
+version = "1.8.0"
 description = "Monitor, analyse, diagnose, simulate and test CAN, CAN FD and LIN buses"
 authors = [{ name = "AKJ7", email = "akj123429@gmail.com" }]
 license = "MIT"
@@ -41,6 +41,10 @@ dependencies = [
     "ldfparser==0.26.0",  # Pinned: pre-1.0, minor versions may break the API
     # MCP server (can-mcp and the in-app Agent server), its HTTP transport brings uvicorn and starlette
     "mcp>=2",
+    # Security manager: the encrypted key store, SecOC authenticators, TLS certificates for DoIP and decrypting
+    # IPsec ESP and MACsec in Ethernet captures
+    "cryptography>=42",
+    "keyring>=25",  # Remembering the key store password in the OS keychain (optional, off by default)
 ]
 
 [project.urls]
@@ -66,6 +70,10 @@ gvret = "can_explorer.core.gvret:GvretBus"
 elm327 = "can_explorer.core.elm327:Elm327Bus"
 # GM Class 2 / SAE J1850 VPW through an ELM327 adapter, usable as python-can interface "elm327_vpw"
 elm327_vpw = "can_explorer.core.elm327_vpw:Elm327VpwBus"
+# K-Line (ISO 9141-2 / ISO 14230 KWP) through an ELM327 adapter, usable as python-can interface "elm327_kline"
+elm327_kline = "can_explorer.core.elm327_kline:Elm327KLineBus"
+# SAE J1708 serial bus (RS-485) of older heavy trucks, usable as python-can interface "j1708"
+j1708 = "can_explorer.core.j1708:J1708Bus"
 # J2534 pass-thru devices (SAE J2534-1 04.04 drivers), usable as python-can interface "j2534"
 j2534 = "can_explorer.core.j2534:J2534Bus"
 # TMC RP1210 heavy-duty adapters (Nexiq, DG DPA, Noregon, …), usable as python-can interface "rp1210"
@@ -134,6 +142,8 @@ python_files = "test_*.py"
 python_functions = "test_*"
 testpaths = "tests"
 asyncio_mode = "auto"
+# A test still running after this many seconds dumps every thread's stack (a hang shows where it is stuck)
+faulthandler_timeout = 120
 
 [build-system]
 requires = ["hatchling"]

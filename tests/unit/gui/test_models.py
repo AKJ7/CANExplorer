@@ -123,6 +123,18 @@ def test_overview_model_highlights_changes(qapp):
     assert cell(model, 1, 7, RICH_TEXT_ROLE) is False
 
 
+def test_select_rows_selects_a_range(qapp):
+    model = TraceModel(store_with([frame(i, bytes([i])) for i in range(6)]), lambda: 10.0)
+    model.rebuild()
+    selection = QItemSelectionModel(model)
+    model.select_rows(selection, 3, 1, False)  # Either order
+    assert model.selected_rows(selection) == [1, 2, 3]
+    model.select_rows(selection, 5, 5, True)  # Extends
+    assert model.selected_rows(selection) == [1, 2, 3, 5]
+    model.select_rows(selection, 4, 99, False)  # Replaces, clamped to the rows
+    assert model.selected_rows(selection) == [4, 5]
+
+
 def test_copy_and_select_all(qapp):
     store = store_with([frame(i, bytes([i])) for i in range(3)])
     model = TraceModel(store, lambda: 10.0, describe=lambda frame: f'info {frame.message.arbitration_id:X}')
@@ -263,3 +275,36 @@ def test_overview_sorting(qapp):
     statistics.update(frame(0x050, b'\x02', timestamp=9.0))
     model.refresh(*statistics.drain_changes())
     assert ids() == ['100', '050', '200', '300']
+
+
+def test_trace_model_time_formats(qapp):
+    store = store_with([frame(0x100, timestamp=t) for t in (1763040010.0, 1763040010.25, 1763040011.0)])
+    model = TraceModel(store, lambda: 1763040000.0)
+    model.rebuild()
+    header = lambda: model.headerData(0, Qt.Orientation.Horizontal)  # noqa: E731
+    assert model.time_format == 'relative' and header() == 'Time [s]'
+    assert [cell(model, row, 0) for row in range(3)] == ['10.000000', '10.250000', '11.000000']
+
+    changed = []
+    model.dataChanged.connect(lambda first, last, roles=(): changed.append((first.row(), last.row(), first.column())))
+    headers = []
+    model.headerDataChanged.connect(lambda orientation, first, last: headers.append((first, last)))
+    model.set_time_format('delta')
+    assert headers == [(0, 0)] and changed == [(0, 2, 0)] and header() == 'Δt [s]'
+    assert [cell(model, row, 0) for row in range(3)] == ['0.000000', '0.250000', '0.750000']
+
+    model.set_time_format('unix')
+    assert cell(model, 2, 0) == '1763040011.000000' and header() == 'Unix time [s]'
+    model.set_time_format('absolute')
+    assert cell(model, 0, 0).count(':') == 2 and header() == 'Time'
+    model.set_time_format('bogus')
+    assert model.time_format == 'relative'
+    assert model.time(store.get(0)) == 10.0  # Replay seeks by the relative time, whatever is shown
+
+
+def test_trace_model_delta_follows_the_filter(qapp):
+    store = store_with([frame(0x100, timestamp=1.0), frame(0x200, timestamp=2.0), frame(0x100, timestamp=4.0)])
+    model = TraceModel(store, lambda: 0.0)
+    model.set_time_format('delta')
+    model.set_filter(MessageFilter.parse('100'))
+    assert [cell(model, row, 0) for row in range(2)] == ['0.000000', '3.000000']

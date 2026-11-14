@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import time
 import uuid
 
@@ -13,6 +14,8 @@ from can_explorer.core.simulation import (
     UdsEcuSimulator,
     UdsServer,
 )
+from can_explorer.core import channel_detection
+from can_explorer.core.channel_detection import ERROR, FOUND, BackendProbe, configs_of
 from can_explorer.core.session import BusSession
 from can_explorer.core.sources import BusConfig, LiveSource
 from can_explorer.gui.connection_manager import ConnectionManager
@@ -208,7 +211,10 @@ async def test_diagnostics_against_simulated_ecu(manager, channel, tmp_path):
     assert (await run(lambda: diagnostics.read_did('F186')))['description'] == 'Active diagnostic session = extended'
     missing = await run(lambda: diagnostics.read_did('1234'))
     assert missing['error'] and 'requestOutOfRange' in missing['description']
-    assert diagnostics.security_access(1) == 'Choose a key file defining compute_key(level, seed)'
+    assert (
+        diagnostics.security_access(1)
+        == 'Choose a key algorithm: a file defining compute_key(level, seed), or one in the Security Manager'
+    )
     key_file = tmp_path / 'key.py'
     key_file.write_text('def compute_key(level, seed):\n    return bytes(b ^ 0xFF for b in seed)\n')
     diagnostics.set_key_file(QUrl.fromLocalFile(str(key_file)))
@@ -297,19 +303,27 @@ async def test_gmlan_against_simulated_ecu(manager, channel, tmp_path):
         return gmlan.history[-1]
 
     assert gmlan.set_addressing('241', '641', False) == ''
+    assert (gmlan.request_id, gmlan.response_id, gmlan.extended, gmlan.single_wire) == ('241', '641', False, True)
     entry = await run(lambda: gmlan.read_did('90'))
     assert entry['positive'] and entry['response'].startswith('5A 90')
     assert gmlan.raw_request('zz') != ''
     assert (await run(lambda: gmlan.write_did('90', '41 42')))['description'] == 'DID 0x90 written'
     assert (await run(lambda: gmlan.initiate_operation(0x02)))['positive']
+    assert gmlan.operation == 'disableAllDTCs'
     assert (await run(gmlan.disable_normal_communication))['positive']
+    assert gmlan.communication_disabled
     assert (await run(gmlan.return_to_normal))['positive']
+    assert (gmlan.operation, gmlan.communication_disabled) == ('', False)
 
     key_file = tmp_path / 'key.py'
     key_file.write_text('def compute_key(level, seed):\n    return bytes(b ^ 0xFF for b in seed)\n')
     assert gmlan.security_access('1') == 'Choose a key file first'
     gmlan.set_key_file(QUrl.fromLocalFile(str(key_file)))
     assert (await run(lambda: gmlan.security_access('1')))['description'] == 'Security level 1 unlocked'
+    assert gmlan.unlocked_level == 1
+    assert gmlan.set_addressing('242', '642', False) == ''  # Another ECU: nothing done to it yet
+    assert gmlan.unlocked_level == 0 and gmlan.request_id == '242'
+    assert gmlan.set_addressing('241', '641', False) == ''
 
     await run(gmlan.read_dtcs)
     assert gmlan.dtcs[0] == {'code': 'P0123-04', 'status': '0x60'}
@@ -371,36 +385,60 @@ async def test_lin_connection(manager, channel, data_dir):
     slaves.stop()
 
 
-async def test_channel_detection(manager, monkeypatch):
-    monkeypatch.setattr(
-        ConnectionManager,
-        '_probe_interfaces',
-        staticmethod(
-            lambda: [
-                {'interface': 'virtual', 'channel': 'a'},
-                {'interface': 'virtual', 'channel': 'a'},
-                {'interface': 'x'},
-            ]
+async def test_channel_detection(manager, monkeypatch, caplog):
+    probes = [
+        BackendProbe(
+            'virtual', FOUND, [{'interface': 'virtual', 'channel': 'a'}, {'interface': 'virtual', 'channel': 'a'}]
         ),
-    )
+        BackendProbe('x', FOUND, [{'interface': 'x'}]),
+        BackendProbe('etas', ERROR, detail="OSError('driver error')"),
+    ]
+    monkeypatch.setattr(ConnectionManager, '_probe_interfaces', staticmethod(lambda: probes))
+    assert manager.last_detection == []
     manager.detect_channels()
     assert manager.detecting
-    await wait_until(lambda: not manager.detecting)
+    with caplog.at_level(logging.INFO):
+        await wait_until(lambda: not manager.detecting)
     assert manager.detected_channels == {'VirtualBus': ['a']}
+    assert manager.last_detection == probes
+    assert "Channel detection: etas: error after 0.00 s: OSError('driver error')" in caplog.text
+
+
+async def test_system_report_detects_channels_first(manager, monkeypatch):
+    from PyQt6.QtGui import QGuiApplication
+
+    probes = [BackendProbe('etas', ERROR, detail="OSError('driver error')", alone=True)]
+    calls, copied = [], []
+    monkeypatch.setattr(ConnectionManager, '_probe_interfaces', staticmethod(lambda: calls.append(1) or probes))
+    manager.system_report_copied.connect(lambda: copied.append(QGuiApplication.clipboard().text()))
+    QGuiApplication.clipboard().clear()
+    assert manager.copy_system_report() is False  # Detecting first
+    assert manager.copy_system_report() is False  # Still detecting: not started twice
+    await wait_until(lambda: copied)
+    assert len(copied) == 1 and copied[0].startswith('CANExplorer system report')
+    assert "etas: error after 0.00 s: OSError('driver error') [probed alone]" in copied[0]
+    assert manager.copy_system_report() is True  # The last detection is reused, copied at once
+    assert len(copied) == 2 and calls == [1]
 
 
 def test_channel_probe_survives_failing_backend(monkeypatch):
     etas = [{'interface': 'etas', 'channel': 'ETAS://USB/SuperCAN:3c04469d/CAN:0'}]
 
-    def detect(interface, timeout):
-        if interface == 'etas':
-            return etas
-        if interface == 'vector':
-            raise OSError('driver error')
-        return []
+    class Bus:
+        def __init__(self, interface):
+            self.interface = interface
 
-    monkeypatch.setattr(can, 'detect_available_configs', detect)
-    assert ConnectionManager._probe_interfaces() == etas
+        def _detect_available_configs(self):
+            if self.interface == 'etas':
+                return [dict(config) for config in etas]
+            if self.interface == 'vector':
+                raise OSError('driver error')
+            return []
+
+    monkeypatch.setattr(channel_detection, '_get_class_for_interface', Bus)
+    probes = {probe.interface: probe for probe in ConnectionManager._probe_interfaces()}
+    assert configs_of(probes.values()) == etas
+    assert probes['vector'].status == ERROR and 'driver error' in probes['vector'].detail
 
 
 async def test_fd_connection_and_recent_entries(manager, channel):
@@ -665,7 +703,8 @@ async def test_flashing(manager, channel, tmp_path, monkeypatch):
     ecu.start()
     try:
         assert (
-            flashing.start({'security_level': 1}) == 'Choose the key file in the Diagnostics view for security access'
+            flashing.start({'security_level': 1})
+            == 'Choose the key algorithm in the Diagnostics view for security access'
         )
         assert flashing.start({'security_level': 2}) == 'Security access levels for requesting a seed are odd'
         assert flashing.start({'erase_routine': 'XYZ'}) == "Invalid hex erase routine: 'XYZ'"
@@ -898,3 +937,15 @@ async def test_in_app_mcp_server_controller(manager, channel):
     server.stop()
     await wait_until(lambda: not server.running, timeout=10)
     assert server.url == '' and server.token == ''
+
+
+async def test_e2e_protections_of_an_arxml_database(manager, channel, data_dir, e2e_arxml):
+    connection = open_connection(manager, channel)
+    assert connection.e2e_protections == []
+    connection.load_database(QUrl.fromLocalFile(str(e2e_arxml)))
+    assert connection.e2e_protections == [  # The frame, and the same PDU inside the Bundle container frame
+        {'message': 'EngineData', 'profile': 'E2E P05', 'checked': True, 'reason': ''},
+        {'message': 'EnginePdu', 'profile': 'E2E P05', 'checked': True, 'reason': ''},
+    ]
+    connection.load_database(QUrl.fromLocalFile(str(data_dir / 'example.dbc')))
+    assert connection.e2e_protections == []

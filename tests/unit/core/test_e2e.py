@@ -1,4 +1,7 @@
+import pytest
+
 from can_explorer.core import e2e
+from can_explorer.core.e2e import Profile4, Profile6, Profile7, crc64
 
 # AUTOSAR CRC library published check values (SWS CRC), for two standard inputs.
 ZEROS = bytes([0x00, 0x00, 0x00, 0x00])
@@ -107,3 +110,62 @@ def test_profile22_requires_sixteen_ids():
 
     with pytest.raises(ValueError, match='16 entries'):
         e2e.Profile22([1, 2, 3])
+
+
+# Profiles 4, 6 and 7: the protocol examples of AUTOSAR PRS_E2EProtocol R23-11 (counter 0, all data bytes zero),
+# without and with the 8-byte SOME/IP upper header in front of the E2E header ("offset = 64")
+SPEC_EXAMPLES = [
+    ('table 6.42', Profile4(0x0A0B0C0D), 16, '0010 0000 0a0b0c0d 862b0556 00000000'),
+    ('table 6.43', Profile4(0x0A0B0C0D, 8), 24, '0000000000000000 0018 0000 0a0b0c0d 69d7502e 00000000'),
+    ('table 6.64', Profile6(0x1234), 8, 'b155 0008 00 000000'),
+    ('table 6.65', Profile6(0x1234, 8), 16, '0000000000000000 4eb7 0010 00 000000'),
+    ('table 6.71', Profile7(0x0A0B0C0D), 24, '1fb2e737fcedbcd9 00000018 00000000 0a0b0c0d 00000000'),
+    (
+        'table 6.72',
+        Profile7(0x0A0B0C0D, 8),
+        32,
+        '0000000000000000 17f7c817323865a8 00000020 00000000 0a0b0c0d 00000000',
+    ),
+]
+
+
+def test_crc64_check_value():
+    assert crc64(b'123456789') == 0x995DC9BBDF1939FA  # The CRC-64 (ECMA) check value of the AUTOSAR CRC library
+
+
+@pytest.mark.parametrize('table, profile, length, expected', SPEC_EXAMPLES, ids=[case[0] for case in SPEC_EXAMPLES])
+def test_length_profiles_match_the_spec_examples(table, profile, length, expected):
+    protected = profile.protect(bytes(length), 0)
+    assert protected.hex() == expected.replace(' ', '')
+    result = profile.check(protected)
+    assert result.ok and result.counter == 0 and result.error == ''
+
+
+@pytest.mark.parametrize('profile', [Profile4(0x01020304, 8), Profile6(0xBEEF, 8), Profile7(0x01020304, 8)])
+def test_length_profiles_detect_corruption(profile):
+    data = bytes(8 + profile.HEADER) + b'payload'
+    protected = profile.protect(data, 5)
+    assert profile.check(protected) == profile.check(protected) and profile.check(protected).counter == 5
+    corrupted = protected[:-1] + bytes([protected[-1] ^ 1])
+    assert not profile.check(corrupted).ok and profile.check(corrupted).error == ''
+    upper_header_changed = bytes([protected[0] ^ 1]) + protected[1:]  # The bytes before the header are protected
+    assert not profile.check(upper_header_changed).ok
+    truncated = profile.check(protected[:-1])
+    assert not truncated.ok and truncated.error.startswith('length field ')
+    assert profile.check(protected[: 8 + profile.HEADER - 1]).error.startswith('shorter than the ')
+    other_id = type(profile)(profile.data_id ^ 1, 8)
+    assert not other_id.check(protected).ok
+
+
+def test_profile4_and_7_report_a_wrong_data_id():
+    protected = Profile4(0x11223344).protect(bytes(16), 1)
+    result = Profile4(0x11223345).check(protected)
+    assert not result.ok and result.error == 'Data ID 0x11223344, expected 0x11223345'
+
+
+def test_length_profile_limits():
+    with pytest.raises(ValueError, match='16-bit Data ID'):
+        Profile6(0x10000)
+    with pytest.raises(ValueError, match='no room'):
+        Profile4(1).protect(bytes(11), 0)
+    assert Profile6(1).protect(bytes(5), 0x1FF)[4] == 0xFF  # The 8-bit counter wraps

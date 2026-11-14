@@ -10,6 +10,7 @@ ColumnLayout {
     required property var model
     // Width per column in pixels; 0 makes the column fill the remaining space
     required property var columnWidths
+    // Keep the newest row visible as rows arrive, also while rows are selected (the selection follows its rows)
     property bool autoScroll: false
     // Clicking a column header calls model.sort_by(column)
     property bool sortable: false
@@ -18,6 +19,27 @@ ColumnLayout {
 
     // Right click on a row (selected first, when it was not)
     signal contextMenuRequested(int row)
+    // showRow() jumped to a row while auto-scrolling; the owner should switch auto-scroll off, or the newest rows
+    // would push the shown row out of view at once
+    signal autoScrollInterrupted()
+
+    // A click on a row, as in a file manager: a click selects the row, Ctrl+click adds or removes it, Shift+click
+    // selects the range from the current row (the anchor, which stays put) to it, Ctrl+Shift+click adds that range.
+    // A right click keeps a selection that includes the row, so the context menu acts on the whole group.
+    function selectRow(row, selected, modifiers, right) {
+        const index = root.model.index(row, 0)
+        const shift = modifiers & Qt.ShiftModifier
+        const control = modifiers & Qt.ControlModifier
+        const anchor = selection.currentIndex.valid ? selection.currentIndex.row : -1
+        if (shift && anchor >= 0) {
+            root.model.select_rows(selection, anchor, row, !!control)
+        } else if (control && !right) {
+            selection.setCurrentIndex(index, ItemSelectionModel.Toggle | ItemSelectionModel.Rows)
+        } else if (!(right && selected)) {
+            selection.setCurrentIndex(index, ItemSelectionModel.ClearAndSelect | ItemSelectionModel.Rows)
+        }
+        tableView.forceActiveFocus()
+    }
 
     // Select a row and scroll to it, e.g. for a search result or a bookmark
     function showRow(row) {
@@ -25,6 +47,8 @@ ColumnLayout {
             return
         const index = root.model.index(row, 0)
         selection.setCurrentIndex(index, ItemSelectionModel.ClearAndSelect | ItemSelectionModel.Rows)
+        if (root.autoScroll)
+            root.autoScrollInterrupted()
         tableView.positionViewAtRow(row, TableView.Contain)
     }
 
@@ -159,12 +183,24 @@ ColumnLayout {
         selectionModel: ItemSelectionModel { id: selection }
         selectionBehavior: TableView.SelectRows
         selectionMode: TableView.ExtendedSelection
+        // Clicks are handled by the delegates (clickRow); the built-in handling cleared the selection on a click
+        pointerNavigationEnabled: false
         Layout.fillWidth: true
         Layout.fillHeight: true
         ScrollBar.vertical: ScrollBar {}
         ScrollBar.horizontal: ScrollBar {}
         columnWidthProvider: column => root.columnWidth(column)
         onWidthChanged: forceLayout()
+        Connections {
+            target: root
+            function onColumnWidthsChanged() { tableView.forceLayout() }
+        }
+        // Auto-scroll pins the view to the bottom of the content: moving contentY scrolls incrementally (only the
+        // rows coming into view are loaded), where positionViewAtRow() relayouts the table every time and stutters.
+        // When full, the trace drops rows at the top as fast as new ones arrive: the content height stays, and the
+        // pinned view shows the newest rows without moving.
+        onContentHeightChanged: if (root.autoScroll) root.scrollToEnd()
+        onHeightChanged: if (root.autoScroll) root.scrollToEnd()
 
         delegate: Rectangle {
             required property string display
@@ -199,22 +235,32 @@ ColumnLayout {
                 color: Theme.warning
             }
 
+            // Selects on press, not on tap: a tap is cancelled when the pointer drifts past the drag threshold, the
+            // button is held long, or the view starts to flick, which lost clicks. The context menu opens on release.
             TapHandler {
-                acceptedButtons: Qt.RightButton
-                onTapped: {
-                    if (!parent.selected)
-                        root.showRow(parent.row)
-                    root.contextMenuRequested(parent.row)
+                id: rowTap
+                property bool menuPending: false
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                gesturePolicy: TapHandler.ReleaseWithinBounds
+                onPressedChanged: {
+                    if (pressed) {
+                        // The handler's point carries the keyboard modifiers and buttons
+                        const right = (point.pressedButtons & Qt.RightButton) !== 0
+                        root.selectRow(parent.row, parent.selected, point.modifiers, right)
+                        menuPending = right
+                    } else if (menuPending) {
+                        menuPending = false
+                        root.contextMenuRequested(parent.row)
+                    }
                 }
             }
         }
     }
 
-    Connections {
-        target: root.model
-        function onRowsInserted() {
-            if (root.autoScroll && !selection.hasSelection)
-                tableView.positionViewAtRow(tableView.rows - 1, TableView.AlignBottom)
-        }
+    function scrollToEnd() {
+        tableView.contentY = Math.max(tableView.originY,
+            tableView.originY + tableView.contentHeight - tableView.height + tableView.bottomMargin)
     }
+
+    onAutoScrollChanged: if (autoScroll) scrollToEnd()
 }

@@ -269,6 +269,7 @@ class FileSource:
         self.path = Path(path)
         self.clock = PlaybackClock((1.0 if realtime else 0.0) if speed is None else speed)
         self.duration: Optional[float] = None
+        self.first_timestamp: Optional[float] = None  # Of the log's first frame, once read
         self._bridge: Optional[ThreadBridge] = None
         self._generation = 0  # Of the reader thread; seeking back starts a new one
         self._stop = threading.Event()
@@ -394,7 +395,7 @@ class FileSource:
                     raise SourceError(f'Could not read {self.path.name}: {item}') from item
                 self._slots.release()
                 if first_timestamp is None and item:
-                    first_timestamp = item[0].timestamp
+                    first_timestamp = self.first_timestamp = item[0].timestamp
                     if not clock.started:
                         clock.start()
                 if clock.speed <= 0:

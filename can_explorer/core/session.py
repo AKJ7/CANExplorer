@@ -36,11 +36,18 @@ class SessionState(enum.Enum):
 class PeriodicTransmit:
     """Base of the periodic transmissions of a session."""
 
-    def __init__(self, session: 'BusSession', msg: can.Message, period: float):
+    def __init__(
+        self,
+        session: 'BusSession',
+        msg: can.Message,
+        period: float,
+        prepare: Optional[Callable[[can.Message], can.Message]] = None,
+    ):
         if period <= 0:
             raise ValueError(f'Period must be positive: {period=}')
         self.message = msg
         self.period = period
+        self.prepare = prepare  # Makes each frame before it is sent (e.g. a new SecOC freshness value and MAC)
         self._session = session
 
     @property
@@ -57,8 +64,14 @@ class SoftwarePeriodicTransmit(PeriodicTransmit):
     The frames go through the session, so they appear in the trace and recordings.
     """
 
-    def __init__(self, session: 'BusSession', msg: can.Message, period: float):
-        super().__init__(session, msg, period)
+    def __init__(
+        self,
+        session: 'BusSession',
+        msg: can.Message,
+        period: float,
+        prepare: Optional[Callable[[can.Message], can.Message]] = None,
+    ):
+        super().__init__(session, msg, period, prepare)
         self._task = asyncio.get_running_loop().create_task(self._run(), name=f'Periodic {msg.arbitration_id:#x}')
 
     async def _run(self) -> None:
@@ -66,10 +79,13 @@ class SoftwarePeriodicTransmit(PeriodicTransmit):
         deadline = loop.time()
         try:
             while True:
-                self._session.send(clone_message(self.message))
+                msg = clone_message(self.message)
+                self._session.send(self.prepare(msg) if self.prepare is not None else msg)
                 deadline += self.period
                 await asyncio.sleep(max(0.0, deadline - loop.time()))
-        except SessionError as e:
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # A session error, or a frame that cannot be prepared (e.g. no SecOC key)
             logger.warning(f'Stopping periodic transmission of {self.message.arbitration_id:#x}: {e}')
         finally:
             self._session._periodic_finished(self)
@@ -128,6 +144,10 @@ class BusSession:
         self._task: Optional[asyncio.Task] = None
         self._recorder: Optional[can.Listener] = None
         self.recording_path: Optional[Path] = None
+        # Wall-clock time minus frame timestamp while recording: the smallest difference seen, i.e. with the least
+        # delivery delay. Ties the interface's clock to the wall clock, e.g. to synchronise a camera video.
+        self.recording_clock_offset: Optional[float] = None
+        self.last_recorder: Optional['Recorder | TriggeredRecorder'] = None  # The latest one, also once stopped
         self._periodic: List[PeriodicTransmit] = []
         self._message_listeners: List[Callable[[can.Message], None]] = []
         self._state_listeners: List[Callable[['BusSession'], None]] = []
@@ -218,6 +238,9 @@ class BusSession:
             callback(msg)
 
     def _record(self, msg: can.Message) -> None:
+        offset = time.time() - msg.timestamp
+        if self.recording_clock_offset is None or offset < self.recording_clock_offset:
+            self.recording_clock_offset = offset
         try:
             self._recorder.on_message_received(msg)
             return
@@ -278,12 +301,27 @@ class BusSession:
         if not self.source.echoes_tx:
             self._dispatch(msg)
 
-    def start_periodic(self, msg: can.Message, period: float, hardware: bool = False) -> PeriodicTransmit:
+    def start_periodic(
+        self,
+        msg: can.Message,
+        period: float,
+        hardware: bool = False,
+        prepare: Optional[Callable[[can.Message], can.Message]] = None,
+    ) -> PeriodicTransmit:
+        """Send `msg` every `period` seconds. `prepare` makes each frame from a copy of `msg` before it is sent;
+        it needs software timing, since the hardware repeats one fixed frame."""
         if not self.source.can_send:
             raise SessionError('This source cannot transmit')
         if not self.is_open:
             raise SessionError('Session is not open')
-        periodic = (HardwarePeriodicTransmit if hardware else SoftwarePeriodicTransmit)(self, msg, period)
+        if hardware and prepare is not None:
+            raise SessionError(
+                'This frame changes every period (e.g. a SecOC freshness value and MAC); send it with software timing'
+            )
+        if hardware:
+            periodic: PeriodicTransmit = HardwarePeriodicTransmit(self, msg, period)
+        else:
+            periodic = SoftwarePeriodicTransmit(self, msg, period, prepare)
         self._periodic.append(periodic)
         self._notify_periodic()
         return periodic
@@ -340,11 +378,13 @@ class BusSession:
                 recorder = Recorder(path, split_bytes, split_seconds)
                 recorder._open()  # At once, so that a bad path is reported now
                 self._recorder = recorder
+            self.last_recorder = self._recorder
         except ConditionError as e:
             raise SessionError(f'Invalid trigger condition: {e}') from e
         except Exception as e:
             raise SessionError(f'Could not record to {path}: {e}') from e
         self.recording_path = path
+        self.recording_clock_offset = None
         logger.info(f'Recording to {path}')
 
     @property

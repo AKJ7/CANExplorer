@@ -29,18 +29,23 @@ on 0x101). **Ext** uses 29-bit identifiers.
 
 ## Services
 
-| Button | GMLAN service |
+The services are grouped into sections on the left; the ECU's trouble codes and the history of requests and
+responses are on the right. The header shows the state the page has put the ECU in — the diagnostic operation
+initiated, *Normal comms off*, the unlocked security level and *Tester present* — until **Return to normal** or a
+change of the request/response identifiers. (The ECU also leaves diagnostics by itself when tester present stops.)
+
+| Control | GMLAN service |
 |---|---|
-| **Initiate** | InitiateDiagnosticOperation (0x10): *disableAllDTCs*, *enableDTCsDuringDeviceControl*, *wakeUpLinks* |
+| **Programmed state › Report** | ReportProgrammedState (0xA2) |
+| **Diagnostic mode › Initiate** | InitiateDiagnosticOperation (0x10): *disableAllDTCs*, *enableDTCsDuringDeviceControl*, *wakeUpLinks* |
 | **Disable normal comms** | DisableNormalCommunication (0x28): stop the ECU's normal application messages |
 | **Return to normal** | ReturnToNormalMode (0x20) |
-| **Programmed state** | ReportProgrammedState (0xA2) |
-| **Tester present** | TesterPresent (0x3E), sent periodically to keep diagnostics alive |
-| **Read / Write** | ReadDataByIdentifier (0x1A) / WriteDataByIdentifier (0x3B) — GMLAN identifiers are one byte, e.g. 0x90 for the VIN |
-| **Unlock** | SecurityAccess (0x27): request a seed on an odd level, send the key from the [key file](diagnostics.md#security-access) |
-| **Read DTCs** | ReadDiagnosticInformation (0xA9): the trouble codes, shown as `P0123-04` (code and failure-type byte) with their status |
-| **Clear DTCs** | ClearDiagnosticInformation (0x04) |
-| **Raw request** | Any service as hex bytes, e.g. `1A 90`; the response is decoded in the log |
+| **Tester present** (switch) | TesterPresent (0x3E), sent periodically to keep diagnostics alive |
+| **Data identifiers › Read / Write** | ReadDataByIdentifier (0x1A) / WriteDataByIdentifier (0x3B) — GMLAN identifiers are one byte, e.g. 0x90 for the VIN |
+| **Security access › Unlock** | SecurityAccess (0x27): request a seed on an odd level (hex), send the key from the [key algorithm](diagnostics.md#security-access) or the Security Manager (its key store or a security profile) |
+| **Trouble codes › Read** | ReadDiagnosticInformation (0xA9): the trouble codes, shown as `P0123-04` (code and failure-type byte) with their status byte |
+| **Trouble codes › Clear** | ClearDiagnosticInformation (0x04) |
+| **Raw request › Send** | Any service as hex bytes, e.g. `1A 90`; the response is decoded in the history |
 
 !!! warning "Diagnostics change the running ECU"
     Disabling normal communication, security access, writing identifiers and device control change how the ECU

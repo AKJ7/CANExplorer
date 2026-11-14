@@ -63,6 +63,15 @@ Card {
             editable: true
         }
         Label { text: qsTr("ms") }
+        // Frames of SecOC secured PDUs get a new freshness value and MAC (Security Manager), unless unticked
+        CheckBox {
+            text: "SecOC"
+            visible: root.connection.secoc_protections.length > 0
+            checked: root.connection.secure_transmit
+            onToggled: root.connection.set_secure_transmit(checked)
+            ToolTip.visible: hovered
+            ToolTip.text: qsTr("Secure the frames of SecOC secured PDUs: a new freshness value and MAC for every frame, with the Security Manager's key. Untick to send the data exactly as typed")
+        }
         CheckBox {
             id: hardwareBox
             text: qsTr("HW timed")

@@ -1,8 +1,10 @@
 """Regenerate the screenshots of the documentation (docs/assets/screenshots).
 
-Usage: QT_QPA_PLATFORM=offscreen uv run python tools/docs_screenshots.py
+Usage: QT_QPA_PLATFORM=offscreen uv run python tools/docs_screenshots.py [--only NAME,NAME…]
 
-Drives the application with simulated buses, ECUs and LIN slaves; no hardware is needed.
+Drives the application with simulated buses, ECUs and LIN slaves; no hardware is needed. With --only, every
+scenario still runs (later ones build on earlier ones) but only the named screenshots are written, so the others
+stay as they are.
 """
 
 import asyncio
@@ -18,7 +20,7 @@ from pathlib import Path
 import can
 import qasync
 from PyQt6 import sip
-from PyQt6.QtCore import Q_ARG, QMetaObject, QObject, QSettings, QUrl
+from PyQt6.QtCore import Q_ARG, QMetaObject, QObject, QPointF, QSettings, QUrl
 from PyQt6.QtQuick import QQuickWindow
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -32,6 +34,12 @@ os.environ.setdefault('QSG_RHI_BACKEND', 'opengl')
 
 # Use throwaway settings, so the screenshots do not depend on (or change) the user's
 QSettings.setPath(QSettings.Format.NativeFormat, QSettings.Scope.UserScope, tempfile.mkdtemp())
+# and a throwaway key store: never the user's (nor its audit log)
+os.environ['CANEXPLORER_KEYSTORE'] = str(Path(tempfile.mkdtemp()) / 'keystore.json')
+
+ONLY = set()
+if '--only' in sys.argv:
+    ONLY = set(sys.argv[sys.argv.index('--only') + 1].split(','))
 
 from can_explorer.core.bushealth import ERR_BUSOFF, ERR_CNT, ERR_CRTL, ERR_PROT, ERR_RESTARTED  # noqa: E402
 from can_explorer.core import updates  # noqa: E402
@@ -79,8 +87,24 @@ def show_page(page: str):
 
 async def shot(name: str, delay: float = 0.4):
     await asyncio.sleep(delay)
-    window.grabWindow().save(str(OUT / f'{name}.png'))
+    if ONLY and name not in ONLY:
+        return
+    if window.height() > 900:
+        await _grab_tall(name)
+    else:
+        window.grabWindow().save(str(OUT / f'{name}.png'))
     print('saved', name)
+
+
+async def _grab_tall(name: str):
+    """A window made taller than it was created: the offscreen surface keeps its first size (grabWindow would
+    return garbage above it), so render the scene, dialogs included, into an image of its own."""
+    root = window.contentItem().parentItem() or window.contentItem()
+    result = root.grabToImage()
+    done = asyncio.Event()
+    result.ready.connect(done.set)
+    await asyncio.wait_for(done.wait(), 5)
+    result.image().save(str(OUT / f'{name}.png'))
 
 
 def error_frame(timestamp: float, classes: int, data) -> can.Message:
@@ -120,8 +144,12 @@ async def mqtt_scenario(connection, view):
         }
     )
     assert not error, error
-    while mqtt.state != 'connected':
+    for _ in range(200):  # 10 s
+        if mqtt.state == 'connected':
+            break
         await asyncio.sleep(0.05)
+    else:
+        raise RuntimeError(f'MQTT did not connect: {mqtt.state} (run with --extra mqtt)')
     await asyncio.sleep(2.2)  # Some values published, and the statistics updated
     dialog = [o for o in view.findChildren(QObject) if o.metaObject().className().startswith('MqttDialog')][0]
     dialog.open()
@@ -334,7 +362,7 @@ async def reverse_engineering_scenario():
     reverse.analysis.run(False)
     while reverse.analysis.running:
         await asyncio.sleep(0.05)
-    tabs.setProperty('currentIndex', 1)
+    tabs.setProperty('currentIndex', 2)
     await shot('reverse-analysis')
 
     gps = Path(tempfile.mkdtemp()) / 'gps.csv'
@@ -344,13 +372,13 @@ async def reverse_engineering_scenario():
     reverse.reference.find('csv:0', 1.0)
     while reverse.reference.running:
         await asyncio.sleep(0.05)
-    tabs.setProperty('currentIndex', 2)
+    tabs.setProperty('currentIndex', 3)
     await shot('reverse-reference')
 
     reverse.markers.find('', 0.5, 1.0)
     while reverse.markers.running:
         await asyncio.sleep(0.05)
-    tabs.setProperty('currentIndex', 3)
+    tabs.setProperty('currentIndex', 4)
     await shot('reverse-markers')
 
     # Related signals: re-broadcast the vehicle speed on another message, so it is found on two
@@ -367,8 +395,43 @@ async def reverse_engineering_scenario():
     reverse.related.find(0.98, 0.5)
     while reverse.related.running:
         await asyncio.sleep(0.05)
-    tabs.setProperty('currentIndex', 4)
+    tabs.setProperty('currentIndex', 5)
     await shot('reverse-related')
+
+    # Capture reaction: a steady baseline, then the action (headlights on, wiper stage up) flips a bit and steps a
+    # nibble of the body switches (3B0), and a lamp status message (6A1) appears
+    def feed(t0, seconds, action):
+        frames = []
+        for step in range(int(seconds / 0.02)):
+            stamp = t0 + step * 0.02
+            switches = bytearray([0x10, 0x04 if action else 0x00, 0x00, 0x25 if action else 0x22, 0, 0, 0, 0])
+            frames.append(can.Message(timestamp=stamp, arbitration_id=0x3B0, is_extended_id=False, data=switches))
+            if step % 5 == 0:
+                cluster = bytes([0x42, 0x00, 0x7F, 0x01])
+                frames.append(
+                    can.Message(timestamp=stamp + 0.004, arbitration_id=0x420, is_extended_id=False, data=cluster)
+                )
+            if action and step % 5 == 2:
+                lamps = bytes([0x03, 0x00])
+                frames.append(
+                    can.Message(timestamp=stamp + 0.008, arbitration_id=0x6A1, is_extended_id=False, data=lamps)
+                )
+        for frame in frames:
+            connection.session._dispatch(frame)
+        return t0 + seconds
+
+    reaction = reverse.reaction
+    t0 = feed(time.time(), 0.5, False)  # The frames before the baseline
+    reaction.start_baseline()
+    t0 = feed(t0, 2.0, False)
+    reaction.mark_action()
+    feed(t0, 2.0, True)
+    connection._refresh()
+    reaction.capture()
+    while reaction.running:
+        await asyncio.sleep(0.05)
+    tabs.setProperty('currentIndex', 6)
+    await shot('reverse-reaction')
 
     tabs.setProperty('currentIndex', 0)
     manager.remove_connection(len(manager.connections) - 1)
@@ -432,17 +495,24 @@ async def gmlan_scenario():
     simulator.start()
     gmlan = connection.gmlan
     show_page('gmlan')
+    key_file = Path(tempfile.mkdtemp()) / 'gm_key.py'
+    key_file.write_text('def compute_key(level, seed):\n    return bytes(b ^ 0xFF for b in seed)\n')
+    gmlan.set_key_file(QUrl.fromLocalFile(str(key_file)))
+    gmlan.toggle_tester_present()
     for call in (
         lambda: gmlan.read_did('90'),
         lambda: gmlan.initiate_operation(0x02),
+        lambda: gmlan.security_access('1'),
+        lambda: gmlan.read_did('B0'),
         gmlan.read_dtcs,
-        lambda: gmlan.write_did('90', '41 42'),
+        lambda: gmlan.raw_request('1A 42'),  # An identifier the ECU does not have: a negative response
     ):
         call()
         while gmlan.busy:
             await asyncio.sleep(0.03)
         await asyncio.sleep(0.05)
     await shot('gmlan', 0.4)
+    gmlan.toggle_tester_present()
     simulator.stop()
     ecu_session.stop()
     manager.remove_connection(len(manager.connections) - 1)
@@ -655,6 +725,198 @@ async def someip_scenario():
     window.setProperty('tool', '')
 
 
+BENCH_PROFILE = """
+class BenchProfile:
+    name = 'Bench ECUs'
+    description = 'Seed/key and SecOC keys of the bench ECUs'
+
+    def compute_key(self, level, seed):
+        return bytes(b ^ 0xFF for b in seed)
+
+    def secoc_key(self, pdu, data_id):
+        return None
+
+
+profile = BenchProfile()
+"""
+BENCH_KEY = bytes.fromhex('2B7E151628AED2A6ABF7158809CF4F3C')
+
+
+async def security_events_scenario(connection, ecu_session):
+    """The Security events page: unknown identifiers and refused security access and authentication, sent by
+    another node (frames CANExplorer sends itself are not counted)."""
+    connection.clear_security_events()
+
+    def frame(can_id, data, extended=False):
+        ecu_session.source.send(can.Message(arbitration_id=can_id, data=bytes(data), is_extended_id=extended))
+
+    for _ in range(4):  # Someone trying keys: invalidKey, then exceedNumberOfAttempts
+        frame(0x7E8, [0x03, 0x7F, 0x27, 0x35, 0, 0, 0, 0])
+        await asyncio.sleep(0.05)
+    frame(0x7E8, [0x03, 0x7F, 0x27, 0x36, 0, 0, 0, 0])
+    frame(0x7E8, [0x03, 0x7F, 0x27, 0x37, 0, 0, 0, 0])
+    frame(0x7E8, [0x03, 0x7F, 0x29, 0x52, 0, 0, 0, 0])  # A certificate from an untrusted issuer
+    frame(0x7E8, [0x03, 0x7F, 0x22, 0x34, 0, 0, 0, 0])  # authenticationRequired
+    for can_id in (0x5A0, 0x5A1, 0x6F1):
+        frame(can_id, [0xDE, 0xAD, 0xBE, 0xEF])
+        await asyncio.sleep(0.03)
+    frame(0x18DA10F1, [0x02, 0x10, 0x03], extended=True)
+    await asyncio.sleep(0.5)
+    show_page('security')
+    await shot('security-events', 0.8)
+
+
+async def security_manager_scenario():
+    """The Security Manager dialog: an unlocked key store with test certificates, a SecOC key, a UDS
+    authentication key and a key server, and a loaded security profile."""
+    security = manager.security
+    security.store._scrypt_cost = 2**10  # A throwaway store: unlocking fast matters more than its strength
+    assert security.create('docs-password', 'docs-password') == ''
+    assert security.create_test_pki({'prefix': 'Bench', 'key_type': 'ec-p256', 'days': 365}) == ''
+    assert security.add_secoc_key('Powertrain SecOC', BENCH_KEY.hex(), 'SecuredStatus, 0x12', '') == ''
+    assert security.add_auth_key('Bench ECUs key', BENCH_KEY.hex(), 'aes-cmac') == ''
+    assert security.add_key_server('OEM key server', 'https://keys.example.com/api', 'token', 'Bench CA') == ''
+    profile = Path(tempfile.mkdtemp()) / 'bench_profile.py'
+    profile.write_text(BENCH_PROFILE)
+    assert security.load_profile(QUrl.fromLocalFile(str(profile))) == ''
+    dialog = items('SecurityManagerDialog')[0]
+    window.resize(1440, 1300)
+    await asyncio.sleep(1.0)  # Rendered at the new size before the dialog opens
+    dialog.open()
+    await shot('security-manager', 1.2)
+    dialog.close()
+    window.resize(1440, 900)
+    await asyncio.sleep(0.5)
+
+
+def _section(view, title: str):
+    for child in view.findChildren(QObject):
+        try:
+            if child.property('title') == title and 'Section' in child.metaObject().className():
+                return child
+        except RuntimeError:
+            continue
+    raise LookupError(title)
+
+
+async def authentication_scenario(connection, ecu):
+    """The Diagnostics view's Authentication section after a bidirectional challenge-response."""
+    from can_explorer.core import uds_auth
+
+    ecu.server.authentication = uds_auth.AuthenticationServer(
+        [], challenge_response=uds_auth.symmetric_challenge_response(BENCH_KEY, 'aes-cmac')
+    )
+    diagnostics = connection.diagnostics
+    diagnostics.clear_history()
+    diagnostics.authentication_configuration()
+    await wait_idle(diagnostics)
+    error = diagnostics.authenticate_challenge_response({'source': 'Bench ECUs key', 'bidirectional': True})
+    assert not error, error
+    await wait_idle(diagnostics)
+    show_page('diagnostics')
+    await asyncio.sleep(0.3)
+    view = [view for view in items('DiagnosticsView') if view.isVisible()][0]
+    section = _section(view, 'Authentication')
+    for box in section.findChildren(QObject):
+        if 'ComboBox' in box.metaObject().className() and box.property('count') == 2:
+            box.setProperty('currentIndex', 1)  # Challenge-response
+            break
+    for child in section.findChildren(QObject):
+        if 'CheckBox' in child.metaObject().className() and child.property('text') == 'Bidirectional':
+            child.setProperty('checked', True)
+    flickable = section.parentItem()
+    while flickable is not None and 'Flickable' not in flickable.metaObject().className():
+        flickable = flickable.parentItem()
+    if flickable is not None:
+        content = flickable.property('contentItem')
+        flickable.setProperty('contentY', max(0.0, section.mapToItem(content, QPointF(0, 0)).y() - 8))
+    await shot('diagnostics-authentication', 0.6)
+    if flickable is not None:
+        flickable.setProperty('contentY', 0.0)
+    ecu.server.authentication = None
+
+
+async def restbus_scenario(connection):
+    """The Restbus page sending the example database's messages, one of them excluded."""
+    restbus = connection.restbus
+    restbus.set_all(True)
+    restbus.set_value('EngineData', 'EngineSpeed', '850')
+    restbus.set_enabled('VehicleSpeed', False)
+    error = restbus.start()
+    assert not error, error
+    show_page('restbus')
+    await shot('restbus', 1.0)
+    restbus.stop()
+    restbus.set_all(False)
+
+
+async def filter_scenario(connection):
+    """A display filter in the top bar, on the trace."""
+    connection.set_filter('100-1FF')
+    bar = items('TopBar')[0]
+    for field in bar.findChildren(QObject):
+        if 'TextField' in field.metaObject().className() and 'Filter:' in str(field.property('placeholderText')):
+            field.setProperty('text', '100-1FF')
+    for find_bar in items('TraceFindBar'):  # The search of the trace-search screenshot
+        for field in find_bar.findChildren(QObject):
+            if 'TextField' in field.metaObject().className():
+                field.setProperty('text', '')
+    show_page('trace')
+    await shot('filters', 0.6)
+    connection.set_filter('')
+    for field in bar.findChildren(QObject):
+        if 'TextField' in field.metaObject().className() and field.property('text') == '100-1FF':
+            field.setProperty('text', '')
+
+
+async def map_scenario():
+    """A replayed one-minute drive with its GPS track: the Video & map page without a video, the track drawn without
+    map tiles (they are off by default)."""
+    import cantools
+
+    database = cantools.database.load_file(str(EXAMPLES / 'vehicle.dbc'))
+    engine, vehicle = database.get_message_by_name('EngineData'), database.get_message_by_name('VehicleSpeed')
+    directory = Path(tempfile.mkdtemp())
+    log, track = directory / 'drive.blf', directory / 'drive.gpx'
+    start, duration = time.time() - 120, 60.0
+    points = []
+    with can.Logger(str(log)) as writer:
+        for i in range(int(duration * 10) + 1):  # 10 Hz
+            t = i / 10
+            speed = 48 + 14 * math.sin(t / 9)  # km/h
+            data = engine.encode({'EngineSpeed': 900 + speed * 28, 'CoolantTemp': 88, 'GearPosition': 3})
+            writer.on_message_received(can.Message(timestamp=start + t, arbitration_id=engine.frame_id, data=data))
+            data = vehicle.encode({'WheelSpeed': speed})
+            writer.on_message_received(
+                can.Message(timestamp=start + t, arbitration_id=vehicle.frame_id, is_extended_id=True, data=data)
+            )
+    lat, lon = 48.13740, 11.57550  # A drive through Munich: about 800 m in a curve
+    for i in range(int(duration) + 1):
+        heading = math.radians(60 + 110 * i / duration)
+        step = (48 + 14 * math.sin(i / 9)) / 3.6  # Metres in one second
+        lat += step * math.cos(heading) / 111_320
+        lon += step * math.sin(heading) / (111_320 * math.cos(math.radians(lat)))
+        stamp = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(start + i))
+        points.append(f'<trkpt lat="{lat:.6f}" lon="{lon:.6f}"><time>{stamp}</time></trkpt>')
+    track.write_text(
+        '<gpx xmlns="http://www.topografix.com/GPX/1/1" version="1.1"><trk><name>Test drive</name><trkseg>'
+        + ''.join(points)
+        + '</trkseg></trk></gpx>'
+    )
+    manager.open_log_file(QUrl.fromLocalFile(str(log)), 'Raw', 4.0)
+    replayed = manager.connections[-1]
+    show_page('media')  # Laid out first, so the map fits the track when it is attached
+    await asyncio.sleep(0.8)
+    replayed.media.refresh()
+    error = replayed.media.attach_gps(QUrl.fromLocalFile(str(track)))
+    assert not error, error
+    await asyncio.sleep(6.0)  # Some way into the drive
+    replayed.replay.set_paused(True)
+    await shot('video-and-map', 1.0)
+    replayed.media.detach_gps()
+    manager.remove_connection(len(manager.connections) - 1)
+
+
 async def scenario():
     OUT.mkdir(parents=True, exist_ok=True)
     await shot('welcome', 0.5)
@@ -735,6 +997,10 @@ async def scenario():
     plot_view.follow_live()
     show_page('simulation')
     await shot('simulation')
+    await restbus_scenario(connection)
+    await filter_scenario(connection)
+    await security_events_scenario(connection, ecu_session)
+    await security_manager_scenario()
 
     diagnostics = connection.diagnostics
     connection.load_database(QUrl.fromLocalFile(str(DATA / 'example.cdd')))
@@ -749,6 +1015,7 @@ async def scenario():
         await wait_idle(diagnostics)
     show_page('diagnostics')
     await shot('diagnostics')
+    await authentication_scenario(connection, ecu)
     # UDS discovery: scanning a range of data identifiers on the simulated ECU
     scan = connection.uds_scan
     scan.start({'kind': 'dids', 'start': 'F180', 'end': 'F1A0', 'timeout_ms': 150})
@@ -790,6 +1057,7 @@ async def scenario():
     manager.connections[-1].replay.set_paused(True)
     await shot('replay')
     manager.remove_connection(len(manager.connections) - 1)
+    await map_scenario()
 
     # LIN connection with simulated slaves
     lin_channel = f'docs-lin-{uuid.uuid4().hex[:6]}'
@@ -851,6 +1119,8 @@ async def scenario():
     await asyncio.sleep(0.7)
     [page for page in items('J1939View') if page.isVisible()][0].setProperty('selected', 0)
     await shot('j1939', 0.6)
+    show_page('trace')  # The frames decoded as J1939 in the trace
+    await shot('protocol-decoding', 0.6)
     ecus.stop()
 
     # CANopen network: two simulated I/O modules

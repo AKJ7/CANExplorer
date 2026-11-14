@@ -56,6 +56,7 @@ async def test_tools_registered_read_only():
         'reaction_at_markers',
         'load_database',
         'unload_database',
+        'secoc_status',
         'correlate',
         'promote_to_dbc',
         'list_interfaces',

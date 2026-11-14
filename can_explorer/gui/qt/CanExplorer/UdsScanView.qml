@@ -49,6 +49,7 @@ ColumnLayout {
             timeout_ms: Number(timeoutField.text),
             delay_ms: Number(delayField.text),
             enter_session: sessionBox.currentValue,
+            security_level: unlockBox.checked ? levelField.text : "",
             allow_state_changing: allowBox.checked,
             count: Number(countField.text),
             fuzz_seed: fuzzSeedField.text,
@@ -184,6 +185,22 @@ ColumnLayout {
             ToolTip.visible: hovered
             ToolTip.text: qsTr("Change to this diagnostic session before scanning, to reach services and DIDs that need it")
         }
+        CheckBox {
+            id: unlockBox
+            text: qsTr("Unlock level")
+            ToolTip.visible: hovered
+            ToolTip.text: root.diagnostics.key_file
+                ? qsTr("After entering the session, unlock this security level with the Diagnostics view's key algorithm, to reach what answers \"security access denied\"")
+                : qsTr("Choose a key algorithm in the Diagnostics view (Security access) first")
+        }
+        TextField {
+            id: levelField
+            text: "1"
+            enabled: unlockBox.checked
+            Layout.preferredWidth: 40
+            ToolTip.visible: hovered
+            ToolTip.text: qsTr("The odd level that requests the seed (hex)")
+        }
         Label { text: qsTr("Per-request timeout") }
         TextField {
             id: timeoutField
@@ -240,6 +257,15 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.leftMargin: 4
         Layout.rightMargin: 4
+    }
+
+    Label {
+        text: root.scan.note
+        visible: text.length > 0
+        color: root.scan.state === "failed" ? Theme.danger : Theme.success
+        wrapMode: Text.Wrap
+        Layout.fillWidth: true
+        Layout.leftMargin: 4
     }
 
     Label {

@@ -30,7 +30,7 @@ Card {
             Label {
                 anchors.centerIn: parent
                 text: root.icon
-                color: "white"
+                color: Theme.onColor(root.accentColor)
                 font.pixelSize: 20
                 font.bold: true
             }

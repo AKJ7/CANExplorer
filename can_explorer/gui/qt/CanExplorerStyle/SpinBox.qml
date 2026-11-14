@@ -27,7 +27,7 @@ T.SpinBox {
         font: control.font
         color: control.enabled ? Theme.text : Theme.alpha(Theme.text, 0.4)
         selectionColor: Theme.accent
-        selectedTextColor: "white"
+        selectedTextColor: Theme.onAccent
         horizontalAlignment: Qt.AlignHCenter
         verticalAlignment: Qt.AlignVCenter
         readOnly: !control.editable

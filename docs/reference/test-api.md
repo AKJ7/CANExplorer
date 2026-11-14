@@ -43,6 +43,9 @@ See [Test automation](../user-guide/test-automation.md) for how test scripts are
         - collect
         - measure_cycle_time
         - expect_cycle_time
+        - secoc_status
+        - expect_secoc_ok
+        - send_secoc_attack
         - uds
 
 ## Results

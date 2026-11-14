@@ -39,7 +39,12 @@ class RestbusController(QObject):
             self._sim.stop()
         database = self._database()
         messages = database.messages() if database is not None else []
-        self._sim = RestbusSimulator(self._connection.session, messages, self._default_cycle_ms) if messages else None
+        decoder = self._connection.session.decoder
+        self._sim = (
+            RestbusSimulator(self._connection.session, messages, self._default_cycle_ms, decoder.secure)
+            if messages
+            else None
+        )
 
     def database_changed(self) -> None:
         """Rebuild from the connection's database (called when it is loaded, its bus changes, or it is unloaded)."""
@@ -112,6 +117,8 @@ class RestbusController(QObject):
                     'length': message.length,
                     'signal_count': len(message.signals),
                     'enabled': entry.enabled,
+                    'secured': entry.secured,
+                    'problem': self._sim.problems.get(entry.key, ''),
                 }
             )
         return rows
@@ -123,7 +130,13 @@ class RestbusController(QObject):
         if entry is None:
             return []
         rows = []
+        # The freshness and authenticator of a secured PDU are computed for each frame, not edited
+        computed = (
+            {f'{entry.message.name}_Freshness', f'{entry.message.name}_Authenticator'} if entry.secured else set()
+        )
         for signal in entry.message.signals:
+            if signal.name in computed:
+                continue
             value = entry.values.get(signal.name)
             rows.append(
                 {
@@ -193,9 +206,10 @@ class RestbusController(QObject):
             return 'This connection cannot transmit'
         if self._sim.enabled_count == 0:
             return 'No messages are enabled'
-        self._sim.start()
+        problems = self._sim.start()
         self.changed.emit()
-        return ''
+        self.messages_changed.emit()
+        return '\n'.join(problems)
 
     @pyqtSlot()
     def stop(self) -> None:

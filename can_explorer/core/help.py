@@ -52,6 +52,7 @@ HELP_NAV: Tuple[Section, ...] = (
             Page('Reverse engineering', 'user-guide/reverse-engineering.md'),
             Page('Recording, replay and export', 'user-guide/recording-and-replay.md'),
             Page('Comparing recordings', 'user-guide/compare-recordings.md'),
+            Page('Video and GPS map', 'user-guide/video-and-map.md'),
             Page('Several buses', 'user-guide/multi-bus.md'),
             Page('Bus gateway', 'user-guide/bus-gateway.md'),
             Page('Restbus simulation', 'user-guide/restbus.md'),
@@ -73,6 +74,7 @@ HELP_NAV: Tuple[Section, ...] = (
             Page('DoIP', 'user-guide/doip.md'),
             Page('SOME/IP', 'user-guide/someip.md'),
             Page('Ethernet capture', 'user-guide/ethernet.md'),
+            Page('Security manager', 'user-guide/security-manager.md'),
             Page('J1939', 'user-guide/j1939.md'),
             Page('CANopen', 'user-guide/canopen.md'),
             Page('EtherCAT (CoE)', 'user-guide/ethercat.md'),
@@ -130,6 +132,7 @@ TOOL_HELP: Dict[str, str] = {
     'overview': 'user-guide/trace-and-overview.md',
     'plots': 'user-guide/signal-plots.md',
     'health': 'user-guide/bus-health.md',
+    'security': 'user-guide/security-manager.md',
     'reverse': 'user-guide/reverse-engineering.md',
     'transmit': 'user-guide/transmitting.md',
     'diagnostics': 'user-guide/diagnostics.md',
@@ -138,6 +141,7 @@ TOOL_HELP: Dict[str, str] = {
     'canopen': 'user-guide/canopen.md',
     'lin': 'user-guide/lin.md',
     'simulation': 'user-guide/simulation.md',
+    'media': 'user-guide/video-and-map.md',
 }
 
 DEFAULT_PAGE = 'user-guide/index.md'

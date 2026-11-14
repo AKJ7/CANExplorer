@@ -32,7 +32,7 @@ ScrollView {
                 Label {
                     anchors.centerIn: parent
                     text: card.icon
-                    color: "white"
+                    color: Theme.onColor(card.accentColor)
                     font.pixelSize: 20
                     font.bold: true
                 }

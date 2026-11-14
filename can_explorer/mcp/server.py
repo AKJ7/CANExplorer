@@ -81,7 +81,7 @@ def build_mcp(service: CanService) -> MCPServer:  # noqa: C901 - a flat list of 
 
     @mcp.tool()
     async def decode_protocol(protocol: str, identifier: str, data: str, extended: bool = False) -> Dict[str, Any]:
-        """Interpret a payload with a protocol decoder (J1939, J1939-22, "NMEA 2000", CANopen, ISO-TP, UDS, KWP2000, LIN, J1587, NM, SecOC),
+        """Interpret a payload with a protocol decoder (J1939, J1939-22, "NMEA 2000", CANopen, ISO-TP, UDS, KWP2000, "K-Line", LIN, J1587, NM, SecOC),
         without a database. Sends nothing."""
         return service.decode_protocol(protocol, identifier, data, extended)
 
@@ -99,7 +99,9 @@ def build_mcp(service: CanService) -> MCPServer:  # noqa: C901 - a flat list of 
         identifier: str, extended: bool = False, include_constant: bool = False
     ) -> Dict[str, Any]:
         """Automatically find the fields of an identifier (checksums, counters, multiplexers, physical values,
-        states and flags) from its recent frames."""
+        states and flags) from its recent frames. Secured PDUs of a loaded ARXML get their SecOC freshness value
+        and MAC labelled (kinds 'freshness', 'mac'); without one, random-looking trailing bytes are labelled
+        'random' (possibly a truncated MAC or encrypted data, a hint only)."""
         return service.analyze(identifier, extended, include_constant)
 
     @mcp.tool()
@@ -199,6 +201,13 @@ def build_mcp(service: CanService) -> MCPServer:  # noqa: C901 - a flat list of 
     async def unload_database() -> Dict[str, Any]:
         """Forget the loaded database, so frames are shown as raw bytes again."""
         return service.unload_database()
+
+    @mcp.tool()
+    async def secoc_status() -> Dict[str, Any]:
+        """The AUTOSAR SecOC secured PDUs of the loaded ARXML database and the outcome of their live checks: per
+        PDU its Data ID, trailer lengths, the key store entry verifying it (never the key) or why it is not checked,
+        and counts of frames verified ok, MAC errors and freshness (replay) errors, with the last result."""
+        return service.secoc_status()
 
     @mcp.tool()
     async def promote_to_dbc(

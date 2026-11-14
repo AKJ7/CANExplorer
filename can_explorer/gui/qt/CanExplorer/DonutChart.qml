@@ -11,6 +11,31 @@ RowLayout {
     property string centerLabel: qsTr("Total")
     readonly property real total: segments.reduce((sum, segment) => sum + segment.value, 0)
 
+    // The arcs to draw, clockwise from the top: [{index, start, end}] in radians. A small gap separates the segments;
+    // it shrinks for small segments, which would otherwise end before they start (the canvas then draws the arc the
+    // long way round, over the whole donut). Empty segments are left out.
+    function arcs() {
+        const result = []
+        if (total <= 0)
+            return result
+        let angle = -Math.PI / 2
+        segments.forEach((segment, index) => {
+            const sweep = Math.max(0, segment.value) / total * 2 * Math.PI
+            if (sweep > 0) {
+                const gap = Math.min(0.02, sweep / 4)
+                result.push({ index: index, start: angle + gap, end: angle + sweep - gap })
+            }
+            angle += sweep
+        })
+        return result
+    }
+
+    // A legend percentage; shares that round to 0.0 but are not empty show as "<0.1%"
+    function percentText(value) {
+        const percent = total > 0 ? value / total * 100 : 0
+        return value > 0 && percent < 0.05 ? "<0.1%" : percent.toFixed(1) + "%"
+    }
+
     spacing: 24
 
     Canvas {
@@ -40,15 +65,12 @@ RowLayout {
                 ctx.beginPath(); ctx.arc(cx, cy, radius - thickness / 2, 0, 2 * Math.PI); ctx.stroke()
                 return
             }
-            let angle = -Math.PI / 2
-            root.segments.forEach((segment, index) => {
-                const sweep = segment.value / root.total * 2 * Math.PI
-                ctx.strokeStyle = Theme.chart[index % Theme.chart.length]
-                ctx.lineWidth = thickness
+            ctx.lineWidth = thickness
+            root.arcs().forEach(arc => {
+                ctx.strokeStyle = Theme.chart[arc.index % Theme.chart.length]
                 ctx.beginPath()
-                ctx.arc(cx, cy, radius - thickness / 2, angle + 0.02, angle + sweep - 0.02)
+                ctx.arc(cx, cy, radius - thickness / 2, arc.start, arc.end, false)
                 ctx.stroke()
-                angle += sweep
             })
         }
 
@@ -91,7 +113,7 @@ RowLayout {
                     spacing: 0
                     Label { text: modelData.label; color: Theme.muted }
                     Label {
-                        text: (root.total > 0 ? modelData.value / root.total * 100 : 0).toFixed(1) + "%"
+                        text: root.percentText(modelData.value)
                         color: Theme.text
                         font.bold: true
                     }

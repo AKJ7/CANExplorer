@@ -30,6 +30,8 @@ the first column. Install the vendor's driver or library for your adapter first;
 | *Rp1210Bus* | `rp1210` | TMC RP1210 heavy-duty (truck, bus, off-highway) adapters: Nexiq USB-Link, DG Technologies DPA 5, Noregon DLA+, Cummins INLINE … (see [below](#rp1210-heavy-duty-adapters)) | Windows | The adapter's RP1210 driver; the driver is 32-bit, so run CANExplorer as 32-bit Python ([below](#rp1210-heavy-duty-adapters)) | – |
 | *Elm327Bus* | `elm327` | OBD adapters with the ELM327 command set: OBDLink MX+, LX, SX, EX and ELM327 compatibles, over USB, Bluetooth or WiFi; made for diagnostics, with limits (see [below](#elm327-and-obdlink-adapters)) | Windows, Linux, macOS | None: a serial port (`COM7`, `/dev/rfcomm0`), or `socket://IP:35000` for WiFi adapters | – |
 | *Elm327VpwBus* | `elm327_vpw` | **SAE J1850 VPW / GM Class 2** (not CAN): the 10.4 kbit/s bus of 1996–2007 GM vehicles, through an ELM327/OBDLink adapter (see [below](#gm-class-2-sae-j1850-vpw)) | Windows, Linux, macOS | None: the adapter's serial port, as for `elm327` | – |
+| *Elm327KLineBus* | `elm327_kline` | **K-Line** (ISO 9141-2 / ISO 14230 KWP, not CAN): the 10.4 kbit/s diagnostic bus of non-CAN OBD-II vehicles (~1996–2008), through an ELM327/OBDLink adapter (see [below](#k-line-iso-9141-2-iso-14230)) | Windows, Linux, macOS | None: the adapter's serial port, as for `elm327`, with an optional `@3`/`@4`/`@5` protocol suffix | – |
+| *J1708Bus* | `j1708` | **SAE J1708** (not CAN): the 9600-baud serial bus of older heavy trucks, carrying J1587; through a USB RS-485/J1708 adapter (see [below](#sae-j1708)) | Windows, Linux, macOS | None: a serial port, with an optional `@<baud>` suffix | – |
 | *SerialBus* | `serial` | Adapters speaking python-can's own serial protocol | Windows, Linux, macOS | None: a serial port | – |
 | *robotellBus* | `robotell` | Robotell USB-CAN adapters | Windows, Linux, macOS | None: a serial port | – |
 | *SeeedBus* | `seeedstudio` | Seeed Studio USB-CAN Analyzer | Windows, Linux, macOS | None: a serial port | – |
@@ -182,6 +184,55 @@ Each VPW frame is presented as a python-can frame whose extended identifier hold
 recording work on it like on any bus. Monitoring and diagnostics share the one adapter, which is half-duplex, so a
 frame on the bus during a diagnostic request is missed. See [J1850 VPW / GM Class 2](../user-guide/j1850.md) for
 the diagnostics page and scripting.
+
+## K-Line (ISO 9141-2 / ISO 14230)
+
+*Elm327KLineBus* (`elm327_kline`) opens a **K-Line** bus — the 10.4 kbit/s single-wire diagnostic bus of OBD-II
+vehicles that do not use CAN (roughly 1996–2008: many European and Asian cars, and US cars before CAN was
+mandated) — through an ELM327/OBDLink adapter put into one of its K-Line protocols. K-Line is not CAN; the bitrate
+is fixed at 10.4 kbit/s.
+
+The channel is the adapter's serial port, exactly as for the [ELM327 CAN interface](#elm327-and-obdlink-adapters)
+(USB, Bluetooth or `socket://IP:35000` for WiFi), with an optional `@<protocol>` suffix choosing the K-Line
+protocol:
+
+| Suffix | Protocol |
+|---|---|
+| `@3` | ISO 9141-2 (5-baud slow initialisation) |
+| `@4` | ISO 14230-4 KWP (5-baud slow initialisation) |
+| `@5` (default) | ISO 14230-4 KWP (fast initialisation) |
+
+For example `/dev/ttyUSB0@3` or `socket://192.168.0.10:35000@5`; without a suffix the default is ISO 14230-4 fast
+init. Each K-Line frame is presented as a python-can frame whose extended identifier holds the three header bytes
+(format, target, source) and whose data is the payload, so the trace, dashboard, reverse engineering and recording
+work on it like on any bus, and the **K-Line** [protocol decoder](../user-guide/protocols.md) describes the service
+payloads (KWP2000 and OBD-II/J1979).
+
+K-Line is a request/response bus with no free-running traffic, so the trace usually shows frames only once a
+tester has started a session — open the [OBD-II](../user-guide/obd.md) or [diagnostics](../user-guide/diagnostics.md)
+page, or send a request; the ELM327 performs the slow or fast initialisation itself on the first request. The
+adapter is half-duplex, so a frame on the bus during a request can be missed.
+
+## SAE J1708
+
+*J1708Bus* (`j1708`) opens a live **SAE J1708** bus — the 9600-baud two-wire (RS-485) serial bus of older heavy
+trucks and buses — through a USB RS-485/J1708 adapter. J1708 is not CAN; it carries the
+[J1587](../user-guide/protocols.md) application layer. The channel is the serial port, with an optional `@<baud>`
+suffix for a non-standard rate (`/dev/ttyUSB0`, `COM5`, `/dev/ttyUSB0@9600`); the default is 9600 baud.
+
+Each J1708 message — a MID (the transmitting module), its data and the trailing checksum — is presented as a
+python-can frame whose identifier is the MID and whose data is the whole message, so the trace, dashboard,
+recording and reverse engineering work on it; select the **J1587** [protocol decoder](../user-guide/protocols.md)
+to describe the parameters.
+
+Limitations:
+
+- **Framing is by idle gaps.** The adapter delivers a byte stream with no explicit message boundaries, so messages
+  are split where the line falls idle or at the 21-byte J1708 maximum. Two messages sent back to back with no
+  detectable gap can be merged into one frame. An adapter that frames J1708 messages itself avoids this.
+- **Sending is best-effort.** J1708 arbitrates by MID priority and bus timing, which a plain UART cannot reproduce,
+  so a sent message may collide on a busy bus; the checksum is computed and appended automatically.
+- **Detect** lists nothing: an ordinary serial port cannot be told from a J1708 adapter, so type the port.
 
 ## Adapters through SocketCAN
 

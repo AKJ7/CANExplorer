@@ -266,7 +266,7 @@ def linux_deb(bundle: Path) -> Path:
             f'Architecture: {arch}\n'
             f'Maintainer: {PUBLISHER} <akj123429@gmail.com>\n'
             f'Installed-Size: {size // 1024}\n'
-            f'Depends: libc6, libegl1, libgl1, libxkbcommon0, libxkbcommon-x11-0, libxcb-cursor0, libfontconfig1, libdbus-1-3\n'
+            f'Depends: libc6, libegl1, libgl1, libxkbcommon0, libxkbcommon-x11-0, libxcb-cursor0, libfontconfig1, libdbus-1-3, libpulse0, libxrandr2\n'
             f'Homepage: {HOMEPAGE}\n'
             f'Description: CAN, CAN FD and LIN bus monitor\n'
             f' {DESCRIPTION}, with signal databases, recording and replay, UDS\n'

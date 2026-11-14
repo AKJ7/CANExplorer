@@ -4,7 +4,7 @@ import os
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Deque, List, Optional
+from typing import Any, Callable, Deque, Dict, List, Optional
 
 import can
 
@@ -37,6 +37,7 @@ class Recorder:
         self._file_start: Optional[float] = None
         self._since_size_check = 0
         self.frames = 0
+        self.file_starts: Dict[str, float] = {}  # File name -> timestamp of its first frame
 
     @property
     def splits(self) -> bool:
@@ -87,6 +88,7 @@ class Recorder:
             self._open()
         if self._file_start is None:
             self._file_start = msg.timestamp
+            self.file_starts[self.files[-1].name] = msg.timestamp
         self._writer.on_message_received(msg)
         self.frames += 1
 
@@ -146,6 +148,7 @@ class TriggeredRecorder:
         self._deadline: Optional[float] = None
         self._number = 1
         self.files: List[Path] = []
+        self._file_starts: Dict[str, float] = {}
         self.events = 0
         self.state = 'armed'
 
@@ -200,6 +203,7 @@ class TriggeredRecorder:
         if self._recorder is not None:
             self._recorder.stop()
             self.files += self._recorder.files
+            self._file_starts.update(self._recorder.file_starts)
             self._recorder = None
 
     def stop(self) -> None:
@@ -208,6 +212,11 @@ class TriggeredRecorder:
     @property
     def current_path(self) -> Optional[Path]:
         return self._recorder.current_path if self._recorder else None
+
+    @property
+    def file_starts(self) -> Dict[str, float]:
+        """File name -> timestamp of its first frame, of the files written so far."""
+        return {**self._file_starts, **(self._recorder.file_starts if self._recorder else {})}
 
     def describe(self) -> str:
         if self.state == 'armed':

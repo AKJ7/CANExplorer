@@ -92,6 +92,8 @@ async def test_publishing(mqtt_broker, database):
     assert payloads(mqtt_broker, 'canexplorer/Vehicle_1/signals/EngineData/EngineSpeed') == [1000, 1200]
     assert payloads(mqtt_broker, 'canexplorer/Vehicle_1/signals/EngineData/GearPosition') == ['First']
     assert json.loads(mqtt_broker.retained['canexplorer/Vehicle_1/signals/EngineData/EngineSpeed']) == 1200
+    # Each cycle publishes its frames after its signals: wait for the last batch to reach the broker
+    await until(lambda: sum(map(len, payloads(mqtt_broker, 'canexplorer/Vehicle_1/frames'))) == 3)
     frames = [frame for batch in payloads(mqtt_broker, 'canexplorer/Vehicle_1/frames') for frame in batch]
     assert [frame[1] for frame in frames] == [0x100] * 3 and len(frames[0]) == 5
     assert 'connecting' in changes and 'connected' in changes
@@ -114,6 +116,8 @@ async def test_sending_and_reconnecting(mqtt_broker, database, monkeypatch):
     mqtt_broker.publish('canexplorer/bench/send', '{"id": "7DF", "data": "02 01 0D"}')
     await until(lambda: bridge.sent == 1 and bridge.rejected == 1)
     assert database.decode(sent[0])['EngineSpeed'] == 900
+    # The rejection is counted before its error is published: wait for the broker to receive it
+    await until(lambda: payloads(mqtt_broker, 'canexplorer/bench/errors'))
     errors = payloads(mqtt_broker, 'canexplorer/bench/errors')
     assert errors == [{'error': 'Identifier 7DF is not in the allow list'}]
     bridge.on_message(engine_data(database, 1))  # Signals are off: nothing published

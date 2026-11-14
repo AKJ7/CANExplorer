@@ -156,6 +156,18 @@ it finds, with their kind and how sure it is:
 | **Flag** | A single bit |
 | **Constant** | Bits that never changed (shown with **Constant bits**) |
 | **Unknown** | Changes irregularly: noise, or several fields that could not be told apart |
+| **SecOC freshness** / **SecOC MAC** | The freshness value and the truncated MAC of a [secured PDU](security-manager.md#secoc-in-the-trace), at the bits the connection's ARXML gives (see below) |
+| **Random (MAC?)** | Trailing bytes whose every bit changes in about half the frames and is set in about half of them: possibly a truncated MAC or encrypted data (see below) |
+
+**Secured frames.** AUTOSAR SecOC appends a freshness value and a truncated MAC to the payload of a secured PDU.
+The MAC changes at random in every frame, so read as an ordinary field it would only be noise split into
+meaningless values. When the connection's database is an ARXML describing the PDU as secured, the analysis labels
+its **SecOC freshness** and **SecOC MAC** bits exactly and analyses only the rest. Without one, trailing bytes (at
+least two) that look random are labelled **Random (MAC?)** and left out of the other fields — a hint, not a finding:
+encrypted data and a field of pure noise look the same, and a checksum found at the end of the frame stays a
+checksum. It needs 100 frames or more of the identifier to tell. The freshness value usually shows up as a
+**Counter** just before it. To check the MACs, load the ARXML and add the keys in the
+[Security Manager](security-manager.md).
 
 Field boundaries come from how often each bit changes: within a field, the less significant a bit, the more often
 it changes, so a bit changing much less often than the one above it starts a new field. This is done in both Intel

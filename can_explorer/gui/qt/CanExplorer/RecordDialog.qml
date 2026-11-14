@@ -25,10 +25,12 @@ Dialog {
             pre: Number(preField.text || 0),
             post: Number(postField.text || 0),
             repeat: repeatBox.checked,
+            camera: cameraBox.currentIndex > 0 ? dialog.connection.media.cameras[cameraBox.currentIndex - 1].id : "",
         })
     }
 
     onAboutToShow: {
+        dialog.connection.media.refresh_cameras()
         error = ""
         standardButton(Dialog.Ok).text = qsTr("Start")
         standardButton(Dialog.Ok).enabled = Qt.binding(() => dialog.selectedFile.toString().length > 0
@@ -67,6 +69,36 @@ Dialog {
             Button {
                 text: qsTr("Browse…")
                 onClicked: fileDialog.open()
+            }
+        }
+
+        GroupBox {
+            title: qsTr("Camera")
+            Layout.fillWidth: true
+            ColumnLayout {
+                anchors.fill: parent
+                spacing: 8
+                RowLayout {
+                    spacing: 10
+                    ComboBox {
+                        id: cameraBox
+                        model: [qsTr("No video")].concat(dialog.connection.media.cameras.map(camera => camera.name))
+                        Layout.preferredWidth: 320
+                    }
+                    Label {
+                        visible: dialog.connection.media.cameras.length === 0
+                        text: qsTr("No camera found")
+                        color: Theme.muted
+                    }
+                }
+                Label {
+                    text: qsTr("The video is saved next to the log (e.g. trace.mp4) and replays in step with it in Video & map.")
+                    color: Theme.muted
+                    font.pixelSize: 12
+                    wrapMode: Text.Wrap
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: 560
+                }
             }
         }
 

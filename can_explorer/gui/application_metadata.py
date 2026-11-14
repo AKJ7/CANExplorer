@@ -1,11 +1,10 @@
-# TODO: Add script to fetch version, build_info and build_date at app creation
-
 import sys
 from PyQt6.QtCore import QObject, pyqtProperty, pyqtSlot, QT_VERSION_STR, PYQT_VERSION_STR
 from PyQt6.QtGui import QGuiApplication
 from can_explorer.sys.log_handler import get_logger
 from can_explorer import settings
 from can_explorer.__version__ import __version__
+from can_explorer.build_info import build_info
 from datetime import datetime
 
 logger = get_logger(__name__)
@@ -27,7 +26,12 @@ class ApplicationMetadata(QObject):
 
     @pyqtProperty(str, final=True, constant=True)
     def build_date(self) -> str:
-        return datetime.today().strftime('%Y-%m-%d %H:%M:%S')
+        """When this bundle was built (UTC); empty when running from source."""
+        return build_info().date
+
+    @pyqtProperty(str, **CONFIG)
+    def commit(self) -> str:
+        return build_info().commit
 
     @pyqtProperty(str, **CONFIG)
     def runtime_version(self) -> str:
@@ -64,7 +68,7 @@ class ApplicationMetadata(QObject):
     @pyqtProperty(str, **CONFIG)
     def app_info(self) -> str:
         info = {
-            'Build': f'{self.build_info}, built on {self.build_date}',
+            'Build': f'{self.build_info}, {build_info().details()}',
             'Runtime version': f'{self.runtime_version}',
             'QT': f'v{self.qt_version}',
             'PYQT': f'v{self.pyqt_version}',

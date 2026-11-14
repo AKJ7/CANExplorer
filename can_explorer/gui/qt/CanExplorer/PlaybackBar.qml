@@ -56,7 +56,7 @@ Card {
             }
             contentItem: Label {
                 text: playButton.text
-                color: "white"
+                color: Theme.onAccent
                 font: playButton.font
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter

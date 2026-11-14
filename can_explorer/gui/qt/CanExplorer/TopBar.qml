@@ -49,7 +49,7 @@ Rectangle {
         contentItem: Label {
             text: windowButton.text
             font: windowButton.font
-            color: windowButton.hovered && windowButton.hoverColor === Theme.danger ? "white" : Theme.text
+            color: windowButton.hovered && windowButton.hoverColor === Theme.danger ? Theme.onDanger : Theme.text
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
         }
@@ -187,7 +187,7 @@ Rectangle {
                     id: badge
                     anchors.centerIn: parent
                     text: root.notifications.length > 99 ? "99+" : root.notifications.length
-                    color: "white"
+                    color: Theme.onDanger
                     font.pixelSize: 11
                     font.bold: true
                 }

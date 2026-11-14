@@ -8,7 +8,7 @@ The trace lists every received (Rx) and transmitted (Tx) frame in arrival order.
 
 | Column | Content |
 |---|---|
-| Time [s] | Time since the first frame of the session |
+| Time [s] | Time of the frame, in the chosen [time format](#time-format) |
 | Dir | `Rx` or `Tx` |
 | Type | `Std` or `Ext` identifier, plus `FD`, `RTR` (remote frame) and `ERR` (error frame) |
 | ID [hex] | Identifier, 3 digits for standard and 8 for extended identifiers |
@@ -16,7 +16,26 @@ The trace lists every received (Rx) and transmitted (Tx) frame in arrival order.
 | Data [hex] | Data bytes |
 | Info | Protocol decoding and decoded signals of the loaded database |
 
-With **Auto-scroll** the trace follows new frames unless rows are selected.
+With **Auto-scroll** the trace follows new frames, also while rows are selected (the selection stays on its
+frames). Jumping to a frame — a search result or a bookmark — switches it off so that frame stays in view; tick it
+again to return to the newest frame.
+
+### Time format
+
+The time selector next to *Auto-scroll* chooses how the first column shows the time of each frame. The choice
+applies to all traces, including the multi-bus trace, and is kept between sessions. Copying rows copies the times
+as shown.
+
+| Format | Header | Content |
+|---|---|---|
+| Relative time | Time [s] | Seconds since the first frame of the session (the default) |
+| Delta time | Δt [s] | Seconds since the previous row; with a display filter, between consecutive matching frames |
+| Absolute time | Time | Local time of day, `HH:MM:SS.ffffff` |
+| Unix time | Unix time [s] | The raw timestamp, seconds since 1970-01-01 UTC |
+
+Absolute and Unix times are only meaningful when frames carry wall-clock timestamps, as they do from live
+interfaces. Log files whose timestamps start at zero show times on 1 January 1970. Exported log files always keep
+the original timestamps, whatever the format shown.
 
 ### Long recordings
 
@@ -54,7 +73,8 @@ the list, marked as no longer available.
 ### Context menu
 
 A right click on a row offers bookmarking, copying the selected rows, finding, and — in replays — **Replay from
-here**.
+here**. In the overview it offers copying the selected rows and selecting all rows. A right click selects the row
+it is on, unless that row is already selected: then the selection stays, so the menu acts on all selected rows.
 
 ## Overview
 
@@ -92,6 +112,7 @@ the trace, overview and signals views have these buttons:
 | Load database… | Load a signal database or a CDD diagnostic description, see [Signal databases](signal-databases.md) |
 | Bus selector | Shown for databases describing several buses |
 | Auto-scroll | Keep the newest frame of the trace visible |
+| Time format | Relative, delta, absolute or Unix time in the trace, see [Time format](#time-format) |
 
 ## Column widths
 
@@ -101,7 +122,9 @@ trace.
 
 ## Selecting and copying
 
-Click rows to select them; ++shift++ and ++ctrl++ extend the selection. **⋮ → Copy Selected Rows**
+Click a row to select it. ++shift++ + click selects all rows from the current row (the last row clicked
+without ++shift++) to the clicked one; ++ctrl++ + click adds a row to the selection or removes it, and
+++ctrl+shift++ + click adds a range. Right clicks select the same way. **⋮ → Copy Selected Rows**
 (++ctrl+c++) copies them as tab separated text with a header line, e.g. to paste into a spreadsheet.
 **⋮ → Select All** (++ctrl+a++) selects all rows of the current view.
 

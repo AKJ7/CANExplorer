@@ -204,6 +204,45 @@ async def test_simulator_retries_a_free_port_the_udp_bind_refuses(monkeypatch):
         await simulator.stop()
 
 
+async def test_simulator_leaves_a_block_of_ports_reserved_for_udp(monkeypatch):
+    # Windows reserves whole blocks for UDP, and the OS hands out neighbouring TCP ports: retries must jump away
+    loop = asyncio.get_running_loop()
+    original, ports = loop.create_datagram_endpoint, []
+
+    async def create_datagram_endpoint(factory, local_addr=None, **kwargs):
+        ports.append(local_addr[1])
+        if abs(local_addr[1] - ports[0]) < 500:
+            raise PermissionError(10013, 'An attempt was made to access a socket in a way forbidden')
+        return await original(factory, local_addr=local_addr, **kwargs)
+
+    monkeypatch.setattr(loop, 'create_datagram_endpoint', create_datagram_endpoint)
+    simulator = DoipEntitySimulator()
+    await simulator.start()
+    try:
+        assert abs(simulator.port - ports[0]) >= 500 and 10000 <= simulator.port <= 60999
+        assert simulator._server.sockets[0].getsockname()[1] == simulator.port
+    finally:
+        await simulator.stop()
+
+
+async def test_simulator_retries_a_refused_tcp_bind(monkeypatch):
+    original, ports = asyncio.start_server, []
+
+    async def start_server(callback, host, port, **kwargs):
+        ports.append(port)
+        if len(ports) == 1:
+            raise PermissionError(10013, 'An attempt was made to access a socket in a way forbidden')
+        return await original(callback, host, port, **kwargs)
+
+    monkeypatch.setattr('can_explorer.core.doip.asyncio.start_server', start_server)
+    simulator = DoipEntitySimulator()
+    await simulator.start()
+    try:
+        assert ports[0] == 0 and len(ports) >= 2 and simulator.running
+    finally:
+        await simulator.stop()
+
+
 async def test_simulator_on_a_given_port_does_not_retry(monkeypatch):
     import socket
 

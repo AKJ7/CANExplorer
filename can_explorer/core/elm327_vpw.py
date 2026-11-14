@@ -78,11 +78,19 @@ class Elm327VpwTransport:
         channel: str,
         on_frame: Optional[Callable[[J1850Message], None]] = None,
         timeout: float = INIT_TIMEOUT,
+        init_commands: Tuple[str, ...] = INIT_COMMANDS,
+        label: str = 'J1850 VPW',
     ):
         import serial  # pyserial, installed with python-can[serial]
 
         self.port = str(channel)
         self.version = ''
+        # The AT commands that set the adapter's protocol and formatting, and the name of that protocol for errors
+        # and the worker-thread name. The K-Line backend (elm327_kline.py) reuses this transport with its own
+        # ISO 9141-2 / ISO 14230 init commands; the frame shape on the wire (a three-byte header and a payload) is
+        # the same, so parsing and the J1850Message representation are shared.
+        self._init_commands = init_commands
+        self._label = label
         self._on_frame = on_frame
         self._reader = LineReader()
         self._lock = threading.Lock()
@@ -102,7 +110,7 @@ class Elm327VpwTransport:
         except BaseException:
             self._serial.close()
             raise
-        self._worker = threading.Thread(target=self._run, name=f'Elm327VpwTransport {self.port}', daemon=True)
+        self._worker = threading.Thread(target=self._run, name=f'Elm327 {self._label} on {self.port}', daemon=True)
         self._worker.start()
 
     # Blocking adapter protocol (worker thread, and __init__ before it starts)
@@ -168,9 +176,9 @@ class Elm327VpwTransport:
             break
         else:
             raise J1850Error(f'No ELM327 or OBDLink adapter answered on {self.port}')
-        for command in INIT_COMMANDS:
+        for command in self._init_commands:
             if '?' in self._command(command):
-                raise J1850Error(f'The adapter on {self.port} does not support {command} (J1850 VPW)')
+                raise J1850Error(f'The adapter on {self.port} does not support {command} ({self._label})')
 
     def _transmit(self, message: J1850Message) -> None:
         self._stop_monitoring()

@@ -1,0 +1,68 @@
+name: Bug report
+description: Something does not work, or CANExplorer crashed
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Two things from CANExplorer make most bugs quick to find:
+
+        1. **The system report**: in CANExplorer, open the menu and choose **Copy System Report**, then paste it
+           below. It lists the versions, your operating system and desktop, and what each CAN interface driver
+           found (or why it found nothing), which is what a missing device needs.
+        2. **The crash report**, if CANExplorer crashed: at the next start it names the file in its log. It is
+           `crash.previous.log` in `~/.local/state/CANExplorer` (Linux), `%LOCALAPPDATA%\CANExplorer` (Windows)
+           or `~/Library/Logs/CANExplorer` (macOS). Drag the file into the crash report field below.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+      placeholder: Clicking "Key file…" in Diagnostics closes CANExplorer instead of opening a file dialog.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Add a connection with …
+        2. Open …
+        3. Click …
+    validations:
+      required: false
+  - type: textarea
+    id: system-report
+    attributes:
+      label: System report
+      description: Menu → **Copy System Report**, then paste here. If CANExplorer does not start, give at least the version, your operating system and how you installed it.
+      placeholder: CANExplorer system report …
+    validations:
+      required: true
+  - type: textarea
+    id: crash-report
+    attributes:
+      label: Crash report
+      description: Only if CANExplorer crashed — attach `crash.previous.log` (see above).
+    validations:
+      required: false
+  - type: input
+    id: hardware
+    attributes:
+      label: CAN interface or adapter
+      description: The device and driver involved, if any (e.g. "PEAK PCAN-USB FD, PCAN-Basic 4.8", "ETAS ES582.1, BOA 2.x").
+    validations:
+      required: false
+  - type: dropdown
+    id: installation
+    attributes:
+      label: How did you install CANExplorer?
+      options:
+        - Installer (Windows, macOS, .deb, AppImage)
+        - Zip archive
+        - Snap Store
+        - From source (uv sync)
+        - Other
+    validations:
+      required: true

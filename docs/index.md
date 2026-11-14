@@ -60,8 +60,9 @@ the Snap, the archives and building with `uv`. Installed copies [update themselv
 
     ---
 
-    UDS over ISO-TP and the LIN transport layer, with DTCs, security access, CANdelaStudio CDD and ASAM ODX/PDX descriptions,
-    ECU flashing, and GMLAN (GMW3110) diagnostics for GM/Opel vehicles.
+    UDS over ISO-TP, the LIN transport layer and DoIP, with DTCs, security access, Authentication (0x29),
+    CANdelaStudio CDD and ASAM ODX/PDX descriptions and ECU flashing; OBD-II, and GMLAN diagnostics for GM/Opel
+    vehicles.
 
     [:octicons-arrow-right-24: Diagnostics](user-guide/diagnostics.md)
 
@@ -74,6 +75,33 @@ the Snap, the archives and building with `uv`. Installed copies [update themselv
 
     [:octicons-arrow-right-24: Protocol decoding](user-guide/protocols.md)
 
+-   :material-ethernet: **Automotive Ethernet**
+
+    ---
+
+    Open or capture pcap/pcapng traffic and decode SOME/IP, DoIP, gPTP, AVTP, TSN and more, field by field; SOME/IP
+    service discovery with E2E checks, and diagnostics over DoIP.
+
+    [:octicons-arrow-right-24: Ethernet capture](user-guide/ethernet.md)
+
+-   :material-magnify-scan: **Reverse engineering**
+
+    ---
+
+    Bit and byte statistics, automatic detection of counters, checksums and multiplexers, and correlation with
+    logged or polled values, promoted to a DBC when found.
+
+    [:octicons-arrow-right-24: Reverse engineering](user-guide/reverse-engineering.md)
+
+-   :material-shield-lock: **Security**
+
+    ---
+
+    A password-protected key store for SecOC, TLS, IPsec/MACsec, seed/key and UDS Authentication, with security
+    profiles and key servers, security events, security tests and an audit log.
+
+    [:octicons-arrow-right-24: Security manager](user-guide/security-manager.md)
+
 -   :material-script-text: **Simulation and scripting**
 
     ---
@@ -81,6 +109,15 @@ the Snap, the archives and building with `uv`. Installed copies [update themselv
     Simulated bus nodes in Python and control panels in QML, like CAPL nodes and panels.
 
     [:octicons-arrow-right-24: Simulation and scripting](user-guide/simulation.md)
+
+-   :material-check-decagram: **Test automation**
+
+    ---
+
+    ECU test scripts with checks, timing measurements and UDS requests, run in the Tests view or headless with
+    `can-test`, with HTML, JUnit and Markdown reports for CI.
+
+    [:octicons-arrow-right-24: Test automation](user-guide/test-automation.md)
 
 </div>
 

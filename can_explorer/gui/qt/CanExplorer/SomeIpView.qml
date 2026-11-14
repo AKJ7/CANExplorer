@@ -57,6 +57,13 @@ ColumnLayout {
             ToolTip.text: qsTr("Load a FIBEX or ARXML file to decode the message payloads into named signals")
             onClicked: root.someip.description_file ? root.someip.unload_description() : fibexDialog.open()
         }
+        Button {
+            text: root.someip.e2e_protections.length > 0
+                ? qsTr("E2E (%1)…").arg(root.someip.e2e_protections.length) : qsTr("E2E…")
+            ToolTip.visible: hovered
+            ToolTip.text: qsTr("AUTOSAR E2E protections (profiles 4, 6, 7) of SOME/IP methods and events, checked as messages arrive")
+            onClicked: e2eDialog.open()
+        }
         Item { Layout.fillWidth: true }
         Pill {
             visible: root.someip.description_file.length > 0
@@ -183,7 +190,7 @@ ColumnLayout {
                         Label { text: modelData.id; font.family: "monospace"; font.pixelSize: 12; color: modelData.sd ? Theme.chart[5] : Theme.text; Layout.preferredWidth: 120 }
                         Label { text: modelData.type; font.pixelSize: 12; color: Theme.muted; Layout.preferredWidth: 150; elide: Text.ElideRight }
                         Label { text: modelData.length; font.family: "monospace"; font.pixelSize: 12; color: Theme.muted; Layout.preferredWidth: 50 }
-                        Label { text: modelData.description; font.pixelSize: 12; color: Theme.text; elide: Text.ElideRight; Layout.fillWidth: true }
+                        Label { text: modelData.description; font.pixelSize: 12; color: modelData.e2e_failed ? Theme.danger : Theme.text; elide: Text.ElideRight; Layout.fillWidth: true }
                     }
                 }
             }
@@ -200,4 +207,6 @@ ColumnLayout {
                 statusLabel.show(error)
         }
     }
+
+    SomeIpE2eDialog { id: e2eDialog }
 }

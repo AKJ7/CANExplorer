@@ -1,5 +1,6 @@
 import asyncio
-from typing import Any, Dict, List, Optional
+import ssl
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from PyQt6.QtCore import QObject, pyqtProperty, pyqtSignal, pyqtSlot
 
@@ -20,10 +21,14 @@ from can_explorer.core.doip import (
     entity_status,
     power_mode,
 )
+from can_explorer.core.keystore import KeyStoreError
 from can_explorer.core.simulation import UdsServer
 from can_explorer.gui.diagnostics import DiagnosticsController
 from can_explorer.gui.flashing import FlashController
 from can_explorer.sys.log_handler import get_logger
+
+if TYPE_CHECKING:
+    from can_explorer.gui.security import SecurityController
 
 logger = get_logger(__name__)
 
@@ -103,8 +108,9 @@ class DoipController(QObject):
     entities_changed = pyqtSignal()
     log_changed = pyqtSignal()
 
-    def __init__(self, parent: Optional[QObject] = None):
+    def __init__(self, security: Optional['SecurityController'] = None, parent: Optional[QObject] = None):
         super().__init__(parent)
+        self._security = security  # Trusted and client certificates for TLS
         self.client: Optional[DoipClient] = None
         self._simulator: Optional[DoipEntitySimulator] = None
         self._entities: List[DoipEntity] = []
@@ -230,12 +236,15 @@ class DoipController(QObject):
             return ''
         where = 'simulated entity' if self._simulated else f'{client.host}:{client.port}'
         text = f'{where} · entity 0x{client.entity_address:04X} · tester 0x{client.source_address:04X}'
-        return text + (' · TLS' if client.tls else '')
+        if client.tls is None:
+            return text
+        return text + (' · TLS, entity verified' if client.tls.verify_mode == ssl.CERT_REQUIRED else ' · TLS')
 
     @pyqtSlot('QVariantMap', result=str)
     def connect_entity(self, options: Dict[str, Any]) -> str:
         """Options: host ('simulated' for the simulated entity), port, tester_address (hex), activation_type,
-        protocol_version, tls. Returns an error or ''."""
+        protocol_version, tls, and with TLS tls_trusted and tls_client (security manager entries: the certificates
+        to verify the entity with, and the client certificate to present; '' for none). Returns an error or ''."""
         if self._connecting:
             return 'Connecting already'
         if self.is_open:
@@ -250,13 +259,22 @@ class DoipController(QObject):
             version = int(options.get('protocol_version', PROTOCOL_2012))
         except (TypeError, ValueError) as e:
             return str(e)
-        tls = bool(options.get('tls', False))
+        tls: Any = bool(options.get('tls', False))
+        if tls and host != SIMULATED:
+            trusted, client = str(options.get('tls_trusted') or ''), str(options.get('tls_client') or '')
+            if (trusted or client) and self._security is None:
+                return 'No security manager for the TLS certificates'
+            if self._security is not None:
+                try:
+                    tls = self._security.tls_context(trusted, client)
+                except (KeyStoreError, ssl.SSLError, OSError) as e:
+                    return str(e)
         self._connecting = True
         self.changed.emit()
         asyncio.ensure_future(self._connect(host, port, tester, activation_type, version, tls))
         return ''
 
-    async def _connect(self, host: str, port: Optional[int], tester: int, activation_type: int, version, tls: bool):
+    async def _connect(self, host: str, port: Optional[int], tester: int, activation_type: int, version, tls):
         simulated = host == SIMULATED
         try:
             if simulated:

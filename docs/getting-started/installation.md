@@ -159,7 +159,8 @@ Then create a connection with bus type **LIN**, interface *SocketcanBus* and cha
 When CANExplorer crashes (for example with a segmentation fault inside Qt), it leaves a crash report: the Python
 stack of every thread at the moment of the crash, below a header with the CANExplorer, Python, PyQt and Qt
 versions, the operating system and the Qt platform and theme in use. At the next start, CANExplorer logs a warning
-with the path of the report. Please attach it to your [bug report](https://github.com/AKJ7/CANExplorer/issues).
+with the path of the report. Please attach it to your [bug report](https://github.com/AKJ7/CANExplorer/issues/new/choose),
+with the [system report](../user-guide/connections.md#system-report) (**Copy System Report** in the menu).
 
 | Platform | Crash report |
 |---|---|

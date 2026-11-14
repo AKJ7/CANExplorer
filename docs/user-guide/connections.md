@@ -26,6 +26,22 @@ recordings, periodic transmissions, schedules and simulations of the connection.
     Some drivers ignore the bitrate given here and use the configuration of the operating system, e.g. SocketCAN
     interfaces are configured with `ip link`, see [Installation](../getting-started/installation.md#setting-up-interfaces).
 
+### When Detect does not list your device
+
+**Detect** asks every installed CAN driver for its channels at once (some drivers take seconds), and asks again,
+one at a time, the drivers that failed: some vendor libraries do not tolerate being loaded next to other drivers.
+What each driver reported is written to the log, and the [system report](#system-report) lists it per driver:
+the channels it found, *none*, or why it found nothing — *unavailable* (its driver library is not installed or does
+not load, with the error), *unsupported* (it cannot list channels: type the channel in), *error* (with the error)
+or *timed out*. A driver that only worked on its own is marked *[probed alone]*.
+
+### System report
+
+**Copy System Report** in the menu copies a report to paste into a
+[bug report](https://github.com/AKJ7/CANExplorer/issues/new/choose): the CANExplorer, Python, PyQt, Qt and
+python-can versions, the operating system and desktop, what each CAN driver reported in the last **Detect** (it runs
+one first when there was none), and whether the last crash left a [crash report](../getting-started/installation.md#if-canexplorer-crashes).
+
 ## Recent connections
 
 **⋮ → Recent Connections** (and the welcome page) reopens the last ten connections with their settings.
