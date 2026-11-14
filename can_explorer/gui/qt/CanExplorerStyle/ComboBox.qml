@@ -49,7 +49,7 @@ T.ComboBox {
         font: control.font
         color: control.enabled ? Theme.text : Theme.alpha(Theme.text, 0.4)
         selectionColor: Theme.accent
-        selectedTextColor: "white"
+        selectedTextColor: Theme.onAccent
         verticalAlignment: Text.AlignVCenter
     }
 
@@ -74,13 +74,30 @@ T.ComboBox {
         padding: 4
 
         contentItem: ListView {
+            id: popupList
             clip: true
-            implicitHeight: contentHeight
+            // An empty model would collapse the popup to its padding; keep room for the placeholder instead.
+            implicitHeight: control.count > 0 ? contentHeight : 32
             model: control.delegateModel
             currentIndex: control.highlightedIndex
             highlightMoveDuration: 0
             boundsBehavior: Flickable.StopAtBounds
             T.ScrollIndicator.vertical: ScrollIndicator {}
+
+            Text {
+                visible: control.count === 0
+                width: popupList.width
+                height: 32
+                leftPadding: 12
+                rightPadding: 12
+                verticalAlignment: Text.AlignVCenter
+                elide: Text.ElideRight
+                text: qsTr("No items")
+                color: Theme.muted
+                font.family: control.font.family
+                font.pixelSize: control.font.pixelSize
+                font.italic: true
+            }
         }
 
         background: GlassPanel {

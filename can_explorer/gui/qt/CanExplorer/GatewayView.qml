@@ -216,12 +216,13 @@ ColumnLayout {
                             spacing: 0
                             RowLayout {
                                 spacing: 6
-                                Rectangle {
-                                    width: 9
-                                    height: 9
-                                    radius: 5
-                                    color: ruleRow.modelData.active ? Theme.success
-                                         : ruleRow.modelData.enabled ? Theme.warning : Theme.muted
+                                StatusDot {
+                                    status: ruleRow.modelData.active ? "ok" : ruleRow.modelData.enabled ? "warning" : "idle"
+                                    ToolTip.visible: ruleHover.hovered
+                                    ToolTip.text: ruleRow.modelData.active ? qsTr("Forwarding")
+                                        : ruleRow.modelData.enabled ? qsTr("Enabled, but its connections are not both open")
+                                        : qsTr("Switched off")
+                                    HoverHandler { id: ruleHover }
                                 }
                                 Label { text: ruleRow.modelData.name; font.bold: true; elide: Text.ElideRight }
                             }

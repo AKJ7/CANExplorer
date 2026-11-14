@@ -21,7 +21,7 @@ T.Button {
     icon.color: contentColor
 
     readonly property color contentColor: !control.enabled ? Theme.alpha(Theme.text, 0.35)
-        : control.filled ? "white" : control.flat ? Theme.accent : Theme.text
+        : control.filled ? Theme.onAccent : control.flat ? Theme.accent : Theme.text
 
     contentItem: IconLabel {
         spacing: control.spacing

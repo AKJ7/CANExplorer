@@ -57,9 +57,55 @@ segmented messages are decoded when you open a capture in the [Ethernet capture]
 
 ## End-to-end protection (E2E)
 
-AUTOSAR **E2E** protection (the CRC and sequence counter that guard a PDU against corruption, loss, repetition and
-reordering) is available as a library for scripts — `can_explorer.core.e2e` provides the AUTOSAR CRC routines
-(`crc8`, `crc8h2f`, `crc16`, `crc32`, `crc32p4`) and the **Profile 2**, **Profile 5** and **Profile 22**
-protect/check functions (each in its default header position, verified against the worked examples in the AUTOSAR
-E2E Protocol Specification). Validating a live PDU needs its E2E configuration (profile, Data IDs, offset) from the
-ARXML, which the UI does not read yet.
+AUTOSAR **E2E** protection guards a message against corruption, loss, repetition and reordering with a CRC, a
+sequence counter, a length and a Data ID in an E2E header. **E2E…** in the toolbar configures which methods and
+events are protected; their messages are then checked as they arrive, and the result is added to the description:
+
+```text
+Speed: VehicleSpeed=88 [E2E P04 ok, counter 41]
+Speed: VehicleSpeed=88 [E2E P04 ok, counter 44 (2 lost)]
+Speed: VehicleSpeed=88 [E2E P04 REPEATED, counter 44]
+Speed: VehicleSpeed=88 [E2E P04 WRONG SEQUENCE, counter 60 (after 44)]
+Speed: VehicleSpeed=91 [E2E P04 CRC ERROR 0x1F2E3D4C, expected 0x9A8B7C6D, counter 61]
+Speed: VehicleSpeed=91 [E2E P04 ERROR: length field 22, data 23 bytes]
+```
+
+Failed checks are shown in red. Each protection gives:
+
+| Setting | Meaning |
+|---|---|
+| Service, Method / event | The SOME/IP ids (hex), e.g. `1234` and `8001` for an event |
+| Profile | **4** (CRC-32, 16-bit counter, 32-bit Data ID), **6** (CRC-16, 8-bit counter, 16-bit Data ID, not sent) or **7** (CRC-64, 32-bit counter, 32-bit Data ID) — the profiles AUTOSAR defines for SOME/IP and other large data |
+| Data ID | The Data ID of the protected data (hex) |
+| Offset (bits) | Where the E2E header starts in the protected data; 64 (the default) is right after the SOME/IP header |
+| Max counter Δ | The largest counter step accepted between two messages: 1 means every message must be received; a bigger step is a *wrong sequence*, a step up to it is *ok* with the number of lost messages |
+
+As in the AUTOSAR E2E protocol specification, the protected data of a SOME/IP message starts at its Request ID:
+the Client ID, Session ID, protocol and interface version, message type and return code (the last 8 bytes of the
+SOME/IP header), followed by the payload, so the CRC covers those header fields too. The Message ID and the
+SOME/IP Length are not protected; the E2E Length field covers the protected data. The counters are tracked per
+method or event and client, and start over when the messages are cleared. SOME/IP-TP messages are checked once
+reassembled.
+
+The protections are kept between sessions, shared with the [Ethernet capture](ethernet.md) tool (which checks them
+in captures too), and can be exported to and imported from a JSON file:
+
+```json
+{"protections": [
+  {"service_id": "0x1234", "method_id": "0x8001", "profile": 4, "data_id": "0x0A0B0C0D",
+   "offset": 64, "max_delta_counter": 1, "name": "VehicleSpeed"}
+]}
+```
+
+The profiles are verified against the protocol examples of the AUTOSAR E2E Protocol Specification (R23-11), with
+and without the SOME/IP header in front. The protections of signal PDUs in an ARXML system description are checked
+live in the trace of a connection, see [ARXML end-to-end protection](signal-databases.md#arxml-end-to-end-protection-e2e).
+
+Limitations:
+
+- The protections of SOME/IP messages are not read from ARXML. There, E2E for SOME/IP goes through the E2E
+  transformer of the ISignals serialized into the PDU and the PDU's message id through the socket connection's PDU
+  identifiers, a chain CANExplorer does not resolve yet; enter the protections instead.
+- Profiles 1, 2, 5, 11 and 22 (made for CAN-sized PDUs) and the method profiles 4m and 7m are not offered for
+  SOME/IP. Scripts can use all the implemented profiles in `can_explorer.core.e2e` (2, 4, 5, 6, 7 and 22) and
+  the checker in `can_explorer.core.someip_e2e`.

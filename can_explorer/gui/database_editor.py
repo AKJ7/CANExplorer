@@ -1,9 +1,10 @@
 """The signal database editor for QML: one database at a time, with a selected message and signal."""
 
+import copy
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from PyQt6.QtCore import QObject, QUrl, pyqtProperty, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QAbstractListModel, QModelIndex, QObject, Qt, QUrl, pyqtProperty, pyqtSignal, pyqtSlot
 
 from can_explorer.core.database_editor import (
     BYTE_ORDERS,
@@ -47,6 +48,147 @@ def _number_text(value: Any) -> str:
     return '' if value is None else f'{value:g}'
 
 
+NODE_ROW, MESSAGE_ROW, SIGNAL_ROW = 'node', 'message', 'signal'
+
+
+class SenderRowsModel(QAbstractListModel):
+    """The "By sender" tree: each sending node, its messages under it and their signals under them, as the rows of a
+    list (`depth` 0, 1 and 2), filtered by the search. Nodes and messages fold and unfold (`toggle`): nodes start
+    unfolded and messages folded, so a large database opens as a short list. While searching, the matching nodes and
+    messages are unfolded; folding one then lasts until the search changes.
+
+    A list model rather than a QML array: a database of 1500 messages has some 24000 signals, and converting them to
+    QML objects on every change took a quarter of a second; the view only reads the rows it shows. It is built only
+    while the list is shown (`active`)."""
+
+    FIELDS = ('kind', 'depth', 'node', 'message', 'identifier', 'signalName', 'expanded', 'count')
+    ROLES = {Qt.ItemDataRole.UserRole + 1 + index: name.encode() for index, name in enumerate(FIELDS)}
+    signal_count_changed = pyqtSignal()
+
+    def __init__(self, groups, parent: Optional[QObject] = None):
+        super().__init__(parent)
+        self._groups = groups  # Returns the groups of DatabaseEditorController.signals_by_sender
+        self._rows: List[tuple] = []
+        self._query = ''
+        self._active = False
+        self._signal_count = 0
+        self._folded_nodes: set = set()  # Nodes folded (they start unfolded)
+        self._unfolded_messages: set = set()  # (node, message) unfolded (they start folded)
+        self._search_folded: set = set()  # While searching, what was folded: node or (node, message)
+
+    def roleNames(self) -> Dict[int, bytes]:
+        return self.ROLES
+
+    def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:
+        return 0 if parent.isValid() else len(self._rows)
+
+    def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole) -> Any:
+        if not index.isValid() or not 0 <= index.row() < len(self._rows) or role not in self.ROLES:
+            return None
+        return self._rows[index.row()][role - Qt.ItemDataRole.UserRole - 1]
+
+    @pyqtProperty(int, notify=signal_count_changed)
+    def signal_count(self) -> int:
+        """The signals matching the search, folded or not."""
+        return self._signal_count
+
+    @pyqtSlot(bool)
+    def set_active(self, active: bool) -> None:
+        if active != self._active:
+            self._active = active
+            self.refresh()
+
+    @pyqtSlot(str)
+    def set_query(self, query: str) -> None:
+        query = query.strip().lower()
+        if query != self._query:
+            self._query = query
+            self._search_folded.clear()
+            self.refresh()
+
+    # Folding
+
+    def _node_open(self, node: str) -> bool:
+        return node not in (self._search_folded if self._query else self._folded_nodes)
+
+    def _message_open(self, node: str, message: str) -> bool:
+        if self._query:
+            return (node, message) not in self._search_folded
+        return (node, message) in self._unfolded_messages
+
+    @pyqtSlot(int)
+    def toggle(self, row: int) -> None:
+        """Fold or unfold the node or message of a row."""
+        if not 0 <= row < len(self._rows):
+            return
+        kind, _, node, message = self._rows[row][:4]
+        if kind == NODE_ROW:
+            key, opened, unfolded = node, self._node_open(node), None
+        elif kind == MESSAGE_ROW:
+            key, opened, unfolded = (node, message), self._message_open(node, message), self._unfolded_messages
+        else:
+            return
+        if self._query:
+            (self._search_folded.add if opened else self._search_folded.discard)(key)
+        elif unfolded is None:
+            (self._folded_nodes.add if opened else self._folded_nodes.discard)(key)
+        else:
+            (unfolded.discard if opened else unfolded.add)(key)
+        self.refresh()
+
+    @pyqtSlot(bool)
+    def set_all(self, unfold: bool) -> None:
+        """Unfold every node and message, or fold them all."""
+        groups = self._groups() if self._active else []
+        nodes = {group['node'] for group in groups}
+        messages = {(group['node'], entry['message']) for group in groups for entry in group['messages']}
+        if self._query:
+            self._search_folded = set() if unfold else nodes | messages
+        else:
+            self._folded_nodes = set() if unfold else nodes
+            self._unfolded_messages = messages if unfold else set()
+        self.refresh()
+
+    def refresh(self) -> None:
+        rows: List[tuple] = []
+        signal_count = 0
+        if self._active:
+            query = self._query
+            for group in self._groups():
+                node = group['node']
+                if not query or query in node.lower():
+                    messages = [(entry, entry['signals']) for entry in group['messages']]
+                else:
+                    messages = []
+                    for entry in group['messages']:
+                        if query in entry['message'].lower() or query in entry['id'].lower():
+                            messages.append((entry, entry['signals']))  # The message matches: all its signals
+                        else:
+                            found = [signal for signal in entry['signals'] if query in signal.lower()]
+                            if found:
+                                messages.append((entry, found))
+                if not messages:
+                    continue
+                signal_count += sum(len(signals) for _, signals in messages)
+                node_open = self._node_open(node)
+                rows.append((NODE_ROW, 0, node, '', '', '', node_open, len(messages)))
+                if not node_open:
+                    continue
+                for entry, signals in messages:
+                    message_open = self._message_open(node, entry['message'])
+                    rows.append((MESSAGE_ROW, 1, node, entry['message'], entry['id'], '', message_open, len(signals)))
+                    if message_open:
+                        rows.extend(
+                            (SIGNAL_ROW, 2, node, entry['message'], entry['id'], signal, False, 0) for signal in signals
+                        )
+        self.beginResetModel()
+        self._rows = rows
+        self.endResetModel()
+        if signal_count != self._signal_count:
+            self._signal_count = signal_count
+            self.signal_count_changed.emit()
+
+
 class DatabaseEditorController(QObject):
     """Every edit returns an error text, or '' when it was applied."""
 
@@ -65,6 +207,11 @@ class DatabaseEditorController(QObject):
         # actually changes the content, not on selection changes or searches.
         self._messages_cache: Optional[List[Dict[str, Any]]] = None
         self._issues_cache: Optional[List[str]] = None
+        self._senders_cache: Optional[List[Dict[str, Any]]] = None
+        self._search_cache: Optional[List[tuple]] = None  # (message, [(lowercase signal name, signal name)])
+        self._copied_signal = None  # A copy of the signal of "Copy signal", pasted with "Paste signal"
+        self._sender_model = SenderRowsModel(lambda: self.signals_by_sender, self)
+        self.changed.connect(self._sender_model.refresh)  # After every change of the content (when shown)
 
     # Files
 
@@ -137,6 +284,8 @@ class DatabaseEditorController(QObject):
         """Drop the cached message and issue rows; the next read rebuilds them."""
         self._messages_cache = None
         self._issues_cache = None
+        self._senders_cache = None
+        self._search_cache = None
 
     def _set_editor(self, editor: DatabaseEditor | LdfEditor, notes: List[str]) -> None:
         self._invalidate()
@@ -411,13 +560,145 @@ class DatabaseEditorController(QObject):
             for owners in self._editor.bit_layout(self._message)
         ]
 
+    @pyqtProperty('QVariantList', notify=changed)
+    def signals_by_sender(self) -> List[Dict[str, Any]]:
+        """Every message and signal, grouped by the node sending it: [{node, messages: [{message, id, signals: [name]}],
+        signals: [{message, id, signal}]}], nodes sorted by name and messages by name, with the messages without a
+        sender last (node ''). A message with several senders is listed under each of them. LIN frames and signals
+        are grouped by the publisher of the signal (of the frame for a frame without signals)."""
+        if self._editor is None:
+            return []
+        if self._senders_cache is None:
+            self._senders_cache = self._build_senders()
+        return self._senders_cache
+
+    def _build_senders(self) -> List[Dict[str, Any]]:
+        groups: Dict[str, Dict[str, Dict[str, Any]]] = {}  # node -> message -> {message, id, signals}
+
+        def add(node: str, message: str, frame_id: str, signal: Optional[str]) -> None:
+            entry = groups.setdefault(node, {}).setdefault(message, {'message': message, 'id': frame_id, 'signals': []})
+            if signal is not None:
+                entry['signals'].append(signal)
+
+        if self.lin:
+            for frame in self._editor.frames:
+                frame_id = f'{frame["frame_id"]:02X}'
+                signals = self._editor.frame_signals(frame['name'])
+                if not signals:
+                    add(frame['publisher'] or '', frame['name'], frame_id, None)
+                for signal, _ in signals:
+                    add(signal.get('publisher') or frame['publisher'] or '', frame['name'], frame_id, signal['name'])
+        else:
+            for message in self._editor.messages:
+                frame_id = f'{message.frame_id:08X}' if message.is_extended_frame else f'{message.frame_id:03X}'
+                for sender in [name for name in message.senders if name != 'Vector__XXX'] or ['']:
+                    add(sender, message.name, frame_id, None)
+                    for signal in message.signals:
+                        add(sender, message.name, frame_id, signal.name)
+        order = sorted((name for name in groups if name), key=str.lower) + ([''] if '' in groups else [])
+        result = []
+        for name in order:
+            messages = sorted(groups[name].values(), key=lambda entry: entry['message'].lower())
+            for entry in messages:
+                entry['signals'].sort()
+            result.append(
+                {
+                    'node': name,
+                    'messages': messages,
+                    'signals': [
+                        {'message': entry['message'], 'id': entry['id'], 'signal': signal}
+                        for entry in messages
+                        for signal in entry['signals']
+                    ],
+                }
+            )
+        return result
+
+    @pyqtProperty(QObject, constant=True)
+    def sender_model(self) -> SenderRowsModel:
+        """The rows of the "By sender" list (see SenderRowsModel)."""
+        return self._sender_model
+
+    @pyqtSlot(str, result='QVariantMap')
+    def search_signals(self, query: str) -> Dict[str, List[str]]:
+        """{message: [its signals whose name contains `query`]} (ignoring case), for the search field. Done here
+        rather than in QML: a database of 1500 messages has some 24000 signal names."""
+        query = query.strip().lower()
+        if self._editor is None or not query:
+            return {}
+        if self._search_cache is None:
+            if self.lin:
+                messages = [
+                    (frame['name'], [signal['name'] for signal, _ in self._editor.frame_signals(frame['name'])])
+                    for frame in self._editor.frames
+                ]
+            else:
+                messages = [
+                    (message.name, [signal.name for signal in message.signals]) for message in self._editor.messages
+                ]
+            self._search_cache = [
+                (name, [(signal.lower(), signal) for signal in signals]) for name, signals in messages
+            ]
+        matches = {}
+        for message, signals in self._search_cache:
+            found = [signal for lowered, signal in signals if query in lowered]
+            if found:
+                matches[message] = found
+        return matches
+
+    @pyqtSlot(str, str)
+    def select(self, message: str, signal: str):
+        """Select a message and one of its signals (e.g. from the search results or the list by sender)."""
+        self._message = message
+        signals = self._signal_names(message)
+        self._signal = signal if signal in signals else signals[0] if signals else ''
+        self.selection_changed.emit()
+
+    # Undo and redo
+
+    @pyqtProperty(bool, notify=changed)
+    def can_undo(self) -> bool:
+        return bool(self._editor and self._editor.history.can_undo)
+
+    @pyqtProperty(bool, notify=changed)
+    def can_redo(self) -> bool:
+        return bool(self._editor and self._editor.history.can_redo)
+
+    @pyqtSlot(result=str)
+    def undo(self) -> str:
+        return self._step_history(forward=False)
+
+    @pyqtSlot(result=str)
+    def redo(self) -> str:
+        return self._step_history(forward=True)
+
+    def _step_history(self, forward: bool) -> str:
+        editor = self._editor
+        if editor is None:
+            return ''
+        before = editor.state()
+        if not (editor.redo() if forward else editor.undo()):
+            return 'Nothing to redo' if forward else 'Nothing to undo'
+        # Show what changed: select the message the step changed, else keep the selection where it still exists
+        focus = editor.changed_message(before, editor.state())
+        self._invalidate()
+        names = self._message_names()
+        message = focus if focus in names else self._message if self._message in names else names[0] if names else ''
+        signals = self._signal_names(message)
+        self._message = message
+        self._signal = self._signal if self._signal in signals else signals[0] if signals else ''
+        self.changed.emit()
+        self.selection_changed.emit()
+        return ''
+
     # Edits
 
     def _apply(self, edit) -> str:
         if self._editor is None:
             return 'Open or create a database first'
         try:
-            edit()
+            with self._editor.edit_step():  # One undo step; an edit that fails is rolled back
+                edit()
         except (EditError, ValueError) as e:
             return str(e)
         self._invalidate()
@@ -588,6 +869,65 @@ class DatabaseEditorController(QObject):
             self._editor.remove_signal(self._message, self._signal)
             names.pop(index)
             self._signal = names[min(index, len(names) - 1)] if names else ''
+
+        return self._apply(edit)
+
+    @pyqtSlot(result=str)
+    def duplicate_message(self) -> str:
+        """Add a copy of the selected message (CAN) after it, with the next free identifier, and select it."""
+        if self.lin:
+            return 'Frames of LIN databases cannot be duplicated'
+
+        def edit():
+            self._message = self._editor.duplicate_message(self._message)
+            signals = self._signal_names(self._message)
+            # The same signal, in the copy
+            self._signal = self._signal if self._signal in signals else signals[0] if signals else ''
+
+        return self._apply(edit)
+
+    @pyqtSlot(result=str)
+    def duplicate_signal(self) -> str:
+        """Add a copy of the selected signal to its message, at the first free bits, and select it."""
+        if self.lin:
+            return 'Signals of LIN databases cannot be duplicated'
+
+        def edit():
+            self._signal = self._editor.copy_signal(self._message, self._signal)
+
+        return self._apply(edit)
+
+    @pyqtProperty(str, notify=changed)
+    def copied_signal(self) -> str:
+        """The name of the signal "Copy signal" holds, pasted with paste_signal ('' when none)."""
+        return self._copied_signal.name if self._copied_signal is not None else ''
+
+    @pyqtSlot(result=str)
+    def copy_signal(self) -> str:
+        """Hold a copy of the selected signal, to paste it into another message (of this or another database)."""
+        if self.lin:
+            return 'Signals of LIN databases cannot be copied'
+        if self._editor is None or not self._signal:
+            return 'Select a signal first'
+        try:
+            self._copied_signal = copy.deepcopy(self._editor.signal(self._message, self._signal))
+        except EditError as e:
+            return str(e)
+        self.changed.emit()
+        return ''
+
+    @pyqtSlot(result=str)
+    def paste_signal(self) -> str:
+        """Add the copied signal to the selected message, at the first free bits, and select it."""
+        if self.lin:
+            return 'Signals cannot be pasted into LIN databases'
+        if self._copied_signal is None:
+            return 'Copy a signal first'
+        if not self._message:
+            return 'Select a message first'
+
+        def edit():
+            self._signal = self._editor.add_signal_copy(self._message, self._copied_signal)
 
         return self._apply(edit)
 

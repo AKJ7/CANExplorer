@@ -13,6 +13,10 @@ ColumnLayout {
     // The simulated entity is chosen in the list; typing an address chooses that address instead
     property bool useSimulated: false
     readonly property bool simulatedChosen: useSimulated || doip.simulated
+    // Security manager entries for TLS: certificates to verify the entity with, and client certificates
+    readonly property var securityEntries: connectionManager.security.entries
+    readonly property var trustedNames: securityEntries.filter(entry => entry.purpose === "tls-ca").map(entry => entry.name)
+    readonly property var clientNames: securityEntries.filter(entry => entry.purpose === "tls-client").map(entry => entry.name)
 
     function report(error) {
         errorLabel.text = error
@@ -26,6 +30,8 @@ ColumnLayout {
             activation_type: activationBox.currentValue,
             protocol_version: versionBox.currentValue,
             tls: tlsBox.checked,
+            tls_trusted: trustBox.currentIndex > 0 ? trustBox.currentText : "",
+            tls_client: clientBox.currentIndex > 0 ? clientBox.currentText : "",
         }))
     }
 
@@ -58,13 +64,31 @@ ColumnLayout {
             text: qsTr("TLS")
             enabled: !root.doip.is_open && !root.simulatedChosen
             ToolTip.visible: hovered
-            ToolTip.text: qsTr("TLS (ISO 13400-2:2019, port %1). The entity's certificate is not verified").arg(root.doip.tls_port)
+            ToolTip.text: qsTr("TLS (ISO 13400-2:2019, port %1). Choose trusted certificates to verify the entity, and a client certificate if it asks for one; both come from the Security Manager").arg(root.doip.tls_port)
             onToggled: {
                 if (checked && portField.text === String(root.doip.default_port))
                     portField.text = String(root.doip.tls_port)
                 else if (!checked && portField.text === String(root.doip.tls_port))
                     portField.text = String(root.doip.default_port)
             }
+        }
+        ComboBox {
+            id: trustBox
+            visible: tlsBox.checked
+            enabled: tlsBox.enabled
+            model: [qsTr("Not verified")].concat(root.trustedNames)
+            Layout.preferredWidth: 150
+            ToolTip.visible: hovered
+            ToolTip.text: qsTr("Verify the entity's certificate against these trusted certificates (Security Manager)")
+        }
+        ComboBox {
+            id: clientBox
+            visible: tlsBox.checked
+            enabled: tlsBox.enabled
+            model: [qsTr("No client certificate")].concat(root.clientNames)
+            Layout.preferredWidth: 170
+            ToolTip.visible: hovered
+            ToolTip.text: qsTr("Present this client certificate (mutual TLS); the Security Manager must be unlocked")
         }
         Label { text: qsTr("Tester address") }
         TextField {

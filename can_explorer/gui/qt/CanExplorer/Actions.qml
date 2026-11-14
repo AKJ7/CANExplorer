@@ -14,6 +14,7 @@ Item {
     property alias copy: copyAction
     property alias selectAll: selectAllAction
     property alias preferences: preferencesAction
+    property alias securityManager: securityManagerAction
     property alias convertDatabase: convertDatabaseAction
     property alias editDatabase: editDatabaseAction
     property alias openWorkspace: openWorkspaceAction
@@ -22,6 +23,7 @@ Item {
     property alias commandPalette: commandPaletteAction
     property alias checkForUpdates: checkForUpdatesAction
     property alias help: helpAction
+    property alias systemReport: systemReportAction
 
     // Open a database file in the editor (e.g. the one of a connection)
     signal editDatabaseFile(string path)
@@ -48,6 +50,13 @@ Item {
         text: qsTr("&Help")
         icon.name: "help-contents"
         shortcut: StandardKey.HelpContents
+    }
+
+    // Copies versions, the Qt setup and what each CAN backend detected, to paste into a bug report
+    Action {
+        id: systemReportAction
+        text: qsTr("Copy &System Report")
+        icon.name: "edit-copy"
     }
 
     Action {
@@ -134,6 +143,12 @@ Item {
         id: checkForUpdatesAction
         text: qsTr("Check for &Updates...")
         icon.name: "system-software-update"
+    }
+
+    Action {
+        id: securityManagerAction
+        text: qsTr("Security &Manager...")
+        icon.name: "security-high"
     }
 
     Action {

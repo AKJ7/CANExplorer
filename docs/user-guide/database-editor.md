@@ -31,26 +31,53 @@ they are lost.
 Connections that decode with the saved file reload it, so the trace, overview and signal plots use the changes
 right away.
 
+## Undo and redo
+
+**↶** and **↷** in the header, or ++ctrl+z++ and ++ctrl+shift+z++ (++ctrl+y++ on Windows), undo and redo edits:
+changing a field, adding, removing, duplicating, copying or pasting messages and signals, removing a node, and
+signals promoted from [reverse engineering](reverse-engineering.md) (each promotion is one step). Undo selects the
+message the step changed, so you see what was undone. While a text field is being edited, the keys undo the
+typing in that field instead.
+
+Undoing back to the saved content clears the unsaved-changes dot; saving keeps the history, so you can still undo
+past a save. An edit that fails changes nothing (no partial edit is left), and setting a field to the value it has
+is not a step. Opening another file, creating a new one or **Revert** starts a new history. The last 200 steps are
+kept. This works for LIN databases too.
+
 ## Messages
 
 The list on the left shows the identifier, name, an **FD** tag for CAN FD frames, the number of signals and a red
-dot for messages with problems. **+** adds a message with a free identifier, **−** removes the selected one; the
-search field filters by name or identifier.
+dot for messages with problems. **+** adds a message with a free identifier, **⧉** duplicates the selected one
+(with its signals, under the name *Name_copy* and the next free identifier after the original, placed right after
+it), **−** removes the selected one.
 
-| Property | Description |
-|---|---|
-| Name | Letters, digits and `_`, not starting with a digit; unique |
-| Identifier | Hexadecimal; up to 7FF, or 1FFFFFFF for extended frames |
-| Length | 0 to 8 bytes, or up to 64 bytes for CAN FD frames |
-| Cycle time | In milliseconds; empty for messages that are not sent cyclically |
-| Senders | Node names, comma separated; unknown nodes are added to the database |
-| Extended (29 bit), CAN FD | Frame format |
-| Comment | Free text |
+The search field filters by message name or identifier, and by **signal name**: a message whose signals match is
+listed with the matching signals under it (*↳ WheelSpeed*), and clicking it selects the first of them.
+
+### Signals by sender
+
+**By sender** above the list shows the database as a tree: each node that sends messages, its messages under it
+(identifier, name and number of signals) and their signals under them. A message with several senders is listed
+under each of them, and the messages without a sender come last, under *No sender*. In LIN databases, frames and
+signals are grouped by the publisher of the signals.
+
+Nodes start unfolded and messages folded, so even a large database opens as a short list. Click a node, or the
+**▸** of a message (or double-click the message), to unfold or fold it; ++left++ and ++right++ fold and unfold the
+focused row. **⊞** and **⊟** unfold and fold everything. Clicking a message or a signal selects it for editing.
+
+The search field filters the tree too: a node, message or identifier that matches keeps all that is under it, and a
+matching signal keeps its message and node. The matches are shown unfolded; what you fold while searching is
+folded until the search changes, and clearing the search brings back the folding of before.
 
 ## Signals
 
 Select a signal in the list (its colour matches the layout below); **+** adds an 8 bit signal at the first free
-byte, **−** removes the selected one. Changes are applied when a field is left or ++enter++ is pressed; invalid
+byte, **−** removes the selected one. **⧉** duplicates the selected signal into its own message, and **Copy** then
+**Paste** copies it into another message (select the message, then paste; it can also be pasted into another
+database opened afterwards). The copy keeps the name when it is free in that message (else *Name_copy*) and is
+placed at the first free bits where it fits; when nothing is free it keeps its start bit and the overlap is listed
+under *Problems*. A multiplexed signal stays multiplexed only in a message with its multiplexer; a copy of a
+multiplexer into a message that has one becomes a plain signal. LIN signals cannot be duplicated or copied. Changes are applied when a field is left or ++enter++ is pressed; invalid
 values are reported in the header and the field returns to the stored value.
 
 | Property | Description |

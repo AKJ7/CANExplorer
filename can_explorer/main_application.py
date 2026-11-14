@@ -23,6 +23,7 @@ from can_explorer.gui.application_metadata import ApplicationMetadata
 from can_explorer.gui.connection_manager import ConnectionManager
 from can_explorer.gui.help import HelpController
 from can_explorer.gui.file_picker import FilePicker
+from can_explorer.gui.qml_network import QmlNetworkFactory
 from can_explorer.desktop import desktop_file_name
 from can_explorer.gui.signal_plot import register_qml_types
 from can_explorer.gui.bit_raster import register_bit_raster
@@ -34,6 +35,19 @@ logger = get_logger(__name__)
 APP_ICON = 'CanExplorer/images/logo.png'  # Generated from docs/assets/logo.svg by tools/make_icons.py
 
 
+def _preload_multimedia() -> None:
+    """Load Qt Multimedia on this (the main) thread, before QML imports it on its loader thread.
+
+    Loading it may log a message (e.g. without a PulseAudio server). Logged on the loader thread, the message reaches
+    the Python message handler there, which waits for the GIL: held by the main thread when Python triggered the
+    load (setting a page), which itself waits for the loader thread. A deadlock.
+    """
+    try:
+        import PyQt6.QtMultimedia  # noqa: F401
+    except ImportError:  # No multimedia backend (e.g. libpulse missing): only the video view is unavailable
+        pass
+
+
 def create_qml_engine(
     context: Dict[str, QObject], on_warnings: Callable[[List[QQmlError]], None]
 ) -> QQmlApplicationEngine:
@@ -43,7 +57,11 @@ def create_qml_engine(
     register_qml_types()
     register_bit_raster()
     register_python_highlighter()
+    _preload_multimedia()
     engine = QQmlApplicationEngine()
+    # Map tiles: an identifying User-Agent and a disk cache; kept alive with the engine
+    engine.network_factory = QmlNetworkFactory()
+    engine.setNetworkAccessManagerFactory(engine.network_factory)
     engine.setOutputWarningsToStandardError(False)
     engine.warnings.connect(on_warnings)
     engine.addImportPath(str(get_res_path('.')))

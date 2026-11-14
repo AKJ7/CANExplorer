@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 from PyQt6.QtCore import QObject, QTimer, QUrl, pyqtProperty, pyqtSignal, pyqtSlot
 
 from can_explorer.core.flashing import FlashImage, FlashJob, FlashOptions, ImageError, load_image
-from can_explorer.core.uds import UdsClient, UdsError, load_key_function
+from can_explorer.core.uds import UdsClient, UdsError, load_key_source
 from can_explorer.sys.log_handler import get_logger
 
 logger = get_logger(__name__)
@@ -157,8 +157,8 @@ class FlashController(QObject):
             if level % 2 == 0:
                 raise ValueError('Security access levels for requesting a seed are odd')
             if not diagnostics.key_file:
-                raise ValueError('Choose the key file in the Diagnostics view for security access')
-            compute_key = load_key_function(diagnostics.key_file)
+                raise ValueError('Choose the key algorithm in the Diagnostics view for security access')
+            compute_key = load_key_source(diagnostics.key_file)
         return FlashOptions(
             programming_session=bool(options.get('session', True)),
             security_level=level,

@@ -488,3 +488,21 @@ async def test_database_editor_with_lin_databases(manager, data_dir, tmp_path):
     assert database.baudrate == 10417 and database.frame('Door_Frm1').frame_id == 0x22
     editor.new_lin_database()
     assert editor.kind == 'lin' and editor.file_name == 'Untitled' and editor.messages == []
+
+
+def test_trace_time_format_applies_to_all_traces(qapp, tmp_path):
+    from PyQt6.QtCore import QSettings
+
+    from can_explorer.gui.app_state import AppState
+
+    state = AppState(QSettings(str(tmp_path / 'settings.ini'), QSettings.Format.IniFormat))
+    state.set_trace_time_format('delta')
+    manager = ConnectionManager(state)
+    try:
+        manager.add_connection({'name': 'Bus', 'interface': 'VirtualBus', 'channel': f'gui-{uuid.uuid4().hex}'})
+        (connection,) = manager.connections
+        assert connection.trace.time_format == 'delta' and manager.multi_bus.trace.time_format == 'delta'
+        state.set_trace_time_format('absolute')
+        assert connection.trace.time_format == 'absolute' and manager.multi_bus.trace.time_format == 'absolute'
+    finally:
+        manager.close_all()

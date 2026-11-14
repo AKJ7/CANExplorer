@@ -56,7 +56,7 @@ CANExplorer opens on its welcome page:
 3. Click **OK**, then **Connect** in the top bar.
 
 !!! success "Check"
-    *Demo* appears in the sidebar under **Connections** with a green dot, and its **Dashboard** opens. The bus is
+    *Demo* appears in the sidebar under **Connections** with a filled circle (an open bus), and its **Dashboard** opens. The bus is
     still quiet: nothing sends yet.
 
 ## 2. Load the signal database
@@ -122,7 +122,7 @@ it or change its speed.
 ## Something does not work?
 
 ??? question "The trace stays empty"
-    Check that the connection is connected (green dot in the sidebar; the top bar shows **Disconnect**), that the
+    Check that the connection is connected (a filled circle after it in the sidebar; the top bar shows **Disconnect**), that the
     simulation runs (the button reads **Stop simulation**) and that **Ignition** is on. Without ignition, the
     engine sends 0 rpm, but frames still arrive every 100 ms.
 

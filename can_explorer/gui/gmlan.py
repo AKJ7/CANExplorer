@@ -17,7 +17,7 @@ from can_explorer.core.gmlan import (
     describe_request,
 )
 from can_explorer.core.isotp_client import IsoTpClient
-from can_explorer.core.uds import load_key_function
+from can_explorer.core.uds import KEYSTORE_PREFIX, load_key_source
 from can_explorer.sys.log_handler import get_logger
 
 logger = get_logger(__name__)
@@ -47,6 +47,11 @@ class GmlanController(QObject):
         self._key_file = ''
         self._keep_alive: Optional[GmlanKeepAlive] = None
         self._keep_alive_transport = None
+        # What this page has done to the ECU (cleared by ReturnToNormalMode or new addressing): the ECU itself also
+        # leaves diagnostics when TesterPresent stops, which is not seen here
+        self._operation = ''
+        self._communication_disabled = False
+        self._unlocked_level = 0
 
     @property
     def session(self):
@@ -79,6 +84,42 @@ class GmlanController(QObject):
         return [{'level': level, 'name': name} for level, name in DIAGNOSTIC_OPERATIONS.items()]
 
     @pyqtProperty(str, notify=changed)
+    def request_id(self) -> str:
+        return f'{self._request_id:0{8 if self._extended else 3}X}'
+
+    @pyqtProperty(str, notify=changed)
+    def response_id(self) -> str:
+        return f'{self._response_id:0{8 if self._extended else 3}X}'
+
+    @pyqtProperty(bool, notify=changed)
+    def extended(self) -> bool:
+        return self._extended
+
+    @pyqtProperty(bool, notify=changed)
+    def single_wire(self) -> bool:
+        source = self.session.source if self.session is not None else None
+        config = getattr(source, 'config', None)
+        return bool(getattr(config, 'single_wire', False))
+
+    @pyqtProperty(str, notify=changed)
+    def operation(self) -> str:
+        """The diagnostic operation last initiated (InitiateDiagnosticOperation), '' in normal mode."""
+        return self._operation
+
+    @pyqtProperty(bool, notify=changed)
+    def communication_disabled(self) -> bool:
+        """Whether normal communication was disabled (DisableNormalCommunication) since the last return to normal."""
+        return self._communication_disabled
+
+    @pyqtProperty(int, notify=changed)
+    def unlocked_level(self) -> int:
+        """The security level last unlocked, 0 if none since the last return to normal."""
+        return self._unlocked_level
+
+    def _reset_state(self):
+        self._operation, self._communication_disabled, self._unlocked_level = '', False, 0
+
+    @pyqtProperty(str, notify=changed)
     def addressing_text(self) -> str:
         width = 8 if self._extended else 3
         return f'request 0x{self._request_id:0{width}X}, response 0x{self._response_id:0{width}X}'
@@ -100,6 +141,8 @@ class GmlanController(QObject):
             response = parse_can_id(response_id, extended)
         except ValueError as e:
             return str(e)
+        if (request, response, extended) != (self._request_id, self._response_id, self._extended):
+            self._reset_state()  # Another ECU
         self._request_id, self._response_id, self._extended = request, response, extended
         self.changed.emit()
         return ''
@@ -145,9 +188,13 @@ class GmlanController(QObject):
             self._busy = False
             self.changed.emit()
 
-    def _service(self, request: bytes, describe: Callable[[bytes], str]) -> str:
+    def _service(
+        self, request: bytes, describe: Callable[[bytes], str], on_success: Optional[Callable[[], None]] = None
+    ) -> str:
         async def operation(client: GmlanClient):
             response = await client.call(request)
+            if on_success is not None:
+                on_success()
             return response, describe(response), True
 
         return self._start(request, operation)
@@ -174,15 +221,22 @@ class GmlanController(QObject):
     @pyqtSlot(int, result=str)
     def initiate_operation(self, level: int) -> str:
         name = DIAGNOSTIC_OPERATIONS.get(level, hex(level))
-        return self._service(bytes([0x10, level]), lambda _: f'InitiateDiagnosticOperation: {name}')
+
+        def initiated():
+            self._operation = name
+
+        return self._service(bytes([0x10, level]), lambda _: f'InitiateDiagnosticOperation: {name}', initiated)
 
     @pyqtSlot(result=str)
     def return_to_normal(self) -> str:
-        return self._service(bytes([0x20]), lambda _: 'Returned to normal mode')
+        return self._service(bytes([0x20]), lambda _: 'Returned to normal mode', self._reset_state)
 
     @pyqtSlot(result=str)
     def disable_normal_communication(self) -> str:
-        return self._service(bytes([0x28]), lambda _: 'Normal communication disabled')
+        def disabled():
+            self._communication_disabled = True
+
+        return self._service(bytes([0x28]), lambda _: 'Normal communication disabled', disabled)
 
     @pyqtSlot(result=str)
     def report_programmed_state(self) -> str:
@@ -216,6 +270,18 @@ class GmlanController(QObject):
         self._key_file = url.toLocalFile() if url.isLocalFile() else url.toString()
         self.changed.emit()
 
+    @pyqtSlot(str)
+    def set_key_entry(self, name: str):
+        """Use a seed/key algorithm kept in the Security Manager's key store."""
+        self._key_file = KEYSTORE_PREFIX + name
+        self.changed.emit()
+
+    @pyqtSlot(str)
+    def set_key_source(self, source: str):
+        """Use a key source: 'keystore:<entry>', 'profile:<name>' (a security profile) or a file path."""
+        self._key_file = source
+        self.changed.emit()
+
     @pyqtSlot(str, result=str)
     def security_access(self, level: str) -> str:
         try:
@@ -227,12 +293,13 @@ class GmlanController(QObject):
         if not self._key_file:
             return 'Choose a key file first'
         try:
-            compute_key = load_key_function(self._key_file)
+            compute_key = load_key_source(self._key_file)
         except Exception as e:
             return f'Could not load the key file: {e}'
 
         async def operation(client: GmlanClient):
             unlocked = await client.security_access(value, compute_key)
+            self._unlocked_level = value
             return b'', f'Security level {value} unlocked' if unlocked else f'Level {value} was already unlocked', True
 
         return self._start(bytes([0x27, value]), operation)

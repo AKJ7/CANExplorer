@@ -1,3 +1,4 @@
+import weakref
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Protocol, Tuple
@@ -6,7 +7,9 @@ import can
 import cantools
 
 from can_explorer.core.database_io import READ_SUFFIXES, load_database
+from can_explorer.core.e2e_check import E2eConfig, e2e_config_of
 from can_explorer.core.frames import Frame
+from can_explorer.core.secoc_check import SecOcCheck, SecOcConfig, SecOcError, SecOcVerifier, secoc_config_of
 from can_explorer.sys.log_handler import get_logger
 
 logger = get_logger(__name__)
@@ -31,6 +34,24 @@ class SignalInfo:
     @property
     def key(self) -> str:
         return f'{self.message}.{self.signal}'
+
+
+def contained_parts(definition, data: bytes) -> List[Tuple[object, bytes]]:
+    """(contained message, its bytes) of a container frame, for the contained PDUs the database knows."""
+    try:
+        parts = definition.unpack_container(bytes(data), allow_truncated=True)
+    except Exception:  # noqa: BLE001 - a malformed container: nothing to check
+        return []
+    return [(contained, bytes(raw)) for contained, raw in parts if not isinstance(contained, int)]
+
+
+def _with_contained(messages) -> List[object]:
+    """The messages and the PDUs contained in container messages."""
+    result = []
+    for message in messages:
+        result.append(message)
+        result.extend(message.contained_messages or [])
+    return result
 
 
 class DbcDecoder:
@@ -153,8 +174,34 @@ class DbcDecoder:
             )
             texts.append(f'{name}: {signals}' if signals else name)
         if definition.is_container:
+            # AUTOSAR E2E protection of the contained PDUs (a container itself is never protected)
+            checks = {}
+            for contained, raw in contained_parts(definition, msg.data):
+                if contained.name not in checks and (e2e := e2e_config_of(contained)) is not None:
+                    checks[contained.name] = e2e.describe(raw)
+            texts = [
+                f'{text} [{checks[name]}]' if name in checks else text
+                for text, (name, _values) in zip(texts, parts, strict=True)
+            ]
             return f'{definition.name} [{"; ".join(texts)}]'
+        # AUTOSAR E2E protection from an ARXML
+        if (e2e := e2e_config_of(definition)) is not None:
+            return f'{texts[0]} [{e2e.describe(msg.data)}]'
         return texts[0]
+
+    def e2e_protected(self) -> List[Tuple[str, E2eConfig]]:
+        """The messages with an AUTOSAR E2E protection (from an ARXML), with their configuration."""
+        return [
+            (message.name, config)
+            for message in _with_contained(self.messages())
+            if (config := e2e_config_of(message)) is not None
+        ]
+
+    def secoc_protected(self) -> List[SecOcConfig]:
+        """The secured PDUs (AUTOSAR SecOC, from an ARXML) with their configuration."""
+        return [
+            config for message in _with_contained(self.messages()) if (config := secoc_config_of(message)) is not None
+        ]
 
 
 class FrameDecoder:
@@ -164,19 +211,61 @@ class FrameDecoder:
     The database is stateless, so frames are only decoded with it when displayed, and the result is cached.
     """
 
-    def __init__(self, protocol: Optional[ProtocolDecoder] = None, database: Optional[DbcDecoder] = None):
+    def __init__(
+        self,
+        protocol: Optional[ProtocolDecoder] = None,
+        database: Optional[DbcDecoder] = None,
+        secoc: Optional[SecOcVerifier] = None,
+    ):
         self.protocol = protocol
         self._database = database
         self._generation = 0
+        # SecOC checks of secured PDUs, run on arrival (the freshness values follow the frame order)
+        self.secoc = secoc
+        self._secured: Dict[Tuple[int, bool], SecOcConfig] = self._secured_pdus(database)
+        self._secured_containers = self._containers_with_secured_pdus(database)
+        # The SecOC check of each frame still referenced elsewhere (e.g. by a test step waiting for it)
+        self._secoc_results: 'weakref.WeakKeyDictionary[can.Message, SecOcCheck]' = weakref.WeakKeyDictionary()
+
+    @staticmethod
+    def _containers_with_secured_pdus(database) -> Dict[Tuple[int, bool], object]:
+        """The container messages carrying secured PDUs, by identifier."""
+        if not hasattr(database, 'secoc_protected'):
+            return {}
+        return {
+            (message.frame_id, message.is_extended_frame): message
+            for message in database.messages()
+            if message.is_container and any(secoc_config_of(part) for part in message.contained_messages or [])
+        }
+
+    @staticmethod
+    def _secured_pdus(database) -> Dict[Tuple[int, bool], SecOcConfig]:
+        if not hasattr(database, 'secoc_protected'):  # SecOC is configured in ARXML (DbcDecoder) only
+            return {}
+        secured = {}
+        for message in database.messages():
+            config = secoc_config_of(message)
+            if config is not None:
+                secured.setdefault((message.frame_id, message.is_extended_frame), config)
+        return secured
 
     @property
     def database(self) -> Optional[DbcDecoder]:
         return self._database
 
+    @property
+    def secured_pdus(self) -> Dict[Tuple[int, bool], SecOcConfig]:
+        """The SecOC configuration of the secured PDUs of the database (an ARXML), by identifier."""
+        return dict(self._secured)
+
     @database.setter
     def database(self, database: Optional[DbcDecoder]) -> None:
         self._database = database
         self._generation += 1  # Invalidates the descriptions cached in the frames
+        self._secured = self._secured_pdus(database)
+        self._secured_containers = self._containers_with_secured_pdus(database)
+        if self.secoc is not None:
+            self.secoc.reset()
 
     def describe(self, msg: can.Message) -> str:
         """Protocol description of a frame, called once per frame in arrival order.
@@ -187,13 +276,55 @@ class FrameDecoder:
             from can_explorer.core.bushealth import decode_error_frame
 
             return decode_error_frame(msg).describe()
-        if self.protocol is None:
-            return ''
-        try:
-            return self.protocol.describe(msg) or ''
-        except Exception as e:
-            logger.debug(f'Decoder {self.protocol} failed on {msg}: {e}')
-            return ''
+        text = ''
+        if self.protocol is not None:
+            try:
+                text = self.protocol.describe(msg) or ''
+            except Exception as e:
+                logger.debug(f'Decoder {self.protocol} failed on {msg}: {e}')
+        if self.secoc is not None and not msg.is_remote_frame:
+            key = (msg.arbitration_id, msg.is_extended_id)
+            config = self._secured.get(key)
+            if config is not None:
+                result = self.secoc.check(config, bytes(msg.data))
+                self._secoc_results[msg] = result
+                check = f'[{result.describe()}]'
+                text = f'{text} {check}' if text else check
+            elif key in self._secured_containers:  # Secured PDUs inside a container frame
+                checks = []
+                for contained, raw in contained_parts(self._secured_containers[key], msg.data):
+                    contained_config = secoc_config_of(contained)
+                    if contained_config is None:
+                        continue
+                    result = self.secoc.check(contained_config, raw)
+                    if msg not in self._secoc_results or self._secoc_results[msg].ok:
+                        self._secoc_results[msg] = result  # The first failure counts for the frame
+                    checks.append(f'{contained.name}: {result.describe()}')
+                if checks:
+                    check = f'[{"; ".join(checks)}]'
+                    text = f'{text} {check}' if text else check
+        return text
+
+    def secoc_result(self, msg: can.Message) -> Optional[SecOcCheck]:
+        """The SecOC check of a received frame (None for frames of no secured PDU, or without a verifier)."""
+        return self._secoc_results.get(msg)
+
+    def secured_config(self, arbitration_id: int, is_extended_id: bool) -> Optional[SecOcConfig]:
+        """The SecOC configuration of a secured PDU of the database with this identifier, if any."""
+        return self._secured.get((arbitration_id, is_extended_id))
+
+    def secure(self, msg: can.Message) -> can.Message:
+        """`msg` with its payload secured (new freshness value and MAC) when it is a secured PDU of the database;
+        other frames are returned unchanged. Raises SecOcError without a key or a usable configuration."""
+        config = self._secured.get((msg.arbitration_id, msg.is_extended_id))
+        if config is None or msg.is_remote_frame:
+            return msg
+        if self.secoc is None:
+            raise SecOcError(f'Cannot secure {config.pdu}: no security manager')
+        data = self.secoc.secure(config, bytes(msg.data))
+        msg.data = bytearray(data)
+        msg.dlc = len(data)
+        return msg
 
     def full_description(self, frame: Frame) -> str:
         """Protocol and signal database description of a frame, for display."""
@@ -217,6 +348,8 @@ class FrameDecoder:
     def reset(self) -> None:
         if self.protocol is not None:
             self.protocol.reset()
+        if self.secoc is not None:
+            self.secoc.reset()
 
 
 def open_signal_database(path: str | Path):

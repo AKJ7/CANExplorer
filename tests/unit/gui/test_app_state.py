@@ -36,6 +36,19 @@ def test_preferences_are_clamped(state):
     assert state.max_trace_rows == 1_000 and state.refresh_interval_ms == 1_000
 
 
+def test_trace_time_format_persists(state, tmp_path):
+    changes = []
+    state.preferences_changed.connect(lambda: changes.append(True))
+    assert state.trace_time_format == 'relative'
+    state.set_trace_time_format('unix')
+    state.set_trace_time_format('unix')  # No change, no signal
+    assert changes == [True]
+    reloaded = AppState(QSettings(str(tmp_path / 'settings.ini'), QSettings.Format.IniFormat))
+    assert reloaded.trace_time_format == 'unix'
+    reloaded.set_trace_time_format('bogus')
+    assert reloaded.trace_time_format == 'relative'
+
+
 def test_window_geometry(state):
     assert state.window_geometry() == []
     state.save_window_geometry(10, 20, 800, 600)
@@ -57,6 +70,21 @@ def test_theme(state, tmp_path):
     state.set_theme('Unknown')
     reloaded = AppState(QSettings(str(tmp_path / 'settings.ini'), QSettings.Format.IniFormat))
     assert reloaded.theme == 'Nord'
+
+
+def test_system_theme_is_offered_first_and_persists(state, tmp_path):
+    assert state.themes[0] == 'System' and state.themes[1:] == sorted(state.themes[1:], key=str.casefold)
+    state.set_theme('System')
+    reloaded = AppState(QSettings(str(tmp_path / 'settings.ini'), QSettings.Format.IniFormat))
+    assert reloaded.theme == 'System'
+
+
+def test_system_light_and_dark_themes(state, tmp_path):
+    assert (state.system_light_theme, state.system_dark_theme) == ('Light', 'Dark')
+    state.set_system_themes('Solarized Light', 'Gruvbox Dark')
+    state.set_system_themes('System', 'Unknown')  # Neither is a palette: both ignored
+    reloaded = AppState(QSettings(str(tmp_path / 'settings.ini'), QSettings.Format.IniFormat))
+    assert (reloaded.system_light_theme, reloaded.system_dark_theme) == ('Solarized Light', 'Gruvbox Dark')
 
 
 def test_spirit_easter_egg(state, tmp_path):

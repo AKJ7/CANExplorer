@@ -12,6 +12,7 @@ from can_explorer.core.uds import (
     DATA_IDENTIFIERS,
     RESET_TYPES,
     ROUTINE_CONTROL_TYPES,
+    KEYSTORE_PREFIX,
     SESSIONS,
     SessionKeepAlive,
     UdsClient,
@@ -20,8 +21,11 @@ from can_explorer.core.uds import (
     describe_response,
     did_name,
     format_did_value,
-    load_key_function,
+    load_key_source,
 )
+from can_explorer.core import audit, keystore, uds_auth
+from can_explorer.core.uds_auth import UdsAuthenticationError
+from can_explorer.core.uds_security_test import SecurityTestError
 from can_explorer.sys.log_handler import get_logger
 
 logger = get_logger(__name__)
@@ -56,6 +60,7 @@ class DiagnosticsController(QObject):
         self._history: List[Dict[str, Any]] = []
         self._dtcs: List[Dict[str, str]] = []
         self._key_file = ''
+        self._authenticated = False
         self._description: Optional[DiagnosticDescription] = None
         self._keep_alive: Optional[SessionKeepAlive] = None
         self._keep_alive_transport = None
@@ -250,7 +255,7 @@ class DiagnosticsController(QObject):
         try:
             response, description, positive = await operation(UdsClient(transport))
             self._record(request, response, description, positive, error=False)
-        except UdsError as e:
+        except (UdsError, UdsAuthenticationError, SecurityTestError) as e:
             self._record(request, None, str(e), positive=False, error=True)
         except Exception as e:  # Transport errors
             logger.warning(f'Diagnostic request failed: {e}')
@@ -324,12 +329,24 @@ class DiagnosticsController(QObject):
         self._key_file = url.toLocalFile() if url.isLocalFile() else url.toString()
         self.changed.emit()
 
+    @pyqtSlot(str)
+    def set_key_entry(self, name: str):
+        """Use a seed/key algorithm kept in the Security Manager's key store."""
+        self._key_file = KEYSTORE_PREFIX + name
+        self.changed.emit()
+
+    @pyqtSlot(str)
+    def set_key_source(self, source: str):
+        """Use a seed/key key source: 'keystore:<entry>', 'profile:<name>' (a security profile) or a file path."""
+        self._key_file = source
+        self.changed.emit()
+
     @pyqtSlot(int, result=str)
     def security_access(self, level: int) -> str:
         if not self._key_file:
-            return 'Choose a key file defining compute_key(level, seed)'
+            return 'Choose a key algorithm: a file defining compute_key(level, seed), or one in the Security Manager'
         try:
-            compute_key = load_key_function(self._key_file)
+            compute_key = load_key_source(self._key_file)
         except UdsError as e:
             return str(e)
 
@@ -339,6 +356,122 @@ class DiagnosticsController(QObject):
             return None, text, True
 
         return self._start(bytes([0x27, level]), operation)
+
+    # Security access testing
+
+    @pyqtSlot(int, int, str, result=str)
+    def analyse_seeds(self, level: int, count: int, between: str) -> str:
+        """Request `count` seeds of a level and report weaknesses (repeats, constant bytes, predictable steps)."""
+
+        async def operation(client: UdsClient):
+            report = await client.seed_analysis(level, count, between)
+            return None, report.describe(), not report.weak
+
+        return self._start(bytes([0x27, level]), operation)
+
+    @pyqtSlot(int, int, bool, result=str)
+    def test_lockout(self, level: int, max_attempts: int, test_reset: bool) -> str:
+        """Send wrong keys until the ECU locks out, and check the delay (and whether a reset ends it)."""
+
+        async def operation(client: UdsClient):
+            report = await client.lockout_test(level, max_attempts, test_reset=test_reset)
+            good = (
+                report.locked_after is not None and bool(report.delay_enforced) and report.survives_reset is not False
+            )
+            return None, report.describe(), good
+
+        return self._start(bytes([0x27, level]), operation)
+
+    # Authentication (0x29)
+
+    @pyqtProperty('QVariantList', constant=True)
+    def signature_schemes(self) -> List[Dict[str, str]]:
+        return [{'value': key, 'name': name} for key, name in uds_auth.SIGNATURE_SCHEMES.items()]
+
+    @pyqtSlot('QVariantMap', result=str)
+    def authenticate(self, options: Dict[str, Any]) -> str:
+        """Authentication by certificate exchange. Options: certificate (a client certificate entry of the
+        Security Manager, or 'profile:<name>'), scheme (proof-of-ownership signature), bidirectional, trusted (a trusted-certificates
+        entry, checking the ECU's certificate). Returns an error, or ''."""
+        store = keystore.default_store()
+        try:
+            # A key store entry, or 'profile:<name>': a security profile's certificate, signing with its key
+            certificate, private_key = uds_auth.credentials(store, str(options.get('certificate') or ''))
+            trusted = options.get('trusted') or ''
+            trusted_certificates = uds_auth.trusted_certificates(store, str(trusted)) if trusted else []
+            scheme = str(options.get('scheme') or uds_auth.scheme_for(certificate.public_key()))
+            uds_auth.check_scheme(scheme, certificate.public_key())
+        except uds_auth.UdsAuthenticationError as e:
+            return str(e)
+        bidirectional = bool(options.get('bidirectional', False))
+        task = (
+            uds_auth.VERIFY_CERTIFICATE_BIDIRECTIONAL if bidirectional else uds_auth.VERIFY_CERTIFICATE_UNIDIRECTIONAL
+        )
+
+        async def operation(client: UdsClient):
+            self._authenticated = False  # The ECU ends an authentication when a new one starts
+            result = await client.authenticate(
+                certificate, private_key, scheme, bidirectional, trusted_certificates, store.revocation_lists()
+            )
+            self._authenticated = result.authenticated
+            audit.record(
+                'uds authentication', certificate=options.get('certificate'), authenticated=result.authenticated
+            )
+            return None, result.description, result.authenticated
+
+        return self._start(bytes([uds_auth.SID, task]), operation)
+
+    @pyqtSlot('QVariantMap', result=str)
+    def authenticate_challenge_response(self, options: Dict[str, Any]) -> str:
+        """Authentication by challenge-response (0x05, then 0x06 or 0x07). Options: source (a shared key or client
+        certificate entry of the Security Manager, or 'profile:<name>'), scheme (for signatures), bidirectional,
+        trusted (a trusted-certificates entry checking the ECU's proof), algorithm (the algorithmIndicator: hex or
+        a dotted OID), additional (the additional parameter, hex). Returns an error, or ''."""
+        store = keystore.default_store()
+        source = str(options.get('source') or '')
+        bidirectional = bool(options.get('bidirectional', False))
+        try:
+            prove, verify_server, how = uds_auth.challenge_response_credentials(
+                store, source, str(options.get('scheme') or ''), str(options.get('trusted') or '')
+            )
+            indicator = uds_auth.algorithm_indicator(str(options.get('algorithm') or ''))
+            additional = parse_hex_bytes(str(options.get('additional') or ''))
+        except (uds_auth.UdsAuthenticationError, ValueError) as e:
+            return str(e)
+
+        async def operation(client: UdsClient):
+            self._authenticated = False  # The ECU ends an authentication when a new one starts
+            result = await client.authenticate_challenge_response(
+                prove, bidirectional, verify_server, indicator=indicator, additional_parameter=additional
+            )
+            self._authenticated = result.authenticated
+            audit.record(
+                'uds authentication', source=source, method='challenge-response', authenticated=result.authenticated
+            )
+            return None, f'{result.description} (proof: {how})', result.authenticated
+
+        return self._start(bytes([uds_auth.SID, uds_auth.REQUEST_CHALLENGE_FOR_AUTHENTICATION]), operation)
+
+    @pyqtSlot(result=str)
+    def deauthenticate(self) -> str:
+        async def operation(client: UdsClient):
+            text = await client.deauthenticate()
+            self._authenticated = False
+            return None, f'deAuthenticate: {text}', True
+
+        return self._start(bytes([uds_auth.SID, uds_auth.DE_AUTHENTICATE]), operation)
+
+    @pyqtSlot(result=str)
+    def authentication_configuration(self) -> str:
+        async def operation(client: UdsClient):
+            return None, f'authenticationConfiguration: {await uds_auth.authentication_configuration(client)}', True
+
+        return self._start(bytes([uds_auth.SID, uds_auth.AUTHENTICATION_CONFIGURATION]), operation)
+
+    @pyqtProperty(bool, notify=changed)
+    def authenticated(self) -> bool:
+        """Whether the last authentication on this connection completed (and was not ended since)."""
+        return self._authenticated
 
     @pyqtSlot(str, result=str)
     def read_dtcs(self, status_mask: str) -> str:

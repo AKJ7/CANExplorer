@@ -9,6 +9,7 @@ simulated DoIP entity.
 """
 
 import asyncio
+import random
 import socket
 import ssl
 import struct
@@ -35,7 +36,8 @@ CONTROL_TIMEOUT = 2.0
 # A_DoIP_Diagnostic_Message: the acknowledgement of a diagnostic message
 DIAGNOSTIC_ACK_TIMEOUT = 2.0
 DISCOVERY_TIMEOUT = 2.0
-SIMULATOR_PORT_ATTEMPTS = 20  # Free ports tried by the simulated entity before giving up
+SIMULATOR_PORT_ATTEMPTS = 50  # Free ports tried by the simulated entity before giving up
+SIMULATOR_RETRY_PORTS = (10000, 60999)  # Where the retries pick ports at random
 
 # Payload types
 GENERIC_NACK = 0x0000
@@ -693,6 +695,7 @@ class DoipEntitySimulator:
         max_sockets: int = 2,
         activation_types: Tuple[int, ...] = (0x00, 0x01),
         response_delay: float = 0.05,
+        tls: Optional[ssl.SSLContext] = None,
     ):
         """
         Args:
@@ -703,6 +706,7 @@ class DoipEntitySimulator:
             max_sockets: TCP connections served at the same time.
             activation_types: Routing activation types accepted.
             response_delay: Seconds between a 'response pending' and the next response.
+            tls: A server SSLContext to serve the TCP connections over TLS (as on the DoIP TLS port).
         """
         if targets is None:
             from can_explorer.core.simulation import UdsServer
@@ -714,6 +718,7 @@ class DoipEntitySimulator:
         self.max_sockets = max_sockets
         self.activation_types = activation_types
         self.response_delay = response_delay
+        self.tls = tls
         self.power_mode = 0x01
         self.connections = 0
         self.diagnostic_messages: List[Tuple[int, int, bytes]] = []
@@ -730,18 +735,22 @@ class DoipEntitySimulator:
     async def start(self) -> None:
         loop = asyncio.get_running_loop()
         # Port 0: the OS picks a free TCP port, but the same number may be taken or reserved for UDP (Windows
-        # excludes port ranges per protocol: WinError 10013), so pick another until both bind
+        # excludes port ranges per protocol: WinError 10013). The OS hands out neighbouring ports, which may all
+        # lie in one excluded block, so the retries pick ports at random until both TCP and UDP bind
         attempts = SIMULATOR_PORT_ATTEMPTS if self.port == 0 else 1
         for attempt in range(attempts):
-            server = await asyncio.start_server(self._serve, self.host, self.port)
-            port = server.sockets[0].getsockname()[1]
+            requested = self.port if attempt == 0 else random.randint(*SIMULATOR_RETRY_PORTS)
+            server = None
             try:
+                server = await asyncio.start_server(self._serve, self.host, requested, ssl=self.tls)
+                port = server.sockets[0].getsockname()[1]
                 self._udp, _ = await loop.create_datagram_endpoint(
                     lambda: _SimulatorUdp(self), local_addr=(self.host, port)
                 )
             except OSError:
-                server.close()
-                await server.wait_closed()
+                if server is not None:
+                    server.close()
+                    await server.wait_closed()
                 if attempt == attempts - 1:
                     raise
                 continue

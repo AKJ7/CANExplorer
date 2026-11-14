@@ -1,9 +1,15 @@
 """Editing CAN signal databases (DBC, DBF, KCD, SYM; ARXML is read and saved in one of the others).
 
-The database is a cantools Database; the editor changes its messages, signals and nodes in place, checks the
-result and saves it in the format of the file extension.
+The database is a cantools Database; the editor changes its messages, signals and nodes, checks the result and
+saves it in the format of the file extension.
+
+Edits are undoable (core/edit_history.py). A message is never changed in place: before its first change in an edit
+step it is replaced by a copy (`_writable`), so the message objects referenced by earlier states stay as they were,
+and a state is just the lists of message and node objects. A step costs a copy of the messages it changes, not of
+the database (a full copy takes about a second for a database of 1500 messages).
 """
 
+import copy
 import re
 from collections import OrderedDict
 from contextlib import contextmanager
@@ -13,6 +19,7 @@ from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
 from cantools.database.can import Database, Message, Node, Signal
 
 from can_explorer.core.database_io import WRITE_SUFFIXES, DatabaseFormatError, load_database, save_database
+from can_explorer.core.edit_history import UndoableEditor
 
 MAX_STANDARD_ID = 0x7FF
 MAX_EXTENDED_ID = 0x1FFFFFFF
@@ -84,11 +91,48 @@ def _mux_ids(value: Any) -> Optional[List[int]]:
     return ids or None
 
 
-class DatabaseEditor:
+def _fingerprint(message: Message) -> Tuple:
+    """What the editor can change in a message: equal fingerprints mean an edit changed nothing."""
+    signals = tuple(
+        (
+            signal.name,
+            signal.start,
+            signal.length,
+            signal.byte_order,
+            signal.is_signed,
+            signal.scale,
+            signal.offset,
+            signal.minimum,
+            signal.maximum,
+            signal.unit,
+            signal.raw_initial,
+            tuple(signal.receivers),
+            repr(signal.comments),
+            tuple((signal.choices or {}).items()),
+            signal.is_multiplexer,
+            tuple(signal.multiplexer_ids or ()),
+            signal.multiplexer_signal,
+        )
+        for signal in message.signals
+    )
+    return (
+        message.name,
+        message.frame_id,
+        message.is_extended_frame,
+        message.is_fd,
+        message.length,
+        message.cycle_time,
+        tuple(message.senders),
+        repr(message.comments),
+        signals,
+    )
+
+
+class DatabaseEditor(UndoableEditor):
     def __init__(self, path: Optional[str | Path] = None):
         self.path: Optional[Path] = None
         self.warnings: List[str] = []
-        self.dirty = False
+        self._fresh: set = set()  # ids of the message copies private to the current edit step (changed in place)
         self._defer = 0  # >0 while a deferred() block batches changes and holds back validation
         self._deferred: set = set()  # Messages touched inside a deferred() block, to validate when it ends
         if path is None:
@@ -96,6 +140,52 @@ class DatabaseEditor:
         else:
             self.path = Path(path)
             self.database, self.warnings = load_database(self.path)
+        self._init_history()
+
+    # Undo (see core/edit_history.py)
+
+    def _capture(self) -> Tuple[Tuple[Message, ...], Tuple[Node, ...]]:
+        return tuple(self.database.messages), tuple(self.database.nodes)
+
+    def _restore(self, state) -> None:
+        messages, nodes = state
+        self.database.messages[:] = messages
+        self.database.nodes[:] = nodes
+        self._fresh = set()  # The restored objects belong to recorded states: the next change copies them
+
+    def _same(self, first, second) -> bool:
+        (first_messages, first_nodes), (second_messages, second_nodes) = first, second
+        if len(first_messages) != len(second_messages) or len(first_nodes) != len(second_nodes):
+            return False
+        if any(a is not b and a.name != b.name for a, b in zip(first_nodes, second_nodes, strict=True)):
+            return False
+        return all(
+            a is b or _fingerprint(a) == _fingerprint(b) for a, b in zip(first_messages, second_messages, strict=True)
+        )
+
+    def _begin_step(self) -> None:
+        self._fresh = set()
+
+    def changed_message(self, first, second) -> Optional[str]:
+        """The name of a message that differs between two states (preferably as in `second`), to select it."""
+        names_first = {message.name for message in first[0]}
+        for a, b in zip(first[0], second[0], strict=False):  # A message may have been added or removed
+            if a is not b and _fingerprint(a) != _fingerprint(b):
+                return b.name
+        added = [message.name for message in second[0] if message.name not in names_first]
+        if added:
+            return added[0]
+        return None
+
+    def _writable(self, message: Message) -> Message:
+        """The message to change: a copy replacing it, unless it is already this step's own copy."""
+        if id(message) in self._fresh:
+            return message
+        index = next(i for i, candidate in enumerate(self.database.messages) if candidate is message)
+        duplicate = copy.deepcopy(message)
+        self.database.messages[index] = duplicate
+        self._fresh.add(id(duplicate))
+        return duplicate
 
     # Files
 
@@ -114,7 +204,8 @@ class DatabaseEditor:
                 f'Cannot write {target.suffix or "files without extension"}; use {", ".join(WRITE_SUFFIXES)}'
             )
         warnings = save_database(self.database, target)
-        self.path, self.dirty = target, False
+        self.path = target
+        self._mark_saved()
         return warnings
 
     # Lookup
@@ -146,7 +237,6 @@ class DatabaseEditor:
         # database.refresh() is O(number of messages) and was run on every edit, which froze the UI on large
         # databases. The editor does not use cantools' name/frame-id lookup dictionaries, so they need not be
         # rebuilt here; a loaded database validates non-strictly (overlaps become issues), a new one strictly.
-        self.dirty = True
         if message is None:
             return
         if self._defer:  # Inside a deferred() block: validate once when it ends, not on every step
@@ -198,6 +288,7 @@ class DatabaseEditor:
         self._check_frame_id(frame_id, extended)
         message = Message(frame_id, name, 8, [], is_extended_frame=extended, strict=False)
         self.database.messages.append(message)
+        self._fresh.add(id(message))
         self._changed(message)
         return name
 
@@ -210,7 +301,7 @@ class DatabaseEditor:
     def update_message(self, message_name: str, **fields: Any) -> str:
         """Change message properties: name, frame_id, is_extended_frame, is_fd, length, cycle_time, senders,
         comment. Returns the (possibly new) name."""
-        message = self.message(message_name)
+        message = self._writable(self.message(message_name))
         new_name = self._check_name(fields['name'], 'Message') if 'name' in fields else message.name
         if new_name != message.name and any(other.name == new_name for other in self.database.messages):
             raise EditError(f'A message named {new_name} exists already')
@@ -242,9 +333,79 @@ class DatabaseEditor:
         self.database.messages.remove(self.message(name))
         self._changed()
 
+    def _copy_name(self, base: str, taken: Iterable[str]) -> str:
+        """A free name for a copy: Speed -> Speed_copy, Speed_copy2, ..."""
+        taken = set(taken)
+        name, index = f'{base}_copy', 2
+        while name in taken:
+            name, index = f'{base}_copy{index}', index + 1
+        return name
+
+    def duplicate_message(self, name: str) -> str:
+        """Add a copy of a message, with its signals, under a new name and the next free identifier after the
+        original; it is placed after the original. Returns the copy's name."""
+        original = self.message(name)
+        duplicate = copy.deepcopy(original)
+        duplicate.name = self._copy_name(original.name, (message.name for message in self.database.messages))
+        used = {m.frame_id for m in self.database.messages if m.is_extended_frame == original.is_extended_frame}
+        maximum = MAX_EXTENDED_ID if original.is_extended_frame else MAX_STANDARD_ID
+        frame_id = original.frame_id + 1
+        while frame_id in used and frame_id <= maximum:
+            frame_id += 1
+        if frame_id > maximum:
+            frame_id = self._free_frame_id(original.is_extended_frame)
+        duplicate.frame_id = frame_id
+        index = next(i for i, message in enumerate(self.database.messages) if message is original)
+        self.database.messages.insert(index + 1, duplicate)
+        self._fresh.add(id(duplicate))
+        self._changed(duplicate)
+        return duplicate.name
+
+    def _free_start(self, message: Message, signal: Signal) -> Optional[int]:
+        """The first start bit at which `signal` (as laid out by its byte order) fits into the free bits of
+        `message`, or None."""
+        used = {bit for other in message.signals for bit in signal_bits(other)}
+        size = message.length * 8
+        probe = copy.copy(signal)
+        for start in range(size):
+            probe.start = start
+            bits = signal_bits(probe)
+            if all(0 <= bit < size and bit not in used for bit in bits):
+                return start
+        return None
+
+    def copy_signal(self, source_message: str, signal_name: str, target_message: Optional[str] = None) -> str:
+        """Copy a signal into `target_message` (default: its own message); see add_signal_copy."""
+        return self.add_signal_copy(target_message or source_message, self.signal(source_message, signal_name))
+
+    def add_signal_copy(self, target_message: str, signal: Signal) -> str:
+        """Add a copy of `signal` (from any message, e.g. one copied earlier) to a message; returns the copy's name.
+        It keeps its name when that is free in the target (else Name_copy), and goes to the first free bits where it
+        fits (or stays at its start bit, overlapping, when nothing is free). Multiplexing is kept only where it still
+        makes sense: a multiplexed copy needs a switch of the same name in the target, and a second switch becomes a
+        plain signal."""
+        target = self._writable(self.message(target_message))
+        duplicate = copy.deepcopy(signal)
+        names = [other.name for other in target.signals]
+        if duplicate.name in names:
+            duplicate.name = self._copy_name(signal.name, names)
+        start = self._free_start(target, duplicate)
+        if start is not None:
+            duplicate.start = start
+        switches = [other.name for other in target.signals if other.is_multiplexer]
+        if duplicate.is_multiplexer and switches:
+            duplicate.is_multiplexer = False
+        if duplicate.multiplexer_ids and duplicate.multiplexer_signal not in switches:
+            duplicate.multiplexer_ids, duplicate.multiplexer_signal = None, None
+        target.signals.append(duplicate)
+        target.signals.sort(key=lambda candidate: candidate.start)
+        self._add_nodes(duplicate.receivers)
+        self._changed(target)
+        return duplicate.name
+
     def add_signal(self, message_name: str, name: Optional[str] = None) -> str:
         """Add an 8 bit signal at the first free byte (or bit 0 when the message is full)."""
-        message = self.message(message_name)
+        message = self._writable(self.message(message_name))
         existing = {signal.name for signal in message.signals}
         if name:
             name = self._check_name(name, 'Signal')
@@ -265,7 +426,7 @@ class DatabaseEditor:
         """Change signal properties: name, start, length, byte_order, is_signed, scale, offset, minimum, maximum,
         unit, initial, receivers, comment, choices (dict or text) and the multiplexing (is_multiplexer,
         multiplexer_ids, multiplexer_signal). Returns the (possibly new) name."""
-        message = self.message(message_name)
+        message = self._writable(self.message(message_name))
         signal = self.signal(message_name, signal_name)
         new_name = self._check_name(fields['name'], 'Signal') if 'name' in fields else signal.name
         if new_name != signal.name and any(other.name == new_name for other in message.signals):
@@ -365,8 +526,9 @@ class DatabaseEditor:
         return False, multiplexer_ids, multiplexer_signal
 
     def remove_signal(self, message_name: str, signal_name: str) -> None:
-        message = self.message(message_name)
-        message.signals.remove(self.signal(message_name, signal_name))
+        signal = self.signal(message_name, signal_name)
+        message = self._writable(self.message(message_name))
+        message.signals.remove(next(candidate for candidate in message.signals if candidate.name == signal.name))
         self._changed(message)
 
     def _add_nodes(self, names: Iterable[str]) -> None:
@@ -389,7 +551,10 @@ class DatabaseEditor:
         if node is None:
             raise EditError(f'No node {name!r}')
         self.database.nodes.remove(node)
-        for message in self.database.messages:
+        for message in list(self.database.messages):
+            if name not in message.senders and not any(name in signal.receivers for signal in message.signals):
+                continue
+            message = self._writable(message)
             if name in message.senders:
                 message.senders.remove(name)
             for signal in message.signals:

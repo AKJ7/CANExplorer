@@ -6,7 +6,7 @@ import can
 import pytest
 
 from can_explorer.core.decoding import open_signal_database
-from can_explorer.core.reverse.analysis import analyse, analyse_all, classify, collect
+from can_explorer.core.reverse.analysis import IdFrames, analyse, analyse_all, classify, collect
 from can_explorer.core.reverse.checksums import crc8, find_checksums, sae_j1850
 from can_explorer.core.reverse.fields import BitField
 from can_explorer.core.reverse.markers import Marker, find_marker_changes
@@ -18,6 +18,7 @@ from can_explorer.core.reverse.reference import (
     read_reference_csv,
     reference_from_signal,
 )
+from can_explorer.core.secoc_check import SecOcConfig
 from can_explorer.core.reverse.synthetic import Behaviour, discoverable, generate, score_fields
 
 FULL = Behaviour('sine', period=20, amplitude=0.95)
@@ -308,3 +309,76 @@ def test_markers_find_the_bits_of_an_action():
     assert best.transitions == ('0 → 1', '1 → 0') and best.background == 0
     assert all(match.field.frame_id != 0x200 for match in matches)  # Changes everywhere, not specific
     assert find_marker_changes(collect(frames), []) == []
+
+
+def _secured_frames(count, seed=7):
+    """Byte 0 a counter, bytes 1-2 a smooth value, bytes 3-6 a random MAC."""
+    rng = random.Random(seed)
+    frames = IdFrames((0x300, False))
+    for index in range(count):
+        value = int(1000 + 800 * math.sin(index / 40))
+        payload = bytes([index & 0xFF]) + value.to_bytes(2, 'little')
+        frames.times.append(index * 0.01)
+        frames.payloads.append(payload + rng.randbytes(4))
+    return frames
+
+
+def test_random_trailing_bytes_are_labelled_as_a_possible_mac():
+    result = analyse(_secured_frames(300))
+    kinds = {item.field.key: item.kind for item in result.fields}
+    assert kinds['300[31|32@0+]'] == 'random'  # Bytes 3-6, from the most significant bit of byte 3
+    random_field = next(item for item in result.fields if item.kind == 'random')
+    assert 'possibly a truncated MAC' in random_field.details and random_field.confidence < 1
+    assert 'counter' in kinds.values() and 'physical' in kinds.values()  # The rest is still analysed
+    assert not any(item.kind == 'random' for item in analyse(_secured_frames(60)).fields)  # Too few frames
+
+
+def test_smooth_and_counting_bytes_are_not_random():
+    frames = _secured_frames(300)
+    frames.payloads = [payload[:3] for payload in frames.payloads]
+    assert not any(item.kind == 'random' for item in analyse(frames).fields)
+
+
+def test_a_trailing_crc_stays_a_checksum():
+    rng = random.Random(3)
+    frames = IdFrames((0x310, False))
+    for index in range(300):
+        data = rng.randbytes(7)
+        frames.times.append(index * 0.01)
+        frames.payloads.append(data + bytes([sae_j1850(data)]))
+    result = analyse(frames)
+    assert any(item.kind == 'checksum' and item.field.start == 56 for item in result.fields)
+
+
+def test_secoc_fields_from_the_arxml_configuration():
+    # 3 bytes of payload, then 4 bits of freshness value and a 28 bit MAC, packed from the most significant bit
+    config = SecOcConfig('SecuredStatus', 0x12, 3, auth_tx_bits=28, freshness_bits=32, freshness_tx_bits=4)
+    frames = _secured_frames(40)  # Few frames: the ARXML needs no statistics
+    result = analyse(frames, secoc=config)
+    secured = {item.kind: item for item in result.fields if item.kind in ('freshness', 'mac')}
+    assert secured['freshness'].field.key == '300[31|4@0+]'
+    assert secured['mac'].field.key == '300[27|28@0+]'
+    assert 'SecuredStatus' in secured['mac'].details and secured['mac'].confidence == 1.0
+    assert not any(item.kind == 'random' for item in result.fields)
+    covered = [bit for item in result.fields for bit in item.field.bits]
+    assert len(covered) == len(set(covered))  # Nothing else claims the secured bits
+
+    # A MAC longer than 64 bits is split into fields of at most 64 bits; frames too short are left alone
+    long_mac = SecOcConfig('Long', 1, 1, auth_tx_bits=96, freshness_bits=8, freshness_tx_bits=0)
+    long_frames = IdFrames((0x320, False), [0.0] * 30, [bytes(range(13))] * 30)
+    lengths = [item.field.length for item in analyse(long_frames, secoc=long_mac).fields if item.kind == 'mac']
+    assert lengths == [64, 32]
+    assert analyse_all({(0x300, False): frames}, secured={(0x300, False): long_mac})[0].fields[0].kind != 'mac'
+
+
+def test_secured_pdus_of_an_arxml_reach_the_analysis(secoc_arxml):
+    from can_explorer.core.decoding import DbcDecoder, FrameDecoder
+
+    secured = FrameDecoder(None, DbcDecoder(secoc_arxml)).secured_pdus
+    assert list(secured) == [(0x300, False)]
+    rng = random.Random(5)
+    frames = IdFrames((0x300, False), [i * 0.01 for i in range(50)], [rng.randbytes(6) for _ in range(50)])
+    [result] = analyse_all({(0x300, False): frames}, secured=secured)
+    keys = {item.kind: item.field.key for item in result.fields if item.kind in ('freshness', 'mac')}
+    assert keys == {'freshness': '300[23|4@0+]', 'mac': '300[19|28@0+]'}  # After the 2 payload bytes
+    assert FrameDecoder(None, None).secured_pdus == {}

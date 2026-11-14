@@ -33,8 +33,8 @@ The payload, length, extended/FD flags and bitrate-switch bit are forwarded unch
 
 ## The rule list
 
-Each rule shows a status dot — green when it is actively forwarding, amber when enabled but its connections are not
-both open, grey when switched off — its route, filter, rewrite, rate limit, and the number of frames **forwarded**
+Each rule shows a status mark — a filled green circle when it is actively forwarding, an amber diamond when
+enabled but its connections are not both open, a hollow grey ring when switched off (hover it to read the state) — its route, filter, rewrite, rate limit, and the number of frames **forwarded**
 and **dropped**. The **On** switch enables or disables a single rule; **✕** removes it. **Reset counters** zeroes
 the tallies and **Clear rules** removes them all.
 

@@ -70,7 +70,9 @@ def test_dashboard_pages_and_themes_render_without_warnings(window, qtbot):
         'overview',
         'signals',
         'health',
+        'security',
         'reverse',
+        'media',
         'diagnostics',
         'obd',
         'flash',
@@ -220,6 +222,100 @@ async def test_playback_bars_render_without_warnings(window, qapp, tmp_path):
     for _ in range(10):
         await asyncio.sleep(0.01)
         qapp.processEvents()
+    assert warnings == []
+
+
+def test_database_editor_search_by_sender_and_undo(window, qtbot, data_dir, tmp_path):
+    import shutil
+
+    from PyQt6.QtCore import QObject
+
+    engine, manager, warnings = window
+    root = engine.rootObjects()[0]
+    root.setProperty('tool', 'database-editor')
+    editor = manager.database_editor
+    shutil.copy(data_dir / 'complex.dbc', tmp_path / 'complex.dbc')
+    assert editor.open_path(str(tmp_path / 'complex.dbc')) == ''
+    qtbot.wait(50)
+    card = root.findChild(QObject, 'databaseMessagesCard')
+    search = root.findChild(QObject, 'databaseSearch')
+    messages = root.findChild(QObject, 'databaseMessageList')
+    senders = root.findChild(QObject, 'databaseSenderList')
+    assert messages.property('count') == 5
+
+    # Searching a signal name finds its message
+    search.setProperty('text', 'wheel')
+    qtbot.waitUntil(lambda: messages.property('count') == 1)
+
+    # The sender tree, filtered by the same search: Gateway > VehicleSpeed > WheelSpeed, unfolded
+    card.setProperty('bySender', True)
+    qtbot.waitUntil(lambda: senders.property('visible'))
+    assert senders.property('count') == 3
+    search.setProperty('text', '')
+    qtbot.waitUntil(lambda: senders.property('count') == 7)  # 2 nodes and their 5 messages, folded
+    tree = editor.sender_model
+    tree.set_all(True)
+    qtbot.waitUntil(lambda: senders.property('count') == 21)  # And the 14 signals
+    qtbot.wait(50)
+
+    # Edits in either list are undone and redone
+    editor.select('FloatData', 'Ratio')
+    assert editor.duplicate_signal() == '' and editor.can_undo
+    qtbot.waitUntil(lambda: senders.property('count') == 22)
+    assert editor.undo() == ''
+    qtbot.waitUntil(lambda: senders.property('count') == 21)
+    assert editor.redo() == '' and editor.dirty
+    tree.set_all(False)
+    qtbot.waitUntil(lambda: senders.property('count') == 2)
+    card.setProperty('bySender', False)
+    qtbot.wait(50)
+    assert warnings == []
+
+
+def test_database_editor_stays_fast_on_a_large_database(window, qtbot, tmp_path):
+    """Regression: the "By sender" list (then ListView sections over an array) took 26 s for 100 messages of 16
+    signals, and searching or editing as long, even while hidden. 300 messages now take well under a second."""
+    import time
+
+    import cantools
+    from cantools.database.can import Database, Message, Node, Signal
+    from PyQt6.QtCore import QObject
+
+    database = Database()
+    database.nodes.extend(Node(name) for name in ('ECU1', 'ECU2', 'ECU3'))
+    for index in range(300):
+        signals = [Signal(f'Sig{index}_{bit}', bit * 4, 4, receivers=['ECU2']) for bit in range(16)]
+        database.messages.append(
+            Message(0x100 + index, f'Message{index}', 8, signals, senders=[f'ECU{index % 3 + 1}'], strict=False)
+        )
+    database.refresh()
+    cantools.database.dump_file(database, str(tmp_path / 'large.dbc'))
+
+    engine, manager, warnings = window
+    root = engine.rootObjects()[0]
+    root.setProperty('tool', 'database-editor')
+    editor = manager.database_editor
+    card = root.findChild(QObject, 'databaseMessagesCard')
+    search = root.findChild(QObject, 'databaseSearch')
+    senders = root.findChild(QObject, 'databaseSenderList')
+
+    def timed(action):
+        start = time.perf_counter()
+        action()
+        qtbot.wait(1)
+        return time.perf_counter() - start
+
+    durations = {
+        'open': timed(lambda: editor.open_path(str(tmp_path / 'large.dbc'))),
+        'search': timed(lambda: search.setProperty('text', 'sig12')),
+        'edit': timed(lambda: (editor.select('Message12', 'Sig12_3'), editor.update_signal({'unit': 'V'}))),
+        'by sender': timed(lambda: card.setProperty('bySender', True)),
+        'by sender search': timed(lambda: search.setProperty('text', 'sig2')),
+        'by sender edit': timed(lambda: editor.update_signal({'unit': 'W'})),
+    }
+    assert senders.property('count') > 0
+    assert max(durations.values()) < 3, durations  # Seconds; the quadratic list took minutes here
+    card.setProperty('bySender', False)
     assert warnings == []
 
 
@@ -1004,9 +1100,9 @@ def test_combo_box_lists_show_their_texts(window, qtbot):
     )
     dialog.open()
     qtbot.wait(100)
-    boxes = [item for item in dialog.findChildren(QObject) if 'ComboBox' in item.metaObject().className()]
+    boxes = [dialog.findChild(QObject, 'themeBox'), dialog.findChild(QObject, 'languageBox')]
     texts = []
-    for box in boxes[:2]:  # Theme (a list of strings) and language (objects with textRole "name")
+    for box in boxes:  # Theme (a list of strings) and language (objects with textRole "name")
         popup = engine.newQObject(box).property('popup')
         popup.toQObject().setProperty('visible', True)
         qtbot.wait(100)
@@ -1022,6 +1118,232 @@ def test_combo_box_lists_show_their_texts(window, qtbot):
     assert {'Dark', 'Light'} <= texts[0]
     assert texts[1] == {'System language', 'English', 'Deutsch', 'Français', '中文', '日本語'}
     dialog.close()
+    assert warnings == []
+
+
+def test_theme_picker_previews_until_accepted(window, qtbot):
+    """Picking a theme previews it at once; Cancel goes back, OK keeps it. System resolves to Light or Dark."""
+    from PyQt6 import sip
+    from PyQt6.QtCore import Q_ARG, QMetaObject, Qt
+    from PyQt6.QtGui import QGuiApplication
+    from PyQt6.QtQuick import QQuickWindow
+
+    engine, manager, warnings = window
+    state = manager.app_state
+    state.set_theme('Dark')
+    theme = engine.singletonInstance('CanExplorer', 'Theme')
+    root = sip.cast(engine.rootObjects()[0], QQuickWindow)
+    dialog = next(
+        item for item in root.findChildren(QObject) if item.metaObject().className().startswith('PreferencesDialog')
+    )
+    theme_box = dialog.findChild(QObject, 'themeBox')
+
+    def pick(name, box=theme_box):
+        index = engine.newQObject(box).property('model').toVariant().index(name)
+        box.setProperty('currentIndex', index)
+        QMetaObject.invokeMethod(box, 'activated', Qt.ConnectionType.DirectConnection, Q_ARG(int, index))
+        qtbot.wait(30)
+
+    dialog.open()
+    qtbot.wait(100)
+    pick('Nord')
+    assert theme.property('effectiveName') == 'Nord' and state.theme == 'Dark'
+    assert theme.property('background').name() == '#2b303b'
+    dialog.reject()
+    qtbot.wait(100)
+    assert theme.property('preview') == '' and theme.property('effectiveName') == 'Dark'
+
+    dialog.open()
+    qtbot.wait(100)
+    pick('Cyberpunk')
+    dialog.accept()
+    qtbot.wait(100)
+    assert state.theme == 'Cyberpunk' and theme.property('effectiveName') == 'Cyberpunk'
+    # Text on Cyberpunk's bright cyan accent is black, not white
+    assert theme.property('onAccent').name() == '#000000'
+
+    state.set_theme('System')
+    qtbot.wait(30)
+    system_dark = QGuiApplication.styleHints().colorScheme() != Qt.ColorScheme.Light
+    assert theme.property('effectiveName') == ('Dark' if system_dark else 'Light')
+
+    # The themes of System are chosen per mode, from the light and the dark themes respectively
+    light_box, dark_box = dialog.findChild(QObject, 'systemLightBox'), dialog.findChild(QObject, 'systemDarkBox')
+    dialog.open()
+    qtbot.wait(100)
+    assert light_box.property('visible') and dark_box.property('visible')
+    light_themes = engine.newQObject(light_box).property('model').toVariant()
+    dark_themes = engine.newQObject(dark_box).property('model').toVariant()
+    assert {'Light', 'Solarized Light', 'High Contrast Light'} <= set(light_themes)
+    assert {'Dark', 'Tokyo Night', 'Night Vision'} <= set(dark_themes)
+    assert not set(light_themes) & set(dark_themes) and 'System' not in light_themes + dark_themes
+    pick('Gruvbox Light', light_box)
+    pick('Tokyo Night', dark_box)
+    assert theme.property('effectiveName') == ('Tokyo Night' if system_dark else 'Gruvbox Light')
+    assert state.system_dark_theme == 'Dark'  # Only previewed so far
+    dialog.accept()
+    qtbot.wait(100)
+    assert (state.system_light_theme, state.system_dark_theme) == ('Gruvbox Light', 'Tokyo Night')
+    assert theme.property('effectiveName') == ('Tokyo Night' if system_dark else 'Gruvbox Light')
+
+    state.set_system_themes('Light', 'Dark')
+    state.set_theme('Dark')
+    qtbot.wait(30)
+    assert not light_box.property('visible') or not dialog.property('visible')
+    assert warnings == []
+
+
+async def test_status_dots_show_the_state_by_shape(window, qapp):
+    """Connection states are told apart by the shape of the sidebar's StatusDot, with the state in the tooltip."""
+    import asyncio
+
+    from PyQt6 import sip
+    from PyQt6.QtQuick import QQuickWindow
+
+    async def settle():
+        for _ in range(10):
+            await asyncio.sleep(0.01)
+            qapp.processEvents()
+
+    engine, manager, warnings = window
+    manager.add_connection({'name': 'Bus', 'interface': 'VirtualBus', 'channel': f'qml-{uuid.uuid4().hex}'})
+    await settle()
+
+    def statuses():
+        stack, found = [sip.cast(engine.rootObjects()[0], QQuickWindow).contentItem()], []
+        while stack:
+            item = stack.pop()
+            if item.metaObject().className().startswith('StatusDot') and item.property('status'):
+                found.append(item.property('status'))
+            stack.extend(item.childItems())
+        return found
+
+    assert statuses() == ['idle']  # Added closed: a hollow ring
+    connection = manager.connections[0]
+    connection.open()
+    await settle()
+    assert statuses() == ['ok']  # Open: a filled circle
+    connection.close()
+    await settle()
+    assert statuses() == ['idle']
+    assert warnings == []
+
+
+async def test_views_show_their_activity_in_the_sidebar(window, qapp):
+    """A view doing something (here tester present in Diagnostics) gets a mark after it, explained in its tooltip."""
+    import asyncio
+
+    from PyQt6 import sip
+    from PyQt6.QtQuick import QQuickWindow
+
+    async def settle():
+        for _ in range(10):
+            await asyncio.sleep(0.01)
+            qapp.processEvents()
+
+    engine, manager, warnings = window
+    manager.add_connection({'name': 'Bus', 'interface': 'VirtualBus', 'channel': f'qml-{uuid.uuid4().hex}'})
+    connection = manager.connections[0]
+    connection.open()
+    await settle()
+
+    def views():
+        stack, found = [sip.cast(engine.rootObjects()[0], QQuickWindow).contentItem()], {}
+        while stack:
+            item = stack.pop()
+            if item.metaObject().className().startswith('NavItem') and item.isVisible():
+                found[item.property('text')] = item
+            stack.extend(item.childItems())
+        return found
+
+    assert views()['Diagnostics'].property('status') == ''
+    connection.diagnostics.set_tester_present(True)
+    await settle()
+    diagnostics = views()['Diagnostics']
+    assert diagnostics.property('status') == 'ok'
+    assert diagnostics.property('activity').toVariant() == {'status': 'ok', 'text': 'Tester present'}
+    connection.diagnostics.set_tester_present(False)
+    await settle()
+    assert views()['Diagnostics'].property('status') == ''
+    assert warnings == []
+
+
+async def test_tools_show_their_activity_in_the_sidebar(window, qapp):
+    """The gateway warns while its rules wait for their connections, and shows it forwards once they are open."""
+    import asyncio
+
+    from PyQt6 import sip
+    from PyQt6.QtQuick import QQuickWindow
+
+    async def settle(rounds=10):
+        for _ in range(rounds):
+            await asyncio.sleep(0.02)
+            qapp.processEvents()
+
+    engine, manager, warnings = window
+    for name in ('A', 'B'):
+        manager.add_connection({'name': name, 'interface': 'VirtualBus', 'channel': f'qml-{uuid.uuid4().hex}'})
+    gateway = manager.gateway
+    assert gateway.add_rule({'source': 'A', 'destination': 'B'}) == ''
+
+    def tool_item(text):
+        stack = [sip.cast(engine.rootObjects()[0], QQuickWindow).contentItem()]
+        while stack:
+            item = stack.pop()
+            if item.metaObject().className().startswith('NavItem') and item.property('text') == text:
+                return item
+            stack.extend(item.childItems())
+
+    def gateway_item():
+        return tool_item('Bus gateway')
+
+    def activity(text):
+        item = tool_item(text)
+        value = item.property('activity')
+        return item.property('status'), value.toVariant()['text'] if value is not None else ''
+
+    await settle()
+    assert gateway_item().property('status') == ''
+
+    # The database editor is active while a database is open, and warns about unsaved changes
+    assert activity('Database editor') == ('', '')
+    manager.database_editor.new_database()
+    await settle()
+    assert activity('Database editor') == ('ok', 'Editing Untitled')
+
+    # The multi-bus trace waits for its connections, merges while one is open, and shows when it is paused
+    multi_bus = manager.multi_bus
+    multi_bus.set_selected('A', True)
+    await settle()
+    assert activity('Multi-bus trace') == ('idle', 'Waiting for A to connect')
+    manager.connections[0].open()
+    await settle()
+    assert activity('Multi-bus trace') == ('ok', 'Merging A')
+    multi_bus.set_paused(True)
+    await settle()
+    assert activity('Multi-bus trace') == ('idle', 'Paused: A')
+    multi_bus.set_paused(False)
+    multi_bus.set_selected('A', False)
+    manager.connections[0].close()
+    await settle()
+    assert activity('Multi-bus trace') == ('', '')
+    gateway.set_enabled(True)
+    try:
+        await settle()
+        item = gateway_item()
+        assert item.property('status') == 'warning'
+        assert item.property('activity').toVariant()['text'] == '1 of 1 rules waiting for their connections'
+        for connection in manager.connections:
+            connection.open()
+        await settle(40)  # The gateway refreshes its rules periodically
+        item = gateway_item()
+        assert item.property('status') == 'ok'
+        assert item.property('activity').toVariant()['text'] == 'Forwarding, rules: 1'
+    finally:
+        gateway.set_enabled(False)
+        gateway.clear_rules()
+    await settle()
+    assert gateway_item().property('status') == ''
     assert warnings == []
 
 
@@ -1196,4 +1518,273 @@ def test_about_dialog_confirms_the_copy_to_clipboard(window, qtbot):
     dialog.open()
     assert not label.property('shown')  # Not left over when the dialog is opened again
     dialog.close()
+    assert warnings == []
+
+
+async def test_table_rows_are_selected_by_clicks(window, qapp, tmp_path):
+    """In the trace and the overview, a left or right click selects the row, Shift+click selects a range from the
+    current row, Ctrl+click toggles a row, and a right click inside the selection keeps it for the context menu."""
+    import asyncio
+
+    import can
+    from PyQt6 import sip
+    from PyQt6.QtCore import QPoint, QPointF, Qt, QUrl
+    from PyQt6.QtQuick import QQuickWindow
+    from PyQt6.QtTest import QTest
+
+    engine, manager, warnings = window
+    view = sip.cast(engine.rootObjects()[0], QQuickWindow)
+    view.resize(1300, 850)
+    view.show()
+
+    async def settle(steps=10):
+        for _ in range(steps):
+            await asyncio.sleep(0.01)
+            qapp.processEvents()
+
+    path = tmp_path / 'trace.asc'
+    with can.Logger(path) as logger:
+        for i in range(200):
+            logger.on_message_received(
+                can.Message(arbitration_id=0x100 + i % 8, data=bytes([i % 256]), timestamp=i * 0.01)
+            )
+    manager.open_log_file(QUrl.fromLocalFile(str(path)), 'Raw', 0.0)
+    await settle(30)
+    connection_view = next(i for i in _visual_items(view) if i.metaObject().className().startswith('ConnectionView'))
+    shift, control = Qt.KeyboardModifier.ShiftModifier, Qt.KeyboardModifier.ControlModifier
+
+    for page in ('trace', 'overview'):
+        connection_view.setProperty('page', page)
+        await settle()
+        frame_table = next(
+            i for i in _visual_items(view) if i.metaObject().className().startswith('FrameTable') and i.isVisible()
+        )
+        table = next(
+            i for i in _visual_items(view) if i.metaObject().className() == 'QQuickTableView' and i.isVisible()
+        )
+        selection = frame_table.property('selectionModel')
+        if page == 'trace':  # Auto-scroll would keep the trace at its end; the clicks address rows from the top
+            auto_scroll = next(
+                i
+                for i in _visual_items(view)
+                if i.metaObject().className().startswith('CheckBox')
+                and i.property('text') == 'Auto-scroll'
+                and i.isVisible()
+            )
+            auto_scroll.setProperty('checked', False)
+        table.setProperty('contentY', 0)
+        await settle()
+        js_table = engine.newQObject(table)
+        row_height = js_table.property('rowHeight').callWithInstance(js_table, [0]).toNumber()
+        assert row_height > 0
+
+        async def click(
+            row,
+            button=Qt.MouseButton.LeftButton,
+            modifiers=Qt.KeyboardModifier.NoModifier,
+            table=table,
+            height=row_height,
+        ):
+            point = table.mapToScene(QPointF(table.width() / 2, (row + 0.5) * height)).toPoint()
+            QTest.mouseClick(view, button, modifiers, QPoint(point.x(), point.y()))
+            await settle()
+            if button == Qt.MouseButton.RightButton:
+                QTest.keyClick(view, Qt.Key.Key_Escape)  # Close the context menu
+                await settle()
+
+        def rows(selection=selection):
+            return sorted({index.row() for index in selection.selectedIndexes()})
+
+        await click(1, Qt.MouseButton.RightButton)
+        assert rows() == [1], page
+        await click(2)
+        assert rows() == [2], page
+        await click(5, modifiers=shift)
+        assert rows() == [2, 3, 4, 5], page
+        await click(4, Qt.MouseButton.RightButton)  # Inside the selection: kept for the menu
+        assert rows() == [2, 3, 4, 5], page
+        await click(0, modifiers=shift)  # From the same anchor, the other way
+        assert rows() == [0, 1, 2], page
+        await click(6, modifiers=control)
+        assert rows() == [0, 1, 2, 6], page
+        await click(1, modifiers=control)
+        assert rows() == [0, 2, 6], page
+        await click(7, Qt.MouseButton.RightButton)  # Outside the selection: selects that row
+        assert rows() == [7], page
+
+        # A sloppy click still counts: the pointer drifts past the drag threshold, or the button is held long
+        start = table.mapToScene(QPointF(table.width() / 2, 3.5 * row_height)).toPoint()
+        QTest.mousePress(view, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, start)
+        for step in range(1, 6):
+            QTest.mouseMove(view, start + QPoint(step * 6, 0))
+        QTest.mouseRelease(view, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, start + QPoint(30, 0))
+        await settle()
+        assert rows() == [3], page
+        start = table.mapToScene(QPointF(table.width() / 2, 1.5 * row_height)).toPoint()
+        QTest.mousePress(view, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, start)
+        await settle(120)  # Past the long-press threshold
+        QTest.mouseRelease(view, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, start)
+        await settle()
+        assert rows() == [1], page
+    assert warnings == []
+
+
+def test_security_manager_renders_without_warnings(window, qtbot, tmp_path, monkeypatch, secoc_arxml):
+    from PyQt6 import sip
+    from PyQt6.QtCore import QUrl
+    from PyQt6.QtQuick import QQuickWindow
+
+    engine, manager, warnings = window
+    security = manager.security
+    monkeypatch.setattr(security.store, 'path', tmp_path / 'keys.json')
+    security.store._scrypt_cost = 16
+    root = engine.rootObjects()[0]
+    view = sip.cast(root, QQuickWindow)
+    dialog = next(
+        o for o in view.findChildren(QObject) if o.metaObject().className().startswith('SecurityManagerDialog')
+    )
+    dialog.open()  # No key store yet
+    qtbot.wait(100)
+    assert security.create('pw', 'pw') == ''
+    assert security.add_secoc_key('Powertrain', bytes(16).hex(), '*', '') == ''
+    assert security.add_macsec_sa('Zone', bytes(16).hex(), '') == ''
+    qtbot.wait(50)
+    for purpose in ('tls-client', 'tls-ca', 'ipsec', 'macsec', 'seed-key', 'secoc'):
+        dialog.setProperty('purpose', purpose)
+        qtbot.wait(30)
+    security.lock()  # The unlock form
+    qtbot.wait(50)
+    dialog.close()
+    qtbot.wait(100)
+
+    # The DoIP TLS choices, the Ethernet decryption note and a connection's SecOC status
+    root.setProperty('tool', 'doip')
+    qtbot.wait(50)
+    root.setProperty('tool', 'ethernet')
+    qtbot.wait(50)
+    root.setProperty('tool', '')
+    manager.add_connection({'name': 'Bus', 'interface': 'VirtualBus', 'channel': f'qml-{uuid.uuid4().hex}'})
+    manager.connections[-1].load_database(QUrl.fromLocalFile(str(secoc_arxml)))
+    qtbot.wait(100)
+    assert manager.connections[-1].secoc_protections[0]['reason'] == 'the key store is locked'
+    # The SecOC parts of the connection pages: the transmit box, the restbus badge, the key store buttons
+    stack = [view.contentItem()]
+    while not stack[-1].metaObject().className().startswith('ConnectionView'):
+        item = stack.pop()
+        stack.extend(item.childItems())
+    connection_view = stack[-1]
+    for page in ('trace', 'restbus', 'diagnostics', 'gmlan', 'dashboard'):
+        connection_view.setProperty('page', page)
+        qtbot.wait(40)
+    assert warnings == []
+
+
+async def test_trace_auto_scroll_continues_with_selected_rows(window, qapp):
+    """Auto-scroll keeps following new frames while rows are selected; jumping to a row (find, bookmark) switches
+    it off so the shown row stays in view."""
+    import asyncio
+
+    import can
+    from PyQt6 import sip
+    from PyQt6.QtCore import QModelIndex, QPoint, QPointF, Qt
+    from PyQt6.QtQuick import QQuickWindow
+    from PyQt6.QtTest import QTest
+
+    engine, manager, warnings = window
+    view = sip.cast(engine.rootObjects()[0], QQuickWindow)
+    view.resize(1300, 850)
+    view.show()
+
+    async def settle(steps=10):
+        for _ in range(steps):
+            await asyncio.sleep(0.01)
+            qapp.processEvents()
+
+    channel = f'qml-{uuid.uuid4().hex}'
+    manager.add_connection({'name': 'Bus', 'interface': 'VirtualBus', 'channel': channel})
+    connection = manager.connections[0]
+    connection.open()
+    connection_view = next(i for i in _visual_items(view) if i.metaObject().className().startswith('ConnectionView'))
+    connection_view.setProperty('page', 'trace')
+    await settle()
+    frame_table = next(
+        i for i in _visual_items(view) if i.metaObject().className().startswith('FrameTable') and i.isVisible()
+    )
+    table = next(i for i in _visual_items(view) if i.metaObject().className() == 'QQuickTableView' and i.isVisible())
+    auto_scroll = next(
+        i
+        for i in _visual_items(view)
+        if i.metaObject().className().startswith('CheckBox') and i.property('text') == 'Auto-scroll' and i.isVisible()
+    )
+    model = frame_table.property('model')
+
+    async def send(count):
+        with can.Bus(interface='virtual', channel=channel) as bus:
+            for i in range(count):
+                bus.send(can.Message(arbitration_id=0x100 + i % 8, data=bytes([i % 256])))
+        for _ in range(100):
+            await settle(2)
+            if model.rowCount(QModelIndex()) >= expected:
+                break
+        await settle()
+
+    def at_bottom():
+        return table.property('bottomRow') == model.rowCount(QModelIndex()) - 1
+
+    expected = 100
+    await send(100)
+    assert at_bottom()
+
+    # Select a row, then more frames arrive: still followed
+    js_table = engine.newQObject(table)
+    row_height = js_table.property('rowHeight').callWithInstance(js_table, [table.property('topRow')]).toNumber()
+    point = table.mapToScene(QPointF(table.width() / 2, 2.5 * row_height)).toPoint()
+    QTest.mouseClick(view, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, QPoint(point.x(), point.y()))
+    await settle()
+    assert frame_table.property('selectionModel').hasSelection()
+    expected = 200
+    await send(100)
+    assert auto_scroll.property('checked')
+    assert at_bottom()
+
+    # Jumping to a row (as find and the bookmarks do) switches auto-scroll off and keeps the row in view
+    js_frame_table = engine.newQObject(frame_table)
+    js_frame_table.property('showRow').callWithInstance(js_frame_table, [5])
+    await settle()
+    assert not auto_scroll.property('checked')
+    expected = 300
+    await send(100)
+    assert table.property('topRow') <= 5 <= table.property('bottomRow')
+
+    # Switching it back on jumps to the newest frame
+    auto_scroll.setProperty('checked', True)
+    await settle()
+    assert at_bottom()
+    connection.close()
+    assert warnings == []
+
+
+def test_someip_e2e_dialog_renders_without_warnings(window, qtbot):
+    from PyQt6 import sip
+    from PyQt6.QtQuick import QQuickWindow
+
+    engine, manager, warnings = window
+    root = engine.rootObjects()[0]
+    view = sip.cast(root, QQuickWindow)
+    someip = manager.someip
+    someip._settings = None  # Do not keep the protections in the shared test settings
+    assert someip.add_e2e({'service_id': '1234', 'method_id': '8001', 'data_id': '1', 'profile': '6'}) == ''
+    for tool in ('someip', 'ethernet'):
+        root.setProperty('tool', tool)
+        qtbot.wait(50)
+        dialogs = [o for o in view.findChildren(QObject) if o.metaObject().className().startswith('SomeIpE2eDialog')]
+        assert dialogs
+        for dialog in dialogs:
+            dialog.open()
+            qtbot.wait(80)
+            dialog.close()
+            qtbot.wait(50)
+    someip.remove_e2e(0)
+    root.setProperty('tool', '')
+    qtbot.wait(50)
     assert warnings == []

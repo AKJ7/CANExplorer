@@ -4,14 +4,15 @@ VLAN, IPv4/IPv6, ARP, UDP/TCP) and the automotive protocols on top — SOME/IP (
 
 Both the classic libpcap format and pcapng (Wireshark's default) are read, for the Ethernet link type. The
 stateless `decode()` dissects one frame; `StreamDecoder` decodes a sequence, reassembling SOME/IP carried over TCP
-(across segments) and SOME/IP-TP (across datagrams) so a message split across packets is decoded in full.
+(across segments) and SOME/IP-TP (across datagrams) so a message split across packets is decoded in full. Given a
+decryptor (core/packet_decryption.py), both decrypt IPsec ESP and MACsec frames and decode what they carried.
 """
 
 import socket
 import struct
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Iterator, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Protocol, Sequence, Tuple
 
 from can_explorer.core import avtp_acf, doip, someip
 from can_explorer.core import gptp as ptp  # Aliased so it does not clash with the EthernetPacket.gptp field
@@ -26,12 +27,14 @@ ETH_PTP = 0x88F7  # gPTP / IEEE 802.1AS
 ETH_AVTP = 0x22F0  # IEEE 1722
 ETH_LLDP = 0x88CC
 ETH_MACSEC = 0x88E5  # IEEE 802.1AE (MACsec)
+ETH_EAPOL = 0x888E  # IEEE 802.1X (EAPOL), carrying MKA: the key agreement of MACsec
 ETH_RTAG = 0xF1C1  # IEEE 802.1CB redundancy tag (FRER)
 ETH_MVRP = 0x88F5  # Multiple VLAN Registration Protocol (SRP/TSN)
 ETH_MMRP = 0x88F6  # Multiple MAC Registration Protocol
 ETH_MSRP = 0x22EA  # Multiple Stream Reservation Protocol (SRP, IEEE 802.1Qat)
 
 ETHERTYPE_NAMES = {
+    ETH_EAPOL: 'EAPOL',
     ETH_ARP: 'ARP',
     ETH_PTP: 'gPTP',
     ETH_AVTP: 'AVTP',
@@ -130,6 +133,17 @@ class EthernetPacket:
     gptp: Optional[ptp.GptpMessage] = None  # The parsed gPTP message, for the time-sync summary
     can_frames: List[avtp_acf.AcfCanFrame] = field(default_factory=list)  # CAN tunnelled in AVTP ACF (TSCF/NTSCF)
     avtp: Optional[AvtpStreamRef] = None  # The stream id/sequence of an AVTP stream frame, for stream health
+    decrypted: str = ''  # The ESP/MACsec association a protected frame was decrypted with (core/packet_decryption.py)
+    tls_records: List[Any] = field(default_factory=list)  # TLS records this segment completed (core/tls_decrypt.py)
+    # Security findings of the packet: (kind, identifier, detail), collected by core/security_events.py
+    security: List[Tuple[str, str, str]] = field(default_factory=list)
+
+
+class Decryptor(Protocol):
+    """Decrypts protected frames (core/packet_decryption.PacketDecryptor): returns None for frames it does not
+    handle, else an object with `frame` (the plaintext Ethernet frame, or None), `label` and `describe()`."""
+
+    def decrypt(self, data: bytes) -> Optional[Any]: ...
 
 
 # --- pcap file reading and writing (classic libpcap, Ethernet link type) ---
@@ -308,6 +322,12 @@ def _decode_l3(packet: EthernetPacket, ethertype: int, data: bytes, offset: int,
             encrypted = ' encrypted' if tci & 0x08 else ''  # E bit
             packet.info = f'AN {tci & 0x03}, PN {packet_number}{encrypted}'
         return
+    if ethertype == ETH_EAPOL:
+        packet.l3 = 'EAPOL'
+        eapol = parse_eapol(data[offset:])
+        packet.protocol = 'MKA' if eapol is not None and eapol.mka is not None else 'EAPOL'
+        packet.info = eapol.describe() if eapol is not None else 'short EAPOL frame'
+        return
     if ethertype in (ETH_MVRP, ETH_MMRP, ETH_MSRP):  # IEEE 802.1 (M)SRP / TSN stream reservation control
         packet.l3 = packet.protocol = ETHERTYPE_NAMES[ethertype]
         packet.info = 'stream reservation' if ethertype == ETH_MSRP else 'registration protocol'
@@ -405,6 +425,121 @@ def _decode_application(packet: EthernetPacket, payload: bytes, nm_port: Optiona
         packet.protocol = 'mDNS' if MDNS_PORT in ports else 'DNS'
         packet.info = _dns_summary(payload)
         return
+    if packet.l4 == 'TCP' and _looks_like_tls(payload):
+        packet.protocol = 'TLS'
+        packet.info = _TLS_CONTENT_TYPES[payload[0]]
+
+
+_TLS_CONTENT_TYPES = {20: 'change cipher spec', 21: 'alert', 22: 'handshake', 23: 'application data'}
+
+
+def _looks_like_tls(payload: bytes) -> bool:
+    """A TCP payload that starts with a TLS record header (content type, version 3.x, a plausible length)."""
+    return (
+        len(payload) >= 5
+        and payload[0] in _TLS_CONTENT_TYPES
+        and payload[1] == 3
+        and payload[2] <= 4
+        and int.from_bytes(payload[3:5], 'big') <= 18432
+    )
+
+
+# IEEE 802.1X EAPOL and MKA (MACsec Key Agreement), as Wireshark's packet-eapol and packet-mka dissectors read them:
+# EAPOL is version, type and a 16-bit body length; an MKA PDU is a list of parameter sets padded to 4 bytes, the
+# basic parameter set first and a 16-byte ICV last. The keys it distributes (Distributed SAK) are wrapped and are
+# only named here.
+EAPOL_TYPES = {
+    0: 'EAP packet',
+    1: 'Start',
+    2: 'Logoff',
+    3: 'Key',
+    4: 'Encapsulated ASF alert',
+    5: 'MKA',
+    6: 'Announcement (generic)',
+    7: 'Announcement (specific)',
+    8: 'Announcement request',
+}
+MKA_PARAMETER_SETS = {
+    1: 'Live Peer List',
+    2: 'Potential Peer List',
+    3: 'MACsec SAK Use',
+    4: 'Distributed SAK',
+    5: 'Distributed CAK',
+    6: 'KMD',
+    7: 'Announcement',
+    8: 'XPN',
+    255: 'ICV Indicator',
+}
+MKA_ICV_LENGTH = 16
+
+
+@dataclass
+class MkaPdu:
+    version: int
+    key_server_priority: int
+    key_server: bool
+    macsec_desired: bool
+    macsec_capability: int
+    sci: str  # System identifier (MAC address) and port, hex
+    member_identifier: str  # Hex
+    message_number: int
+    cak_name: str  # Hex
+    parameter_sets: List[str] = field(default_factory=list)  # The parameter sets after the basic one, by name
+
+
+@dataclass
+class EapolFrame:
+    version: int
+    type: int
+    length: int
+    mka: Optional[MkaPdu] = None
+
+    def describe(self) -> str:
+        kind = EAPOL_TYPES.get(self.type, f'type {self.type}')
+        if self.mka is None:
+            return f'EAPOL {kind}'
+        mka = self.mka
+        text = f'MKA v{mka.version}' + (', key server' if mka.key_server else '')
+        text += f', SCI {mka.sci}, MN {mka.message_number}'
+        sets = [name for name in mka.parameter_sets if name != 'ICV Indicator']
+        return text + (f', {", ".join(sets)}' if sets else '')
+
+
+def parse_eapol(data: bytes) -> Optional[EapolFrame]:
+    """An EAPOL frame and, for MKA, its basic parameter set and the parameter sets it carries."""
+    if len(data) < 4:
+        return None
+    version, kind, length = data[0], data[1], struct.unpack('>H', data[2:4])[0]
+    frame = EapolFrame(version, kind, length)
+    body = data[4 : 4 + length]
+    if kind != 5 or len(body) < 4:
+        return frame
+    body_length = struct.unpack('>H', body[2:4])[0] & 0x0FFF
+    if body_length < 28 or len(body) < 4 + body_length:
+        return frame
+    flags = body[2]
+    basic = body[4 : 4 + body_length]
+    mka = MkaPdu(
+        version=body[0],
+        key_server_priority=body[1],
+        key_server=bool(flags & 0x80),
+        macsec_desired=bool(flags & 0x40),
+        macsec_capability=(flags & 0x30) >> 4,
+        sci=basic[0:8].hex().upper(),
+        member_identifier=basic[8:20].hex().upper(),
+        message_number=struct.unpack('>I', basic[20:24])[0],
+        cak_name=basic[28:body_length].hex().upper(),
+    )
+    position = 4 + body_length + (-body_length % 4)
+    while len(body) - position > MKA_ICV_LENGTH and len(body) - position >= 4:
+        set_type = body[position]
+        set_length = struct.unpack('>H', body[position + 2 : position + 4])[0] & 0x0FFF
+        mka.parameter_sets.append(MKA_PARAMETER_SETS.get(set_type, f'type {set_type}'))
+        if set_type == 255:
+            break
+        position += 4 + set_length + (-set_length % 4)
+    frame.mka = mka
+    return frame
 
 
 def _dns_summary(payload: bytes) -> str:
@@ -641,21 +776,111 @@ class StreamDecoder:
     partial packets are marked as segments. Feed frames in capture order; it also tracks the SOME/IP services
     announced by Service Discovery (`services`)."""
 
-    def __init__(self, nm_port: Optional[int] = None) -> None:
+    def __init__(
+        self, nm_port: Optional[int] = None, decryptor: Optional[Decryptor] = None, tls: Any = None, e2e: Any = None
+    ) -> None:
         self._tcp: Dict[Tuple, _TcpStream] = {}
         self._tp = someip.SomeIpReassembler()
         self.services: Dict[Tuple[int, int], someip.Service] = {}
         self.nm_port = nm_port
+        self.decryptor = decryptor
+        self.tls = tls  # A core/tls_decrypt.TlsDecryptor: decrypts TLS sessions with a key log
+        self.e2e = e2e  # A core/someip_e2e.SomeIpE2eChecker: checks E2E-protected SOME/IP messages
 
     def decode(self, data: bytes, timestamp: float = 0.0, number: int = 0) -> EthernetPacket:
-        packet = decode(data, timestamp, number, self.nm_port)
+        result = self.decryptor.decrypt(data) if self.decryptor else None
+        decrypted = result is not None and result.frame is not None
+        if decrypted:
+            packet = decode(result.frame, timestamp, number, self.nm_port)
+            packet.length, packet.decrypted = len(data), result.label
+            data = result.frame  # Reassemble what the frame carried
+        else:
+            packet = decode(data, timestamp, number, self.nm_port)
         stream = _l4_stream(data)
         if stream is not None:
             try:
                 self._reassemble(packet, *stream)
             except (struct.error, IndexError, ValueError):
                 pass
+            if self.tls is not None and stream[0] == 'TCP':
+                self._decrypt_tls(packet, stream[1], stream[2], stream[3])
+        if decrypted:
+            packet.info = f'[{result.describe()}] {packet.info}'.rstrip()
+        elif result is not None:  # Protected, but not decrypted: say why next to what the frame is
+            packet.info = f'{packet.info} [{result.describe()}]'.lstrip()
+            if 'integrity check failed' in result.error:  # A wrong key, or a frame changed on the way
+                packet.security.append(('decrypt', result.label, result.error))
+        if (
+            stream is not None
+            and stream[0] == 'TCP'
+            and {packet.src_port, packet.dst_port} & {doip.PORT, doip.TLS_PORT}
+        ):
+            self._doip_security(packet, stream[3])
         return packet
+
+    @staticmethod
+    def _doip_security(packet: EthernetPacket, payload: bytes) -> None:
+        """Refused routing activations, and UDS responses refusing security access or authentication."""
+        from can_explorer.core.security_events import SECURITY_NRCS
+
+        try:
+            _version, payload_type, body = doip.decode_message(payload)
+        except (doip.DoipError, ValueError, IndexError):
+            return
+        flow = f'{packet.src} → {packet.dst}'
+        if payload_type == doip.ROUTING_ACTIVATION_RESPONSE and len(body) >= 5:
+            code = body[4]
+            if code not in (doip.ROUTING_ACTIVATED, doip.ROUTING_CONFIRMATION_REQUIRED):
+                name = doip.ROUTING_ACTIVATION_CODES.get(code, f'code 0x{code:02X}')
+                packet.security.append(('doip-refused', flow, f'routing activation refused: {name}'))
+        elif payload_type == doip.DIAGNOSTIC_MESSAGE and len(body) >= 7 and body[4] == 0x7F:
+            name = SECURITY_NRCS.get(body[6])
+            if name is not None:
+                from can_explorer.core.uds import service_name
+
+                packet.security.append(
+                    ('refused', flow, f'{service_name(body[5])} refused: {name} (NRC 0x{body[6]:02X})')
+                )
+
+    def _describe(self, packet: EthernetPacket, message: someip.SomeIpMessage) -> str:
+        text = someip.describe(message)
+        identifier = f'{message.service_id:04X}.{message.method_id:04X}'
+        if (
+            self.services
+            and not message.is_sd
+            and not any(service_id == message.service_id for service_id, _instance in self.services)
+        ):
+            packet.security.append(('unknown-service', identifier, 'a service Service Discovery did not offer'))
+        result = self.e2e.check(message) if self.e2e else None
+        if result is None:
+            return text
+        if not result.ok:
+            packet.security.append(('e2e', identifier, result.describe()))
+        return f'{text} [{result.describe()}]'
+
+    def _decrypt_tls(self, packet: EthernetPacket, flow: Tuple, seq: int, payload: bytes) -> None:
+        records = self.tls.feed(flow, seq, payload)
+        if not records:
+            return
+        packet.tls_records = records
+        for record in records:
+            if record.error.startswith('decryption failed'):
+                packet.security.append(('tls', f'{packet.src} → {packet.dst}', f'{record.sender}: {record.error}'))
+        data = b''.join(record.plaintext for record in records if record.content_type == 23 and record.plaintext)
+        if data:  # Decode what the session carried, e.g. DoIP on port 3496
+            packet.protocol, packet.info = 'TLS', ''
+            _decode_application(packet, data, self.nm_port)
+            if {packet.src_port, packet.dst_port} & {doip.PORT, doip.TLS_PORT}:
+                self._doip_security(packet, data)
+            if packet.protocol == 'TLS':
+                packet.info = f'{len(data)} bytes of application data'
+            packet.info = f'[TLS decrypted] {packet.info}'
+            return
+        packet.protocol = 'TLS'
+        errors = [record.error for record in records if record.error]
+        packet.info = (
+            f'TLS: {errors[0]}' if errors else ', '.join(dict.fromkeys(record.describe() for record in records))
+        )
 
     def _reassemble(self, packet: EthernetPacket, l4: str, flow: Tuple, seq: Optional[int], payload: bytes) -> None:
         if l4 == 'UDP':
@@ -697,7 +922,8 @@ class StreamDecoder:
                 someip.update_services(self.services, reassembled)
         packet.protocol = 'SOME/IP'
         if completed:
-            packet.info = ' | '.join(someip.describe(message) for message in completed[:3])
+            texts = [self._describe(packet, message) for message in completed]  # All checked: E2E counters follow
+            packet.info = ' | '.join(texts[:3])
         else:
             packet.info = '[SOME/IP-TP segment]'
 
@@ -811,9 +1037,16 @@ class DissectionField:
         return child
 
 
-def dissect(data: bytes, timestamp: float = 0.0, number: int = 0, nm_port: Optional[int] = None) -> DissectionField:
+def dissect(
+    data: bytes,
+    timestamp: float = 0.0,
+    number: int = 0,
+    nm_port: Optional[int] = None,
+    decryptor: Optional[Decryptor] = None,
+) -> DissectionField:
     """Dissect one Ethernet frame into a tree of fields, layer by layer (Ethernet, VLAN/R-TAG, IP, transport and
-    the recognised application protocol). Never raises; dissection stops at the first layer that will not parse."""
+    the recognised application protocol). Never raises; dissection stops at the first layer that will not parse.
+    With a decryptor, a decrypted ESP or MACsec frame gets a branch dissecting the plaintext frame it carried."""
     packet = decode(data, timestamp, number, nm_port)
     summary = f'{len(data)} bytes, {packet.protocol}' if packet.protocol else f'{len(data)} bytes'
     root = DissectionField('Frame', summary, 0, len(data))
@@ -821,6 +1054,14 @@ def dissect(data: bytes, timestamp: float = 0.0, number: int = 0, nm_port: Optio
         _dissect_ethernet(root, packet, data, nm_port)
     except (struct.error, IndexError, ValueError):
         pass
+    result = decryptor.decrypt(data) if decryptor else None
+    if result is not None:
+        if result.frame is None:
+            root.add('Decryption', result.describe())
+        else:
+            inner = dissect(result.frame, timestamp, number, nm_port)
+            branch = root.add('Decrypted', f'{result.label}: {inner.value}')
+            branch.children = inner.children  # Offsets in this branch refer to the plaintext frame
     return root
 
 
@@ -882,6 +1123,26 @@ def _dissect_l3(
         node.add('Source', packet.src, offset + 8, 16)
         node.add('Destination', packet.dst, offset + 24, 16)
         _dissect_l4(root, packet, next_header, data, offset + 40, nm_port)
+        return
+    if ethertype == ETH_EAPOL and len(data) >= offset + 4:
+        eapol = parse_eapol(data[offset:])
+        node = root.add('EAPOL', packet.info, offset, len(data) - offset)
+        node.add('Version', str(data[offset]), offset, 1)
+        node.add('Type', EAPOL_TYPES.get(data[offset + 1], str(data[offset + 1])), offset + 1, 1)
+        node.add('Length', str(struct.unpack('>H', data[offset + 2 : offset + 4])[0]), offset + 2, 2)
+        if eapol is not None and eapol.mka is not None:
+            mka = eapol.mka
+            branch = node.add('MKA', f'version {mka.version}')
+            branch.add('Key server', f'{"yes" if mka.key_server else "no"} (priority {mka.key_server_priority})')
+            branch.add(
+                'MACsec', f'{"desired" if mka.macsec_desired else "not desired"}, capability {mka.macsec_capability}'
+            )
+            branch.add('SCI', mka.sci)
+            branch.add('Member identifier', mka.member_identifier)
+            branch.add('Message number', str(mka.message_number))
+            branch.add('CAK name', mka.cak_name)
+            for name in mka.parameter_sets:
+                branch.add('Parameter set', name)
         return
     if packet.l3:  # Non-IP upper layer: gPTP, AVTP, LLDP, MACsec, (M)SRP, …
         leaf = root.add(packet.l3, packet.info, offset, len(data) - offset)

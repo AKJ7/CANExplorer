@@ -16,7 +16,9 @@ ColumnLayout {
         { key: "overview", title: qsTr("Overview"), icon: "▤" },
         { key: "signals", title: qsTr("Signals"), icon: "∿" },
         { key: "health", title: qsTr("Bus health"), icon: "♥" },
+        { key: "security", title: qsTr("Security events"), icon: "⛨" },
         { key: "reverse", title: qsTr("Reverse engineering"), icon: "⌕" },
+        { key: "media", title: qsTr("Video & map"), icon: "◉" },
     ].concat(connection.can_transmit ? [{ key: "diagnostics", title: qsTr("Diagnostics"), icon: "✚" }] : [])
      .concat(connection.can_transmit && !connection.is_lin && !connection.is_j1850 ? [{ key: "obd", title: qsTr("OBD-II"), icon: "⊙" }] : [])
      .concat(connection.can_transmit ? [{ key: "flash", title: qsTr("Flashing"), icon: "⇪" }] : [])
@@ -30,7 +32,53 @@ ColumnLayout {
      .concat(connection.can_transmit ? [{ key: "simulation", title: qsTr("Simulation"), icon: "▶" }] : [])
      .concat(connection.can_transmit ? [{ key: "restbus", title: qsTr("Restbus"), icon: "⤭" }] : [])
      .concat(connection.can_transmit ? [{ key: "tests", title: qsTr("Tests"), icon: "✓" }] : [])
-    readonly property var pageKeys: ["dashboard", "trace", "overview", "signals", "health", "reverse", "diagnostics", "obd", "flash", "uds-scan", "xcp", "gmlan", "j1850", "j1939", "canopen", "lin", "simulation", "restbus", "tests"]
+    // What each view is doing, for the mark after it in the sidebar: { key: { status, text } } with status "ok"
+    // (running), "warning" or "error" (StatusDot). Kept apart from `pages`, so a change does not rebuild the list.
+    readonly property var pageActivity: {
+        const activity = {}
+        const mark = (key, status, text) => { activity[key] = { status: status, text: text } }
+        const health = connection.bus_health ? connection.bus_health.state : ""
+        if (health === "bus-off")
+            mark("health", "error", qsTr("Bus off"))
+        else if (health === "passive" || health === "warning")
+            mark("health", "warning", health === "passive" ? qsTr("Error passive") : qsTr("Error warning"))
+        const events = connection.security_event_counts || {}
+        if ((events.high || 0) > 0)
+            mark("security", "error", qsTr("%1 high-severity events").arg(events.high))
+        else if ((events.events || 0) > 0)
+            mark("security", "warning", qsTr("%1 events").arg(events.events))
+        if (connection.media && connection.media.camera_recording)
+            mark("media", "ok", qsTr("Recording the camera"))
+        if (connection.diagnostics && connection.diagnostics.tester_present)
+            mark("diagnostics", "ok", qsTr("Tester present"))
+        if (connection.obd && connection.obd.live)
+            mark("obd", "ok", qsTr("Live values"))
+        if (connection.flashing && connection.flashing.running)
+            mark("flash", "ok", qsTr("Flashing"))
+        else if (connection.flashing && connection.flashing.state === "failed")
+            mark("flash", "error", qsTr("Flashing failed"))
+        if (connection.uds_scan && connection.uds_scan.running)
+            mark("uds-scan", "ok", qsTr("Scanning"))
+        else if (connection.uds_scan && connection.uds_scan.state === "failed")
+            mark("uds-scan", "error", qsTr("Scan failed"))
+        if (connection.xcp && (connection.xcp.polling || connection.xcp.connected))
+            mark("xcp", "ok", connection.xcp.polling ? qsTr("Measuring") : qsTr("Connected to the ECU"))
+        if (connection.gmlan && connection.gmlan.tester_present)
+            mark("gmlan", "ok", qsTr("Tester present"))
+        if (connection.schedule_running)
+            mark("lin", "ok", qsTr("Schedule running"))
+        if (connection.simulation && connection.simulation.running)
+            mark("simulation", "ok", qsTr("Simulation running"))
+        if (connection.restbus && connection.restbus.running)
+            mark("restbus", "ok", qsTr("Restbus running"))
+        const tests = connection.tests
+        if (tests && tests.running)
+            mark("tests", "ok", qsTr("Running %1").arg(tests.running_case))
+        else if (tests && (tests.summary.verdict === "failed" || tests.summary.verdict === "error"))
+            mark("tests", "error", qsTr("Last run failed"))
+        return activity
+    }
+    readonly property var pageKeys: ["dashboard", "trace", "overview", "signals", "health", "reverse", "diagnostics", "obd", "flash", "uds-scan", "xcp", "gmlan", "j1850", "j1939", "canopen", "lin", "simulation", "restbus", "tests", "media", "security"]
     property string page: "dashboard"
     readonly property string pageTitle: (pages.find(item => item.key === page) || pages[0]).title
     readonly property bool tablePage: page === "trace" || page === "overview"
@@ -154,11 +202,53 @@ ColumnLayout {
             ToolTip.visible: hovered
             ToolTip.text: qsTr("The database describes several buses; decode with the messages of this one")
         }
+        // AUTOSAR E2E protections of an ARXML database: their CRC is checked in the trace
+        Label {
+            readonly property var protections: root.connection.e2e_protections
+            readonly property int checkedCount: protections.filter(row => row.checked).length
+            visible: protections.length > 0
+            text: qsTr("E2E: %1 of %2 checked").arg(checkedCount).arg(protections.length)
+            color: checkedCount < protections.length ? Theme.warning : Theme.muted
+            ToolTip.visible: e2eHover.hovered
+            ToolTip.text: qsTr("AUTOSAR E2E protections from the database; the trace shows the CRC check of each frame:")
+                + "\n" + protections.map(row => row.message + ": " + row.profile
+                    + (row.checked ? "" : " — " + qsTr("not checked") + " (" + row.reason + ")")).join("\n")
+            HoverHandler { id: e2eHover }
+        }
+        // AUTOSAR SecOC secured PDUs of an ARXML database: their MAC and freshness are checked in the trace
+        Label {
+            readonly property var protections: root.connection.secoc_protections
+            readonly property var statistics: root.connection.secoc_statistics
+            readonly property int checkedCount: protections.filter(row => row.checked).length
+            // Frames that failed verification (MAC or freshness) since the connection started
+            readonly property int failures: Object.values(statistics).reduce(
+                (sum, row) => sum + row.mac_errors + row.freshness_errors, 0)
+            function counts(name) {
+                const row = statistics[name]
+                return row ? " — " + qsTr("%1 ok, %2 MAC errors, %3 freshness errors, %4 sent")
+                    .arg(row.ok).arg(row.mac_errors).arg(row.freshness_errors).arg(row.sent) : ""
+            }
+            visible: protections.length > 0
+            text: qsTr("SecOC: %1 of %2 checked").arg(checkedCount).arg(protections.length)
+                + (failures > 0 ? " · " + qsTr("%1 failed").arg(failures) : "")
+            color: failures > 0 ? Theme.danger : checkedCount < protections.length ? Theme.warning : Theme.muted
+            ToolTip.visible: secocHover.hovered
+            ToolTip.text: qsTr("AUTOSAR SecOC secured PDUs from the database; the trace shows the MAC and freshness check of each frame. Keys come from the Security Manager:")
+                + "\n" + protections.map(row => row.message + " (Data ID " + row.data_id + "): "
+                    + (row.checked ? qsTr("key %1").arg(row.key) : qsTr("not checked") + " (" + row.reason + ")")
+                    + counts(row.message)).join("\n")
+            HoverHandler { id: secocHover }
+            TapHandler { onTapped: Actions.securityManager.trigger() }
+        }
         CheckBox {
             id: autoScrollBox
             visible: root.page === "trace"
             text: qsTr("Auto-scroll")
             checked: true
+        }
+        TimeFormatBox {
+            id: timeFormatBox
+            visible: root.page === "trace"
         }
         CheckBox {
             id: fadeBox
@@ -217,8 +307,9 @@ ColumnLayout {
                 FrameTable {
                     id: traceTable
                     model: root.connection.trace
-                    columnWidths: [110, 40, 70, 90, 40, 200, 0]
+                    columnWidths: [timeFormatBox.columnWidth, 40, 70, 90, 40, 200, 0]
                     autoScroll: autoScrollBox.checked
+                    onAutoScrollInterrupted: autoScrollBox.checked = false
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     onContextMenuRequested: row => {
@@ -236,6 +327,7 @@ ColumnLayout {
                 model: root.connection.overview
                 columnWidths: [90, 40, 70, 80, 90, 40, 200, 0]
                 sortable: true
+                onContextMenuRequested: overviewMenu.popup()
             }
         }
         Card {
@@ -368,6 +460,22 @@ ColumnLayout {
                 connection: root.connection
             }
         }
+        // Loaded when shown: the video player and camera preview cost nothing otherwise. Loaded by URL, not as an
+        // inline type, so a missing QtMultimedia backend (e.g. no libpulse on Linux) only breaks this page.
+        Loader {
+            readonly property bool shown: root.page === "media"
+            function sync() {
+                if (shown)
+                    setSource(Qt.resolvedUrl("MediaView.qml"), { connection: root.connection });
+                else
+                    setSource("");
+            }
+            onShownChanged: sync()
+            Component.onCompleted: sync()
+        }
+        SecurityEventsView {
+            connection: root.connection
+        }
     }
 
     TransmitPanel {
@@ -417,6 +525,19 @@ ColumnLayout {
         target: root.connection
         function onRecording_event(text) {
             statusLabel.show(text)
+        }
+    }
+
+    // Context menu of the overview rows
+    Menu {
+        id: overviewMenu
+        MenuItem {
+            text: qsTr("Copy selected rows\tCtrl+C")
+            onTriggered: overviewTable.copySelection()
+        }
+        MenuItem {
+            text: qsTr("Select all\tCtrl+A")
+            onTriggered: overviewTable.selectAll()
         }
     }
 

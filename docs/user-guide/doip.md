@@ -35,7 +35,7 @@ the bottom of the list.
 | Setting | Meaning |
 |---|---|
 | Entity, Port | The entity's IP address and TCP port (13400) |
-| TLS | TLS on port 3496 (ISO 13400-2:2019). The entity's certificate is not verified |
+| TLS | TLS on port 3496 (ISO 13400-2:2019). The lists next to it choose trusted certificates to verify the entity with and a client certificate to present, from the [security manager](security-manager.md#tls-for-doip); without trusted certificates the entity is not verified |
 | Tester address | CANExplorer's logical address (default `0E00`; external test equipment uses `0E00` to `0FFF`) |
 | Activation type | Routing activation type: *default*, *WWH-OBD* or *central security* |
 | Protocol version | The DoIP version of the messages sent: ISO 13400-2:2012 (2) or 2019 (3) |
@@ -97,7 +97,9 @@ await simulator.stop()
 ```
 
 `entity_status()` and `power_mode()` ask an entity for its status and diagnostic power mode. With
-`DoipClient(..., tls=context)`, scripts can pass their own `ssl.SSLContext` to verify the entity's certificate.
+`DoipClient(..., tls=context)`, scripts can pass their own `ssl.SSLContext`, e.g. one built from the key store with
+`can_explorer.core.tls.client_context(KeyStore(), trusted='Lab CA', client='Tester')`.
+`DoipEntitySimulator(tls=server_context)` serves the simulated entity over TLS.
 
 ## Limitations
 

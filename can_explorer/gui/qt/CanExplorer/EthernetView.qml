@@ -81,6 +81,32 @@ ColumnLayout {
             ToolTip.visible: hovered
             ToolTip.text: qsTr("UDP port carrying AUTOSAR UDP-NM (it has no standard port); set it to decode NM frames")
         }
+        Button {
+            readonly property var counts: eth.security_event_counts
+            text: (counts.events || 0) > 0 ? qsTr("Security events (%1)").arg(counts.events) : qsTr("Security events")
+            onClicked: eventsDialog.open()
+            ToolTip.visible: hovered
+            ToolTip.text: qsTr("SOME/IP E2E failures, IPsec/MACsec integrity failures, TLS records that fail to decrypt, refused DoIP routing activations and security access, and SOME/IP services Service Discovery did not offer")
+        }
+        Button {
+            text: qsTr("SOME/IP E2E…")
+            ToolTip.visible: hovered
+            ToolTip.text: qsTr("E2E protections of SOME/IP methods and events, checked in the capture too (shared with the SOME/IP tool)")
+            onClicked: e2eDialog.open()
+        }
+        Button {
+            text: eth.tls_keylog ? qsTr("TLS key log ✕") : qsTr("TLS key log…")
+            onClicked: {
+                if (eth.tls_keylog)
+                    eth.load_tls_keylog("")
+                else
+                    keylogDialog.open()
+            }
+            ToolTip.visible: hovered
+            ToolTip.text: eth.tls_keylog
+                ? qsTr("Decrypting TLS with %1; click to stop").arg(eth.tls_keylog)
+                : qsTr("Decrypt TLS sessions (e.g. DoIP on port 3496) with a key log file in the SSLKEYLOGFILE format; the capture must include their handshakes")
+        }
         Item { Layout.fillWidth: true }
         BusyIndicator { running: eth.busy; visible: running; Layout.preferredHeight: 28; Layout.preferredWidth: 28 }
         Pill {
@@ -97,6 +123,13 @@ ColumnLayout {
             visible: eth.can_frame_count > 0
             text: qsTr("%1 ACF-CAN").arg(eth.can_frame_count.toLocaleString(Qt.locale(), "f", 0))
             tint: Theme.chart[2]
+        }
+        // IPsec/MACsec associations from the Security Manager decrypt protected frames
+        Pill {
+            visible: eth.decryption_text.length > 0
+            text: eth.decryption_text
+            tint: Theme.success
+            TapHandler { onTapped: Actions.securityManager.trigger() }
         }
     }
 
@@ -407,5 +440,31 @@ ColumnLayout {
         defaultSuffix: "asc"
         nameFilters: [qsTr("CAN log files (*.asc *.blf *.log *.csv *.trc)")]
         onAccepted: statusLabel.show(eth.export_can_log(selectedFile))
+    }
+
+    FileChooser {
+        id: keylogDialog
+        title: qsTr("TLS key log")
+        nameFilters: [qsTr("Key logs (*.log *.txt *.keys)"), qsTr("All files (*)")]
+        onAccepted: {
+            const error = eth.load_tls_keylog(selectedFile)
+            if (error)
+                statusLabel.show(error)
+        }
+    }
+
+    SomeIpE2eDialog { id: e2eDialog }
+
+    Dialog {
+        id: eventsDialog
+        modal: true
+        anchors.centerIn: Overlay.overlay
+        standardButtons: Dialog.Close
+        width: Math.min(1000, (Overlay.overlay ? Overlay.overlay.width : 1000) - 40)
+        height: Math.min(560, (Overlay.overlay ? Overlay.overlay.height : 560) - 40)
+        SecurityEventsView {
+            anchors.fill: parent
+            connection: eth
+        }
     }
 }

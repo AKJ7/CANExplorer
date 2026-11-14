@@ -88,6 +88,20 @@ ColumnLayout {
         }
     }
 
+    // While a text field has the focus it undoes its own typing; otherwise these undo the last database edit
+    Shortcut {
+        id: undoShortcut
+        sequences: [StandardKey.Undo]
+        enabled: root.visible && root.editor.can_undo
+        onActivated: root.apply(root.editor.undo())
+    }
+    Shortcut {
+        id: redoShortcut
+        sequences: [StandardKey.Redo]  // Ctrl+Shift+Z on Linux and macOS, Ctrl+Y on Windows
+        enabled: root.visible && root.editor.can_redo
+        onActivated: root.apply(root.editor.redo())
+    }
+
     // Header
     Card {
         Layout.fillWidth: true
@@ -111,12 +125,8 @@ ColumnLayout {
                         elide: Text.ElideMiddle
                         Layout.maximumWidth: 360
                     }
-                    Rectangle {
-                        visible: root.editor.dirty
-                        width: 8
-                        height: 8
-                        radius: 4
-                        color: Theme.warning
+                    StatusDot {
+                        status: root.editor.dirty ? "warning" : ""
                         ToolTip.visible: dirtyHover.hovered
                         ToolTip.text: qsTr("Unsaved changes")
                         HoverHandler { id: dirtyHover }
@@ -136,6 +146,22 @@ ColumnLayout {
                 }
             }
 
+            ToolButton {
+                text: "↶"
+                font.pixelSize: 18
+                enabled: root.editor.can_undo
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Undo (%1)").arg(undoShortcut.nativeText)
+                onClicked: root.apply(root.editor.undo())
+            }
+            ToolButton {
+                text: "↷"
+                font.pixelSize: 18
+                enabled: root.editor.can_redo
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Redo (%1)").arg(redoShortcut.nativeText)
+                onClicked: root.apply(root.editor.redo())
+            }
             Button {
                 id: newButton
                 text: qsTr("New ▾")
@@ -240,13 +266,33 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.fillHeight: true
 
-        // Messages
+        // Messages, or every signal grouped by the node sending it
         Card {
-            title: (root.lin ? qsTr("Frames (%1)") : qsTr("Messages (%1)")).arg(root.allMessages.length)
+            id: messagesCard
+            objectName: "databaseMessagesCard"
+            property bool bySender: false
+            title: bySender
+                ? qsTr("Signals by sender (%1)").arg(root.editor.sender_model.signal_count)
+                : (root.lin ? qsTr("Frames (%1)") : qsTr("Messages (%1)")).arg(root.allMessages.length)
             Layout.preferredWidth: 330
             Layout.fillHeight: true
             headerItems: [
                 ToolButton {
+                    visible: messagesCard.bySender
+                    text: "⊞"
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Unfold all")
+                    onClicked: root.editor.sender_model.set_all(true)
+                },
+                ToolButton {
+                    visible: messagesCard.bySender
+                    text: "⊟"
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Fold all")
+                    onClicked: root.editor.sender_model.set_all(false)
+                },
+                ToolButton {
+                    visible: !messagesCard.bySender
                     text: "+"
                     font.pixelSize: 18
                     ToolTip.visible: hovered
@@ -254,6 +300,15 @@ ColumnLayout {
                     onClicked: root.apply(root.editor.add_message())
                 },
                 ToolButton {
+                    visible: !messagesCard.bySender && !root.lin
+                    text: "⧉"
+                    enabled: root.editor.current_message.length > 0
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Duplicate the selected message, with its signals")
+                    onClicked: root.apply(root.editor.duplicate_message())
+                },
+                ToolButton {
+                    visible: !messagesCard.bySender
                     text: "−"
                     font.pixelSize: 18
                     enabled: root.editor.current_message.length > 0
@@ -266,61 +321,192 @@ ColumnLayout {
             ColumnLayout {
                 anchors.fill: parent
                 spacing: 8
+                TabBar {
+                    id: listMode
+                    Layout.fillWidth: true
+                    currentIndex: messagesCard.bySender ? 1 : 0
+                    onCurrentIndexChanged: messagesCard.bySender = currentIndex === 1
+                    TabButton { text: root.lin ? qsTr("Frames") : qsTr("Messages") }
+                    TabButton { text: qsTr("By sender") }
+                }
                 TextField {
                     id: messageSearch
-                    placeholderText: qsTr("Search name or ID")
+                    objectName: "databaseSearch"
+                    placeholderText: qsTr("Search name, ID or signal")
                     Layout.fillWidth: true
                 }
                 ListView {
                     id: messageList
+                    objectName: "databaseMessageList"
+                    visible: !messagesCard.bySender
                     clip: true
                     spacing: 4
-                    model: root.allMessages.filter(item => {
+                    // Each message matching the search by name or identifier, or by signals, which are then shown under it
+                    model: {
                         const query = messageSearch.text.trim().toLowerCase()
-                        return !query || item.name.toLowerCase().includes(query) || item.id.toLowerCase().includes(query)
-                    })
+                        if (!query)
+                            return root.allMessages.map(item => ({ item: item, matches: [] }))
+                        const bySignal = root.editor.search_signals(query)  // Searched in Python: only the matches
+                        const rows = []
+                        for (const item of root.allMessages) {
+                            if (item.name.toLowerCase().includes(query) || item.id.toLowerCase().includes(query))
+                                rows.push({ item: item, matches: [] })
+                            else if (bySignal[item.name] !== undefined)
+                                rows.push({ item: item, matches: bySignal[item.name] })
+                        }
+                        return rows
+                    }
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     ScrollBar.vertical: ScrollBar {}
                     delegate: ItemDelegate {
                         required property var modelData
+                        readonly property var item: modelData.item
                         width: ListView.view.width - 6
-                        highlighted: modelData.name === root.editor.current_message
-                        onClicked: root.editor.select_message(modelData.name)
-                        contentItem: RowLayout {
-                            spacing: 8
-                            Label {
-                                text: modelData.id
-                                color: Theme.accent
-                                font.family: "monospace"
-                                Layout.preferredWidth: 72
-                            }
-                            Label {
-                                text: modelData.name
-                                color: Theme.text
-                                font.bold: parent.parent.highlighted
-                                elide: Text.ElideRight
+                        highlighted: item.name === root.editor.current_message
+                        // From a signal match, select that signal too
+                        onClicked: root.editor.select(item.name, modelData.matches.length > 0 ? modelData.matches[0] : "")
+                        contentItem: ColumnLayout {
+                            spacing: 2
+                            RowLayout {
+                                spacing: 8
                                 Layout.fillWidth: true
-                            }
-                            Pill {
-                                visible: modelData.fd
-                                text: "FD"
-                                tint: Theme.chart[5]
+                                Label {
+                                    text: item.id
+                                    color: Theme.accent
+                                    font.family: "monospace"
+                                    Layout.preferredWidth: 72
+                                }
+                                Label {
+                                    text: item.name
+                                    color: Theme.text
+                                    font.bold: highlighted
+                                    elide: Text.ElideRight
+                                    Layout.fillWidth: true
+                                }
+                                Pill {
+                                    visible: item.fd
+                                    text: "FD"
+                                    tint: Theme.chart[5]
+                                }
+                                Label {
+                                    text: item.signals
+                                    color: Theme.muted
+                                    font.pixelSize: 12
+                                }
+                                StatusDot {
+                                    status: item.issue ? "error" : ""
+                                    size: 8
+                                }
                             }
                             Label {
-                                text: modelData.signals
+                                visible: modelData.matches.length > 0
+                                text: "↳ " + modelData.matches.join(", ")
                                 color: Theme.muted
                                 font.pixelSize: 12
-                            }
-                            Rectangle {
-                                visible: modelData.issue
-                                width: 8
-                                height: 8
-                                radius: 4
-                                color: Theme.danger
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                                Layout.leftMargin: 80
                             }
                         }
                     }
+                }
+                ListView {
+                    id: senderList
+                    objectName: "databaseSenderList"
+                    visible: messagesCard.bySender
+                    clip: true
+                    spacing: 2
+                    // A tree as list rows (depth 0: node, 1: message, 2: signal), built in Python and only while shown
+                    // (a database can have tens of thousands of signals). Not ListView sections over an array, which
+                    // made the list quadratically slow (1600 signals took half a minute).
+                    model: root.editor.sender_model
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    ScrollBar.vertical: ScrollBar {}
+                    delegate: ItemDelegate {
+                        id: treeRow
+                        required property int index
+                        required property string kind
+                        required property int depth
+                        required property string node
+                        required property string message
+                        required property string identifier
+                        required property string signalName
+                        required property bool expanded
+                        required property int count
+                        readonly property bool folds: kind !== "signal"
+                        width: ListView.view.width - 6
+                        leftPadding: 6 + depth * 18
+                        highlighted: kind === "message" ? message === root.editor.current_message
+                            : kind === "signal" && message === root.editor.current_message
+                                && signalName === root.editor.current_signal
+                        // A node only folds; a message is selected (its marker folds it); a signal is selected
+                        onClicked: {
+                            if (kind === "node")
+                                root.editor.sender_model.toggle(index)
+                            else
+                                root.editor.select(message, signalName)
+                        }
+                        onDoubleClicked: if (kind === "message") root.editor.sender_model.toggle(index)
+                        Keys.onLeftPressed: if (folds && expanded) root.editor.sender_model.toggle(index)
+                        Keys.onRightPressed: if (folds && !expanded) root.editor.sender_model.toggle(index)
+                        contentItem: RowLayout {
+                            spacing: 6
+                            Label {
+                                text: treeRow.folds ? (treeRow.expanded ? "▾" : "▸") : ""
+                                color: Theme.muted
+                                horizontalAlignment: Text.AlignHCenter
+                                Layout.preferredWidth: 14
+                                Layout.topMargin: treeRow.kind === "node" ? 6 : 0
+                                // A node row already folds when clicked; a message row is selected, and folds here
+                                TapHandler {
+                                    enabled: treeRow.kind === "message"
+                                    onTapped: root.editor.sender_model.toggle(treeRow.index)
+                                }
+                            }
+                            Label {
+                                visible: treeRow.kind === "message"
+                                text: treeRow.identifier
+                                color: Theme.accent
+                                font.family: "monospace"
+                            }
+                            Label {
+                                text: treeRow.kind === "node" ? (treeRow.node || qsTr("No sender"))
+                                    : treeRow.kind === "message" ? treeRow.message : treeRow.signalName
+                                color: treeRow.kind === "node" ? Theme.accent : Theme.text
+                                font.bold: treeRow.kind === "node" || treeRow.highlighted
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                                Layout.topMargin: treeRow.kind === "node" ? 6 : 0
+                            }
+                            Label {
+                                visible: treeRow.folds
+                                text: treeRow.count
+                                color: Theme.muted
+                                font.pixelSize: 12
+                                ToolTip.visible: countHover.hovered
+                                ToolTip.text: treeRow.kind === "node" ? qsTr("%1 messages").arg(treeRow.count)
+                                    : qsTr("%1 signals").arg(treeRow.count)
+                                HoverHandler { id: countHover }
+                            }
+                        }
+                    }
+                    Label {
+                        anchors.centerIn: parent
+                        visible: senderList.count === 0
+                        text: qsTr("No signals")
+                        color: Theme.muted
+                    }
+                }
+                // The list model follows whether it is shown and the search
+                Connections {
+                    target: messagesCard
+                    function onBySenderChanged() { root.editor.sender_model.set_active(messagesCard.bySender) }
+                }
+                Connections {
+                    target: messageSearch
+                    function onTextChanged() { root.editor.sender_model.set_query(messageSearch.text) }
                 }
                 Label {
                     text: qsTr("Nodes: %1").arg(root.editor.nodes.join(", ") || "–")
@@ -461,6 +647,33 @@ ColumnLayout {
                             ToolTip.visible: hovered
                             ToolTip.text: qsTr("Add a signal")
                             onClicked: root.apply(root.editor.add_signal())
+                        },
+                        ToolButton {
+                            visible: !root.lin
+                            text: "⧉"
+                            enabled: root.signal !== null
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("Duplicate the selected signal (placed at the first free bits)")
+                            onClicked: root.apply(root.editor.duplicate_signal())
+                        },
+                        ToolButton {
+                            visible: !root.lin
+                            text: qsTr("Copy")
+                            enabled: root.signal !== null
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("Copy the selected signal, to paste it into another message")
+                            onClicked: {
+                                if (root.apply(root.editor.copy_signal()))
+                                    root.show(qsTr("Copied %1: select a message and paste it").arg(root.editor.copied_signal), false)
+                            }
+                        },
+                        ToolButton {
+                            visible: !root.lin
+                            text: qsTr("Paste")
+                            enabled: root.editor.copied_signal.length > 0
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("Add a copy of %1 to this message").arg(root.editor.copied_signal)
+                            onClicked: root.apply(root.editor.paste_signal())
                         },
                         ToolButton {
                             text: "−"

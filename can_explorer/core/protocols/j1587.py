@@ -1,10 +1,11 @@
 """Passive SAE J1587 decoder: the application layer of the older heavy-truck diagnostic bus (engine, transmission,
 brakes…). A J1587 message is a MID (the module that sent it) followed by parameters, each a PID and its data.
 
-J1587 runs over J1708, which is a 9600-baud serial (RS-485) bus, **not** CAN — so there is no live J1708 capture
-through a CAN interface. This decoder works on J1587 message bytes: a J1708 serial log, a gateway that bridges
-J1708 frames onto the bus, or the scripting console. Each frame's data is treated as one complete J1587 message
-(MID, parameters and, when present, the trailing checksum).
+J1587 runs over J1708, which is a 9600-baud serial (RS-485) bus, **not** CAN. A live J1708 bus is captured through
+the `j1708` interface (`core/j1708.py`), which presents each J1708 message as a frame; this decoder also works on
+J1587 message bytes from a J1708 serial log, a gateway that bridges J1708 frames onto the bus, or the scripting
+console. Each frame's data is treated as one complete J1587 message (MID, parameters and, when present, the
+trailing checksum).
 
 A subset of MIDs and PIDs is named, and the well-known parameters are scaled; the rest are shown as raw bytes.
 """

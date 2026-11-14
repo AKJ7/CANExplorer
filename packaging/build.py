@@ -18,6 +18,8 @@ With --j2534-bridge (Windows), the 32-bit J2534 bridge (can_explorer/core/j2534_
 """
 
 import argparse
+import contextlib
+import datetime
 import os
 import platform
 import re
@@ -90,9 +92,11 @@ def build_pyinstaller() -> Path:
         f'{RESOURCES_DIR}{os.pathsep}can_explorer/resources',
         '--add-data',
         f'{DOCS_DIR}{os.pathsep}{DOCS_TARGET}',
-        # The application version is read from the package metadata
+        # The application version is read from the package metadata, the commit and build date from the build module
         '--copy-metadata',
         DISTRIBUTION,
+        '--hidden-import',
+        'can_explorer._build_version',
         '--distpath',
         str(DIST),
         '--workpath',
@@ -157,6 +161,48 @@ def build_j2534_bridge(python: str, bundle: Path) -> Path:
     return target
 
 
+def _commit() -> str:
+    """The short commit being built: from git, else from the GitHub Actions environment."""
+    try:
+        commit = subprocess.run(
+            ['git', 'rev-parse', '--short', 'HEAD'], cwd=ROOT, capture_output=True, text=True, check=True
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        commit = ''
+    return commit or os.environ.get('GITHUB_SHA', '')[:7]
+
+
+def _build_date() -> str:
+    """Now (UTC), or SOURCE_DATE_EPOCH for reproducible builds."""
+    epoch = os.environ.get('SOURCE_DATE_EPOCH')
+    moment = (
+        datetime.datetime.fromtimestamp(int(epoch), datetime.timezone.utc)
+        if epoch
+        else datetime.datetime.now(datetime.timezone.utc)
+    )
+    return moment.strftime('%Y-%m-%d %H:%M UTC')
+
+
+def build_module_text(backend: str) -> str:
+    """The build module: version, commit, build date and backend, read by can_explorer/build_info.py."""
+    return (
+        f'VERSION = {version(DISTRIBUTION)!r}\n'
+        f'COMMIT = {_commit()!r}\n'
+        f'BUILD_DATE = {_build_date()!r}\n'
+        f'BACKEND = {backend!r}\n'
+    )
+
+
+@contextlib.contextmanager
+def build_module(backend: str):
+    """Write can_explorer/_build_version.py for the duration of the build (it is not part of the source tree)."""
+    VERSION_MODULE.write_text(build_module_text(backend))
+    try:
+        yield
+    finally:
+        VERSION_MODULE.unlink(missing_ok=True)
+
+
 def _numeric_version() -> str:
     """Windows version resources need a purely numeric version such as 1.2.3.0."""
     numbers = [int(part) for part in re.findall(r'\d+', version(DISTRIBUTION))[:4]]
@@ -179,8 +225,9 @@ def build_nuitka(onefile: bool) -> Path:
         f'--output-filename={NAME}',
         f'--output-folder-name={NAME}',
         '--enable-plugin=pyqt6',
-        # QML modules (QtQuick, Controls, Dialogs, Layouts) on top of the default Qt plugins
-        '--include-qt-plugins=qml',
+        # QML modules (QtQuick, Controls, Dialogs, Layouts) on top of the default Qt plugins; multimedia: the
+        # FFmpeg backend recording and playing the camera videos of Video & map
+        '--include-qt-plugins=qml,multimedia',
         f'--include-data-dir={QML_DIR}=can_explorer/gui/qt',
         f'--include-data-dir={RESOURCES_DIR}=can_explorer/resources',
         f'--include-data-dir={DOCS_DIR}={DOCS_TARGET}',
@@ -199,16 +246,17 @@ def build_nuitka(onefile: bool) -> Path:
     if sys.platform == 'win32':
         arguments += ['--windows-console-mode=disable', f'--windows-icon-from-ico={ICONS / "canexplorer.ico"}']
     elif sys.platform == 'darwin':
-        arguments += [f'--macos-app-name={NAME}', f'--macos-app-icon={ICONS / "canexplorer.icns"}']
+        arguments += [
+            f'--macos-app-name={NAME}',
+            f'--macos-app-icon={ICONS / "canexplorer.icns"}',
+            # Without a usage description macOS refuses camera access (recording a video with a CAN log)
+            '--macos-app-protected-resource=NSCameraUsageDescription:Record a video in step with a CAN recording',
+        ]
     else:
         arguments.append(f'--linux-icon={ICONS / "canexplorer.png"}')
-    # Nuitka cannot relate the package metadata of an editable install (uv sync) to the package, so the
-    # version is compiled in instead (see can_explorer/__version__.py)
-    VERSION_MODULE.write_text(f'VERSION = {version(DISTRIBUTION)!r}\n')
-    try:
-        subprocess.run(arguments, check=True, cwd=ROOT)
-    finally:
-        VERSION_MODULE.unlink(missing_ok=True)
+    # Nuitka cannot relate the package metadata of an editable install (uv sync) to the package, so the version
+    # comes from the build module (see can_explorer/__version__.py)
+    subprocess.run(arguments, check=True, cwd=ROOT)
 
     if sys.platform == 'darwin':
         built, bundle = output / f'{NAME}.app', DIST / f'{NAME}.app'
@@ -245,7 +293,8 @@ def main():
     args = parser.parse_args()
     if args.onefile and args.backend != 'nuitka':
         parser.error('--onefile is only supported with --backend nuitka')
-    bundle = build_nuitka(args.onefile) if args.backend == 'nuitka' else build_pyinstaller()
+    with build_module('Nuitka' if args.backend == 'nuitka' else 'PyInstaller'):
+        bundle = build_nuitka(args.onefile) if args.backend == 'nuitka' else build_pyinstaller()
     print(f'Bundle: {bundle}')
     if args.j2534_bridge:
         print(f'J2534 bridge: {build_j2534_bridge(args.j2534_bridge, bundle)}')

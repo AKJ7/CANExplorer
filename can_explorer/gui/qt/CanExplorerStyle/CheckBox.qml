@@ -31,7 +31,7 @@ T.CheckBox {
             anchors.centerIn: parent
             text: control.checkState === Qt.PartiallyChecked ? "–" : "✓"
             visible: control.checkState !== Qt.Unchecked
-            color: "white"
+            color: Theme.onAccent
             font.pixelSize: 13
             font.bold: true
         }

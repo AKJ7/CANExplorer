@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 from PyQt6.QtCore import QObject, QTimer, pyqtProperty, pyqtSignal, pyqtSlot
 
 from can_explorer.core.frames import format_hex, parse_hex_bytes
-from can_explorer.core.uds import UdsClient, did_name, service_name
+from can_explorer.core.uds import UdsClient, UdsError, did_name, load_key_source, service_name
 from can_explorer.core import uds_fuzz, uds_scan
 from can_explorer.sys.log_handler import get_logger
 
@@ -48,6 +48,7 @@ class UdsScanController(QObject):
         self._truncated = False
         self._state = ''  # '', 'running', 'done', 'stopped', 'failed'
         self._kind = uds_scan.DATA_IDENTIFIERS
+        self._note = ''  # What happened before the probes (the security unlock), or why the scan failed
         self._dirty = False
         self._timer = QTimer(self)
         self._timer.setInterval(REFRESH_MS)
@@ -104,6 +105,10 @@ class UdsScanController(QObject):
         ]
 
     @pyqtProperty(str, notify=changed)
+    def note(self) -> str:
+        return self._note
+
+    @pyqtProperty(str, notify=changed)
     def transport_name(self) -> str:
         return self._diagnostics.transport_name
 
@@ -112,7 +117,8 @@ class UdsScanController(QObject):
     @pyqtSlot('QVariantMap', result=str)
     def start(self, options: Dict[str, Any]) -> str:
         """Start a scan. Options: kind, start, end (hex), service (hex), control_type, template (hex), position,
-        width, delay_ms, timeout_ms, enter_session (hex or ''), allow_state_changing. Returns an error or ''."""
+        width, delay_ms, timeout_ms, enter_session (hex or ''), security_level (hex or '': unlock it with the
+        Diagnostics view's key algorithm after entering the session), allow_state_changing. Returns an error or ''."""
         if self.running:
             return 'A scan is already running'
         error = self._diagnostics.transport_error()
@@ -131,6 +137,7 @@ class UdsScanController(QObject):
         self._scanned = self._found = 0
         self._total = plan['total']
         self._truncated = False
+        self._note = ''
         self._state = 'running'
         self._stop = asyncio.Event()
         self._task = asyncio.ensure_future(self._run(plan))
@@ -149,6 +156,21 @@ class UdsScanController(QObject):
         enter = options.get('enter_session') or ''
         session = _hex(enter, 0x7F, 'session') if str(enter).strip() else None
         plan: Dict[str, Any] = {'kind': kind, 'delay': delay, 'timeout': timeout, 'session': session}
+        level_text = str(options.get('security_level') or '').strip()
+        plan['security'] = None
+        if level_text:
+            level = _hex(level_text, 0x7F, 'security level')
+            if level % 2 == 0:
+                raise ValueError('Security levels for requesting a seed are odd (1, 3, 5, …)')
+            source = self._diagnostics.key_file
+            if not source:
+                raise ValueError(
+                    'Choose the key algorithm in the Diagnostics view (Security access) to unlock before scanning'
+                )
+            try:
+                plan['security'] = (level, load_key_source(source))
+            except UdsError as e:
+                raise ValueError(str(e)) from None
 
         if kind == uds_scan.SERVICES:
             services = uds_scan.KNOWN_SERVICES if options.get('known_only', True) else range(0x00, 0x100)
@@ -225,6 +247,15 @@ class UdsScanController(QObject):
         try:
             if plan['session'] is not None:
                 await client.diagnostic_session_control(plan['session'])
+            if plan['security'] is not None:
+                level, compute_key = plan['security']
+                try:
+                    unlocked = await client.security_access(level, compute_key)
+                except Exception as e:
+                    self._note = f'Security access to level 0x{level:02X} failed, nothing probed: {e}'
+                    raise
+                self._note = f'Security level 0x{level:02X} {"unlocked" if unlocked else "was already unlocked"}'
+                self.changed.emit()
             async for result in plan['maker'](client):
                 self._scanned += 1
                 if result.interesting:
@@ -237,6 +268,7 @@ class UdsScanController(QObject):
             raise
         except Exception as e:
             logger.warning(f'UDS scan failed: {e}')
+            self._note = self._note or f'The scan failed: {e}'
             self._state = 'failed'
         finally:
             transport.close()
@@ -291,6 +323,7 @@ class UdsScanController(QObject):
         self._scanned = self._found = self._total = 0
         self._truncated = False
         self._state = ''
+        self._note = ''
         self.results_changed.emit()
         self.changed.emit()
 

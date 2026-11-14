@@ -69,6 +69,17 @@ The remote bus is a python-can interface (`canexplorer_remote`), so scripts and 
 uv run can-test tests/ecu_tests.py --interface canexplorer_remote --channel "raspberrypi.local:8765/vehicle?token=change-me"
 ```
 
+Or directly with python-can:
+
+```python
+import can
+
+channel = 'raspberrypi.local:8765/vehicle?token=change-me'
+with can.Bus(interface='canexplorer_remote', channel=channel) as bus:
+    bus.send(can.Message(arbitration_id=0x7DF, data=[0x02, 0x01, 0x0D], is_extended_id=False))
+    print(bus.recv(timeout=2.0))  # A frame of the remote bus, or None
+```
+
 `GET http://HOST:PORT/buses` (with `?token=…`) lists the buses of a server with their bitrates and clients.
 
 ## MQTT

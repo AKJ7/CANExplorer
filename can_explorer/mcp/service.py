@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import can
 
+from can_explorer.core.channel_detection import configs_of, detect_channels
 from can_explorer.core.database_editor import DatabaseEditor
 from can_explorer.core.database_io import DatabaseFormatError, WRITE_SUFFIXES
 from can_explorer.core.decoding import DbcDecoder, FrameDecoder, open_signal_database
@@ -34,9 +35,11 @@ from can_explorer.core.reverse.reference import (
     reference_from_signal,
 )
 from can_explorer.core.reverse.related import signal_groups
+from can_explorer.core.secoc_check import KeyStoreSecOcKeys, SecOcVerifier
 from can_explorer.core.session import BusSession, SessionError
 from can_explorer.core.sources import BusConfig, LiveSource, MessageSource
 from can_explorer.core.uds import UdsClient, UdsError
+from can_explorer.sys.log_handler import get_logger
 
 DEFAULT_UDS_REQUEST = 0x7E0  # Physical request to the first ECU; OBD uses the functional 0x7DF
 NOT_CONNECTED = 'Not connected to a bus; use connect(interface, channel) first'
@@ -44,6 +47,8 @@ NOT_CONNECTED = 'Not connected to a bus; use connect(interface, channel) first'
 SCAN_FRAMES = 50_000  # Newest frames scanned when answering about recent frames or analysing an identifier
 DEFAULT_FRAME_LIMIT = 50
 ANALYSIS_FRAMES = 20_000
+
+logger = get_logger(__name__)
 
 
 class SendNotAllowed(PermissionError):
@@ -132,7 +137,7 @@ class CanService:
             raise ValueError(f'Unknown protocol {protocol!r}; use one of {", ".join(PROTOCOL_DECODERS)}')
         self.protocol = protocol
         self._buffer_size = buffer_size
-        self._decoder = FrameDecoder(create_protocol_decoder(protocol), database)
+        self._decoder = FrameDecoder(create_protocol_decoder(protocol), database, self._secoc_verifier())
         self.session: Optional[BusSession] = (
             BusSession(source, self._decoder, buffer_size=buffer_size) if source is not None else None
         )
@@ -416,6 +421,46 @@ class CanService:
         self._decoder.database = None
         return {'database': None, 'unloaded': had}
 
+    @staticmethod
+    def _secoc_verifier() -> Optional[SecOcVerifier]:
+        """SecOC checks with the user's key store, unlocked with CANEXPLORER_KEYSTORE_PASSWORD (else secured PDUs
+        are reported as not checked: the key store is locked)."""
+        from can_explorer.core.keystore import KeyStore, KeyStoreError
+
+        store = KeyStore()
+        try:
+            store.unlock_from_environment()
+        except KeyStoreError as e:
+            logger.warning(f'Key store: {e}')
+        return SecOcVerifier(KeyStoreSecOcKeys(store))
+
+    def secoc_status(self) -> Dict[str, Any]:
+        """The SecOC secured PDUs of the loaded ARXML database: Data ID, the key store entry that verifies them (its
+        name only; keys are never returned) or why they are not checked, and the outcome of the checks so far."""
+        database = self._database
+        configs = database.secoc_protected() if hasattr(database, 'secoc_protected') else []
+        verifier = self._decoder.secoc
+        pdus = []
+        for config in configs:
+            key, reason = (None, 'no security manager') if verifier is None else verifier.keys.key_for(config)
+            problem = config.problem or ('' if key is not None else reason)
+            statistics = verifier.statistics.get(config.pdu) if verifier is not None else None
+            pdus.append(
+                {
+                    'pdu': config.pdu,
+                    'data_id': config.data_id,
+                    'checked': not problem,
+                    'key': key.entry if key is not None else None,
+                    'reason': problem,
+                    'freshness_bits': config.freshness_bits,
+                    'freshness_tx_bits': config.freshness_tx_bits,
+                    'mac_bits': config.auth_tx_bits,
+                    'algorithm': config.auth_algorithm,
+                    **(statistics.as_dict() if statistics is not None else {}),
+                }
+            )
+        return {'secured_pdus': pdus}
+
     # Reverse engineering
 
     @staticmethod
@@ -446,7 +491,7 @@ class CanService:
         frames = collect(frame.message for frame in messages)
         if key not in frames:
             return {'id': _id_text(*key), 'frames': 0, 'fields': [], 'note': 'No frames for this identifier'}
-        result = analyse(frames[key])
+        result = analyse(frames[key], secoc=self._secured().get(key))
         fields = [self._field(found) for found in result.fields if include_constant or found.kind != 'constant']
         return {
             'id': _id_text(*key),
@@ -457,13 +502,18 @@ class CanService:
             'fields': fields,
         }
 
+    def _secured(self) -> Dict[Tuple[int, bool], Any]:
+        """The SecOC configuration of the database's secured PDUs (an ARXML), so the analysis labels their
+        freshness value and MAC."""
+        return self._decoder.secured_pdus if self._decoder is not None else {}
+
     def _analyses(self, identifier: Optional[Any], extended: bool) -> List[Any]:
         """Analyse the recent frames of one identifier, or of every identifier when none is given."""
         wanted = None if identifier is None else (_parse_id(identifier), bool(extended))
         frames = collect(frame.message for frame in self._recent(*(wanted or (None, None)), ANALYSIS_FRAMES))
         if wanted is not None:
-            return [analyse(frames[wanted])] if wanted in frames else []
-        return [analyse(frames[key]) for key in frames]
+            return [analyse(frames[wanted], secoc=self._secured().get(wanted))] if wanted in frames else []
+        return [analyse(frames[key], secoc=self._secured().get(key)) for key in frames]
 
     def correlate(
         self,
@@ -517,7 +567,7 @@ class CanService:
             key = (_parse_id(identifier), bool(extended))
             frames = {key: frames[key]} if key in frames else {}
         # Include the analysis's fields (odd-width, Motorola and multiplexed) next to the byte-aligned candidates
-        analyses = [analyse(idframes) for idframes in frames.values()]
+        analyses = [analyse(idframes, secoc=self._secured().get(idframes.key)) for idframes in frames.values()]
         candidate_fields = candidates(frames, analyses)
         matches = correlate_fields(reference, frames, candidate_fields, max_lag=max(0.0, max_lag), top=max(1, top))
         return {
@@ -735,7 +785,7 @@ class CanService:
             return {'error': NOT_CONNECTED}
         messages = [frame.message for frame in self._recent(None, None, ANALYSIS_FRAMES)]
         frames = collect(m for m in messages if not is_obd_identifier((m.arbitration_id, m.is_extended_id)))
-        analyses = [analyse(idframes) for idframes in frames.values()]
+        analyses = [analyse(idframes, secoc=self._secured().get(idframes.key)) for idframes in frames.values()]
         groups = signal_groups(frames, analyses, min_correlation=min_correlation, top=max(1, top))
         return {
             'groups': [
@@ -941,10 +991,8 @@ class CanService:
     @staticmethod
     def interfaces() -> List[Dict[str, Any]]:
         """The CAN interfaces python-can can detect on this machine (for choosing a channel to connect to)."""
-        try:
-            configs = can.detect_available_configs()
-        except Exception:
-            return []
+        # Each backend on its own: one failing backend no longer hides the channels of all the others
+        configs = configs_of(detect_channels())
         return [{'interface': config.get('interface'), 'channel': str(config.get('channel'))} for config in configs]
 
     # Diagnostics (OBD-II and UDS, over ISO-TP)

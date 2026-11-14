@@ -67,10 +67,12 @@ Menu {
     MenuSeparator {}
     MenuItem { action: Actions.editDatabase }
     MenuItem { action: Actions.convertDatabase }
+    MenuItem { action: Actions.securityManager }
     MenuItem { action: Actions.preferences }
     MenuSeparator {}
     MenuItem { action: Actions.help }
     MenuItem { action: Actions.checkForUpdates }
+    MenuItem { action: Actions.systemReport }
     MenuItem { action: Actions.about }
     MenuItem { action: Actions.exit }
 }

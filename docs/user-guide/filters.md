@@ -4,6 +4,8 @@ The filter field in the top bar limits the frames shown in the trace and the ove
 plots, diagnostics and simulations always see all frames. An invalid filter is shown in red and has no effect;
 hover it to see the error.
 
+![The filter 100-1FF in the top bar: the trace shows only identifier 0x100](../assets/screenshots/filters.png)
+
 ## Syntax
 
 Terms are separated by spaces or commas. An empty filter shows everything.
@@ -42,3 +44,21 @@ The message of a signal comparison can also be a contained PDU of an AUTOSAR con
 | `100-1FF !123` | 0x100–0x1FF except 0x123 |
 | `tx fd` | CAN FD frames sent by CANExplorer |
 | `18FEF100-18FEF1FF` | J1939 PGN 0xFEF1 from any source address |
+
+## In scripts
+
+The same syntaxes are available to Python scripts, e.g. to go through a log file
+([example](recording-and-replay.md#logs-in-scripts)):
+
+```python
+from can_explorer.core.conditions import condition_matcher
+from can_explorer.core.decoding import DbcDecoder
+from can_explorer.core.filters import MessageFilter
+
+engine_frames = MessageFilter.parse('100-1FF !123')
+engine_frames.matches(msg)  # True or False for a can.Message
+
+database = DbcDecoder('vehicle.dbc')
+hot = condition_matcher('EngineData.CoolantTemp > 110', lambda: database)
+hot(msg)
+```

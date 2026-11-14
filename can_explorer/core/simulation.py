@@ -9,6 +9,7 @@ They run on a BusSession, typically on python-can's virtual interface next to th
 """
 
 import asyncio
+import time
 from typing import Callable, Dict, List, Optional, Tuple
 
 import can
@@ -37,11 +38,33 @@ class UdsServer:
         slow_routines: Tuple[int, ...] = (),
         max_block_length: int = 0x402,
         download_requires_security: bool = False,
+        authentication=None,
+        authentication_dids: Tuple[int, ...] = (),
+        seed_generator: Optional[Callable[[], bytes]] = None,
+        max_attempts: int = 0,
+        lockout_delay: float = 10.0,
+        lockout_survives_reset: bool = True,
+        clock: Callable[[], float] = time.monotonic,
     ):
         self.dids = dict(dids or {0xF190: b'WDB1234567890ABCD', 0xF18C: b'SN-0001'})
+        # Authentication (0x29): a core/uds_auth.AuthenticationServer; the DIDs it protects need an authenticated
+        # tester (NRC 0x34 authenticationRequired otherwise)
+        self.authentication = authentication
+        self.authentication_dids = authentication_dids
         self.dtcs = list(dtcs if dtcs is not None else [(0x012345, 0x09), (0xC10000, 0x08)])
         self.seed = seed
         self.key_function = key_function
+        # Security access hardening: a new seed per request (seed_generator, else the fixed `seed`); after
+        # `max_attempts` wrong keys (0: unlimited) exceedNumberOfAttempts, then requiredTimeDelayNotExpired for
+        # `lockout_delay` seconds, which an ECU reset ends unless `lockout_survives_reset`
+        self.seed_generator = seed_generator
+        self.max_attempts = max_attempts
+        self.lockout_delay = lockout_delay
+        self.lockout_survives_reset = lockout_survives_reset
+        self.clock = clock
+        self.failed_attempts = 0
+        self._locked_until: Optional[float] = None
+        self._current_seed = seed
         self.slow_routines = slow_routines
         self.session = 0x01
         self.unlocked_level: Optional[int] = None
@@ -71,6 +94,7 @@ class UdsServer:
             0x19: self._read_dtcs,
             0x22: self._read_did,
             0x27: self._security_access,
+            0x29: self._authentication,
             0x2E: self._write_did,
             0x31: self._routine_control,
             0x34: self._request_download,
@@ -102,16 +126,28 @@ class UdsServer:
 
     def _ecu_reset(self, request: bytes) -> List[bytes]:
         self.session, self.unlocked_level = 0x01, None
+        if not self.lockout_survives_reset:
+            self._locked_until, self.failed_attempts = None, 0
         return [bytes([0x51, request[1] & 0x7F])]
 
     def _tester_present(self, request: bytes) -> List[bytes]:
         self.tester_present_count += 1
         return [bytes([0x7E, request[1] & 0x7F])]
 
+    def _authentication(self, request: bytes) -> List[bytes]:
+        if self.authentication is None:
+            return self._negative(0x29, 0x11)
+        return [self.authentication.handle(request)]
+
+    def _needs_authentication(self, did: int) -> bool:
+        return did in self.authentication_dids and not (self.authentication and self.authentication.authenticated)
+
     def _read_did(self, request: bytes) -> List[bytes]:
         if len(request) != 3:
             return self._negative(0x22, 0x13)
         did = int.from_bytes(request[1:3], 'big')
+        if self._needs_authentication(did):
+            return self._negative(0x22, 0x34)
         if did == 0xF186:
             return [bytes([0x62]) + request[1:3] + bytes([self.session])]
         if did not in self.dids:
@@ -121,6 +157,8 @@ class UdsServer:
     def _write_did(self, request: bytes) -> List[bytes]:
         if len(request) < 4:
             return self._negative(0x2E, 0x13)
+        if self._needs_authentication(int.from_bytes(request[1:3], 'big')):
+            return self._negative(0x2E, 0x34)
         if self.unlocked_level is None:
             return self._negative(0x2E, 0x33)
         self.dids[int.from_bytes(request[1:3], 'big')] = bytes(request[3:])
@@ -132,15 +170,26 @@ class UdsServer:
         level = request[1]
         if self.session == 0x01:
             return self._negative(0x27, 0x7F)
+        if self._locked_until is not None:
+            if self.clock() < self._locked_until:
+                return self._negative(0x27, 0x37)  # requiredTimeDelayNotExpired
+            self._locked_until, self.failed_attempts = None, 0
         if level % 2:
             self._pending_seed_level = level
-            seed = bytes(len(self.seed)) if self.unlocked_level == level else self.seed
-            return [bytes([0x67, level]) + seed]
+            if self.unlocked_level == level:
+                return [bytes([0x67, level]) + bytes(len(self.seed))]
+            self._current_seed = self.seed_generator() if self.seed_generator is not None else self.seed
+            return [bytes([0x67, level]) + self._current_seed]
         if self._pending_seed_level != level - 1:
             return self._negative(0x27, 0x24)
         self._pending_seed_level = None
-        if bytes(request[2:]) != self.key_function(level - 1, self.seed):
+        if bytes(request[2:]) != self.key_function(level - 1, self._current_seed):
+            self.failed_attempts += 1
+            if self.max_attempts and self.failed_attempts >= self.max_attempts:
+                self._locked_until = self.clock() + self.lockout_delay
+                return self._negative(0x27, 0x36)  # exceedNumberOfAttempts
             return self._negative(0x27, 0x35)
+        self.failed_attempts = 0
         self.unlocked_level = level - 1
         return [bytes([0x67, level])]
 

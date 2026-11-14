@@ -6,13 +6,19 @@ import asyncio
 import socket
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union
 
 import can
 from PyQt6.QtCore import QObject, QTimer, QUrl, pyqtProperty, pyqtSignal, pyqtSlot
 
 from can_explorer.core import ethernet, gptp, log_formats, pcap_live
+from can_explorer.core.security_events import EthernetSecurityMonitor
+from can_explorer.core.tls_decrypt import KeyLog, KeyLogError, TlsDecryptor
 from can_explorer.sys.log_handler import get_logger
+
+if TYPE_CHECKING:
+    from can_explorer.gui.security import SecurityController
+    from can_explorer.gui.someip import SomeIpController
 
 logger = get_logger(__name__)
 
@@ -88,10 +94,16 @@ class EthernetController(QObject):
     changed = pyqtSignal()  # Busy, file, error, capture state
     data_changed = pyqtSignal()  # Packets
 
-    def __init__(self, parent: Optional[QObject] = None):
+    def __init__(
+        self,
+        security: Optional['SecurityController'] = None,
+        someip: Optional['SomeIpController'] = None,
+        parent: Optional[QObject] = None,
+    ):
         super().__init__(parent)
         self._raw: List[ethernet.RawPacket] = []
         self._decoded: List[ethernet.EthernetPacket] = []
+        self._monitor = EthernetSecurityMonitor()  # Security events of the decoded packets
         self._filter = ''
         self._error = ''
         self._status = ''
@@ -99,7 +111,16 @@ class EthernetController(QObject):
         self._busy = False
         self._capture: Optional[Union[LiveCapture, PcapLiveCapture]] = None
         self._nm_port: Optional[int] = None  # AUTOSAR UDP-NM has no standard port; the user sets it
-        self._decoder = ethernet.StreamDecoder(self._nm_port)  # Reassembles SOME/IP over TCP and SOME/IP-TP
+        self._security = security  # IPsec/MACsec associations to decrypt protected frames with
+        self._decryptor = security.packet_decryptor() if security is not None else None
+        self._keylog: Optional[KeyLog] = None  # A TLS key log decrypting TLS sessions
+        self._someip = someip  # Its SOME/IP E2E protections are checked in captures too
+        if someip is not None:
+            someip.e2e_changed.connect(self._redecode_loaded)
+        self._keylog_file = ''
+        if security is not None:
+            security.keys_changed.connect(self._keys_changed)
+        self._decoder = self._new_decoder()  # Reassembles SOME/IP over TCP and SOME/IP-TP
         self._base_time: Optional[float] = None
         self._timer = QTimer(self)
         self._timer.setInterval(REFRESH_INTERVAL_MS)
@@ -158,16 +179,78 @@ class EthernetController(QObject):
         if self._raw and self._capture is None and not self._busy:
             asyncio.ensure_future(self._redecode())
 
+    def _new_decoder(self) -> ethernet.StreamDecoder:
+        tls = TlsDecryptor(self._keylog) if self._keylog is not None else None
+        e2e = self._someip.e2e_checker() if self._someip is not None else None
+        return ethernet.StreamDecoder(self._nm_port, self._decryptor, tls, e2e)
+
+    @pyqtProperty(str, notify=changed)
+    def tls_keylog(self) -> str:
+        """The TLS key log file decrypting TLS sessions, '' for none."""
+        return self._keylog_file
+
+    @pyqtSlot(QUrl, result=str)
+    def load_tls_keylog(self, url: QUrl) -> str:
+        """Decrypt TLS sessions with a key log (the SSLKEYLOGFILE format); an empty URL stops. Returns an error."""
+        if url.isEmpty():
+            self._keylog, self._keylog_file = None, ''
+        else:
+            path = str(Path(url.toLocalFile() if url.isLocalFile() else url.toString()))  # Native separators
+            try:
+                self._keylog = KeyLog.load(path)
+            except KeyLogError as e:
+                return str(e)
+            self._keylog_file = path
+        self._redecode_loaded()
+        return ''
+
+    def _redecode_loaded(self) -> None:
+        self.changed.emit()
+        if self._raw and self._capture is None and not self._busy:
+            asyncio.ensure_future(self._redecode())
+        elif self._capture is not None:
+            self._decoder.decryptor = self._decryptor  # Later live packets
+            if self._keylog is not None and self._decoder.tls is None:
+                self._decoder.tls = TlsDecryptor(self._keylog)
+            self._decoder.e2e = self._someip.e2e_checker() if self._someip is not None else None
+
+    def _keys_changed(self) -> None:
+        """The security manager's associations changed (e.g. it was unlocked): decrypt the loaded capture again."""
+        self._decryptor = self._security.packet_decryptor() if self._security is not None else None
+        self._redecode_loaded()
+
+    @pyqtProperty(str, notify=changed)
+    def decryption_text(self) -> str:
+        """Which associations protected frames are decrypted with, '' for none."""
+        decryptor = self._decryptor
+        parts = []
+        if decryptor:
+            count = len(decryptor.esp) + len(decryptor.macsec)
+            kinds = ' and '.join(
+                part
+                for part in (
+                    f'{len(decryptor.esp)} IPsec' if decryptor.esp else '',
+                    f'{len(decryptor.macsec)} MACsec' if decryptor.macsec else '',
+                )
+                if part
+            )
+            parts.append(f'{kinds} association' + ('s' if count > 1 else ''))
+        if self._keylog is not None:
+            sessions = len(self._keylog)
+            parts.append(f'a TLS key log of {sessions} session' + ('s' if sessions != 1 else ''))
+        return 'Decrypting with ' + ' and '.join(parts) if parts else ''
+
     async def _redecode(self) -> None:
-        """Re-run the decoder over the already-loaded raw packets (after the UDP-NM port changed)."""
+        """Re-run the decoder over the already-loaded raw packets (after the UDP-NM port or the keys changed)."""
         self._busy, self._status = True, 'Re-decoding…'
         self.changed.emit()
-        decoder = ethernet.StreamDecoder(self._nm_port)
+        decoder = self._new_decoder()
         raw = self._raw
         decoded = await asyncio.to_thread(
             lambda: [decoder.decode(packet.data, packet.timestamp, index + 1) for index, packet in enumerate(raw)]
         )
         self._decoder, self._decoded = decoder, decoded
+        self._monitor_all()
         self._status, self._busy = f'{len(decoded):,} packets', False
         self.changed.emit()
         self.data_changed.emit()
@@ -179,7 +262,7 @@ class EthernetController(QObject):
         if not 1 <= number <= len(self._raw):
             return []
         raw = self._raw[number - 1]
-        tree = ethernet.dissect(raw.data, raw.timestamp, number, self._nm_port)
+        tree = ethernet.dissect(raw.data, raw.timestamp, number, self._nm_port, self._decryptor)
         rows: List[Dict[str, Any]] = []
 
         def walk(node: ethernet.DissectionField, depth: int) -> None:
@@ -188,6 +271,14 @@ class EthernetController(QObject):
                 walk(child, depth + 1)
 
         walk(tree, 0)
+        packet = self._decoded[number - 1] if number <= len(self._decoded) else None
+        if packet is not None and packet.tls_records:  # Records decrypted with the key log (stateful, per session)
+            rows.append({'depth': 1, 'label': 'TLS', 'value': f'{len(packet.tls_records)} records'})
+            for record in packet.tls_records:
+                rows.append({'depth': 2, 'label': record.sender, 'value': record.describe()})
+                if record.plaintext and record.content_type == 23:
+                    preview = record.plaintext[:48].hex(' ').upper() + (' …' if len(record.plaintext) > 48 else '')
+                    rows.append({'depth': 3, 'label': 'Plaintext', 'value': preview})
         return rows
 
     @pyqtProperty(int, notify=data_changed)
@@ -312,7 +403,7 @@ class EthernetController(QObject):
         return ''
 
     async def _open_pcap(self, path: str) -> None:
-        decoder = ethernet.StreamDecoder(self._nm_port)
+        decoder = self._new_decoder()
         try:
             raw = await asyncio.to_thread(lambda: list(ethernet.read_pcap(path))[:MAX_PACKETS])
             decoded = await asyncio.to_thread(
@@ -324,6 +415,7 @@ class EthernetController(QObject):
             return
         self._decoder = decoder
         self._raw, self._decoded = raw, decoded
+        self._monitor_all()
         self._base_time = raw[0].timestamp if raw else None
         self._file = Path(path).name
         self._status = f'{len(decoded):,} packets'
@@ -340,7 +432,7 @@ class EthernetController(QObject):
         if not interface:
             return 'Choose an interface'
         self.clear()
-        self._decoder = ethernet.StreamDecoder(self._nm_port)
+        self._decoder = self._new_decoder()
         capture: Union[LiveCapture, PcapLiveCapture]
         if pcap_live.available():
             capture = PcapLiveCapture(interface, self._on_live_packet)
@@ -365,7 +457,9 @@ class EthernetController(QObject):
         if self._base_time is None:
             self._base_time = timestamp
         self._raw.append(ethernet.RawPacket(timestamp, bytes(data)))
-        self._decoded.append(self._decoder.decode(bytes(data), timestamp, len(self._raw)))
+        packet = self._decoder.decode(bytes(data), timestamp, len(self._raw))
+        self._decoded.append(packet)
+        self._monitor.on_packet(packet)
         self._dirty = True
 
     @pyqtSlot()
@@ -383,11 +477,48 @@ class EthernetController(QObject):
             self._dirty = False
             self.data_changed.emit()
 
+    def _monitor_all(self) -> None:
+        self._monitor.clear()
+        for packet in self._decoded:
+            self._monitor.on_packet(packet)
+
+    # Security events (the same API as a connection's, for the SecurityEventsView)
+
+    @pyqtProperty('QVariantList', notify=data_changed)
+    def security_events(self) -> List[Dict[str, Any]]:
+        return self._monitor.rows()
+
+    @pyqtProperty('QVariantMap', notify=data_changed)
+    def security_event_counts(self) -> Dict[str, int]:
+        rows = self._monitor.rows()
+        return {
+            'events': len(rows),
+            'high': sum(1 for row in rows if row['severity'] == 'high'),
+            'frames': sum(int(row['count']) for row in rows),
+        }
+
+    @pyqtSlot()
+    def clear_security_events(self) -> None:
+        self._monitor.clear()
+        self.data_changed.emit()
+
+    @pyqtSlot(QUrl, result=str)
+    def export_security_events(self, url: QUrl) -> str:
+        path = Path(url.toLocalFile() if url.isLocalFile() else url.toString())
+        if not path.suffix:
+            path = path.with_suffix('.csv')
+        try:
+            count = self._monitor.export(path)
+        except OSError as e:
+            return f'Could not write {path.name}: {e}'
+        return f'Exported {count} events to {path.name}'
+
     @pyqtSlot()
     def clear(self) -> None:
         self._raw = []
         self._decoded = []
-        self._decoder = ethernet.StreamDecoder(self._nm_port)
+        self._monitor.clear()
+        self._decoder = self._new_decoder()
         self._base_time = None
         if self._capture is None:
             self._file = ''

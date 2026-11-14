@@ -7,13 +7,16 @@ encoded from the signals' initial values (editable at runtime), and messages sen
 are testing — can be excluded, which is the usual restbus set.
 
 Qt-free; it drives a BusSession's periodic transmissions. It does **not** compute message counters or E2E/CRC
-checksums: those stay at whatever value you set, so a receiver that checks them will see them constant.
+checksums: those stay at whatever value you set, so a receiver that checks them will see them constant. AUTOSAR
+SecOC secured PDUs are secured afresh for every frame (freshness value and MAC) when a `secure` function is given
+(the connection's `FrameDecoder.secure`, with the security manager's keys).
 """
 
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 import can
 
+from can_explorer.core.secoc_check import SecOcError, secoc_config_of
 from can_explorer.core.session import BusSession, PeriodicTransmit, SessionError
 from can_explorer.sys.log_handler import get_logger
 
@@ -57,6 +60,7 @@ class RestbusMessage:
         self.enabled = enabled
         self.values = _default_values(message)
         self.data = _encode(message, self.values)
+        self.secured = secoc_config_of(message) is not None  # Secured afresh for every frame
         self._transmit: Optional[PeriodicTransmit] = None
 
     @property
@@ -93,8 +97,16 @@ class RestbusMessage:
 class RestbusSimulator:
     """Drives the periodic transmission of a set of database messages on a session."""
 
-    def __init__(self, session: BusSession, messages, default_cycle_ms: int = DEFAULT_CYCLE_MS):
+    def __init__(
+        self,
+        session: BusSession,
+        messages,
+        default_cycle_ms: int = DEFAULT_CYCLE_MS,
+        secure: Optional[Callable[[can.Message], can.Message]] = None,
+    ):
         self.session = session
+        self.secure = secure  # Secures the frames of SecOC secured PDUs
+        self.problems: Dict[IdKey, str] = {}  # Enabled messages that could not start, and why
         self.default_period = default_cycle_ms / 1000.0
         self._messages: Dict[IdKey, RestbusMessage] = {}
         for message in messages:
@@ -159,14 +171,17 @@ class RestbusSimulator:
         if entry is not None:
             entry.set_value(signal, value)
 
-    def start(self) -> None:
-        """Begin transmitting every enabled message at its period. Requires the session to be open."""
+    def start(self) -> List[str]:
+        """Begin transmitting every enabled message at its period. Requires the session to be open. Returns why
+        messages could not start (e.g. secured PDUs without a key); the others run."""
         if self._running:
-            return
+            return []
         self._running = True
+        self.problems = {}
         for entry in self._messages.values():
             if entry.enabled:
                 self._start_entry(entry)
+        return [f'{self._messages[key].message.name}: {problem}' for key, problem in self.problems.items()]
 
     def stop(self) -> None:
         if not self._running:
@@ -178,9 +193,22 @@ class RestbusSimulator:
     def _start_entry(self, entry: RestbusMessage) -> None:
         if entry._transmit is not None:
             return
+        prepare = None
+        if entry.secured:
+            if self.secure is None:
+                self.problems[entry.key] = 'secured PDU (SecOC), but no security manager to secure it'
+                return
+            try:
+                self.secure(entry._can_message())  # Fails now, not on every period, without a key
+            except SecOcError as error:
+                self.problems[entry.key] = str(error)
+                logger.warning('Restbus: not sending %s: %s', entry.message.name, error)
+                return
+            prepare = self.secure
         try:
-            entry._transmit = self.session.start_periodic(entry._can_message(), entry.period)
+            entry._transmit = self.session.start_periodic(entry._can_message(), entry.period, prepare=prepare)
         except (SessionError, ValueError) as error:
+            self.problems[entry.key] = str(error)
             logger.warning('Restbus: could not start %s: %s', entry.message.name, error)
 
     def _stop_entry(self, entry: RestbusMessage) -> None:

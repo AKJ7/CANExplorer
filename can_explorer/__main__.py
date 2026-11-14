@@ -4,9 +4,9 @@ import sys
 import qasync
 
 from can_explorer import settings
-from can_explorer.__version__ import __version__
 from can_explorer.main_application import MainApplication
-from can_explorer.sys.crash_log import CrashLog, crash_log_dir, report_header
+from can_explorer.sys.crash_log import CrashLog, crash_log_dir
+from can_explorer.sys.system_report import application_header
 from can_explorer.sys.environment import sanitize_snap_environment
 from can_explorer.sys.log_handler import get_logger, setup_logging
 
@@ -15,11 +15,8 @@ logger = get_logger(__name__)
 
 def start_crash_log() -> CrashLog:
     """Write a crash report if the application crashes (see `can_explorer/sys/crash_log.py`)."""
-    from PyQt6.QtCore import PYQT_VERSION_STR, QT_VERSION_STR, qVersion
-
     crash_log = CrashLog(crash_log_dir())
-    header = report_header(__version__, [f'PyQt {PYQT_VERSION_STR}, Qt {qVersion()} (built with {QT_VERSION_STR})'])
-    if previous := crash_log.start(header):
+    if previous := crash_log.start(application_header()):
         logger.warning(f'The previous run crashed, its crash report is {previous}: please attach it to a bug report')
     if crash_log.enabled:
         logger.debug(f'Crash report enabled: {crash_log.path}')

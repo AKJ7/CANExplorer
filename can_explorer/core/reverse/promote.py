@@ -20,6 +20,9 @@ KIND_NAMES = {
     'flag': 'Flag',
     'constant': 'Constant',
     'unknown': 'Unknown',
+    'freshness': 'SecOC freshness',
+    'mac': 'SecOC MAC',
+    'random': 'Random (MAC?)',
 }
 
 

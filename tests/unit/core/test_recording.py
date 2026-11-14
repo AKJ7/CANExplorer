@@ -1,4 +1,5 @@
 import asyncio
+import time
 import uuid
 
 import can
@@ -31,6 +32,10 @@ def test_split_by_duration(tmp_path):
     recorder.stop()
     assert [path.name for path in recorder.files] == ['trace_001.asc', 'trace_002.asc', 'trace_003.asc']
     assert [len(read(path)) for path in recorder.files] == [10, 10, 5]
+    # The first frame of each file, to synchronise a camera video with each of them
+    assert recorder.file_starts == pytest.approx(
+        {'trace_001.asc': 100.0, 'trace_002.asc': 101.0, 'trace_003.asc': 102.0}
+    )
 
 
 def test_split_by_size(tmp_path):
@@ -71,6 +76,7 @@ def test_triggered_start_stop_and_repeat(tmp_path):
     assert recorder.state == 'armed' and recorder.events == 2
     assert [path.name for path in recorder.files] == ['run_001.asc', 'run_002.asc']
     assert [len(read(path)) for path in recorder.files] == [4, 2]
+    assert recorder.file_starts == {'run_001.asc': 1.0, 'run_002.asc': 6.0}
 
 
 async def test_session_recording_options(tmp_path):
@@ -92,5 +98,8 @@ async def test_session_recording_options(tmp_path):
     await asyncio.sleep(0.1)
     peer.shutdown()
     assert session.recorder.state == 'done' and events
+    # Wall clock minus frame clock: the frames were stamped about 1000 s after 1970, i.e. long before now
+    assert session.recording_clock_offset == pytest.approx(time.time() - 1000.0, abs=5)
     session.stop()
+    assert session.recorder is None and session.last_recorder.file_starts == {'b.asc': 1000.0}
     assert [can_id for can_id, _ in read(tmp_path / 'b.asc')] == [0x100, 0x101, 0x123]  # 1 s before, 0 s after

@@ -20,6 +20,7 @@ from PyQt6.QtGui import QGuiApplication
 from can_explorer.core.filters import MessageFilter
 from can_explorer.core.frames import Frame, format_hex, frame_type
 from can_explorer.core.store import IdKey, IdStatistics
+from can_explorer.core.timestamps import DEFAULT_TIME_FORMAT, DELTA, format_time, normalize_time_format, time_header
 from can_explorer.core.trace_store import TraceStore
 
 ALIGN_LEFT = Qt.AlignmentFlag.AlignLeft
@@ -132,6 +133,17 @@ class FrameTableModel(QAbstractTableModel):
         selection = QItemSelection(self.index(0, 0), self.index(self.rowCount() - 1, self.columnCount() - 1))
         selection_model.select(selection, QItemSelectionModel.SelectionFlag.ClearAndSelect)
 
+    @pyqtSlot(QItemSelectionModel, int, int, bool)
+    def select_rows(self, selection_model: QItemSelectionModel, first: int, last: int, extend: bool = False):
+        """Select the rows from `first` to `last` (in either order), replacing the selection unless `extend`."""
+        first, last = sorted((first, last))
+        first, last = max(first, 0), min(last, self.rowCount() - 1)
+        if first > last:
+            return
+        selection = QItemSelection(self.index(first, 0), self.index(last, self.columnCount() - 1))
+        flag = QItemSelectionModel.SelectionFlag
+        selection_model.select(selection, flag.Select if extend else flag.ClearAndSelect)
+
     @staticmethod
     def selected_rows(selection_model: QItemSelectionModel) -> List[int]:
         return sorted({index.row() for index in selection_model.selectedIndexes()})
@@ -164,6 +176,7 @@ class TraceModel(FrameTableModel):
     INFO_COLUMN = 6
 
     bookmarks_changed = pyqtSignal()
+    time_format_changed = pyqtSignal()
 
     def __init__(
         self,
@@ -182,10 +195,35 @@ class TraceModel(FrameTableModel):
         self._count = 0  # ... and the number of rows
         self._scanned = 0  # With a filter: frames before this absolute index were checked
         self._bookmarks: Dict[int, str] = {}  # Absolute index -> note
+        self._time_format = DEFAULT_TIME_FORMAT
 
     @property
     def store(self) -> TraceStore:
         return self._store
+
+    def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
+        if section == 0 and orientation == Qt.Orientation.Horizontal and role == Qt.ItemDataRole.DisplayRole:
+            return time_header(self._time_format)
+        return super().headerData(section, orientation, role)
+
+    # Time format of the first column (see core.timestamps)
+
+    def _get_time_format(self) -> str:
+        return self._time_format
+
+    @pyqtSlot(str)
+    def set_time_format(self, time_format: str) -> None:
+        time_format = normalize_time_format(time_format)
+        if time_format == self._time_format:
+            return
+        self._time_format = time_format
+        self.headerDataChanged.emit(Qt.Orientation.Horizontal, 0, 0)
+        rows = self.rowCount()
+        if rows:
+            self.dataChanged.emit(self.index(0, 0), self.index(rows - 1, 0))
+        self.time_format_changed.emit()
+
+    time_format = pyqtProperty(str, fget=_get_time_format, fset=set_time_format, notify=time_format_changed)
 
     def data(self, index: QModelIndex, role=Qt.ItemDataRole.DisplayRole):
         if role == BOOKMARK_ROLE:
@@ -222,6 +260,14 @@ class TraceModel(FrameTableModel):
         start = self._start_time()
         return msg.timestamp - (msg.timestamp if start is None else start)
 
+    def time_text(self, row: int, frame: Frame) -> str:
+        """The first column: the frame's time in the chosen format."""
+        previous = None
+        if self._time_format == DELTA and row > 0:
+            before = self.frame(row - 1)
+            previous = before.message.timestamp if before is not None else None
+        return format_time(self._time_format, frame.message.timestamp, self._start_time(), previous)
+
     def display(self, row: int, column: int) -> str:
         frame = self.frame(row)
         if frame is None:
@@ -229,7 +275,7 @@ class TraceModel(FrameTableModel):
         msg = frame.message
         match column:
             case 0:
-                return f'{self.time(frame):.6f}'
+                return self.time_text(row, frame)
             case 1:
                 return 'Rx' if msg.is_rx else 'Tx'
             case 2:
@@ -309,6 +355,8 @@ class TraceModel(FrameTableModel):
                 self._indices.extend(new)
                 self.endInsertRows()
         self._scanned = total
+        if dropped and self._time_format == DELTA and self.rowCount():
+            self.dataChanged.emit(self.index(0, 0), self.index(0, 0))  # The new first row has no previous frame
 
     def refresh_descriptions(self) -> None:
         """The description column changed (e.g. a database was loaded)."""

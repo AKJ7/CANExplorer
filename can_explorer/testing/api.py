@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Callable, Iterable, List, Optional, Union
 
 import can
 
+from can_explorer.core.secoc_check import SecOcError
 from can_explorer.scripting.api import MessageBuffer, ReceivedMessage, ScriptError
 
 if TYPE_CHECKING:
@@ -280,9 +281,14 @@ class TestContext:
         extended: Optional[bool] = None,
         fd: bool = False,
         remote: bool = False,
+        secure: Optional[bool] = None,
         **signals: Any,
     ) -> None:
-        """Send a frame: `t.send('BrakeCommand', Pressure=50)`, `t.send(buffer)` or `t.send(0x123, b'\\x01')`."""
+        """Send a frame: `t.send('BrakeCommand', Pressure=50)`, `t.send(buffer)` or `t.send(0x123, b'\\x01')`.
+
+        A database message that is an AUTOSAR SecOC secured PDU is secured (new freshness value and MAC, with the
+        key store's key) unless `secure=False`; frames given as an identifier and bytes are sent as given unless
+        `secure=True`."""
         if isinstance(message, str):
             message = self.message(message).update(signals)
         elif signals:
@@ -308,8 +314,74 @@ class TestContext:
                 data=payload,
             )
             name = f'0x{msg.arbitration_id:X}'
+        decoder = self._runner.session.decoder
+        config = decoder.secured_config(msg.arbitration_id, msg.is_extended_id)
+        if secure if secure is not None else (config is not None and isinstance(message, MessageBuffer)):
+            if config is None:
+                raise ScriptError(f'{name} is not a SecOC secured PDU of the database')
+            try:
+                msg = decoder.secure(msg)
+            except SecOcError as e:
+                raise ScriptError(str(e)) from e
+            name += ' (SecOC)'
         self._runner._send(msg)
         self._step('send', f'{name} [{bytes(msg.data).hex(" ").upper()}]')
+
+    # SecOC
+
+    def _secured(self, message: Union[str, MessageBuffer]):
+        buffer = self.message(message) if isinstance(message, str) else message
+        config = self._runner.session.decoder.secured_config(buffer.id, buffer.is_extended)
+        verifier = self._runner.session.decoder.secoc
+        if config is None:
+            raise ScriptError(f'{buffer.name} is not a SecOC secured PDU of the database')
+        if verifier is None:
+            raise ScriptError('No security manager: SecOC frames cannot be checked or secured')
+        return buffer, config, verifier
+
+    def secoc_status(self, message: str) -> dict:
+        """The SecOC checks of a secured PDU so far: counts of frames `ok`, `mac_errors`, `freshness_errors`,
+        `not_checked` and `sent` (secured), and the `last` result as text."""
+        _buffer, config, verifier = self._secured(message)
+        statistics = verifier.statistics.get(config.pdu)
+        empty = {'ok': 0, 'mac_errors': 0, 'freshness_errors': 0, 'not_checked': 0, 'sent': 0, 'last': ''}
+        return statistics.as_dict() if statistics is not None else empty
+
+    async def expect_secoc_ok(self, message: str, timeout: float = 1.0, description: str = '') -> bool:
+        """Wait for the next frame of a SecOC secured PDU and check that its MAC and freshness value verify."""
+        buffer, _config, _verifier = self._secured(message)
+        msg = await self.wait_for_message(buffer.name, timeout)
+        text = description or f'{buffer.name} passes SecOC verification within {timeout:g} s'
+        if msg is None:
+            return self.check(False, f'{text} (no frame)')
+        result = self._runner.session.decoder.secoc_result(msg.raw)
+        if result is None:
+            return self.check(False, f'{text} (the frame was not checked)')
+        return self.check(result.ok, f'{text} ({result.describe()})')
+
+    def send_secoc_attack(self, message: Union[str, MessageBuffer], attack: str, **signals: Any) -> bytes:
+        """Send a manipulated frame of a SecOC secured PDU that the receiving ECU must reject, for security tests
+        on a bench you are authorised to test. `attack` is one of `can_explorer.core.secoc_check.ATTACKS`:
+        'replay' (a frame sent before, again), 'stale_freshness' (a valid MAC over a used freshness value),
+        'wrong_mac' or 'payload_bitflip'. Replay and stale freshness need a secured frame of the PDU sent first.
+        Returns the data sent; check the ECU's reaction yourself, e.g. with `expect_no_message`."""
+        buffer, config, verifier = self._secured(message)
+        if signals:
+            buffer.update(signals)
+        try:
+            data = verifier.manipulate(config, buffer.encode(), attack)
+        except SecOcError as e:
+            raise ScriptError(str(e)) from e
+        msg = can.Message(
+            arbitration_id=buffer.id,
+            is_extended_id=buffer.is_extended,
+            is_fd=buffer.is_fd,
+            bitrate_switch=buffer.is_fd,
+            data=data,
+        )
+        self._runner._send(msg)
+        self._step('send', f'{buffer.name} (SecOC {attack.replace("_", " ")}) [{data.hex(" ").upper()}]')
+        return data
 
     # Waiting
 

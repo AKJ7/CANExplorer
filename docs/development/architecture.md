@@ -103,6 +103,15 @@ computer.
 | `gui/app_state.py` | Persistent settings (QSettings) |
 | `gui/qt/CanExplorer/` | QML views, dialogs and dashboard components; `Theme.qml` holds the colours of the themes, `GlassPanel.qml` the frosted glass of dialogs, menus and popups |
 | `gui/qt/CanExplorerStyle/` | Qt Quick Controls style drawing buttons, inputs, dialogs, menus etc. with the theme colours (Fusion for the rest) |
+| `build_info.py` | The running build: version, commit, build date and packaging backend |
+| `core/channel_detection.py` | Channel detection of every python-can backend, with the outcome of each (found, none, unavailable, unsupported, error, timeout) and a retry alone of those that failed |
+| `core/e2e_check.py` | Live AUTOSAR E2E checks (profiles 2, 5, 22) of signal PDUs, configured from the E2E protections of an ARXML |
+| `core/keystore.py` | The security manager's encrypted key store (scrypt and AES-256-GCM): SecOC keys, TLS certificates, IPsec/MACsec associations |
+| `core/secoc.py`, `core/secoc_check.py` | SecOC primitives (CMAC/AES); live checks and securing of the secured PDUs of an ARXML, with freshness value managers |
+| `core/tls.py` | TLS client contexts for DoIP from key store entries |
+| `core/packet_decryption.py` | Decrypting IPsec ESP and MACsec frames of an Ethernet capture |
+| `gui/security.py` | The Security Manager: the key store and the SecOC verifiers, packet decryptor and TLS contexts handed to the other tools |
+| `sys/system_report.py` | The system report for bug reports (versions, Qt setup, channel detection, crash report) |
 | `sys/config.py`, `sys/environment.py`, `sys/crash_log.py` | Application settings; clean-up of snap environments; crash reports (`faulthandler` writing to a per-user file, kept when the run crashed) |
 | `can_server/` | `can-server`: shares local CAN interfaces over WebSocket |
 | `can_explorer/mcp/` | `can-mcp`: exposes a bus to an agent over the Model Context Protocol (`service.py` the logic, `server.py` the MCP tools) |

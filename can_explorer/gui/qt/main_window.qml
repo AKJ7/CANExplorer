@@ -74,8 +74,8 @@ ApplicationWindow {
             [Actions.newConnection, "Ctrl+N"], [Actions.openLogFile, "Ctrl+O"], [Actions.closeConnection, "Ctrl+W"],
             [Actions.openWorkspace, "Ctrl+Shift+O"], [Actions.saveWorkspace, "Ctrl+S"],
             [Actions.saveWorkspaceAs, "Ctrl+Shift+S"], [Actions.editDatabase, ""], [Actions.convertDatabase, ""],
-            [Actions.copy, "Ctrl+C"], [Actions.selectAll, "Ctrl+A"], [Actions.preferences, ""],
-            [Actions.help, "F1"], [Actions.checkForUpdates, ""], [Actions.about, ""], [Actions.exit, "Ctrl+Q"],
+            [Actions.copy, "Ctrl+C"], [Actions.selectAll, "Ctrl+A"], [Actions.securityManager, ""], [Actions.preferences, ""],
+            [Actions.help, "F1"], [Actions.checkForUpdates, ""], [Actions.systemReport, ""], [Actions.about, ""], [Actions.exit, "Ctrl+Q"],
         ]
         for (const [action, shortcut] of actions)
             add(qsTr("Command"), label(action), () => action.trigger(), shortcut, action.enabled)
@@ -122,6 +122,16 @@ ApplicationWindow {
         property: "name"
         value: connectionManager.app_state.theme
     }
+    Binding {
+        target: Theme
+        property: "systemLightName"
+        value: connectionManager.app_state.system_light_theme
+    }
+    Binding {
+        target: Theme
+        property: "systemDarkName"
+        value: connectionManager.app_state.system_dark_theme
+    }
 
     color: Theme.background
     palette.window: Theme.background
@@ -132,7 +142,7 @@ ApplicationWindow {
     palette.button: Theme.card
     palette.buttonText: Theme.text
     palette.highlight: Theme.accent
-    palette.highlightedText: "white"
+    palette.highlightedText: Theme.onAccent
     palette.light: Qt.lighter(Theme.card, 1.3)
     palette.midlight: Qt.lighter(Theme.card, 1.15)
     palette.mid: Theme.border
@@ -287,6 +297,7 @@ ApplicationWindow {
             currentConnection: mainWindow.currentIndex
             pages: mainWindow.currentConnectionView ? mainWindow.currentConnectionView.pages : []
             currentPage: mainWindow.currentConnectionView ? mainWindow.currentConnectionView.page : ""
+            pageActivity: mainWindow.currentConnectionView ? mainWindow.currentConnectionView.pageActivity : ({})
             currentTool: mainWindow.tool
             collapsed: mainWindow.sidebarCollapsed
             onConnectionSelected: index => {
@@ -615,6 +626,10 @@ ApplicationWindow {
         id: preferencesDialog
     }
 
+    SecurityManagerDialog {
+        id: securityManagerDialog
+    }
+
     ConvertDatabaseDialog {
         id: convertDatabaseDialog
     }
@@ -637,6 +652,22 @@ ApplicationWindow {
         target: Actions.about
         function onTriggered() {
             aboutDialog.open();
+        }
+    }
+
+    Connections {
+        target: Actions.systemReport
+        function onTriggered() {
+            // Copied at once, or after the channel detection it needs first (system_report_copied)
+            if (!connectionManager.copy_system_report())
+                mainWindow.notify(qsTr("Detecting the CAN channels for the system report…"))
+        }
+    }
+
+    Connections {
+        target: connectionManager
+        function onSystem_report_copied() {
+            mainWindow.notify(qsTr("System report copied to the clipboard: paste it into your bug report"))
         }
     }
 
@@ -745,6 +776,13 @@ ApplicationWindow {
         target: Actions.preferences
         function onTriggered() {
             preferencesDialog.open()
+        }
+    }
+
+    Connections {
+        target: Actions.securityManager
+        function onTriggered() {
+            securityManagerDialog.open()
         }
     }
 

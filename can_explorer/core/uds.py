@@ -6,12 +6,14 @@ ISO-TP on CAN (IsoTpClient) or the LIN transport layer (LinTpClient).
 
 import asyncio
 import importlib.util
+import types
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, List, Optional, Protocol, Tuple
 
 import can
 
+from can_explorer.core import uds_auth
 from can_explorer.core.frames import format_hex
 
 SERVICES = {
@@ -23,6 +25,7 @@ SERVICES = {
     0x23: 'ReadMemoryByAddress',
     0x27: 'SecurityAccess',
     0x28: 'CommunicationControl',
+    0x29: 'Authentication',
     0x2E: 'WriteDataByIdentifier',
     0x2F: 'InputOutputControlByIdentifier',
     0x31: 'RoutineControl',
@@ -51,6 +54,7 @@ NEGATIVE_RESPONSE_CODES = {
     0x35: 'invalidKey',
     0x36: 'exceedNumberOfAttempts',
     0x37: 'requiredTimeDelayNotExpired',
+    **uds_auth.NEGATIVE_RESPONSE_CODES,  # authenticationRequired (0x34) and the Authentication NRCs (0x50..0x5D)
     0x70: 'uploadDownloadNotAccepted',
     0x71: 'transferDataSuspended',
     0x72: 'generalProgrammingFailure',
@@ -150,6 +154,8 @@ def nrc_name(code: int) -> str:
 def describe_request(payload: bytes, description=None) -> str:
     if not payload:
         return ''
+    if payload[0] == uds_auth.SID and len(payload) >= 2:
+        return uds_auth.describe(payload)
     text = service_name(payload[0]) + (f' {format_hex(payload[1:])}' if len(payload) > 1 else '')
     if payload[0] in (0x22, 0x2E) and len(payload) >= 3 and description is not None:
         name = description.name(int.from_bytes(payload[1:3], 'big'))
@@ -164,6 +170,8 @@ def describe_response(payload: bytes, description=None) -> str:
         return 'empty response'
     if payload[0] == NEGATIVE_RESPONSE and len(payload) >= 3:
         return f'Negative response to {service_name(payload[1])}: {nrc_name(payload[2])}'
+    if payload[0] == uds_auth.SID + 0x40 and len(payload) >= 3:
+        return f'Positive response to {uds_auth.describe(payload)}'
     if payload[0] == 0x62 and len(payload) >= 3 and description is not None:
         decoded = description.describe(int.from_bytes(payload[1:3], 'big'), payload[3:])
         if decoded is not None:
@@ -217,6 +225,60 @@ def format_did_value(did: int, data: bytes) -> str:
 
 def did_name(did: int) -> str:
     return DATA_IDENTIFIERS.get(did, f'DID 0x{did:04X}')
+
+
+KEYSTORE_PREFIX = 'keystore:'  # A key source naming a seed/key entry of the key store instead of a file
+
+
+def load_key_source(source: str, store=None) -> Callable[[int, bytes], bytes]:
+    """The seed/key function of a key source: a Python file, or 'keystore:<entry>' for a seed/key algorithm kept in
+    the key store (`store`, by default the application's; it must be unlocked)."""
+    from can_explorer.core import security_profiles
+
+    if source.startswith(security_profiles.PREFIX):  # A security profile computes the key
+        name = source[len(security_profiles.PREFIX) :]
+        try:
+            profile = security_profiles.registry().get(name)
+        except security_profiles.SecurityProfileError as e:
+            raise UdsError(str(e)) from e
+        if not callable(getattr(profile, 'compute_key', None)):
+            raise UdsError(f'The security profile {name!r} has no seed/key algorithm')
+        from can_explorer.core import audit
+
+        audit.record('seed/key algorithm used', profile=name)
+
+        def compute_key(level: int, seed: bytes) -> bytes:
+            try:
+                key = profile.compute_key(level, seed)
+            except security_profiles.SecurityProfileError as e:
+                raise UdsError(str(e)) from e
+            if key is None:
+                raise UdsError(f'The security profile {name!r} has no key for level {level}')
+            return bytes(key)
+
+        return compute_key
+    if not source.startswith(KEYSTORE_PREFIX):
+        return load_key_function(source)
+    from can_explorer.core import keystore
+
+    name = source[len(KEYSTORE_PREFIX) :]
+    store = store if store is not None else keystore.default_store()
+    try:
+        script = store.secrets(name)['script']
+    except (keystore.KeyStoreError, KeyError) as e:
+        raise UdsError(f'Seed/key algorithm {name!r}: {e}') from e
+    from can_explorer.core import audit
+
+    audit.record('seed/key algorithm used', entry=name)
+    module = types.ModuleType(f'can_explorer_key_{name}')
+    try:
+        exec(compile(script, f'<key store: {name}>', 'exec'), module.__dict__)  # noqa: S102  (the user's own algorithm)
+    except Exception as e:
+        raise UdsError(f'Error in seed/key algorithm {name!r}: {e}') from e
+    function = getattr(module, 'compute_key', None)
+    if not callable(function):
+        raise UdsError(f'Seed/key algorithm {name!r} does not define compute_key(level, seed)')
+    return function
 
 
 def load_key_function(path: str | Path) -> Callable[[int, bytes], bytes]:
@@ -344,6 +406,31 @@ class UdsClient:
     async def routine_control(self, control_type: int, routine: int, data: bytes = b'') -> bytes:
         response = await self.call(bytes([0x31, control_type, routine >> 8, routine & 0xFF]) + bytes(data))
         return response[4:]
+
+    async def authenticate(
+        self, certificate, private_key, scheme: str, bidirectional: bool = False, trusted=(), crls=()
+    ):
+        """Authentication (0x29) by certificate exchange: see `can_explorer.core.uds_auth.authenticate`."""
+        return await uds_auth.authenticate(self, certificate, private_key, scheme, bidirectional, trusted, crls=crls)
+
+    async def authenticate_challenge_response(self, prove, bidirectional: bool = False, verify_server=None, **kwargs):
+        """Authentication (0x29) by challenge-response: see `uds_auth.authenticate_challenge_response`."""
+        return await uds_auth.authenticate_challenge_response(self, prove, bidirectional, verify_server, **kwargs)
+
+    async def deauthenticate(self) -> str:
+        return await uds_auth.deauthenticate(self)
+
+    async def seed_analysis(self, level: int, count: int = 32, between: str = 'session', session: int = 0x03):
+        """Request seeds and report weaknesses: see `can_explorer.core.uds_security_test.seed_analysis`."""
+        from can_explorer.core import uds_security_test
+
+        return await uds_security_test.seed_analysis(self, level, count, between, session)
+
+    async def lockout_test(self, level: int, max_attempts: int = 10, wrong_key=None, test_reset: bool = False):
+        """Send wrong keys and report the lockout: see `can_explorer.core.uds_security_test.lockout_test`."""
+        from can_explorer.core import uds_security_test
+
+        return await uds_security_test.lockout_test(self, level, max_attempts, wrong_key, test_reset)
 
 
 async def uds_request(transport: UdsTransport, payload: bytes) -> UdsResult:

@@ -344,6 +344,7 @@ class ReceivedMessage:
     source: str  # 'address:port' of the sender
     local_port: int  # The port it was received on
     message: SomeIpMessage
+    e2e: str = ''  # The E2E check of the message (core/someip_e2e.py), '' when it has no E2E configuration
 
 
 class _Protocol(asyncio.DatagramProtocol):
@@ -371,6 +372,7 @@ class SomeIpMonitor:
         self._transports: List[asyncio.BaseTransport] = []
         self._listeners: List[Callable[[ReceivedMessage], None]] = []
         self._reassembler = SomeIpReassembler()
+        self.e2e = None  # A core/someip_e2e.SomeIpE2eChecker: checks protected messages as they arrive
 
     @property
     def is_open(self) -> bool:
@@ -403,7 +405,10 @@ class SomeIpMonitor:
             message = self._reassembler.feed(message)  # Reassemble SOME/IP-TP; segments return None until complete
             if message is None:
                 continue
-            received = ReceivedMessage(now, f'{addr[0]}:{addr[1]}', local_port, message)
+            result = self.e2e.check(message) if self.e2e else None
+            received = ReceivedMessage(
+                now, f'{addr[0]}:{addr[1]}', local_port, message, result.describe() if result is not None else ''
+            )
             self.messages.append(received)
             self.total += 1
             if message.is_sd:
@@ -418,6 +423,8 @@ class SomeIpMonitor:
         self.messages.clear()
         self.services.clear()
         self.total = 0
+        if self.e2e:
+            self.e2e.reset()
 
     def close(self) -> None:
         for transport in self._transports:

@@ -8,6 +8,257 @@ development stages are listed by date and commit, newest first.
 
 ## [Unreleased]
 
+## [1.8.0] – 2026-11-14
+
+### Added
+
+- **Camera video and GPS map in step with recordings** (*Video & map* view). Pick a camera in the Record dialog
+  to record a video next to the log (`drive.blf` → `drive.mp4`), in H.264 where the graphics hardware encodes it,
+  else in MPEG-4 Part 2 (switched to automatically when the hardware encoder fails); a `drive.blf.media.json` sidecar ties the
+  interface's clock to the video, also for split and triggered recordings. Replaying the log plays the video at
+  the replay's position and speed, through pausing and seeking. GPX tracks and NMEA 0183 logs (RMC/GGA) can be
+  attached to a replay, aligned by UTC time (or at the start, for tracks without dates), and are shown on a map
+  with the position, speed and altitude at the replay time. Video and GPS offsets fine-tune the alignment.
+  Map tiles (OpenStreetMap by default, any `{z}/{x}/{y}` server) are off until enabled in the preferences, and
+  are cached on disk.
+- **Trace time formats.** A selector in the trace toolbar (and the multi-bus trace) shows frame times as
+  relative (seconds since the start), delta (since the previous row, following the display filter), absolute
+  (local time of day) or Unix time. The choice is shared by all traces and remembered.
+- **Security Manager** (menu and command palette): a password-protected key store for the keys and certificates
+  of secured vehicle networks, and the tools that use them. Secrets are encrypted (scrypt, AES-256-GCM, each
+  entry's settings bound into its encryption); only names and settings are shown while it is locked, and keys
+  never reach logs, reports or the MCP interface. `CANEXPLORER_KEYSTORE_PASSWORD` unlocks it for headless runs.
+  - **SecOC checks in the trace.** The secured PDUs of an ARXML (`SECURED-I-PDU`) are verified frame by frame:
+    `[SecOC ok, FV 1042]`, `MAC ERROR`, or `FRESHNESS ERROR` for a replayed value. Bit-packed trailers of any
+    length are read; CMAC/AES and HMAC-SHA-256 are recognised from the ARXML's algorithm names (others can be set
+    on the key, never guessed). Freshness values are reconstructed as counters from their transmitted low bits,
+    or by a manufacturer scheme given as a Python file. The toolbar shows *SecOC: n of m checked*. Scripts can
+    build secured PDUs with `SecOcVerifier.secure`.
+  - **DoIP over TLS with certificates**: verify the entity against trusted certificates and present a client
+    certificate (mutual TLS); the top bar says when the entity was verified. `SSLKEYLOGFILE` writes the session
+    keys for decrypting captures.
+  - **IPsec and MACsec decryption in Ethernet captures**: ESP with AES-GCM, AES-CBC or NULL encryption (with
+    HMAC-SHA-256/SHA-1), tunnel and transport mode, and MACsec GCM-AES-128/256, encrypted or integrity-only. The
+    packet list shows what the packets carried, and the details pane a dissection of the decrypted frame.
+  - **Sending secured PDUs**: the restbus simulation, the Transmit panel (**SecOC**, on by default) and test
+    scripts secure SecOC secured PDUs with a new freshness value and MAC in every frame. Periodic sending prepares
+    each frame afresh (software timing).
+  - **SecOC statistics and test steps**: counts of frames verified, MAC errors, freshness errors and frames sent per
+    secured PDU in the connection toolbar, the MCP tool `secoc_status` (results only, never keys), and the test
+    steps `t.secoc_status`, `t.expect_secoc_ok` and `t.send(..., secure=…)`.
+  - **SecOC security tests**: `t.send_secoc_attack` sends frames an ECU must reject — a replay, a stale freshness
+    value, a wrong MAC, a flipped payload bit — so test benches can check that it does.
+  - **TLS in Ethernet captures**: **TLS key log…** decrypts TLS 1.2 and 1.3 sessions (AES-GCM, ChaCha20-Poly1305)
+    with an `SSLKEYLOGFILE` key log and decodes what they carried, e.g. DoIP; TLS packets are recognised as such.
+  - **Seed/key algorithms in the key store**: UDS seed/key scripts are kept encrypted and chosen with **From key
+    store** in the Diagnostics (and Flashing) and GMLAN views.
+  - **Certificate expiry notices** for TLS certificates that expired or expire within 30 days.
+- **Security Manager, continued:**
+  - **Key bundles**: export chosen entries to a file encrypted with its own passphrase, and import them on another
+    computer (existing entries are kept unless replaced).
+  - **Remember the password in the OS keychain** (Windows Credential Manager, macOS Keychain, Secret Service), so
+    the key store unlocks at start; off by default. New dependency: `keyring`.
+  - **Test certificates**: a CA with a tester and an ECU certificate (EC, Ed25519 or RSA) for benches and
+    simulators, ready for DoIP over TLS and UDS Authentication.
+  - **AUTOSAR trip/reset freshness values** for SecOC: trip, reset and message counters synchronised by a
+    TripResetSyncMsg, received and sent as in Annex A of the AUTOSAR SecOC specification (§11.4).
+  - **Security events** page per connection: SecOC and E2E failures, unknown identifiers, frames faster than their
+    cycle time and refused security access or authentication, counted per identifier with severity, exportable as
+    CSV or JSON.
+- **Security testing and evidence:**
+  - **Security access tests** (Diagnostics, test scripts): seed analysis (repeated seeds, constant bytes,
+    predictable steps, short seeds; seeds renewed by session change, ECU reset or repeated requests) and a lockout
+    test (attempts until exceedNumberOfAttempts, the delay, and whether an ECU reset ends it). The simulated ECU
+    can now generate random seeds and lock out wrong keys.
+  - **Audit log** of the security manager: unlocking, entries added, exported and imported, keys and
+    certificates used, authentications, security tests and attack frames, each record chained with an HMAC under
+    a key in the key store; **Verify** shows whether records were changed, removed or reordered.
+  - **Security events in Ethernet captures**: SOME/IP E2E failures, IPsec/MACsec integrity failures, TLS records
+    that fail to decrypt, refused DoIP routing activations and security access, SOME/IP services not offered.
+  - **Certificate revocation lists** in the key store, applied to DoIP TLS and UDS Authentication (a revoked
+    certificate is refused; the simulated ECU answers NRC 0x57).
+  - **SecOC and E2E checks of the PDUs inside container frames**, in the trace and the security events.
+  - **MKA (MACsec Key Agreement, EAPOL) decoded** in Ethernet captures: key server, SCI, message number and
+    parameter sets.
+- **UDS Authentication (0x29) by certificate exchange**: the Diagnostics view (also over DoIP) authenticates with
+  a client certificate from the Security Manager — verifyCertificateUnidirectional or Bidirectional, then
+  proofOfOwnership signed over the ECU's challenge (ECDSA, Ed25519 or RSA, as the ECU expects) — checks a
+  bidirectional ECU's certificate and proof, and de-authenticates. Test scripts use `t.uds.authenticate(…)`. All
+  sub-functions and the authentication NRCs (0x34, 0x50–0x5D) are named in the trace. The message layouts follow
+  python-udsoncan (cross-checked byte for byte) and the exchange the public AUTOSAR Dcm specification. The
+  simulated ECU supports it, protecting DIDs with `authenticationRequired`.
+- **UDS Authentication by challenge-response** (requestChallengeForAuthentication, then
+  verifyProofOfOwnershipUnidirectional or Bidirectional, 0x05–0x07): authentication without certificates, with a
+  key shared with the ECU (new *UDS authentication key* entries: HMAC-SHA-256 or AES-CMAC over the challenge), a
+  client certificate's private key (a signature) or a security profile; the algorithmIndicator as hex or an OID,
+  additional parameters, and a bidirectional ECU's proof checked. **Configuration** in the Authentication section
+  asks the ECU which method it offers. What the proof covers is manufacturer specific, so the built-in proofs are
+  documented as a choice and profiles can supply their own. Test scripts use
+  `t.uds.authenticate_challenge_response(…)`; the simulated ECU supports it too.
+- **Security profiles and key servers** in the Security Manager: manufacturer plug-ins (a Python file, or an
+  installed package's entry point) supplying SecOC keys or authenticators, freshness values, seed/key, and
+  certificates and signatures for UDS Authentication, so secrets need not be kept on this computer. **Key server**
+  entries reach a server over HTTPS with a bearer token (a documented REST API): seed/key and signatures are
+  computed by the server, SecOC keys held in memory only. **From Security Manager** in the Diagnostics and GMLAN
+  views chooses a profile's seed/key; profile certificates appear in the Authentication section.
+- **E2E checks of SOME/IP messages.** E2E protections are configured per SOME/IP method or event (**E2E…** in the
+  SOME/IP tool, **SOME/IP E2E…** in the Ethernet capture) and checked as messages arrive: the CRC, the length and
+  Data ID of the E2E header, and the counter sequence (`REPEATED`, `WRONG SEQUENCE`, or ok with lost messages
+  counted). The protected data starts at the SOME/IP Request ID, as AUTOSAR specifies. The protections are kept
+  between sessions and can be exported and imported as JSON. They are not read from ARXML yet.
+- **E2E profiles 4, 6 and 7** (CRC-32P4, CRC-16 and CRC-64 with an explicit length), the profiles for SOME/IP and
+  other large data, with a configurable header offset; verified against the protocol examples of the AUTOSAR E2E
+  specification, with and without the SOME/IP header. The CRC-64 routine is new too.
+- **K-Line interface (ISO 9141-2 / ISO 14230 KWP2000).** A new python-can backend (`elm327_kline`) drives an
+  ELM327/OBDLink adapter on the 10.4 kbit/s K-Line diagnostic bus of non-CAN OBD-II vehicles (roughly 1996–2008,
+  many European and Asian cars). Each K-Line frame is presented as a frame with the three header bytes (format,
+  target, source) in the extended identifier and the payload as the data, so the trace, dashboard, reverse
+  engineering and recording work on it. The channel is the adapter's serial port (as for `elm327`) with an optional
+  `@3`/`@4`/`@5` suffix choosing ISO 9141-2 slow init, ISO 14230 slow init or ISO 14230 fast init (the default).
+  K-Line is request/response, so frames usually appear only once a tester has started a session. A new **K-Line**
+  trace decoder names the KWP2000 and OBD-II/J1979 service payloads (which carry no ISO-TP, unlike the KWP2000
+  decoder).
+- **J1708 interface.** A new python-can backend (`j1708`) captures a live SAE J1708 bus — the 9600-baud two-wire
+  (RS-485) serial bus of older heavy trucks — through a USB RS-485/J1708 adapter, so it can be monitored, recorded
+  and decoded. Each J1708 message (the MID, its data and checksum) is a frame whose identifier is the MID; select
+  the existing **J1587** decoder to describe the parameters. The channel is the serial port with an optional
+  `@<baud>` suffix (default 9600). Messages are framed by the idle gaps between them (so back-to-back messages with
+  no detectable gap can merge), and sending is best-effort (a plain UART cannot reproduce J1708 bus arbitration);
+  both limits are documented.
+- **Undo and redo in the database editor** (↶ ↷, ++ctrl+z++ / ++ctrl+shift+z++, ++ctrl+y++ on Windows), for CAN
+  and LIN databases: every edit — fields, adding, removing, duplicating, copying and pasting messages and signals,
+  removing nodes, promoting reverse-engineering results (one step each) — can be undone, and undo selects what it
+  changed. Undoing back to the saved content clears the unsaved-changes mark, and the history survives saving. An
+  edit that fails no longer leaves a partial change behind. Steps copy only the messages they change, so undo stays
+  fast on large databases.
+- **Duplicate and copy in the database editor**: duplicate a message with its signals (next free identifier),
+  duplicate a signal, or copy a signal and paste it into another message, placed at the first free bits where it
+  fits.
+- **Search signals in the database editor**: the search field also finds messages by the names of their signals,
+  listing the matching signals under each message.
+- **Signals by sender** in the database editor: the database as a collapsible tree of sending nodes, their messages
+  and their signals (LIN: by publisher), filtered by the same search, with the matches unfolded. Nodes start
+  unfolded and messages folded; ⊞ and ⊟ unfold and fold everything.
+- **Live AUTOSAR E2E checks from ARXML.** When an ARXML system description protects PDUs with E2E (an
+  `END-TO-END-PROTECTION-SET`), the trace checks the CRC of every received frame of those PDUs and shows the result
+  in its description, e.g. `[E2E P05 ok, counter 7]` or `[E2E P05 CRC ERROR 0x0D05, expected 0x0D04, counter 7]`.
+  Profiles 2, 5 and 22 are checked; the toolbar shows *E2E: n of m checked*. A protection whose profile is not
+  implemented, cannot be told from its category, or whose Data IDs do not fit is shown as not checked with the
+  reason (the profile is never guessed). Counter gaps are not tracked, and PDUs inside container frames are not
+  checked.
+- **Copy System Report** (menu and command palette) copies what a bug report needs: the CANExplorer, Python, PyQt,
+  Qt and python-can versions, the operating system and desktop, what each CAN driver reported in the last channel
+  detection (it runs one first if needed), and whether the last crash left a crash report.
+- **Channel detection says why a device is missing.** **Detect** now records, per driver, the channels it found or
+  why it found none — its driver library is not installed or does not load (with the error), it cannot list
+  channels, it raised an error, or it timed out — in the log and the system report. Drivers that fail while all
+  are probed at once are probed again one at a time (some vendor libraries do not tolerate being loaded next to
+  other drivers). The MCP `interfaces` tool no longer returns nothing when a single driver fails.
+- **A bug report template** on GitHub asking for the system report and the crash report.
+- **System theme**: follows the light or dark mode of the operating system and switches along with it. **In light
+  mode** and **In dark mode** choose the theme it shows in each (by default Light and Dark), e.g. Solarized Light
+  and Solarized Dark. Offered first in the theme list.
+- **States read by shape, not only colour**: the marks after the connections in the sidebar — a filled circle when
+  open, a hollow ring when closed, a circle with "!" after an error — and the gateway rule marks (filled circle,
+  diamond, ring) can be told apart by colour-blind users and in the monochrome Night Vision theme; hovering a
+  connection or a rule names its state. The tools use the same marks — running (a database open in the database
+  editor, the multi-bus trace merging, EtherCAT, Physical I/O, DoIP, SOME/IP, Ethernet capture, gateway, a
+  comparison), set up but idle (the multi-bus trace paused or waiting for its connections), a warning (unsaved database changes, gateway rules waiting for
+  their connections, Ethernet security events) or an error (SOME/IP or capture errors) — and so do the views of a
+  connection: a mark after a view while something runs in it (tester present, OBD-II live
+  values, flashing, a UDS discovery scan, XCP, the LIN schedule, a simulation, the restbus, tests, camera recording),
+  or when it has a warning or an error to look at (bus error states, security events, a failed test run, flash or
+  scan); hovering the view says which.
+- **Theme previews**: each theme in **Settings → Theme** shows swatches of its colours, and picking one previews it
+  on the whole window at once; **OK** keeps it, **Cancel** goes back to the previous theme.
+- **Thirteen new themes** (44 in all):
+  - light partners of dark themes: **Solarized Light** and **Nord Light**;
+  - popular editor palettes: **Catppuccin Latte** and **Catppuccin Mocha**, **Gruvbox Dark** and **Gruvbox Light**,
+    **Tokyo Night** and **One Dark**;
+  - colour-blind-safe themes on the Okabe-Ito colours: **Colour-Safe Dark** and **Colour-Safe Light** at normal
+    contrast, and **High Contrast Light** (black on white) for bright workshops and laptops in sunlight;
+  - **Night Vision**, dim reds on black for working in a vehicle at night without losing dark adaptation;
+  - **Phosphor**, a green oscilloscope screen.
+
+  Each palette follows its published colours, made lighter or darker where needed to meet the contrast minimums.
+- **Secured frames in the automatic analysis** (reverse engineering, also over MCP). With an ARXML describing
+  secured PDUs, their SecOC freshness value and truncated MAC are labelled at the ARXML's bits (*SecOC freshness*,
+  *SecOC MAC*) and only the rest is analysed. Without one, random-looking trailing bytes — every bit changing in,
+  and set in, about half of 100 or more frames — are labelled *Random (MAC?)*, as a hint, instead of being split into
+  meaningless values; a checksum at the end of a frame stays a checksum.
+- **UDS discovery unlocks a security level before scanning** (**Unlock level**), with the key algorithm chosen in
+  the Diagnostics view (a file, a Security Manager seed/key algorithm or a security profile), so DIDs, routines and
+  services that answer *securityAccessDenied* can be scanned too. If the unlock fails, nothing is probed.
+
+### Changed
+
+- **`cryptography` is a dependency**: the SecOC CMAC now uses it instead of a pure-Python AES (same results,
+  checked against the NIST and FIPS test vectors). The DoIP simulator can serve TLS (`DoipEntitySimulator(tls=…)`).
+- **The Diagnostics view is reorganised.** The services are grouped into titled sections (Target ECU, Session,
+  Data identifiers, Security access, Routine control, Raw request) in a resizable left column; the trouble codes
+  (with their Read/Clear buttons and status mask) and the request history are stacked on the right. The header shows
+  the transport, connection, tester-present and loaded-description state. DTCs show their status bits inline and are
+  marked *Confirmed* or *Pending*. History entries are numbered cards with the service name and an outcome mark that
+  tells positive responses, negative responses and timeouts apart by shape. Errors appear in a dismissible banner,
+  and both lists show a hint while empty.
+- **The GMLAN view is reorganised like the Diagnostics view.** The services are grouped into titled sections
+  (Target ECU, Diagnostic mode, Data identifiers, Security access, Raw request) in a resizable left column; the
+  trouble codes and the request history are stacked on the right, as numbered cards with an outcome mark. The header
+  shows the single-wire bus and what the page has done to the ECU — the diagnostic operation initiated, normal
+  communication disabled, the security level unlocked and tester present — until *Return to normal* or a change of
+  ECU addressing. Tester present is a switch, the security level a hex spin box, and errors appear in a dismissible
+  banner.
+- **The About dialog shows the build's commit and its real build date.** Bundles record the commit, the build date
+  (UTC) and the packaging backend when they are built; from a source tree the commit is read from git. "Built on"
+  showed the current date instead of the build date. The crash report and the system report show the same.
+- **Every theme meets the WCAG contrast minimums**: 4.5:1 for text and secondary text, 3:1 for the accent, status
+  and chart colours, against every panel. Colours that fell short were made lighter or darker, keeping their hue —
+  most visibly the secondary text of Dracula and Solarized Dark, the status and chart colours of the light themes
+  (Beach, Beach Towels, Pastel Rainbow, Aquarius, Pink Gold, Bumblebee, Light) and Rainbow's indigo, which was
+  nearly invisible on its background. Bumblebee's fourth chart colour is now blue (it matched the second).
+- **Chart colours that looked alike were replaced** with clearly different ones, so overlaid signals stay
+  distinguishable: two cyans and two purples in Purple, two greens in Forest, two teals in Moonlight, two seafoams in
+  Lollipop, green and teal in Pastel Rainbow, and two reds in Pink Gold.
+- **Text on accent colours is white or black, whichever is more legible**, instead of always white: on filled
+  buttons, check boxes, selected text, badges, the play button and the dashboard icons. White text failed on most
+  themes' accents (e.g. 1.5:1 on Cyberpunk's cyan); among others the default Dark theme's filled buttons now have
+  black text.
+
+### Fixed
+
+- **The Security events page no longer leaves a wide gap at the top while empty.** Without events, the
+  toolbar and the explanation were spread down the page; they now sit under the title.
+- **The traffic breakdown donut no longer overruns with very small shares.** A segment below about 0.6 % (e.g. a
+  few extended frames among many standard ones) was drawn the long way round, over the whole chart. Small segments
+  now keep a thin slice of their own, empty ones are left out, and the legend shows shares that round to zero as
+  "<0.1%" instead of "0.0%".
+- **Auto-scroll keeps following the trace after rows are selected.** It used to stop for as long as any row was
+  selected, and could stop short of the newest frame when many arrived at once. It now follows new frames whenever
+  it is ticked; jumping to a search result or a bookmark unticks it so that frame stays in view, and ticking it again
+  jumps to the newest frame. Following new frames scrolls the table smoothly instead of re-laying it out on every
+  refresh.
+- **Clicking rows in the trace and the overview selects them reliably.** A left click no longer clears the
+  selection, a right click selects the row it is on (keeping an existing selection that includes it, so the context
+  menu acts on all selected rows), ++shift++ + click selects the range from the current row, ++ctrl++ + click adds
+  or removes a row, and ++ctrl+shift++ + click adds a range. Rows are selected on press, so a click also counts when
+  the pointer moves slightly or the button is held. The overview now has a context menu too (copy the selected
+  rows, select all).
+- **An empty drop-down list now shows "No items"** when opened, instead of a thin, half-drawn strip under the box.
+- **Main window failing to load without a QtMultimedia backend.** On Linux systems without PulseAudio
+  (`libpulse.so.0`), QtMultimedia could not load, so the whole main window failed. Now only the *Video & map*
+  view is unavailable there. The `.deb` package now depends on `libpulse0`.
+- **TLS key log path on Windows.** The Ethernet view showed the loaded key log path with forward slashes; it now
+  uses the platform's native separators.
+- **Simulated DoIP entity failing to start on Windows** ("An attempt was made to access a socket in a way
+  forbidden by its access permissions"). Windows reserves blocks of ports for UDP, and the free ports tried one
+  after another could all lie in one such block; the retries now pick ports at random, also when TCP refuses one.
+- **Channel detection retries overrunning their time on Windows.** After a backend's retry used up the time left,
+  the coarse Windows clock could still show time remaining, so the next failed backend was retried anyway. A
+  retry that raised also ended the whole detection instead of being reported as that backend's error.
+- **Freeze when opening the *Video & map* view on Linux without a sound server.** Qt Multimedia logs a message
+  while it loads, which could deadlock the application when QML loaded it in the background; it is now loaded at
+  start-up. The `.deb` package also depends on `libxrandr2`, needed by Qt's FFmpeg media backend.
+
 ## [1.7.1] – 2026-11-13
 
 ### Added
@@ -891,7 +1142,8 @@ Called "Milestone 0.1.0" in the commit message and the README roadmap.
 - Qt Widgets user interface: main window, new connection dialog, about dialog and a raw CAN frame table.
 - Pipenv based project setup, VS Code development container, Dockerfile and a CI workflow skeleton.
 
-[Unreleased]: https://github.com/AKJ7/CANExplorer/compare/v1.7.1...HEAD
+[Unreleased]: https://github.com/AKJ7/CANExplorer/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/AKJ7/CANExplorer/compare/v1.7.1...v1.8.0
 [1.7.1]: https://github.com/AKJ7/CANExplorer/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/AKJ7/CANExplorer/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/AKJ7/CANExplorer/compare/v1.5.0...v1.6.0

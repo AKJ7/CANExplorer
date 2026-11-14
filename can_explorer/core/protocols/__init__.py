@@ -5,6 +5,7 @@ from can_explorer.core.protocols.canopen import CanOpenDecoder
 from can_explorer.core.protocols.isotp import IsoTpDecoder
 from can_explorer.core.protocols.j1587 import J1587Decoder
 from can_explorer.core.protocols.j1939 import J1939Decoder, J1939_22Decoder
+from can_explorer.core.protocols.kline import KLineDecoder
 from can_explorer.core.protocols.kwp2000 import Kwp2000Decoder
 from can_explorer.core.protocols.nm import NmDecoder
 from can_explorer.core.protocols.nmea2000 import NmeaDecoder
@@ -17,6 +18,7 @@ PROTOCOL_DECODERS: Dict[str, Optional[Callable[[], ProtocolDecoder]]] = {
     IsoTpDecoder.name: IsoTpDecoder,
     UdsDecoder.name: UdsDecoder,
     Kwp2000Decoder.name: Kwp2000Decoder,
+    KLineDecoder.name: KLineDecoder,
     J1939Decoder.name: J1939Decoder,
     J1939_22Decoder.name: J1939_22Decoder,
     NmeaDecoder.name: NmeaDecoder,

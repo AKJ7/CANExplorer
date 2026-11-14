@@ -19,7 +19,8 @@ ColumnLayout {
     function kindColor(kind) {
         return kind === "checksum" ? Theme.chart[4] : kind === "counter" ? Theme.chart[2]
              : kind === "multiplexer" ? Theme.chart[5] : kind === "physical" ? Theme.success
-             : kind === "enum" || kind === "flag" ? Theme.chart[1] : Theme.muted
+             : kind === "enum" || kind === "flag" ? Theme.chart[1]
+             : kind === "mac" || kind === "freshness" ? Theme.danger : kind === "random" ? Theme.warning : Theme.muted
     }
 
     RowLayout {

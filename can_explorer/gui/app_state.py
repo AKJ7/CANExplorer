@@ -5,12 +5,16 @@ from typing import Any, Dict, List, Optional
 
 from PyQt6.QtCore import QObject, QSettings, QStandardPaths, pyqtProperty, pyqtSignal, pyqtSlot
 
+from can_explorer.core.timestamps import DEFAULT_TIME_FORMAT, normalize_time_format
 from can_explorer.sys.log_handler import get_logger
+
+DEFAULT_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
 
 logger = get_logger(__name__)
 
 MAX_RECENT = 10
-# Must match the palettes of Theme.qml. Listed alphabetically; this is the order shown in the theme picker.
+# Must match the palettes of Theme.qml (tests/unit/gui/test_theme.py checks it). Listed alphabetically; this is the
+# order shown in the theme picker, after SYSTEM_THEME.
 THEMES = (
     'Amethyst',
     'Aquarius',
@@ -20,20 +24,31 @@ THEMES = (
     'Blueberry',
     'Bumblebee',
     'Cappuccino',
+    'Catppuccin Latte',
+    'Catppuccin Mocha',
+    'Colour-Safe Dark',
+    'Colour-Safe Light',
     'Cyberpunk',
     'Dark',
     'Dracula',
     'Ember',
     'Forest',
+    'Gruvbox Dark',
+    'Gruvbox Light',
     'High Contrast',
+    'High Contrast Light',
     'Light',
     'Lollipop',
     'Metro',
     'Midnight Plum',
     'Moonlight',
+    'Night Vision',
     'Nord',
+    'Nord Light',
     'Ocean',
+    'One Dark',
     'Pastel Rainbow',
+    'Phosphor',
     'Pink Gold',
     'Prism',
     'Purple',
@@ -41,8 +56,15 @@ THEMES = (
     'Rainbow',
     'Rosé',
     'Solarized Dark',
+    'Solarized Light',
     'Space Gray',
+    'Tokyo Night',
 )
+# Follows the light/dark colour scheme of the operating system, showing the chosen light or dark theme (by default
+# Light and Dark; resolved in Theme.qml). Listed first.
+SYSTEM_THEME = 'System'
+DEFAULT_SYSTEM_LIGHT_THEME = 'Light'
+DEFAULT_SYSTEM_DARK_THEME = 'Dark'
 # Hidden themes: valid and persisted, but kept out of the theme list until unlocked. 'Spirit' (the red diamond)
 # is unlocked by the seven havens easter egg in the About dialog (see awaken_spirit).
 SECRET_THEMES = ('Spirit',)
@@ -57,6 +79,14 @@ TRACE_HISTORY_RANGE = (0, 50_000_000)
 # Width of the sidebar in pixels; the default must match Theme.sidebarWidth
 DEFAULT_SIDEBAR_WIDTH = 232
 SIDEBAR_WIDTH_RANGE = (180, 420)
+
+
+def _is_palette(name: Any) -> bool:
+    return name in THEMES or name in SECRET_THEMES
+
+
+def _is_theme(name: Any) -> bool:
+    return name == SYSTEM_THEME or _is_palette(name)
 
 
 class AppState(QObject):
@@ -202,19 +232,83 @@ class AppState(QObject):
         self._settings.sync()
         self.preferences_changed.emit()
 
+    @pyqtProperty(str, notify=preferences_changed)
+    def trace_time_format(self) -> str:
+        """How the trace shows frame times: 'relative', 'delta', 'absolute' or 'unix'."""
+        return normalize_time_format(self._settings.value('preferences/trace_time_format', DEFAULT_TIME_FORMAT))
+
+    @pyqtSlot(str)
+    def set_trace_time_format(self, time_format: str) -> None:
+        time_format = normalize_time_format(time_format)
+        if time_format == self.trace_time_format:
+            return
+        self._settings.setValue('preferences/trace_time_format', time_format)
+        self._settings.sync()
+        self.preferences_changed.emit()
+
+    # Map tiles of the GPS map: off until enabled, since showing a map sends its area to the tile server
+
+    @pyqtProperty(bool, notify=preferences_changed)
+    def map_tiles(self) -> bool:
+        return str(self._settings.value('map/tiles', 'false')).lower() == 'true'
+
+    @pyqtProperty(str, notify=preferences_changed)
+    def map_tile_url(self) -> str:
+        return str(self._settings.value('map/tile_url', '') or DEFAULT_TILE_URL)
+
+    @pyqtProperty(str, constant=True)
+    def default_map_tile_url(self) -> str:
+        return DEFAULT_TILE_URL
+
+    @pyqtSlot(bool, str)
+    def set_map_tiles(self, enabled: bool, url: str) -> None:
+        url = url.strip()
+        valid = url.startswith(('https://', 'http://')) and all(part in url for part in ('{z}', '{x}', '{y}'))
+        self._settings.setValue('map/tiles', 'true' if enabled else 'false')
+        self._settings.setValue('map/tile_url', url if valid and url != DEFAULT_TILE_URL else '')
+        self._settings.sync()
+        self.preferences_changed.emit()
+
     # Appearance
 
     @pyqtProperty(str, notify=preferences_changed)
     def theme(self) -> str:
         value = self._settings.value('appearance/theme', DEFAULT_THEME)
-        return value if value in THEMES or value in SECRET_THEMES else DEFAULT_THEME
+        return value if _is_theme(value) else DEFAULT_THEME
 
     @pyqtProperty('QStringList', notify=preferences_changed)
     def themes(self) -> List[str]:
-        names = list(THEMES)
+        names = [SYSTEM_THEME, *THEMES]
         if self.spirit_unlocked:
             names.extend(SECRET_THEMES)
         return names
+
+    @pyqtProperty(str, notify=preferences_changed)
+    def system_light_theme(self) -> str:
+        """The theme 'System' shows while the operating system is in light mode."""
+        value = self._settings.value('appearance/system_light_theme', DEFAULT_SYSTEM_LIGHT_THEME)
+        return value if _is_palette(value) else DEFAULT_SYSTEM_LIGHT_THEME
+
+    @pyqtProperty(str, notify=preferences_changed)
+    def system_dark_theme(self) -> str:
+        """The theme 'System' shows while the operating system is in dark mode."""
+        value = self._settings.value('appearance/system_dark_theme', DEFAULT_SYSTEM_DARK_THEME)
+        return value if _is_palette(value) else DEFAULT_SYSTEM_DARK_THEME
+
+    @pyqtSlot(str, str)
+    def set_system_themes(self, light: str, dark: str) -> None:
+        """Choose the themes of 'System'; an unknown name (or 'System' itself) leaves that one unchanged."""
+        changed = False
+        for key, value, current in (
+            ('appearance/system_light_theme', light, self.system_light_theme),
+            ('appearance/system_dark_theme', dark, self.system_dark_theme),
+        ):
+            if _is_palette(value) and value != current:
+                self._settings.setValue(key, value)
+                changed = True
+        if changed:
+            self._settings.sync()
+            self.preferences_changed.emit()
 
     @pyqtProperty(bool, notify=preferences_changed)
     def spirit_unlocked(self) -> bool:
@@ -223,7 +317,7 @@ class AppState(QObject):
 
     @pyqtSlot(str)
     def set_theme(self, theme: str) -> None:
-        if (theme in THEMES or theme in SECRET_THEMES) and theme != self.theme:
+        if _is_theme(theme) and theme != self.theme:
             self._settings.setValue('appearance/theme', theme)
             self._settings.sync()
             self.preferences_changed.emit()

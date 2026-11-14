@@ -72,6 +72,34 @@ mosquitto_pub -t canexplorer/Vehicle/send -m '{"id": "7DF", "data": "02 01 0D"}'
     the allow list short, use a broker with users and access control lists (so that only trusted clients may
     publish to `…/send`), and use TLS (`mqtts://`) outside a trusted network.
 
+### From Python
+
+Any MQTT client works; with [aiomqtt](https://pypi.org/project/aiomqtt/), a program reacting to a signal and
+asking for a frame to be sent:
+
+```python
+import asyncio
+import json
+
+import aiomqtt
+
+
+async def main():
+    async with aiomqtt.Client('localhost') as client:
+        await client.subscribe('canexplorer/Vehicle/signals/#')
+        # Ask CANExplorer to send a frame (needs "Send frames published to …/send" and the allow list)
+        await client.publish('canexplorer/Vehicle/send', json.dumps({'id': '7DF', 'data': '02 01 0D'}))
+        async for message in client.messages:
+            *_, name, signal = message.topic.value.split('/')
+            print(f'{name}.{signal} = {json.loads(message.payload)}')
+            if signal == 'CoolantTemp' and json.loads(message.payload) > 110:
+                print('engine too hot')
+                break
+
+
+asyncio.run(main())
+```
+
 ## Home Assistant
 
 With Home Assistant's MQTT integration, a signal becomes a sensor:

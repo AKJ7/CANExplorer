@@ -7,6 +7,13 @@ IPv4/IPv6, ARP, ICMP, IGMP/MLD and UDP/TCP — and recognises the automotive pro
 formats and **CAN, LIN and FlexRay tunnelled over Ethernet** via ACF, and MAAP), **LLDP**, the **SRP/TSN** control
 protocols (MVRP, MSRP, MMRP), **MACsec** (802.1AE), **UDP-NM** (AUTOSAR network management, on a port you set) and
 common infrastructure (DHCP, DNS/mDNS, IPsec ESP/AH). It is a standalone tool, separate from the CAN connections.
+With keys in the [security manager](security-manager.md#ipsec-and-macsec-in-ethernet-captures), IPsec ESP and
+MACsec packets are decrypted and what they carried is decoded; with a [TLS key log](security-manager.md#tls-in-ethernet-captures),
+so are TLS sessions such as DoIP on port 3496. SOME/IP messages with [E2E protection](someip.md#end-to-end-protection-e2e)
+(**SOME/IP E2E…**) are checked in the capture, in capture order. **MKA** (MACsec Key Agreement over EAPOL) frames
+are decoded down to their parameter sets, and **Security events** lists the capture's security findings — failed
+E2E checks, decryption and integrity failures, refused DoIP routing activations and security access, SOME/IP
+services Service Discovery did not offer (see the [security manager](security-manager.md#security-events)).
 
 Where the [SOME/IP](someip.md) and [DoIP](doip.md) tools interpret one protocol live, this one shows *everything*
 on an Ethernet segment — so you can see what is actually on the wire, and which protocols.

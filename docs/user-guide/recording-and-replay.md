@@ -26,6 +26,12 @@ it. **Stop recording**, disconnecting or closing the connection ends it.
 
 ![Record dialog](../assets/screenshots/record-dialog.png)
 
+### Recording a camera video
+
+Choose a camera under **Camera** to record a video along with the frames, saved next to the log (`drive.blf` →
+`drive.mp4`). Replaying the log shows the video in step with it, together with an attached GPS track; see
+[Video and GPS map](video-and-map.md).
+
 ### Splitting into several files
 
 With **Split into numbered files**, a new file is started every given number of megabytes and/or minutes:
@@ -102,3 +108,33 @@ stops with a notification.
 
 **Export…** saves frames of the trace to a log file: the selected rows, or all rows currently displayed (which
 honours the filter) when nothing is selected.
+
+## Logs in scripts
+
+The log files are those of [python-can](https://python-can.readthedocs.io/en/stable/file_io.html), so scripts read
+and write them with `can.LogReader` and `can.Logger` (the format follows the file name; a `.gz` suffix compresses the
+text formats, and `.mf4` needs the `mf4` extra). CANExplorer's decoding, display filters and trigger conditions work
+on the frames:
+
+```python
+import can
+
+from can_explorer.core.conditions import condition_matcher
+from can_explorer.core.decoding import DbcDecoder
+from can_explorer.core.filters import MessageFilter
+
+database = DbcDecoder('vehicle.dbc')
+engine_frames = MessageFilter.parse('100-1FF !123')  # The display filter syntax
+hot = condition_matcher('EngineData.CoolantTemp > 110', lambda: database)  # The trigger condition syntax
+
+with can.LogReader('drive.blf') as log, can.Logger('hot.asc.gz') as hot_frames:
+    for msg in log:
+        if not engine_frames.matches(msg):
+            continue
+        values = database.decode(msg)  # {'EngineSpeed': 2400.0, 'CoolantTemp': 90, 'GearPosition': 'Second'}
+        if values is None:  # Not in the database
+            continue
+        print(f'{msg.timestamp:.3f}', values['EngineSpeed'], values['GearPosition'])
+        if hot(msg):
+            hot_frames.on_message_received(msg)  # Written compressed: the .gz suffix
+```

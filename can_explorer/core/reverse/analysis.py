@@ -10,6 +10,10 @@
 4. Neighbouring fields that the first rule joins are split again: in a real field the upper part changes only when
    the lower part wraps around (255 → 0), in two independent fields it does not; and of rarely changing fields
    (flags, enumerations), parts that hardly ever change in the same frame are separate fields.
+0. Secured bytes come first: with an ARXML, the SecOC freshness value and MAC of a secured PDU are labelled at the
+   bits the ARXML gives. Without one, trailing bytes whose bits each change in about half the frames and are set in
+   about half of them are labelled random: possibly a truncated MAC (SecOC appends it to the payload) or encrypted
+   data. Only a hint: a field of noise looks the same. These bits are left out of the steps below.
 5. Each field is classified: constant, counter (the same step from frame to frame through its whole range), flag,
    enumeration (few values,
    rarely changing), physical value (changing smoothly, read signed when that is smoother) or unknown. Of the
@@ -25,6 +29,7 @@ import numpy as np
 
 from can_explorer.core.reverse.checksums import find_checksums
 from can_explorer.core.reverse.fields import BitField, _from_motorola_index, _motorola_index
+from can_explorer.core.secoc_check import SecOcConfig
 
 IdKey = Tuple[int, bool]
 
@@ -39,7 +44,24 @@ ENUM_VALUES = 16
 ENUM_CHANGES = 0.3
 MUX_MIN_GROUP = 5
 
-KINDS = ('checksum', 'counter', 'multiplexer', 'physical', 'enum', 'flag', 'constant', 'unknown')
+# Random looking bytes: each bit changes in, and is set in, about half the frames (enough frames for that to tell)
+RANDOM_MIN_FRAMES = 100
+RANDOM_LOW, RANDOM_HIGH = 0.35, 0.65  # ±3 standard deviations of a random bit's share over 100 frames
+RANDOM_MIN_BYTES = 2
+
+KINDS = (
+    'checksum',
+    'counter',
+    'multiplexer',
+    'physical',
+    'enum',
+    'flag',
+    'constant',
+    'unknown',
+    'freshness',  # SecOC freshness value, at the bits an ARXML gives
+    'mac',  # SecOC MAC, at the bits an ARXML gives
+    'random',  # Random looking trailing bytes: possibly a MAC or encrypted data
+)
 # Value of a field per bit when choosing between overlapping fields (physical values: their confidence)
 _WEIGHT = {'checksum': 1.2, 'counter': 1.1, 'enum': 0.8, 'flag': 0.8, 'unknown': 0.1, 'constant': 0.0}
 MUX_CALM = 0.3  # Share of the changing bits that must calm down when the frames are grouped by the multiplexer
@@ -433,8 +455,71 @@ def _multiplexer(data: _Data, key: IdKey, excluded: Set[int]) -> Optional[Tuple[
     return (best[1], best[2]) if best is not None else None
 
 
-def analyse(frames: IdFrames, multiplexers: bool = True) -> IdAnalysis:
-    """Find the fields of the frames of one identifier (those of the most common length)."""
+def _chunks(key: IdKey, first: int, length: int) -> List[BitField]:
+    """Big endian fields of at most 64 bits covering `length` bits from Motorola index `first` (MSB first)."""
+    result = []
+    while length > 0:
+        part = min(length, 64)
+        result.append(BitField(key[0], key[1], _from_motorola_index(first), part, 'big_endian'))
+        first, length = first + part, length - part
+    return result
+
+
+def _secoc_fields(data: _Data, key: IdKey, config: SecOcConfig) -> List[FoundField]:
+    """The freshness value and MAC of a secured PDU where its ARXML puts them: right after the authentic payload,
+    freshness first, packed from the most significant bit (as the SecOC check reads them)."""
+    if config.payload_length is None or not config.auth_tx_bits or data.size < config.length * 8:
+        return []
+    start = config.payload_length * 8
+    freshness_bits = config.freshness_tx_bits or 0
+    found = []
+    for kind, first, length, what in (
+        ('freshness', start, freshness_bits, 'freshness value'),
+        ('mac', start + freshness_bits, config.auth_tx_bits, 'MAC'),
+    ):
+        fields = _chunks(key, first, length)
+        for index, field in enumerate(fields):
+            raw = data.raw(field)
+            part = f', part {index + 1} of {len(fields)}' if len(fields) > 1 else ''
+            details = f'SecOC {what} of {config.pdu}, {length} bits transmitted (ARXML){part}'
+            found.append(FoundField(field, kind, 1.0, details, min(raw), max(raw), len(set(raw))))
+    return found
+
+
+def _random_trailer(data: _Data, key: IdKey, excluded: Set[int]) -> List[FoundField]:
+    """Trailing bytes that look random (see the module), up to an `excluded` bit; a hint, not a finding."""
+    if len(data) < RANDOM_MIN_FRAMES:
+        return []
+    rates = data.rates()
+    ones = data.bits.mean(axis=0).tolist()
+
+    def random(byte: int) -> bool:
+        return not excluded & set(range(byte * 8, byte * 8 + 8)) and all(
+            RANDOM_LOW <= rates[bit] <= RANDOM_HIGH and RANDOM_LOW <= ones[bit] <= RANDOM_HIGH
+            for bit in range(byte * 8, byte * 8 + 8)
+        )
+
+    first = data.length
+    while first > 0 and random(first - 1):
+        first -= 1
+    count = data.length - first
+    if count < RANDOM_MIN_BYTES:
+        return []
+    found = []
+    fields = _chunks(key, first * 8, count * 8)
+    for field in fields:
+        raw = data.raw(field)
+        details = (
+            f'{count} trailing bytes change at random: possibly a truncated MAC (SecOC) or encrypted data — '
+            'load the ARXML to check'
+        )
+        found.append(FoundField(field, 'random', 0.5, details, min(raw), max(raw), len(set(raw))))
+    return found
+
+
+def analyse(frames: IdFrames, multiplexers: bool = True, secoc: Optional[SecOcConfig] = None) -> IdAnalysis:
+    """Find the fields of the frames of one identifier (those of the most common length); `secoc` is the
+    identifier's SecOC configuration from an ARXML, if it is a secured PDU."""
     key = frames.key
     if not frames.payloads:
         return IdAnalysis(key, 0, 0, [], note='No frames')
@@ -445,13 +530,20 @@ def analyse(frames: IdFrames, multiplexers: bool = True) -> IdAnalysis:
     if len(payloads) < MIN_FRAMES:
         return IdAnalysis(key, len(payloads), length, [], note=f'Too few frames ({len(payloads)}, {MIN_FRAMES} needed)')
     data = _Data(payloads)
-    fields: List[FoundField] = []
-    excluded: Set[int] = set()
+    fields: List[FoundField] = _secoc_fields(data, key, secoc) if secoc is not None else []
+    secured = bool(fields)
+    excluded: Set[int] = {bit for item in fields for bit in item.field.bits}
     for match in find_checksums(payloads):
+        if set(range(match.byte * 8, match.byte * 8 + 8)) & excluded:
+            continue
         field = BitField(key[0], key[1], match.byte * 8, 8)
         raw = data.raw(field)
         fields.append(FoundField(field, 'checksum', match.share, match.description, min(raw), max(raw), len(set(raw))))
         excluded |= set(field.bits)
+    if not secured:  # After the checksums: a CRC byte looks random too
+        trailer = _random_trailer(data, key, excluded)
+        fields += trailer
+        excluded |= {bit for item in trailer for bit in item.field.bits}
 
     multiplexer = None
     found_mux = _multiplexer(data, key, excluded) if multiplexers else None
@@ -509,13 +601,16 @@ def analyse(frames: IdFrames, multiplexers: bool = True) -> IdAnalysis:
 
 
 def analyse_all(
-    frames: Dict[IdKey, IdFrames], progress: Optional[Callable[[int, int], None]] = None
+    frames: Dict[IdKey, IdFrames],
+    progress: Optional[Callable[[int, int], None]] = None,
+    secured: Optional[Dict[IdKey, SecOcConfig]] = None,
 ) -> List[IdAnalysis]:
-    """Analyse every identifier, in the order of their identifiers; `progress(done, total)` after each."""
+    """Analyse every identifier, in the order of their identifiers; `progress(done, total)` after each.
+    `secured` gives the SecOC configuration of the secured PDUs (from an ARXML) by identifier."""
     keys = sorted(frames, key=lambda key: (key[1], key[0]))
     result = []
     for index, key in enumerate(keys):
-        result.append(analyse(frames[key]))
+        result.append(analyse(frames[key], secoc=(secured or {}).get(key)))
         if progress is not None:
             progress(index + 1, len(keys))
     return result

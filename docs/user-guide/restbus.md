@@ -7,6 +7,8 @@ alive.
 
 It is a view of a connection that can transmit: open **Restbus** in the connection's view list in the sidebar.
 
+![Restbus simulation sending the example database's EngineData, with VehicleSpeed switched off](../assets/screenshots/restbus.png)
+
 ## Using it
 
 1. **Open a connection** that can transmit and load a signal database (DBC, ARXML, KCD, SYM or DBF) on it, as for
@@ -33,6 +35,9 @@ including while the simulation is running.
 - Message **counters and E2E/CRC checksums are not computed**: each signal keeps the value it was given, so a
   receiver that validates a rolling counter or a checksum will see it constant. Use the
   [scripting console](simulation.md) when you need a changing counter or a computed checksum.
+- AUTOSAR **SecOC** secured PDUs of an ARXML *are* secured, with a new freshness value and MAC in every frame and
+  the key from the [security manager](security-manager.md#sending-secured-pdus) (marked *SecOC* in the list). Without
+  a key they are not sent, and the list says why.
 - A multiplexed or container message whose default values do not form a valid layout is sent as all-zero bytes of
   the right length, so the identifier is still present on the bus.
 - Transmission needs a connection that is connected and can send (not a replayed log file).

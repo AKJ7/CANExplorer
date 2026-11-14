@@ -161,6 +161,18 @@ ColumnLayout {
                             Layout.preferredWidth: 90
                         }
                         Label { text: messageRow.modelData.name; color: Theme.text; elide: Text.ElideRight; Layout.fillWidth: true }
+                        // A SecOC secured PDU: secured afresh for every frame with the Security Manager's key
+                        Label {
+                            visible: messageRow.modelData.secured
+                            text: "SecOC"
+                            color: messageRow.modelData.problem ? Theme.danger : Theme.success
+                            font.pixelSize: 11
+                            ToolTip.visible: secocRowHover.hovered
+                            ToolTip.text: messageRow.modelData.problem
+                                ? qsTr("Not sent: %1").arg(messageRow.modelData.problem)
+                                : qsTr("Secured for every frame: a new freshness value and MAC, with the key from the Security Manager")
+                            HoverHandler { id: secocRowHover }
+                        }
                         Label { text: messageRow.modelData.senders; color: Theme.muted; elide: Text.ElideRight; Layout.preferredWidth: 130 }
                         Label {
                             text: messageRow.modelData.cycle_ms > 0 ? (messageRow.modelData.cycle_ms + " ms") : qsTr("event")

@@ -414,3 +414,72 @@ def test_dissect_vlan_tagged_frame():
     vlan_node = _child(root, '802.1Q VLAN')
     assert _child(vlan_node, 'VLAN id').value == '100'
     assert [child.label for child in root.children] == ['Ethernet II', '802.1Q VLAN', 'ARP']
+
+
+def mka_frame():
+    """An EAPOL-MKA PDU: the basic parameter set (MKA v3, key server, MACsec desired, capability 2), a live peer
+    list with one peer, a distributed SAK (wrapped, dummy bytes) and the ICV."""
+    sci = bytes.fromhex('001122334455') + b'\x00\x01'
+    member, number, agility, cak_name = bytes(range(12)), struct.pack('>I', 7), bytes.fromhex('0080C201'), b'\xab' * 16
+    basic_body = sci + member + number + agility + cak_name  # 44 bytes
+    basic = bytes([3, 0x10, 0xE0 | (len(basic_body) >> 8), len(basic_body) & 0xFF]) + basic_body
+    peers = bytes([1, 0, 0, 16]) + bytes(range(12, 24)) + struct.pack('>I', 3)
+    sak = bytes([4, 0, 0, 28]) + bytes(28)
+    body = basic + peers + sak + b'\xcc' * 16
+    eapol = bytes([3, 5]) + struct.pack('>H', len(body)) + body
+    return eth('01:80:c2:00:00:03', 'aa:bb:cc:dd:ee:ff', ethernet.ETH_EAPOL, eapol)
+
+
+def test_decode_eapol_mka():
+    packet = ethernet.decode(mka_frame())
+    assert packet.l3 == 'EAPOL' and packet.protocol == 'MKA'
+    assert packet.info == 'MKA v3, key server, SCI 0011223344550001, MN 7, Live Peer List, Distributed SAK'
+    eapol = ethernet.parse_eapol(mka_frame()[14:])
+    mka = eapol.mka
+    assert (mka.key_server_priority, mka.macsec_desired, mka.macsec_capability) == (0x10, True, 2)
+    assert mka.member_identifier == bytes(range(12)).hex().upper() and mka.cak_name == 'AB' * 16
+    tree = ethernet.dissect(mka_frame())
+    branch = next(child for child in tree.children if child.label == 'EAPOL').children[-1]
+    assert branch.label == 'MKA' and [child.label for child in branch.children][-2:] == [
+        'Parameter set',
+        'Parameter set',
+    ]
+    start = eth('01:80:c2:00:00:03', 'aa:bb:cc:dd:ee:ff', ethernet.ETH_EAPOL, bytes([2, 1, 0, 0]))
+    assert ethernet.decode(start).protocol == 'EAPOL' and ethernet.decode(start).info == 'EAPOL Start'
+
+
+def tcp_doip(payload_type, body, sport=13400, dport=50000):
+    message = doip.encode_message(payload_type, body)
+    tcp = struct.pack('>HHIIBBHHH', sport, dport, 1, 0, 5 << 4, 0x18, 65535, 0, 0) + message
+    return eth('11:22:33:44:55:66', 'aa:bb:cc:dd:ee:ff', ethernet.ETH_IPV4, ipv4('10.0.0.2', '10.0.0.1', 6, tcp) + tcp)
+
+
+def test_security_findings_and_the_ethernet_monitor():
+    from can_explorer.core.security_events import EthernetSecurityMonitor
+
+    decoder = ethernet.StreamDecoder()
+    refused = decoder.decode(tcp_doip(doip.ROUTING_ACTIVATION_RESPONSE, bytes.fromhex('0E80 1000 06 00000000')), 1.0)
+    assert refused.security == [
+        ('doip-refused', '10.0.0.2 → 10.0.0.1', 'routing activation refused: ' + doip.ROUTING_ACTIVATION_CODES[0x06])
+    ]
+    granted = decoder.decode(tcp_doip(doip.ROUTING_ACTIVATION_RESPONSE, bytes.fromhex('0E80 1000 10 00000000')), 1.1)
+    assert granted.security == []
+    nrc = decoder.decode(tcp_doip(doip.DIAGNOSTIC_MESSAGE, bytes.fromhex('1001 0E80 7F2735')), 1.2)
+    assert nrc.security == [('refused', '10.0.0.2 → 10.0.0.1', 'SecurityAccess refused: invalidKey (NRC 0x35)')]
+    # SOME/IP services: once Service Discovery offered something, other services stand out
+    decoder.services[(0x1234, 0x0001)] = None
+    unknown = decoder.decode(
+        udp_frame('192.168.0.10', '192.168.0.20', 50000, 30509, someip_msg(0x4321, 0x8001, 0x02)), 1.3
+    )
+    assert unknown.security == [('unknown-service', '4321.8001', 'a service Service Discovery did not offer')]
+    offered = decoder.decode(
+        udp_frame('192.168.0.10', '192.168.0.20', 50000, 30509, someip_msg(0x1234, 0x8001, 0x02)), 1.4
+    )
+    assert offered.security == []
+
+    monitor = EthernetSecurityMonitor()
+    for packet in (refused, granted, nrc, nrc, nrc, unknown):
+        monitor.on_packet(packet)
+    rows = {row['kind']: row for row in monitor.rows()}
+    assert rows['refused']['count'] == 3 and rows['refused']['severity'] == 'high'  # 3 refusals within a second
+    assert rows['doip-refused']['first'] == 0.0 and rows['unknown-service']['identifier'] == '4321.8001'

@@ -8,107 +8,43 @@ truncated MAC:
     [ authentic payload | truncated freshness | truncated MAC ]
 
 The MAC is computed over the 16-bit Data ID, the authentic payload and the *complete* freshness value. This module
-implements the common CMAC/AES-128 algorithm (verified against the NIST SP 800-38B / FIPS-197 test vectors) and the
-generate/verify operations; validating a live PDU needs its SecOC configuration (Data ID, the key, and the
-truncated lengths) from the ARXML. Byte-aligned payload/freshness lengths and a MAC length that is a whole number
-of bits are handled.
+holds the primitives: CMAC over AES (with the `cryptography` package; the tests check the NIST SP 800-38B and FIPS-197
+vectors) and byte-aligned generate/verify/split. The live check of secured PDUs configured in an ARXML, with
+bit-packed trailers and freshness reconstruction, is in core/secoc_check.py.
 """
 
 import hmac
 from typing import Optional, Tuple
 
 import can
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.cmac import CMAC
 
-# --- AES-128 (FIPS-197), enough for CMAC: single-block encryption ---
-
-_SBOX = bytes.fromhex(
-    '637c777bf26b6fc53001672bfed7ab76ca82c97dfa5947f0add4a2af9ca472c0'
-    'b7fd9326363ff7cc34a5e5f171d8311504c723c31896059a071280e2eb27b275'
-    '09832c1a1b6e5aa0523bd6b329e32f8453d100ed20fcb15b6acbbe394a4c58cf'
-    'd0efaafb434d338545f9027f503c9fa851a3408f929d38f5bcb6da2110fff3d2'
-    'cd0c13ec5f974417c4a77e3d645d197360814fdc222a908846eeb814de5e0bdb'
-    'e0323a0a4906245cc2d3ac629195e479e7c8376d8dd54ea96c56f4ea657aae08'
-    'ba78252e1ca6b4c6e8dd741f4bbd8b8a703eb5664803f60e613557b986c11d9e'
-    'e1f8981169d98e949b1e87e9ce5528df8ca1890dbfe6426841992d0fb054bb16'
-)
-_RCON = (0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1B, 0x36)
-
-
-def _xtime(a: int) -> int:
-    return ((a << 1) ^ 0x1B) & 0xFF if a & 0x80 else (a << 1)
-
-
-def _key_schedule(key: bytes) -> list:
-    """Expand a 16-byte key into 11 round keys (176 bytes), column-major like the AES state."""
-    schedule = list(key)
-    for i in range(4, 44):
-        word = schedule[(i - 1) * 4 : i * 4]
-        if i % 4 == 0:
-            word = word[1:] + word[:1]  # RotWord
-            word = [_SBOX[b] for b in word]  # SubWord
-            word[0] ^= _RCON[i // 4 - 1]
-        previous = schedule[(i - 4) * 4 : (i - 3) * 4]
-        schedule += [previous[j] ^ word[j] for j in range(4)]
-    return schedule
-
-
-def _encrypt_block(schedule: list, block: bytes) -> bytes:
-    state = [block[i] ^ schedule[i] for i in range(16)]
-    for rnd in range(1, 11):
-        state = [_SBOX[b] for b in state]  # SubBytes
-        # ShiftRows: row r (indices r, r+4, r+8, r+12) rotates left by r
-        state = [state[(i % 4) + 4 * ((i // 4 + i % 4) % 4)] for i in range(16)]
-        if rnd != 10:  # MixColumns
-            mixed = []
-            for c in range(4):
-                s0, s1, s2, s3 = state[4 * c : 4 * c + 4]
-                t = s0 ^ s1 ^ s2 ^ s3
-                mixed += [
-                    s0 ^ t ^ _xtime(s0 ^ s1),
-                    s1 ^ t ^ _xtime(s1 ^ s2),
-                    s2 ^ t ^ _xtime(s2 ^ s3),
-                    s3 ^ t ^ _xtime(s3 ^ s0),
-                ]
-            state = mixed
-        state = [state[i] ^ schedule[16 * rnd + i] for i in range(16)]  # AddRoundKey
-    return bytes(state)
+AES_KEY_LENGTHS = (16, 24, 32)
 
 
 def aes128_encrypt(key: bytes, block: bytes) -> bytes:
     """Encrypt one 16-byte block with AES-128 (ECB, single block)."""
     if len(key) != 16 or len(block) != 16:
         raise ValueError('AES-128 needs a 16-byte key and a 16-byte block')
-    return _encrypt_block(_key_schedule(key), block)
+    encryptor = Cipher(algorithms.AES(bytes(key)), modes.ECB()).encryptor()
+    return encryptor.update(bytes(block)) + encryptor.finalize()
 
 
-# --- CMAC (NIST SP 800-38B) over AES-128 ---
-
-
-def _double(block: bytes) -> bytes:
-    value = int.from_bytes(block, 'big')
-    shifted = (value << 1) & ((1 << 128) - 1)
-    if value & (1 << 127):
-        shifted ^= 0x87  # Rb for a 128-bit block
-    return shifted.to_bytes(16, 'big')
+def cmac_aes(key: bytes, message: bytes) -> bytes:
+    """The 16-byte CMAC (NIST SP 800-38B) of `message` under AES with a 16, 24 or 32-byte key."""
+    if len(key) not in AES_KEY_LENGTHS:
+        raise ValueError(f'CMAC/AES needs a 16, 24 or 32-byte key, not {len(key)} bytes')
+    mac = CMAC(algorithms.AES(bytes(key)))
+    mac.update(bytes(message))
+    return mac.finalize()
 
 
 def cmac_aes128(key: bytes, message: bytes) -> bytes:
     """The 16-byte CMAC of `message` under AES-128 (NIST SP 800-38B)."""
-    schedule = _key_schedule(key)
-    subkey = _double(_encrypt_block(schedule, bytes(16)))  # K1 = double(AES(key, 0))
-    blocks = (len(message) + 15) // 16 or 1
-    last = message[(blocks - 1) * 16 :]
-    if len(last) == 16:
-        last_block = bytes(a ^ b for a, b in zip(last, subkey, strict=True))
-    else:  # Incomplete (or empty) last block: pad with 0x80 00…, use K2
-        padded = last + b'\x80' + b'\x00' * (15 - len(last))
-        subkey = _double(subkey)  # K2 = double(K1)
-        last_block = bytes(a ^ b for a, b in zip(padded, subkey, strict=True))
-    x = bytes(16)
-    for index in range(blocks - 1):
-        block = message[index * 16 : index * 16 + 16]
-        x = _encrypt_block(schedule, bytes(a ^ b for a, b in zip(x, block, strict=True)))
-    return _encrypt_block(schedule, bytes(a ^ b for a, b in zip(x, last_block, strict=True)))
+    if len(key) != 16:
+        raise ValueError('AES-128 needs a 16-byte key')
+    return cmac_aes(key, message)
 
 
 # --- SecOC ---

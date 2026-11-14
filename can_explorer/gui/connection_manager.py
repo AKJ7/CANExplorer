@@ -1,5 +1,5 @@
 import asyncio
-import concurrent.futures
+import datetime
 import json
 import logging
 import time
@@ -12,8 +12,19 @@ from PyQt6.QtCore import QObject, QTimer, QUrl, pyqtProperty, pyqtSignal, pyqtSl
 from PyQt6.QtGui import QGuiApplication
 
 from can_explorer.core.bushealth import BusHealth
+from can_explorer.core.channel_detection import (
+    DETECTION_TIMEOUT,
+    ERROR,
+    FOUND,
+    TIMEOUT,
+    BackendProbe,
+    configs_of,
+    detect_channels,
+)
 from can_explorer.core.database_io import WRITE_SUFFIXES, convert_database
 from can_explorer.core.decoding import DATABASE_SUFFIXES, FrameDecoder, open_signal_database
+from can_explorer.core.secoc_check import SecOcError
+from can_explorer.core.security_events import SecurityMonitor
 from can_explorer.core.diagnostic_description import DESCRIPTION_SUFFIXES
 from can_explorer.core.filters import MessageFilter
 from can_explorer.core.frames import parse_can_id, parse_hex_bytes
@@ -54,6 +65,7 @@ from can_explorer.gui.j1939 import J1939Controller
 from can_explorer.gui.playback import BusReplay, ReplayPlayback
 from can_explorer.gui.mcp_server import McpServerController
 from can_explorer.gui.mqtt import MqttController
+from can_explorer.gui.security import SecurityController
 from can_explorer.gui.simulation import SimulationController
 from can_explorer.gui.plot_view import PlotView
 from can_explorer.gui.reverse import ReverseController
@@ -65,14 +77,15 @@ from can_explorer.gui.testing import TestController
 from can_explorer.gui.trace_tools import TraceTools
 from can_explorer.gui.workspace import SUFFIX as WORKSPACE_SUFFIX
 from can_explorer.gui.workspace import WorkspaceError, open_workspace, save_workspace
+from can_explorer.gui.media import MediaController
 from can_explorer.gui.models import OverviewModel, TraceModel
 from can_explorer.sys.log_handler import get_logger
+from can_explorer.sys.system_report import application_header, system_report
 from can_explorer.util import canutils
 
 logger = get_logger(__name__)
 
 # Seconds each interface may take to list its channels; driver libraries such as ETAS BOA can take several
-DETECTION_TIMEOUT = 15.0
 
 STATISTICS_INTERVAL_MS = 1_000
 HISTORY_SECONDS = 60
@@ -106,6 +119,7 @@ class CanConnection(QObject):
     bus_statistics_changed = pyqtSignal()
     recording_changed = pyqtSignal()
     database_changed = pyqtSignal()
+    secoc_changed = pyqtSignal()  # The secured PDUs, or the keys to check them
     filter_changed = pyqtSignal()
     paused_changed = pyqtSignal()
     periodic_changed = pyqtSignal()
@@ -136,6 +150,7 @@ class CanConnection(QObject):
         self._filter = MessageFilter()
         self._filter_error = ''
         self._paused = False
+        self._secure_transmit = True
         self._frame_count = 0
         self._recording_status = ''
         self.origin: Dict[str, Any] = {}  # How the connection was created, for workspaces
@@ -143,6 +158,8 @@ class CanConnection(QObject):
         self._history: deque = deque(maxlen=HISTORY_SECONDS)
         self.health = BusHealth()  # Error frames, states and load over the last hour
         session.add_message_listener(self.health.on_message)
+        self.security_monitor = SecurityMonitor(session.decoder)  # SecOC/E2E failures, unknown ids, refusals …
+        session.add_message_listener(self.security_monitor.on_message)
         self._diagnostics = DiagnosticsController(self, parent=self)
         self._obd = ObdController(self, parent=self)
         self._j1939 = J1939Controller(self, parent=self)
@@ -161,6 +178,8 @@ class CanConnection(QObject):
         self._tests = TestController(self, parent=self)
         self._replay = ReplayPlayback(self, parent=self)
         self._bus_replay = BusReplay(self, parent=self)
+        self._media = MediaController(self, parent=self)
+        self._replay.changed.connect(self._media.refresh)  # Seeking and pausing, also after the replay finished
         self._timer = QTimer(self)
         self._timer.setInterval(refresh_interval_ms)
         self._timer.timeout.connect(self._refresh)
@@ -389,6 +408,7 @@ class CanConnection(QObject):
         self._reverse.shutdown()
         self._mcp_server.shutdown()
         self.session.stop()
+        self._media.stop_camera()
 
     def set_refresh_interval(self, interval_ms: int):
         self._timer.setInterval(interval_ms)
@@ -430,6 +450,7 @@ class CanConnection(QObject):
             self.statistics_changed.emit()
         self._replay.refresh()
         self._bus_replay.refresh()
+        self._media.refresh()
         status = self.recording_status
         if status != self._recording_status:  # E.g. a split recording started its next file
             self._recording_status = status
@@ -483,8 +504,9 @@ class CanConnection(QObject):
 
     @pyqtSlot(QUrl, 'QVariantMap', result=str)
     def record(self, url: QUrl, options: Dict[str, Any]) -> str:
-        """Start recording with options: split_mb, split_minutes, and for a triggered recording trigger (bool),
-        start, stop, pre, post (seconds) and repeat. Returns an error, or ''."""
+        """Start recording with options: split_mb, split_minutes, camera (the id of a camera to record a video
+        with), and for a triggered recording trigger (bool), start, stop, pre, post (seconds) and repeat. Returns an
+        error, or ''."""
         try:
             split_bytes = int(float(options.get('split_mb') or 0) * 1_000_000)
             split_seconds = float(options.get('split_minutes') or 0) * 60
@@ -507,6 +529,9 @@ class CanConnection(QObject):
             return str(e)
         finally:
             self.recording_changed.emit()
+        camera_error = self._media.start_camera(str(options.get('camera') or ''), _local_path(url))
+        if camera_error:
+            self.error_occurred.emit(camera_error)  # The CAN recording runs anyway
         return ''
 
     def _on_recording_event(self, text: str) -> None:
@@ -516,6 +541,7 @@ class CanConnection(QObject):
     @pyqtSlot()
     def stop_recording(self):
         self.session.stop_recording()
+        self._media.stop_camera()
         self.recording_changed.emit()
 
     @pyqtSlot(QUrl, QObject, result=str)
@@ -567,6 +593,36 @@ class CanConnection(QObject):
         database = self.session.decoder.database
         return list(getattr(database, 'buses', []) or [])
 
+    @pyqtProperty('QVariantList', notify=database_changed)
+    def e2e_protections(self) -> List[Dict[str, Any]]:
+        """The AUTOSAR E2E protections of the database (from an ARXML), checked live in the trace."""
+        database = self.session.decoder.database
+        protected = database.e2e_protected() if hasattr(database, 'e2e_protected') else []
+        return [
+            {'message': name, 'profile': config.label, 'checked': not config.problem, 'reason': config.problem}
+            for name, config in protected
+        ]
+
+    @pyqtProperty('QVariantList', notify=secoc_changed)
+    def secoc_protections(self) -> List[Dict[str, Any]]:
+        """The secured PDUs (AUTOSAR SecOC, from an ARXML) checked live in the trace, and the key each one uses."""
+        decoder = self.session.decoder
+        database = decoder.database
+        configs = database.secoc_protected() if hasattr(database, 'secoc_protected') else []
+        rows = []
+        for config in configs:
+            problem, key = config.problem, ''
+            if not problem and decoder.secoc is not None:
+                found, reason = decoder.secoc.keys.key_for(config)
+                key, problem = (found.entry, '') if found is not None else ('', reason)
+            elif decoder.secoc is None:
+                problem = 'no security manager'
+            data_id = f'0x{config.data_id:X}' if config.data_id is not None else '?'
+            rows.append(
+                {'message': config.pdu, 'data_id': data_id, 'key': key, 'checked': not problem, 'reason': problem}
+            )
+        return rows
+
     @pyqtProperty(str, notify=database_changed)
     def database_bus(self) -> str:
         return getattr(self.session.decoder.database, 'bus', None) or ''
@@ -599,6 +655,7 @@ class CanConnection(QObject):
         self._trace.refresh_descriptions()
         self._overview.refresh_descriptions()
         self.database_changed.emit()
+        self.secoc_changed.emit()
         self.tracked_signals_changed.emit()
         self.schedule_changed.emit()
 
@@ -686,13 +743,68 @@ class CanConnection(QObject):
                 dlc=8 if remote else None,
                 data=payload,
             )
+            prepare = None
+            if self._secure_transmit and self.session.decoder.secured_config(frame_id, extended) is not None:
+                prepare = self.session.decoder.secure  # A SecOC secured PDU: new freshness value and MAC per frame
+                msg = prepare(msg)  # Fails here without a key
             if period_ms > 0:
-                self.session.start_periodic(msg, period_ms / 1000, hardware=hardware)
+                self.session.start_periodic(msg, period_ms / 1000, hardware=hardware, prepare=prepare)
             else:
                 self.session.send(msg)
-        except (ValueError, SessionError) as e:
+        except (ValueError, SessionError, SecOcError) as e:
             return str(e)
         return ''
+
+    @pyqtProperty('QVariantMap', notify=statistics_changed)
+    def secoc_statistics(self) -> Dict[str, Any]:
+        """Per secured PDU name: frames verified ok, MAC errors, freshness errors, not checked, sent secured, and
+        the last result."""
+        verifier = self.session.decoder.secoc
+        if verifier is None:
+            return {}
+        return {pdu: statistics.as_dict() for pdu, statistics in verifier.statistics.items()}
+
+    @pyqtProperty('QVariantList', notify=statistics_changed)
+    def security_events(self) -> List[Dict[str, Any]]:
+        """The security events seen on the bus (core/security_events.py), most recent first."""
+        return self.security_monitor.rows()
+
+    @pyqtProperty('QVariantMap', notify=statistics_changed)
+    def security_event_counts(self) -> Dict[str, int]:
+        rows = self.security_monitor.rows()
+        return {
+            'events': len(rows),
+            'high': sum(1 for row in rows if row['severity'] == 'high'),
+            'frames': sum(int(row['count']) for row in rows),
+        }
+
+    @pyqtSlot()
+    def clear_security_events(self):
+        self.security_monitor.clear()
+        self.statistics_changed.emit()
+
+    @pyqtSlot(QUrl, result=str)
+    def export_security_events(self, url: QUrl) -> str:
+        """Write the events to a CSV or JSON file (by suffix). Returns a status message."""
+        path = _local_path(url)
+        if not path.suffix:
+            path = path.with_suffix('.csv')
+        try:
+            count = self.security_monitor.export(path)
+        except OSError as e:
+            return f'Could not write {path.name}: {e}'
+        return f'Exported {count} events to {path.name}'
+
+    @pyqtProperty(bool, notify=secoc_changed)
+    def secure_transmit(self) -> bool:
+        """Whether frames of SecOC secured PDUs sent from the transmit panel are secured (freshness value and MAC);
+        off, they are sent as typed, e.g. to test that an ECU rejects them."""
+        return self._secure_transmit
+
+    @pyqtSlot(bool)
+    def set_secure_transmit(self, secure: bool):
+        self._secure_transmit = secure
+        self.secoc_changed.emit()
 
     @pyqtSlot()
     def stop_periodic(self):
@@ -800,6 +912,11 @@ class CanConnection(QObject):
         return self._replay
 
     @pyqtProperty(QObject, constant=True)
+    def media(self) -> MediaController:
+        """Camera video and GPS track, in step with a replay."""
+        return self._media
+
+    @pyqtProperty(QObject, constant=True)
     def bus_replay(self) -> BusReplay:
         """Transmission of a log file on the bus of a live connection."""
         return self._bus_replay
@@ -886,6 +1003,7 @@ class CanConnection(QObject):
 class ConnectionManager(QObject):
     connections_changed = pyqtSignal()
     detected_channels_changed = pyqtSignal()
+    system_report_copied = pyqtSignal()
     error_occurred = pyqtSignal(str)
 
     def __init__(self, app_state: Optional[AppState] = None, parent: Optional[QObject] = None):
@@ -896,18 +1014,25 @@ class ConnectionManager(QObject):
         self._detected_channels: Dict[str, List[str]] = {}
         self._detecting = False
         self._detection: Optional[asyncio.Future] = None
+        self._last_detection: List[BackendProbe] = []
+        self._detected_at: Optional[datetime.datetime] = None
+        self._system_report: Optional[asyncio.Future] = None
         self._workspace_file = ''
+        self._security = SecurityController(settings=self._app_state.settings, parent=self)
         self._database_editor = DatabaseEditorController(parent=self)
         self._compare = CompareController(parent=self)
         self._multi_bus = MultiBusController(self, parent=self)
+        self._multi_bus.trace.set_time_format(self._app_state.trace_time_format)
         self._ethercat = EtherCatController(parent=self)
         self._physical_io = PhysicalIoController(parent=self)
-        self._doip = DoipController(parent=self)
-        self._someip = SomeIpController(parent=self)
-        self._ethernet = EthernetController(parent=self)
+        self._doip = DoipController(security=self._security, parent=self)
+        self._someip = SomeIpController(self._app_state.settings, parent=self)
+        self._ethernet = EthernetController(security=self._security, someip=self._someip, parent=self)
         self._gateway = GatewayController(self, parent=self)
         self._updates = UpdateController(self._app_state.settings, parent=self)
         self._database_editor.saved.connect(self._reload_database)
+        self._security.notice.connect(self.error_occurred)  # Notifications, e.g. certificates about to expire
+        QTimer.singleShot(0, self._security.check_expiry)  # Once the window listens
         QGuiApplication.instance().aboutToQuit.connect(self.close_all)
 
     # Workspaces
@@ -1025,6 +1150,11 @@ class ConnectionManager(QObject):
         """Automotive Ethernet capture: pcap files and live capture, decoded."""
         return self._ethernet
 
+    @pyqtProperty(QObject, constant=True)
+    def security(self) -> SecurityController:
+        """The security manager: the key store, used for SecOC, DoIP over TLS and IPsec/MACsec decryption."""
+        return self._security
+
     def _reload_database(self, path: str) -> None:
         """Connections decoding with a database that was edited and saved use the new version."""
         saved = Path(path).resolve()
@@ -1109,42 +1239,43 @@ class ConnectionManager(QObject):
         self.detected_channels_changed.emit()
         self._detection = asyncio.ensure_future(self._detect_channels())
 
-    @staticmethod
-    def _probe_interface(interface: str) -> List[Dict[str, Any]]:
-        try:
-            return list(can.detect_available_configs(interface, timeout=DETECTION_TIMEOUT))
-        except Exception as e:
-            logger.warning(f'Channel detection of {interface} failed: {e!r}')
-            return []
+    @property
+    def last_detection(self) -> List[BackendProbe]:
+        """What each backend reported in the last channel detection (empty before the first one)."""
+        return list(self._last_detection)
 
     @staticmethod
-    def _probe_interfaces() -> List[Dict[str, Any]]:
-        """Probe each interface on its own thread, so that one backend raising an error or taking long (driver
+    def _probe_interfaces() -> List[BackendProbe]:
+        """Probe each backend on its own thread, so that one backend raising an error or taking long (driver
         libraries such as ETAS BOA enumerate their devices slowly) does not lose the channels of all others."""
-        # Probing every backend logs a warning for each missing driver; that is expected here
+        # Probing every backend logs a warning for each missing driver; the outcome of each is logged below instead
         can_logger = logging.getLogger('can')
         level = can_logger.level
         can_logger.setLevel(logging.ERROR)
-        executor = concurrent.futures.ThreadPoolExecutor()
         try:
-            futures = {
-                executor.submit(ConnectionManager._probe_interface, interface): interface
-                for interface in sorted(can.interfaces.VALID_INTERFACES)
-            }
-            done, not_done = concurrent.futures.wait(futures, timeout=DETECTION_TIMEOUT + 1)
-            if not_done:
-                logger.warning(f'Channel detection timed out for: {", ".join(sorted(futures[f] for f in not_done))}')
-            return [config for future in done for config in future.result()]
+            return detect_channels(timeout=DETECTION_TIMEOUT)
         finally:
-            executor.shutdown(wait=False, cancel_futures=True)
             can_logger.setLevel(level)
+
+    @staticmethod
+    def _log_detection(probes: List[BackendProbe]) -> None:
+        for probe in probes:
+            if probe.status in (ERROR, TIMEOUT) or (probe.alone and probe.status == FOUND):
+                logger.warning(f'Channel detection: {probe.summary()}')  # Worth a look: a device may be missed
+            elif probe.status == FOUND:
+                logger.info(f'Channel detection: {probe.summary()}')
+            else:
+                logger.debug(f'Channel detection: {probe.summary()}')  # No device, or no driver installed
 
     async def _detect_channels(self):
         try:
-            configs = await asyncio.to_thread(self._probe_interfaces)
+            probes = await asyncio.to_thread(self._probe_interfaces)
         except Exception as e:
             logger.warning(f'Channel detection failed: {e}')
-            configs = []
+            probes = []
+        self._last_detection = probes
+        self._log_detection(probes)
+        configs = configs_of(probes)
         descriptions = dict(canutils.get_supported_interfaces())
         detected: Dict[str, List[str]] = {}
         for config in configs:
@@ -1157,13 +1288,41 @@ class ConnectionManager(QObject):
                 channels.append(str(channel))
         logger.info(f'Detected channels: {detected}')
         self._detected_channels = detected
+        self._detected_at = datetime.datetime.now().astimezone()
         self._detecting = False
         self.detected_channels_changed.emit()
+
+    # System report (for bug reports)
+
+    @pyqtSlot(result=bool)
+    def copy_system_report(self) -> bool:
+        """Copy the system report (sys/system_report.py) to the clipboard and emit system_report_copied. When no
+        channel detection ran yet, one runs first: returns False while it does, True when copied at once."""
+        if self._last_detection and not self._detecting:
+            self._copy_system_report()
+            return True
+        if self._system_report is None or self._system_report.done():
+            self._system_report = asyncio.ensure_future(self._detect_then_copy_system_report())
+        return False
+
+    async def _detect_then_copy_system_report(self):
+        if not self._detecting:
+            self.detect_channels()
+        if self._detection is not None:
+            await asyncio.shield(self._detection)  # Not cancelled by this task
+        self._copy_system_report()
+
+    def _copy_system_report(self) -> None:
+        text = system_report(application_header(), self._last_detection, self._detected_at)
+        QGuiApplication.clipboard().setText(text)
+        logger.info('Copied the system report to the clipboard')
+        self.system_report_copied.emit()
 
     # Connections
 
     def _add(self, name: str, source: MessageSource, protocol: str) -> CanConnection:
         decoder = FrameDecoder(protocol=create_protocol_decoder(protocol))
+        self._security.attach(decoder)
         state = self._app_state
         session = BusSession(
             source,
@@ -1175,7 +1334,9 @@ class ConnectionManager(QObject):
         connection = CanConnection(
             name, session, protocol, state.max_trace_rows, state.refresh_interval_ms, parent=self
         )
+        connection.trace.set_time_format(state.trace_time_format)
         connection.error_occurred.connect(self.error_occurred)
+        self._security.keys_changed.connect(connection.secoc_changed)
         self._connections.append(connection)
         self.connections_changed.emit()
         return connection
@@ -1262,8 +1423,9 @@ class ConnectionManager(QObject):
 
     @pyqtSlot()
     def close_all(self):
-        if self._detection is not None and not self._detection.done():
-            self._detection.cancel()
+        for task in (self._detection, self._system_report):
+            if task is not None and not task.done():
+                task.cancel()
         for connection in self._connections:
             connection.close()
         self._ethercat.shutdown()
@@ -1274,5 +1436,8 @@ class ConnectionManager(QObject):
         self._gateway.shutdown()
 
     def _apply_preferences(self):
+        time_format = self._app_state.trace_time_format
         for connection in self._connections:
             connection.set_refresh_interval(self._app_state.refresh_interval_ms)
+            connection.trace.set_time_format(time_format)
+        self._multi_bus.trace.set_time_format(time_format)

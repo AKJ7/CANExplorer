@@ -32,6 +32,7 @@ Each found item is coloured by its answer:
 
 - **supported / present** (green): a positive response. For a DID the response data is shown.
 - **locked** (amber): *securityAccessDenied* and similar — the item exists but needs [security access](diagnostics.md#security-access).
+  **Unlock level** unlocks it before scanning (see below).
 - **wrong state/session** (blue): the ECU rejected the request for the current session or state (e.g.
   *serviceNotSupportedInActiveSession*). **Enter session** changes the session before scanning to reach these.
 - **rejected** (grey): any other negative response, which still proves the service or identifier is handled (for
@@ -60,6 +61,12 @@ own or are authorised to test, on a bench, with the vehicle stationary and the p
    **Seeds**, **Iterations** and reproducibility **Seed**.
 2. Optionally **Enter session** (e.g. *extended*) before scanning, raise the **Per-request timeout** for a slow
    ECU, or add a **delay** between requests to go easier on the bus.
+   To reach items that answer *locked*, tick **Unlock level** and give the (odd, hexadecimal) security level: after
+   entering the session, the scan requests a seed and sends the key computed by the key algorithm chosen in the
+   [Diagnostics](diagnostics.md#security-access) view — a Python file, a seed/key algorithm of the
+   [Security Manager](security-manager.md#seedkey-algorithms) or a security profile. Most ECUs grant security
+   access only in a non-default session, so enter one (e.g. *extended*) as well. The result is shown above the
+   progress; if the unlock fails nothing is probed.
 3. **Start**. The progress shows how many values were probed and how many were found; **Stop** ends it early.
 
 Click a found row to send that request again in the [Diagnostics](diagnostics.md) view, where its full response and

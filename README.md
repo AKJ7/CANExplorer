@@ -3,8 +3,7 @@
 <h1 align="center">CANExplorer</h1>
 
 <p align="center">
-  CANBus monitoring for the modern man!  
-  
+  CANBus monitoring for the modern man!<br><br>
   Monitor, analyse, diagnose, simulate and test <b>CAN</b>, <b>CAN FD</b> and <b>LIN</b> buses — on Linux,
   Windows and macOS, with any adapter python-can supports, or without hardware on a virtual bus.
 </p>
@@ -30,7 +29,7 @@
 - Bus health: error state timeline, error frames, TEC/REC and bus load over up to an hour
 - Remote buses: `can-server` shares the interfaces of e.g. a Raspberry Pi in a vehicle over the network
 - MQTT: publish decoded signals (and frames) to a broker for dashboards and home automation, from the application or
-  `can-server`, and optionally send frames requested over MQTT
+  `can-server`, and optionally send frames requested over MQTT (from source: the `mqtt` extra)
 - MCP: `can-mcp` exposes a bus to an AI agent over the Model Context Protocol — inspect identifiers, decode frames
   and protocols, run the reverse-engineering analysis, correlate fields, promote results to a DBC, read trouble
   codes over OBD-II/UDS, and optionally transmit; as tools, resources and prompts, behind permission tiers
@@ -46,6 +45,8 @@
 - Splitting into numbered files by size or time, and triggered recording with conditions such as
   `EngineData.EngineSpeed > 6000`, keeping the time before and after the event
 - Replay at 0.25× to 10× or as fast as possible, with pause and jumping to any position
+- Camera video and GPS map in step with recordings: record a camera next to the log, attach a GPX/NMEA track, and
+  replay the bus, the video and the position on a map together
 - Replay of a recording onto a real bus, filtered and repeated
 - Several buses on one timeline, and simulated gateways forwarding frames between them
 - Comparison of two recordings: identifiers only in one of them, changed cycle times and payloads, and signal
@@ -53,6 +54,7 @@
 
 **Signal databases**
 - Vector DBC, BUSMASTER DBF, AUTOSAR ARXML (including container PDUs), Kayak KCD, PCAN SYM and LIN LDF
+- AUTOSAR E2E (profiles 2, 5, 22) and SecOC of the PDUs of an ARXML checked live in the trace
 - Database editor for CAN and LIN databases (frames, signals, nodes, encodings, schedule tables) with a bit layout
   view and consistency checks, and conversion between the formats
 
@@ -65,15 +67,25 @@
 - DoIP (Diagnostics over IP, ISO 13400-2): finds DoIP entities, connects with routing activation (optionally over
   TLS) and runs diagnostics and flashing over Ethernet; a simulated entity works without a vehicle
 - SOME/IP over automotive Ethernet: listens on UDP, discovers the services offered through SOME/IP-SD and shows the
-  decoded messages; load a FIBEX or ARXML file to deserialize the payloads into named signals
-- Automotive Ethernet capture: open a pcap/pcapng file (or capture live on Linux), dissect each packet field by
-  field, and decode the stack (Ethernet, VLAN, 802.1CB R-TAG, IPv4/IPv6, ARP, ICMP, IGMP/MLD, UDP/TCP) and the
-  protocols on top — SOME/IP, DoIP, gPTP, LLDP, the SRP/TSN control protocols (MVRP/MSRP/MMRP), MACsec, IPsec,
-  DHCP/DNS/mDNS and UDP-NM, and AVTP (IEEE 1722): audio/video streams, and CAN, LIN and FlexRay tunnelled over
-  Ethernet via ACF (exportable as a CAN log)
+  decoded messages; load a FIBEX or ARXML file to deserialize the payloads into named signals; E2E checks of
+  protected methods and events (profiles 4, 6, 7)
+- Automotive Ethernet capture: open a pcap/pcapng file (or capture live on Linux, macOS and Windows), dissect each
+  packet field by field, and decode the stack (Ethernet, VLAN, 802.1CB R-TAG, IPv4/IPv6, ARP, ICMP, IGMP/MLD,
+  UDP/TCP) and the protocols on top — SOME/IP, DoIP, gPTP, LLDP, the SRP/TSN control protocols (MVRP/MSRP/MMRP),
+  MACsec and its key agreement (EAPOL-MKA), IPsec, TLS, DHCP/DNS/mDNS and UDP-NM, and AVTP (IEEE 1722):
+  audio/video streams, and CAN, LIN and FlexRay tunnelled over Ethernet via ACF (exportable as a CAN log); IPsec,
+  MACsec and TLS are decrypted with keys from the security manager
 - UDS discovery: scan an ECU for the services, data identifiers, subfunctions and routines it exposes, classifying
   the answers, for reverse engineering diagnostics; and fuzz it with mutated requests, detecting hangs and crashes
 - Bus gateway: forward frames between two connections with filtering, identifier rewriting and rate limiting
+- Security manager: a password-protected key store for SecOC keys, TLS certificates, IPsec/MACsec keys, seed/key
+  algorithms and UDS authentication keys — SecOC secured PDUs of an ARXML verified in the trace and secured when sent
+  (restbus, transmit, test scripts, with replay and forgery tests; AUTOSAR trip/reset freshness values), DoIP over
+  mutual TLS, UDS Authentication (0x29) by certificate exchange or challenge-response, IPsec ESP, MACsec and TLS
+  (with a key log) in Ethernet captures decrypted and decoded, security events for buses and captures, security
+  access tests (seed quality, lockout), revocation lists, an HMAC-chained audit log, key bundles, test certificates
+  and the OS keychain; security profiles and key servers supply manufacturer keys, seed/key and signatures without
+  keeping the secrets on this computer
 - XCP/CCP measurement and calibration: read measurements live and read/write calibration values by address or by
   name from an A2L file, with simulated slaves for trying it without hardware
 - GMLAN (GMW3110) diagnostics for GM/Opel vehicles — data identifiers, modes, security access and trouble codes —
@@ -81,6 +93,10 @@
 - GM Class 2 (SAE J1850 VPW) for the pre-CAN GM vehicles of 1996–2007 (e.g. the 99–06 P01/P59 PCMs): monitor the
   10.4 kbit/s single-wire bus and run SAE J1979 diagnostics (PIDs, VIN, trouble codes) through an ELM327/OBDLink
   adapter; a simulated ECU works without hardware
+- K-Line (ISO 9141-2 / ISO 14230 KWP2000) for the non-CAN OBD-II vehicles of roughly 1996–2008: monitor the
+  10.4 kbit/s diagnostic bus through an ELM327/OBDLink adapter, with the service payloads decoded in the trace
+- J1708: a live capture of the 9600-baud serial bus of older heavy trucks through a USB RS-485/J1708 adapter,
+  decoded as J1587 in the trace
 - J1939: nodes with their address claims, DM1/DM2 trouble codes and lamps, clearing codes, requests and sending
   parameter groups by name with BAM or RTS/CTS
 - CANopen master: NMT, SDO access to object dictionaries from EDS/DCF files, PDO mappings with live values,
@@ -89,8 +105,8 @@
   PDO assignment and emergencies; real adapters need the `ethercat` extra, a simulated network works without
 - Physical I/O: switch the digital outputs of a USB I/O adapter (aio_usb) and watch its inputs and analogue values,
   from the tool or test scripts; needs the `io` extra, a simulated device works without
-- Decoding of ISO-TP, UDS, KWP2000, J1939, J1939-22 (J1939 on CAN FD), NMEA 2000 (marine, with Fast Packet),
-  CANopen, LIN, J1587, AUTOSAR Network Management and SecOC frames in the trace
+- Decoding of ISO-TP, UDS, KWP2000, K-Line (ISO 9141-2 / ISO 14230), J1939, J1939-22 (J1939 on CAN FD),
+  NMEA 2000 (marine, with Fast Packet), CANopen, LIN, J1587, AUTOSAR Network Management and SecOC frames in the trace
 - LIN master schedule tables
 
 **Simulation and test automation**
@@ -127,8 +143,10 @@ With [uv](https://docs.astral.sh/uv/getting-started/installation/) and Python 3.
 git clone https://github.com/AKJ7/CANExplorer.git
 cd CANExplorer
 uv sync                  # Add --extra mf4 for ASAM MF4 log files (installs asammdf and pandas),
+                         # --extra mqtt for MQTT (installs aiomqtt),
                          # --extra ethercat for EtherCAT adapters (installs pysoem),
-                         # --extra io for USB I/O adapters (installs pyusb and libusb)
+                         # --extra io for USB I/O adapters (installs pyusb and libusb),
+                         # --extra drivers for the python-can interfaces marked ¹ below
 uv run canexplorer
 ```
 
@@ -165,6 +183,8 @@ support and the Linux kernel drivers.
 | RP1210 (`rp1210`) | TMC RP1210 heavy-duty (truck/bus/off-highway) adapters: Nexiq USB-Link, DG DPA 5, Noregon DLA+, Cummins INLINE …; 32-bit Windows drivers | Windows |
 | ELM327 / OBDLink (`elm327`) | OBDLink MX+, LX, SX, EX and ELM327 compatible OBD adapters over USB, Bluetooth or WiFi, for diagnostics | Windows, Linux, macOS |
 | J1850 VPW / GM Class 2 (`elm327_vpw`) | GM "Class 2" 10.4 kbit/s single-wire bus of 1996–2007 GM vehicles, through an ELM327/OBDLink adapter (not CAN) | Windows, Linux, macOS |
+| K-Line (`elm327_kline`) | ISO 9141-2 / ISO 14230 (KWP2000) K-Line diagnostic bus of non-CAN OBD-II vehicles (~1996–2008), through an ELM327/OBDLink adapter (not CAN); `@3`/`@4`/`@5` chooses the protocol | Windows, Linux, macOS |
+| J1708 (`j1708`) | SAE J1708 9600-baud serial (RS-485) bus of older heavy trucks, carrying J1587; through a USB RS-485/J1708 adapter (not CAN) | Windows, Linux, macOS |
 | python-can serial (`serial`) | Adapters with python-can's serial protocol | Windows, Linux, macOS |
 | Robotell (`robotell`) | Robotell USB-CAN | Windows, Linux, macOS |
 | Seeed Studio (`seeedstudio`) | USB-CAN Analyzer | Windows, Linux, macOS |
@@ -197,6 +217,8 @@ In the application, connect to a *VirtualBus*, load `examples/simulation/vehicle
 | `uv run canexplorer` | The application. Options such as `--log_level DEBUG`, or `CANEXPLORER_*` environment variables |
 | `uv run can-test SCRIPT …` | Run ECU test scripts on a bus; exit code and HTML/JUnit reports for CI |
 | `uv run can-db-convert IN OUT` | Convert signal databases, e.g. `vehicle.dbc vehicle.dbf`, or one bus with `system.arxml powertrain.dbc --bus Powertrain` |
+| `uv run can-server` | Share the local CAN interfaces over the network, for the `canexplorer_remote` interface |
+| `uv run can-mcp` | Expose a bus to an AI agent over the Model Context Protocol |
 
 ## Development
 
