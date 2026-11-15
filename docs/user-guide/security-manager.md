@@ -6,14 +6,15 @@ that the secured parts of a vehicle network need, in one password-protected key 
 | Entry | Used for |
 |---|---|
 | SecOC key | Checking AUTOSAR SecOC secured PDUs in the [trace](#secoc-in-the-trace), and [securing the ones sent](#sending-secured-pdus) |
-| TLS client certificate | Presenting a client certificate to a [DoIP](doip.md) entity (mutual TLS), and UDS [Authentication](diagnostics.md#authentication-0x29) by certificate exchange |
+| TLS client certificate | Presenting a client certificate to a [DoIP](doip.md) entity (mutual TLS), and UDS [Authentication](diagnostics.md#authentication-0x29) by certificate exchange; from PEM files or a PKCS#12 file (`.p12`, `.pfx`) |
 | Trusted TLS certificates | Verifying a DoIP entity's certificate, and an ECU's certificate in bidirectional UDS Authentication |
 | Revocation list | Refusing [revoked certificates](#revocation-lists) in DoIP TLS and UDS Authentication |
 | IPsec ESP association | Decrypting IPsec ESP packets in an [Ethernet capture](ethernet.md) |
 | MACsec association | Decrypting MACsec (IEEE 802.1AE) frames in an Ethernet capture |
 | Seed/key algorithm | UDS [security access](#seedkey-algorithms) in the Diagnostics, Flashing and GMLAN views |
 | UDS authentication key | UDS [Authentication by challenge-response](diagnostics.md#challenge-response) with a key shared with the ECUs |
-| Key server | A [remote provider](#key-servers) of SecOC keys, seed/key, certificates and signatures |
+| PKCS#11 token key | A [smart card, USB token or HSM](#pkcs11-tokens) holding the tester's certificate and key, for UDS Authentication |
+| Key server | A [remote provider](#key-servers) of SecOC keys, seed/key, certificates and signatures, with a token or [OAuth 2.0 sign-in](#signing-in-with-oauth-20) |
 
 Keys and algorithms can also come from [security profiles](#security-profiles-and-key-servers): manufacturer plug-ins
 and key servers, so the secrets need not be on this computer.
@@ -222,7 +223,9 @@ With **TLS** ticked in the [DoIP](doip.md) tool, two lists appear:
   certificates the connection is encrypted but the entity is not verified.
 - **No client certificate** / a client certificate: present a *TLS client certificate* entry when the entity asks
   for one (mutual TLS). Add it with its PEM certificate (optionally followed by its chain) and its PEM private key;
-  an encrypted key file needs its password once, when it is added. Using it needs the store unlocked.
+  an encrypted key file needs its password once, when it is added. A PKCS#12 file (`.p12` or `.pfx`, as browsers,
+  Windows and many PKIs export them) holds both: choose it as the certificate, and its password as the file password.
+  Using it needs the store unlocked.
 
 The top bar shows *TLS, entity verified* when the entity's certificate was verified. TLS 1.2 or newer is used.
 
@@ -346,6 +349,26 @@ Each request carries `Authorization: Bearer <token>` when a token is set. A serv
 challenge-response proofs with `/auth/sign`. Use `https://`; `http://` is accepted for local test servers only.
 `can_explorer.core.security_profiles.KeyServerProfile(name, url, token)` is the same client for scripts.
 
+### Signing in with OAuth 2.0
+
+A key server behind a company's identity provider needs no static token. Choose its **Authentication** when adding
+it:
+
+- **OAuth: client credentials** (RFC 6749 §4.4), for a bench computer with an account of its own: the **token
+  endpoint**, the **client ID** and the **client secret** (kept encrypted), and a **scope** if the provider wants
+  one. Access tokens are fetched when needed and renewed before they expire.
+- **OAuth: sign in on the web** (the device authorization grant, RFC 8628), for a person using their own account:
+  the token and **device** endpoints and the client ID. **Sign In…** next to the key server in **Security profiles**
+  shows a web address and a code; open the address in any browser, enter the code and sign in as the identity
+  provider asks (password, multi-factor, single sign-on). The Security Manager notices when it is done. The refresh
+  token it receives is kept encrypted, so later sessions need no new sign-in until the provider ends it; then the
+  key server shows *not signed in* again. **Sign Out** forgets it.
+
+Access tokens are only held in memory. When the key server refuses one (HTTP 401), a new one is fetched and the
+request tried once more. Only the standard OAuth parameters are used, so any provider that implements these RFCs
+works (most do: Microsoft Entra ID, Okta, Keycloak, Auth0, Google). The client authenticates with HTTP Basic when it
+has a secret and with its client ID only otherwise.
+
 ### A minimal key server
 
 The standard library is enough for a key server on a bench; it answers SecOC keys and seed/key, and 404 for the
@@ -404,6 +427,28 @@ ThreadingHTTPServer(('127.0.0.1', 8443), KeyServer).serve_forever()
 
 Add it in the Security Manager as a key server with the URL `http://127.0.0.1:8443` (on this computer) and the
 token, and choose it with **From Security Manager** for security access.
+
+## PKCS#11 tokens
+
+A **PKCS#11 token key** uses a tester certificate whose private key is on a smart card, a USB token or a hardware
+security module, through the vendor's PKCS#11 module (a shared library such as `opensc-pkcs11.so`, the token's
+`.dll` on Windows, or SoftHSM's for tests). Enter the **module**, the **token** label, the **key** label (of the
+private key and of its certificate, which share it) and the **PIN** (kept encrypted). While the store is unlocked
+the token is a security profile: it appears in the **Certificate** list of the Diagnostics view's Authentication
+(certificate exchange) and in the **Key** list of challenge-response, and signs the proofs of ownership itself, so
+the private key never leaves the token.
+
+| Scheme | PKCS#11 mechanism |
+|---|---|
+| ECDSA with SHA-256 (DER or raw r ‖ s) | `CKM_ECDSA_SHA256`; its r ‖ s output is DER-encoded for the DER scheme |
+| RSASSA-PSS with SHA-256 | `CKM_SHA256_RSA_PKCS_PSS`, MGF1 with SHA-256, a 32-byte salt |
+| RSASSA-PKCS1-v1_5 with SHA-256 | `CKM_SHA256_RSA_PKCS` |
+| Ed25519 | `CKM_EDDSA` (PKCS#11 v3.0) |
+
+A session is opened for each signature and closed after it, so a token can be removed and inserted again between
+uses. PKCS#11 needs the python-pkcs11 package, which the installers do not contain yet: run from source with
+`uv sync --extra pkcs11`.
+Tokens are used for UDS Authentication only; the TLS of DoIP takes certificates from the key store.
 
 ## Security events
 
@@ -497,7 +542,10 @@ the parameter sets such as *Distributed SAK* — but the keys they distribute ar
   listed are not supported; AES-GCM expects a 16-byte ICV.
 - MACsec: the extended packet number (XPN) cipher suites and a VLAN tag in front of the SecTAG are not supported.
 - One key store per user; it is not part of a [workspace](workspaces.md) (move entries with key bundles).
-- Security profiles: one profile answers a request (the first able to); there is no built-in PKCS#11 module support
-  (wrap one in a profile). Key servers are reached synchronously, with a 5-second timeout.
+- Security profiles: one profile answers a request (the first able to). Key servers are reached synchronously, with a
+  5-second timeout.
+- PKCS#11: tested against a simulated token, not yet against real cards; DoIP TLS cannot use a token's key.
+  OAuth: the authorization code grant (a browser redirect back to the application) is not offered; use the device
+  grant.
 - Trip/reset freshness: the multi-master method (several synchronisation messages) and the scheme with a complete
   (not truncated) freshness value (Annex A §11.5) are not built in; use a freshness script.

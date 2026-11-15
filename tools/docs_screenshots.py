@@ -31,6 +31,9 @@ EXAMPLES = ROOT / 'examples' / 'simulation'
 # Render with OpenGL like on a desktop (the default offscreen renderer cannot draw the blur of the glass dialogs)
 os.environ.setdefault('QT_QUICK_BACKEND', 'rhi')
 os.environ.setdefault('QSG_RHI_BACKEND', 'opengl')
+# on the GUI thread: Qt otherwise picks the threaded render loop, and its render thread occasionally crashed (in
+# the GL driver) while a large new subtree was synchronised, e.g. on switching to a tab with a long result list
+os.environ.setdefault('QSG_RENDER_LOOP', 'basic')
 
 # Use throwaway settings, so the screenshots do not depend on (or change) the user's
 QSettings.setPath(QSettings.Format.NativeFormat, QSettings.Scope.UserScope, tempfile.mkdtemp())
@@ -837,16 +840,24 @@ async def authentication_scenario(connection, ecu):
 
 
 async def restbus_scenario(connection):
-    """The Restbus page sending the example database's messages, one of them excluded."""
+    """The Restbus page sending the example database's messages, one of them excluded, with EngineData expanded:
+    its values (the gear from its value table) and the coolant temperature byte made a counter."""
     restbus = connection.restbus
     restbus.set_all(True)
     restbus.set_value('EngineData', 'EngineSpeed', '850')
+    restbus.set_value('EngineData', 'GearPosition', 'First')
+    restbus.set_role('EngineData', 'CoolantTemp', 'counter', '', '0')
     restbus.set_enabled('VehicleSpeed', False)
     error = restbus.start()
     assert not error, error
     show_page('restbus')
+    await asyncio.sleep(0.2)
+    view = [view for view in items('RestbusView') if view.isVisible()][0]
+    view.setProperty('expanded', {'EngineData': True})
     await shot('restbus', 1.0)
+    view.setProperty('expanded', {})
     restbus.stop()
+    restbus.set_role('EngineData', 'CoolantTemp', 'value', '', '0')
     restbus.set_all(False)
 
 
@@ -915,6 +926,66 @@ async def map_scenario():
     await shot('video-and-map', 1.0)
     replayed.media.detach_gps()
     manager.remove_connection(len(manager.connections) - 1)
+
+
+async def panel_builder_scenario(connection):
+    """The panel builder: an engine panel laid out, the gauge selected; then its preview on the running simulation."""
+    builder = connection.panel_builder
+    builder.new_panel()
+    builder.set_panel('Engine bench', 720, 420)
+    gauge = builder.add('gauge', 16, 16)
+    builder.update(
+        gauge, {'label': 'Engine speed', 'source': 'signal:EngineData.EngineSpeed', 'max': 4000, 'warn': 3500}
+    )
+    trend = builder.add('trend', 240, 16)
+    builder.update(
+        trend, {'label': 'Coolant', 'source': 'signal:EngineData.CoolantTemp', 'min': 60, 'max': 110, 'seconds': 20}
+    )
+    builder.resize(trend, 440, 144)
+    lamp = builder.add('lamp', 240, 176)
+    builder.update(lamp, {'label': 'Ignition', 'source': 'variable:ignition'})
+    value = builder.add('value', 448, 176)
+    builder.update(value, {'label': 'Vehicle speed', 'source': 'signal:VehicleSpeed.WheelSpeed'})
+    switch = builder.add('switch', 16, 240)
+    builder.update(switch, {'label': 'Ignition', 'variable': 'ignition'})
+    slider = builder.add('slider', 16, 296)
+    builder.update(slider, {'label': 'Target speed', 'variable': 'target_speed', 'min': 800, 'max': 4000, 'step': 100})
+    button = builder.add('button', 240, 240)
+    builder.update(button, {'label': 'Request vehicle speed', 'action': 'raw', 'id': '7DF', 'data': '02 01 0D'})
+    builder.resize(button, 208, 40)
+    builder.select(gauge)
+    view = [view for view in items('SimulationView') if view.isVisible()][0]
+    dialog = [o for o in view.findChildren(QObject) if o.metaObject().className().startswith('PanelBuilderDialog')][0]
+    dialog.open()
+    await shot('panel-builder', 0.8)
+    from PyQt6.QtQuick import QQuickItem
+
+    stack, tabs = [sip.cast(dialog.property('contentItem'), QQuickItem)], None
+    while stack and tabs is None:
+        item = stack.pop()
+        if 'TabBar' in item.metaObject().className() and item.property('count') == 2:
+            tabs = item
+        stack.extend(item.childItems())
+    tabs.setProperty('currentIndex', 1)
+    await shot('panel-builder-preview', 1.5)
+    tabs.setProperty('currentIndex', 0)
+    dialog.close()
+    builder.new_panel()
+
+
+async def flexray_scenario():
+    """The FlexRay tool on a simulated cluster, named and decoded with its ARXML description (with PDUs and update
+    bits), sending a frame of its own in slot 12; then the schedule and bus check."""
+    fr = manager.flexray
+    assert fr.load_database(QUrl.fromLocalFile(str(DATA / 'flexray_pdus.arxml'))) == ''
+    assert fr.start_simulation(0) == ''
+    assert fr.transmit_definition(0, {'EngineSpeed': '2400', 'GearPosition': '2', 'OilPressure': '35.5'}, '') == ''
+    window.setProperty('tool', 'flexray')
+    await asyncio.sleep(2.0)
+    fr.stop()
+    await shot('flexray', 0.6)
+    window.setProperty('tool', '')
+    fr.clear()
 
 
 async def scenario():
@@ -997,6 +1068,7 @@ async def scenario():
     plot_view.follow_live()
     show_page('simulation')
     await shot('simulation')
+    await panel_builder_scenario(connection)
     await restbus_scenario(connection)
     await filter_scenario(connection)
     await security_events_scenario(connection, ecu_session)
@@ -1215,6 +1287,7 @@ async def scenario():
     await gateway_scenario()
     await someip_scenario()
     await ethernet_scenario()
+    await flexray_scenario()
 
     await reverse_engineering_scenario()
 

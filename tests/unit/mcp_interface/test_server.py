@@ -29,6 +29,8 @@ DIAGNOSTIC_READS = {
     'obd_read',
     'uds_read_did',
     'uds_read_dtcs',
+    'uds_dtc_details',
+    'uds_find_ecus',
 }
 CONTROL_TOOLS = {'obd_clear', 'uds_reset', 'uds_routine', 'uds_request'}
 SEND_TOOLS = {'send_frame', 'send_message'}
@@ -60,6 +62,10 @@ async def test_tools_registered_read_only():
         'correlate',
         'promote_to_dbc',
         'list_interfaces',
+        'flexray_load_cluster',
+        'flexray_read_log',
+        'flexray_analyze_log',
+        'flexray_decode',
     }
     # No diagnostics, control or send tools in read-only mode
     assert not (names & (DIAGNOSTIC_READS | CONTROL_TOOLS | SEND_TOOLS))
@@ -86,6 +92,41 @@ async def test_resources_and_prompts_registered():
     assert {'can://status', 'can://identifiers', 'can://frames', 'can://database'} <= resources
     prompts = {prompt.name for prompt in await server.list_prompts()}
     assert {'reverse_engineer_identifier', 'diagnose_trouble_codes', 'find_signal'} <= prompts
+
+
+async def test_everything_has_a_name_title_and_description():
+    """An agent picks tools by their description and a client shows people the title: every tool, resource and
+    prompt (of every tier) carries both, and each gated tool says which tier it needs."""
+    pytest.importorskip('mcp')
+    from can_explorer.mcp.server import build_mcp
+
+    server = build_mcp(_service(allow_send=True))  # Every tier
+    tools = await server.list_tools()
+    resources = await server.list_resources()
+    prompts = await server.list_prompts()
+    for item in [*tools, *resources, *prompts]:
+        assert item.name and item.title and item.description, item.name
+        assert len(item.description) > 20, item.name
+    for tool in tools:
+        if tool.name in DIAGNOSTIC_READS:
+            assert '--allow-diagnostics' in tool.description, tool.name
+        elif tool.name in CONTROL_TOOLS:
+            assert '--allow-control' in tool.description, tool.name
+        elif tool.name in SEND_TOOLS:
+            assert '--allow-send' in tool.description, tool.name
+        else:
+            assert '--allow-' not in tool.description, tool.name
+    # Resources are named for what they hold, not after the Python function behind them
+    by_uri = {str(resource.uri): resource.name for resource in resources}
+    assert by_uri == {
+        'can://status': 'status',
+        'can://identifiers': 'identifiers',
+        'can://frames': 'frames',
+        'can://database': 'database',
+    }
+    # Titles are distinct, so a client listing them can tell them apart
+    titles = [tool.title for tool in tools]
+    assert len(titles) == len(set(titles))
 
 
 def test_cli_help_is_fast():

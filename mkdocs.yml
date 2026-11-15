@@ -76,6 +76,7 @@ nav:
       - CANopen: user-guide/canopen.md
       - EtherCAT (CoE): user-guide/ethercat.md
       - Physical I/O: user-guide/physical-io.md
+      - FlexRay: user-guide/flexray.md
       - LIN: user-guide/lin.md
       - Simulation and scripting: user-guide/simulation.md
       - Test automation: user-guide/test-automation.md

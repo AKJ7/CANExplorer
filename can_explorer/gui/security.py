@@ -5,6 +5,7 @@ connection, a packet decryptor for the Ethernet capture, a TLS context for DoIP 
 change (`keys_changed`), e.g. on unlocking. Secrets never leave Python: QML sees entry metadata only.
 """
 
+import asyncio
 import dataclasses
 import json
 import ssl
@@ -14,11 +15,12 @@ from typing import Any, Dict, List, Optional
 
 from PyQt6.QtCore import QObject, QSettings, QUrl, pyqtProperty, pyqtSignal, pyqtSlot
 
-from can_explorer.core import audit, keychain, keystore, security_profiles, test_pki
+from can_explorer.core import audit, keychain, keystore, oauth, security_profiles, test_pki
 from can_explorer.core.audit import AuditLog
 from can_explorer.core.decoding import FrameDecoder
 from can_explorer.core.keystore import KeyStore, KeyStoreError, parse_hex
 from can_explorer.core.packet_decryption import PacketDecryptor
+from can_explorer.core.pkcs11 import Pkcs11Profile
 from can_explorer.core.secoc_check import (
     ALGORITHMS,
     ChainedSecOcKeys,
@@ -45,6 +47,7 @@ PURPOSE_NAMES = {
     keystore.MACSEC: 'MACsec association',
     keystore.SEED_KEY: 'Seed/key algorithm',
     keystore.AUTH_KEY: 'UDS authentication key',
+    keystore.PKCS11: 'PKCS#11 token key',
     keystore.KEY_SERVER: 'Key server',
 }
 
@@ -77,7 +80,10 @@ def _details(info: keystore.KeyInfo) -> str:
         )
     if info.purpose == keystore.KEY_SERVER:
         trusted = params.get('trusted')
-        return params.get('url', '') + (f' · checked against {trusted}' if trusted else '')
+        auth = {'client-credentials': ' · OAuth client', 'device': ' · OAuth sign-in'}.get(params.get('auth', ''), '')
+        return params.get('url', '') + auth + (f' · checked against {trusted}' if trusted else '')
+    if info.purpose == keystore.PKCS11:
+        return f'{params.get("key", "")} on {params.get("token", "")}'
     if info.purpose == keystore.AUTH_KEY:
         return f'challenge-response · {params.get("mac", "")}'
     if info.purpose == keystore.SEED_KEY:
@@ -119,6 +125,10 @@ class SecurityController(QObject):
         audit.set_log(self.audit_log)
         self._unlock_from_keychain()
         self.keys_changed.connect(self.secoc_keys.invalidate)
+        self._token_sources: Dict[
+            str, Any
+        ] = {}  # Key server name -> (settings, oauth.TokenSource), kept across refreshes
+        self._sign_in: Dict[str, Any] = {}  # The device sign-in in progress, for QML
         self.keys_changed.connect(self._refresh_key_servers)
         for loaded in security_profiles.entry_point_profiles():
             self.profiles.add(loaded)
@@ -401,6 +411,15 @@ class SecurityController(QObject):
 
     @pyqtSlot(str, QUrl, QUrl, str, result=str)
     def add_tls_client(self, name: str, certificate: QUrl, private_key: QUrl, key_password: str) -> str:
+        """A certificate with its private key: PEM files, or one PKCS#12 file (.p12/.pfx, the key password being its
+        password) as `certificate` with an empty `private_key`."""
+        if _local_path(certificate).suffix.lower() in ('.p12', '.pfx') or private_key.isEmpty():
+            return self._run(
+                lambda: self.store.add_tls_client_pkcs12(name, _local_path(certificate).read_bytes(), key_password),
+                'add entry',
+                entry=name,
+            )
+
         def add():
             self.store.add_tls_client(
                 name,
@@ -587,22 +606,138 @@ class SecurityController(QObject):
         return ''
 
     def _refresh_key_servers(self) -> None:
-        """One profile per key server entry of the key store, while it is unlocked (the token is a secret)."""
+        """One profile per key server and PKCS#11 entry of the key store, while it is unlocked (their tokens, client
+        secrets and PINs are secrets)."""
         for loaded in list(self.profiles.profiles):
-            if loaded.source.startswith('key server '):
+            if loaded.source.startswith(('key server ', 'pkcs11 ')):
                 self.profiles.remove(loaded.name)
         if not self.store.unlocked:
+            self._token_sources.clear()
             return
         for info in self.store.entries(keystore.KEY_SERVER):
             try:
-                token = self.store.secrets(info.name).get('token', b'').decode('utf-8')
-                trusted = info.params.get('trusted', '')
-                context = client_context(self.store, trusted=trusted, keylog='') if trusted else None
-                profile = security_profiles.KeyServerProfile(info.name, info.params['url'], token, context)
-            except (KeyStoreError, security_profiles.SecurityProfileError, ssl.SSLError) as e:
+                profile = self._key_server_profile(info)
+            except (KeyStoreError, security_profiles.SecurityProfileError, ssl.SSLError, oauth.OAuthError) as e:
                 logger.warning(f'Key server {info.name}: {e}')
                 continue
             self.profiles.profiles.append(security_profiles.LoadedProfile(profile, f'key server {info.name}'))
+        for info in self.store.entries(keystore.PKCS11):
+            try:
+                pin = self.store.secrets(info.name).get('pin', b'').decode('utf-8')
+            except KeyStoreError as e:
+                logger.warning(f'PKCS#11 key {info.name}: {e}')
+                continue
+            params = info.params
+            profile = Pkcs11Profile(info.name, params['module'], params['token'], params['key'], pin)
+            self.profiles.profiles.append(security_profiles.LoadedProfile(profile, f'pkcs11 {info.name}'))
+
+    def _key_server_profile(self, info: keystore.KeyInfo):
+        params, secrets = info.params, self.store.secrets(info.name)
+        trusted = params.get('trusted', '')
+        context = client_context(self.store, trusted=trusted, keylog='') if trusted else None
+        auth = params.get('auth', 'token')
+        if auth == 'token':
+            token = secrets.get('token', b'').decode('utf-8')
+        else:
+            settings = (
+                auth,
+                params.get('token_url'),
+                params.get('client_id'),
+                params.get('scope'),
+                params.get('device_url'),
+            )
+            kept = self._token_sources.get(info.name)
+            if kept is not None and kept[0] == settings:
+                token = kept[1]
+            else:
+                config = oauth.OAuthConfig(
+                    auth,
+                    params.get('token_url', ''),
+                    params.get('client_id', ''),
+                    secrets.get('client_secret', b'').decode('utf-8'),
+                    params.get('scope', ''),
+                    params.get('device_url', ''),
+                )
+                token = oauth.TokenSource(
+                    config,
+                    secrets.get('refresh_token', b'').decode('utf-8'),
+                    on_refresh_token=lambda value, name=info.name: self._keep_refresh_token(name, value),
+                    context=context,
+                )
+                self._token_sources[info.name] = (settings, token)
+        return security_profiles.KeyServerProfile(info.name, params['url'], token, context)
+
+    def _keep_refresh_token(self, name: str, token: str) -> None:
+        """Keep a key server's (rotated) refresh token encrypted, without reloading the profiles."""
+        try:
+            self.store.update_secrets(name, refresh_token=token.encode('utf-8'))
+        except KeyStoreError as e:
+            logger.warning(f'Key server {name}: the refresh token could not be kept: {e}')
+
+    # OAuth device sign-in of a key server
+
+    @pyqtProperty('QVariantMap', notify=changed)
+    def sign_in(self) -> Dict[str, Any]:
+        """The device sign-in in progress: server, user_code, verification_uri, status ('waiting', 'done', or
+        an error), or {}."""
+        return dict(self._sign_in)
+
+    @pyqtSlot(str, result=str)
+    def start_sign_in(self, name: str) -> str:
+        """Start the OAuth device sign-in of a key server: the user enters the code shown at the address shown,
+        while this polls the identity provider. Returns an error, or ''."""
+        kept = self._token_sources.get(name)
+        if kept is None or kept[1].config.grant != oauth.DEVICE:
+            return f'{name} is not a key server with device sign-in (or the key store is locked)'
+        source = kept[1]
+        loop = asyncio.get_event_loop()
+
+        async def run():
+            try:
+                authorization = await loop.run_in_executor(None, source.start_device_authorization)
+            except oauth.OAuthError as e:
+                self._sign_in = {'server': name, 'status': str(e)}
+                self.changed.emit()
+                return
+            self._sign_in = {
+                'server': name,
+                'user_code': authorization.user_code,
+                'verification_uri': authorization.verification_uri,
+                'verification_uri_complete': authorization.verification_uri_complete,
+                'status': 'waiting',
+            }
+            self.changed.emit()
+            while self._sign_in.get('server') == name and self._sign_in.get('status') == 'waiting':
+                await asyncio.sleep(authorization.interval)
+                if self._sign_in.get('server') != name or self._sign_in.get('status') != 'waiting':
+                    return  # Cancelled
+                try:
+                    done = await loop.run_in_executor(None, source.poll_device_authorization, authorization)
+                except oauth.OAuthError as e:
+                    self._sign_in['status'] = str(e)
+                    self.changed.emit()
+                    return
+                if done:
+                    self._sign_in['status'] = 'done'
+                    audit.record('signed in to a key server', server=name)
+                    self.changed.emit()
+                    self.keys_changed.emit()  # Its seed/key and signatures are available now
+
+        asyncio.ensure_future(run())
+        return ''
+
+    @pyqtSlot()
+    def cancel_sign_in(self):
+        self._sign_in = {}
+        self.changed.emit()
+
+    @pyqtSlot(str)
+    def sign_out(self, name: str):
+        kept = self._token_sources.get(name)
+        if kept is not None:
+            kept[1].sign_out()
+            audit.record('signed out of a key server', server=name)
+            self._keys_changed()
 
     @pyqtProperty('QVariantList', notify=changed)
     def security_profiles(self) -> List[Dict[str, Any]]:
@@ -627,6 +762,34 @@ class SecurityController(QObject):
     @pyqtSlot(str, str, str, str, result=str)
     def add_key_server(self, name: str, url: str, token: str, trusted: str) -> str:
         return self._run(lambda: self.store.add_key_server(name, url, token, trusted), 'add entry', entry=name)
+
+    @pyqtSlot(str, 'QVariantMap', result=str)
+    def add_oauth_key_server(self, name: str, options: Dict[str, Any]) -> str:
+        """A key server behind OAuth 2.0. Options: url, trusted, auth ('client-credentials' or 'device'), token_url,
+        client_id, client_secret, scope, device_url. Returns an error, or ''."""
+
+        def add():
+            self.store.add_key_server(
+                name,
+                str(options.get('url') or ''),
+                trusted=str(options.get('trusted') or ''),
+                auth=str(options.get('auth') or ''),
+                token_url=str(options.get('token_url') or ''),
+                client_id=str(options.get('client_id') or ''),
+                client_secret=str(options.get('client_secret') or ''),
+                scope=str(options.get('scope') or ''),
+                device_url=str(options.get('device_url') or ''),
+            )
+
+        return self._run(add, 'add entry', entry=name)
+
+    @pyqtSlot(str, str, str, str, str, result=str)
+    def add_pkcs11_key(self, name: str, module: str, token: str, key: str, pin: str) -> str:
+        return self._run(lambda: self.store.add_pkcs11_key(name, module, token, key, pin), 'add entry', entry=name)
+
+    @pyqtProperty('QStringList', constant=True)
+    def key_server_auths(self) -> List[str]:
+        return list(keystore.KEY_SERVER_AUTH)
 
     # Ethernet and DoIP
 

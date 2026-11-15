@@ -43,7 +43,9 @@ Dialog {
         appState.set_theme(themeBox.currentText)
         appState.set_language(languageBox.currentValue)
     }
-    // The themes picked in the lists are only previewed: OK keeps them (onAccepted), Cancel or Escape goes back
+    // The themes picked in the lists are only previewed: OK keeps them (onAccepted), Cancel or Escape goes back at
+    // once (onRejected: `closed` only comes after the exit transition), closing otherwise goes back too (onClosed)
+    onRejected: clearPreview()
     onClosed: clearPreview()
 
     GridLayout {

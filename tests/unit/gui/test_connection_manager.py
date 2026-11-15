@@ -144,6 +144,46 @@ async def test_replay_playback_controls(manager, tmp_path):
     assert replay.duration == pytest.approx(0.58) and replay.position == pytest.approx(0.58)
 
 
+async def test_replay_breakpoints_and_stepping(manager, tmp_path):
+    path = tmp_path / 'replay.asc'
+    with can.Logger(path) as logger:
+        for i in range(30):
+            logger.on_message_received(
+                can.Message(arbitration_id=0x100 + i % 3, is_extended_id=False, data=[i], timestamp=10.0 + i * 0.01)
+            )
+    manager.open_log_file(QUrl.fromLocalFile(str(path)), 'Raw', 0.0)
+    connection = manager.connections[0]
+    replay = connection.replay
+    # Added before the frames arrive: they are checked from the first frame on
+    assert replay.add_frame_breakpoint('102', '', 1) == ''  # Passes the first hit: stops at frame 5
+    assert 'Invalid filter term' in replay.add_frame_breakpoint('nope', '', 0)
+    assert 'Message.Signal' in replay.add_signal_breakpoint('Speed > 3', 0)
+    assert 'once a database' in replay.add_signal_breakpoint('EngineData.EngineSpeed > 3000', 0)
+    assert replay.add_time_breakpoint(0.2) == ''
+    await wait_until(lambda: replay.paused and connection.session.trace.total == 6)
+    replay.refresh()
+    assert replay.state == 'paused' and replay.hit_text == 'Breakpoint 102 — 0.050000 s: 102 05'
+    assert [(row['label'], row['hits'], row['skip']) for row in replay.breakpoint_rows] == [
+        ('102', 2, 1),
+        ('EngineData.EngineSpeed > 3000', 0, 0),
+        ('At 0.200 s', 0, 0),
+    ]
+    replay.step()
+    await wait_until(lambda: connection.session.trace.total == 7)
+    replay.refresh()
+    assert replay.hit_text.startswith('Step — 0.060000 s: 100 06')
+    replay.set_breakpoint_enabled(0, False)
+    replay.set_paused(False)
+    await wait_until(lambda: replay.paused and connection.session.trace.total == 21)  # At 0.2 s
+    replay.remove_breakpoint(2)
+    replay.set_paused(False)
+    await wait_until(lambda: connection.session.state is SessionState.FINISHED)
+    replay.refresh()
+    assert connection.session.trace.total == 30 and replay.hit_text == ''
+    replay.clear_breakpoints()
+    assert replay.breakpoint_rows == []
+
+
 async def test_bus_replay(manager, tmp_path):
     channel = f'gui-{uuid.uuid4().hex}'
     path = tmp_path / 'log.asc'
@@ -389,6 +429,10 @@ async def test_workspace_round_trip(manager, tmp_path):
     vehicle.simulation.add_panel(QUrl.fromLocalFile(str(project / 'engine_panel.qml')))
     assert vehicle.simulation.start() == ''
     vehicle.tests.load_script(QUrl.fromLocalFile(str(project / 'vehicle_tests.py')))
+    vehicle.restbus.set_enabled('VehicleSpeed', True)
+    vehicle.restbus.set_mode('VehicleSpeed', 'cyclic_on_change')
+    vehicle.restbus.set_value('EngineData', 'EngineSpeed', '1500')
+    assert vehicle.restbus.start() == ''
     manager.open_log_file(QUrl.fromLocalFile(str(project / 'drive.asc')), 'J1939', 2.0)
 
     workspace = project / 'bench.cxw'
@@ -398,6 +442,10 @@ async def test_workspace_round_trip(manager, tmp_path):
     assert first['database'] == 'vehicle.dbc' and first['simulation']['scripts'] == ['engine_simulation.py']
     assert first['settings']['bitrate'] == 250000 and first['connected'] and first['simulation']['running']
     assert data['connections'][1]['path'] == 'drive.asc' and data['current'] == 1
+    assert first['restbus']['running'] and first['restbus']['messages']['VehicleSpeed'] == {
+        'enabled': True,
+        'mode': 'cyclic_on_change',
+    }
 
     # The project moves elsewhere: relative paths still work
     moved = shutil.move(str(project), str(tmp_path / 'moved'))
@@ -411,6 +459,8 @@ async def test_workspace_round_trip(manager, tmp_path):
     assert vehicle.tracked_signals == ['EngineData.EngineSpeed']
     assert vehicle.simulation.running and [panel['name'] for panel in vehicle.simulation.panels] == ['engine_panel']
     assert [script['name'] for script in vehicle.tests.scripts] == ['vehicle_tests.py']
+    assert vehicle.restbus.running and vehicle.restbus.message_row('VehicleSpeed')['mode'] == 'cyclic_on_change'
+    assert vehicle.restbus.signal_row('EngineData', 'EngineSpeed')['value'] == '1500'
     assert replay.is_replay and replay.protocol == 'J1939' and replay.replay.speed == 2.0
     assert manager.app_state.recent_workspaces[0]['name'] == 'bench'
 

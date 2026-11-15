@@ -23,7 +23,7 @@ ApplicationWindow {
         currentIndex >= 0 && currentIndex < connectionViews.count ? connectionViews.itemAt(currentIndex) : null
     property var notifications: []
     // A tool shown instead of the connections: "", "database-editor", "multi-bus", "compare", "ethercat", "physical-io",
-    // "doip", "someip", "ethernet" or "gateway"
+    // "doip", "someip", "ethernet", "flexray" or "gateway"
     property string tool: ""
     property bool closeConfirmed: false
     property int connectionCount: 0  // Tracks additions, to leave the welcome page when a connection is added
@@ -103,6 +103,7 @@ ApplicationWindow {
                                     ["compare", qsTr("Compare recordings")], ["ethercat", qsTr("EtherCAT (CoE)")],
                                     ["physical-io", qsTr("Physical I/O")], ["doip", qsTr("DoIP")],
                                     ["someip", qsTr("SOME/IP")], ["ethernet", qsTr("Ethernet capture")],
+                                    ["flexray", qsTr("FlexRay")],
                                     ["gateway", qsTr("Bus gateway")]])
             add(qsTr("Tool"), title, () => mainWindow.tool = key)
         for (const theme of connectionManager.app_state.themes)
@@ -341,6 +342,7 @@ ApplicationWindow {
                     : mainWindow.tool === "doip" ? qsTr("DoIP")
                     : mainWindow.tool === "someip" ? qsTr("SOME/IP")
                     : mainWindow.tool === "ethernet" ? qsTr("Ethernet capture")
+                    : mainWindow.tool === "flexray" ? qsTr("FlexRay")
                     : mainWindow.tool === "gateway" ? qsTr("Bus gateway")
                     : mainWindow.tool === "multi-bus" ? qsTr("Multi-bus trace") : ""
                 pageTitle: mainWindow.tool === "database-editor" ? connectionManager.database_editor.file_name
@@ -350,6 +352,7 @@ ApplicationWindow {
                     : mainWindow.tool === "doip" ? doipView.pageTitle
                     : mainWindow.tool === "someip" ? someIpView.pageTitle
                     : mainWindow.tool === "ethernet" ? ethernetView.pageTitle
+                    : mainWindow.tool === "flexray" ? flexRayView.pageTitle
                     : mainWindow.tool === "gateway" ? gatewayView.pageTitle
                     : mainWindow.tool === "multi-bus" ? multiBusView.pageTitle
                     : (mainWindow.tool === "" && mainWindow.currentConnectionView)
@@ -396,6 +399,14 @@ ApplicationWindow {
             PhysicalIoView {
                 id: physicalIoView
                 visible: mainWindow.tool === "physical-io"
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.margins: 24
+            }
+
+            FlexRayView {
+                id: flexRayView
+                visible: mainWindow.tool === "flexray"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.margins: 24

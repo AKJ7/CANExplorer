@@ -1,4 +1,3 @@
-import asyncio
 import uuid
 from pathlib import Path
 
@@ -23,6 +22,7 @@ from can_explorer.core.canopen_tools import (
 )
 from can_explorer.core.session import BusSession
 from can_explorer.core.sources import BusConfig, LiveSource
+from tests.unit.waiting import wait_until as wait_by_deadline
 
 EDS = Path(__file__).parents[3] / 'examples' / 'canopen' / 'io_module.eds'
 
@@ -124,18 +124,14 @@ async def test_sdo_nmt_and_pdos_against_simulated_node():
         with pytest.raises(SdoAbort, match='Sub-index does not exist'):
             await client.upload(0x1018, 9)
         master.send(nmt_message(NMT_START, 5))
-        for _ in range(100):
-            await asyncio.sleep(0.01)
-            if network.nodes.get(5) and network.nodes[5].state == STATE_OPERATIONAL and 0x185 in network.pdo_data:
-                break
+        await wait_by_deadline(
+            lambda: network.nodes.get(5) and network.nodes[5].state == STATE_OPERATIONAL and 0x185 in network.pdo_data
+        )
         assert network.nodes[5].state == STATE_OPERATIONAL and node.state == STATE_OPERATIONAL
         assert network.pdo_data[0x185][1] == bytes([0x05, 0xB0, 0x04, 0xA2, 0xFE])
         assert 0x285 not in network.pdo_data  # TPDO2 is synchronous
         master.send(can.Message(arbitration_id=0x080, is_extended_id=False, data=b''))
-        for _ in range(100):
-            await asyncio.sleep(0.01)
-            if 0x285 in network.pdo_data:
-                break
+        await wait_by_deadline(lambda: 0x285 in network.pdo_data)
         assert network.pdo_data[0x285][1] == encode_value(0x08, 36.5)
         with pytest.raises(TimeoutError):
             await SdoClient(master, 6, timeout=0.1).upload(0x1000, 0)

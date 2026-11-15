@@ -234,6 +234,14 @@ class DiagnosticDescription:
             return []
         return [{'name': item.name, 'unit': item.data_type.unit} for item in did.fields]
 
+    def byte_length(self, identifier: int) -> Optional[int]:
+        """The data length of a DID in bytes (to split snapshot records and periodic data); None for unknown DIDs
+        and layouts that cannot be decoded."""
+        did = self._dids.get(identifier)
+        if did is None or not did.complete or not did.fields:
+            return None
+        return max((item.bit_offset + item.data_type.bit_length + 7) // 8 for item in did.fields)
+
     def decode(self, identifier: int, data: bytes) -> Optional[Dict[str, object]]:
         """Field values of a DID; None for unknown identifiers, undecodable layouts or too short data."""
         did = self._dids.get(identifier)

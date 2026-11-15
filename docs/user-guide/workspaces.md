@@ -8,6 +8,8 @@ the connections and, for each of them,
 - the signal database and its bus, and a CANdelaStudio diagnostic description,
 - the display filter and the plotted signals,
 - the simulation scripts and panels, and whether the simulation was running,
+- the [restbus](restbus.md#workspaces) setup (enabled messages, send modes, values, counters and checksums), and
+  whether it was running,
 - the test scripts,
 - and which connection was selected.
 

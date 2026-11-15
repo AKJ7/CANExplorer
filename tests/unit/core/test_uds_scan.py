@@ -62,8 +62,8 @@ async def test_scan_services_finds_the_handled_ones(client):
     results = await collect(scan_services(uds))
     supported = {result.identifier for result in results if result.interesting}
     # The simulator handles these; none of them report serviceNotSupported
-    assert {0x10, 0x11, 0x22, 0x27, 0x31, 0x3E, 0x19, 0x2E} <= supported
-    assert 0x85 not in supported  # ControlDTCSetting is not handled: serviceNotSupported
+    assert {0x10, 0x11, 0x22, 0x27, 0x31, 0x3E, 0x19, 0x2E, 0x28, 0x85, 0x86} <= supported
+    assert 0x2F not in supported  # InputOutputControlByIdentifier is not handled: serviceNotSupported
     reset = next(result for result in results if result.identifier == 0x11)
     assert reset.interesting and not reset.response[0] == 0x51  # Rejected (truncated), not executed
 

@@ -28,6 +28,8 @@ the first column. Install the vendor's driver or library for your adapter first;
 | *GvretBus* | `gvret` | Devices with SavvyCAN's GVRET protocol: ESP32RET boards, Macchina M2 (M2RET), CANDue (GVRET firmware) | Windows, Linux, macOS | None: a serial port, with `@1` for the device's second bus (`COM5@1`), or `socket://IP:23` for ESP32RET on WiFi (see [below](#gvret-devices)) | – |
 | *J2534Bus* | `j2534` | J2534 pass-thru devices: Drew Technologies Mongoose and CarDAQ, Tactrix OpenPort 2.0, J2534 drivers of Bosch, Autel, Kvaser, PEAK, Intrepid … (see [below](#j2534-pass-thru-devices)) | Windows | The device's J2534 (04.04) driver; 32-bit drivers run in the J2534 bridge ([below](#32-bit-drivers)) | – |
 | *Rp1210Bus* | `rp1210` | TMC RP1210 heavy-duty (truck, bus, off-highway) adapters: Nexiq USB-Link, DG Technologies DPA 5, Noregon DLA+, Cummins INLINE … (see [below](#rp1210-heavy-duty-adapters)) | Windows | The adapter's RP1210 driver; the driver is 32-bit, so run CANExplorer as 32-bit Python ([below](#rp1210-heavy-duty-adapters)) | – |
+| *ZlgBus* | `zlg` | ZLG (周立功) USBCAN-II, USBCAN-E-U series and USBCANFD-100U/200U/400U/800U/MINI (see [below](#zlg-interfaces)); **experimental** | Windows | ZLG's driver and its development library (`zlgcan.dll` with `kerneldlls`) | ✓ |
+| *ToomossBus* | `toomoss` | Toomoss (图莫斯) USB2CAN and USB2CANFD adapters (see [below](#toomoss-adapters)); **experimental** | Windows, Linux, macOS | Toomoss's USB2XXX library (`USB2XXX.dll`, `libUSB2XXX.so`, `libUSB2XXX.dylib`) with its libusb | ✓ |
 | *Elm327Bus* | `elm327` | OBD adapters with the ELM327 command set: OBDLink MX+, LX, SX, EX and ELM327 compatibles, over USB, Bluetooth or WiFi; made for diagnostics, with limits (see [below](#elm327-and-obdlink-adapters)) | Windows, Linux, macOS | None: a serial port (`COM7`, `/dev/rfcomm0`), or `socket://IP:35000` for WiFi adapters | – |
 | *Elm327VpwBus* | `elm327_vpw` | **SAE J1850 VPW / GM Class 2** (not CAN): the 10.4 kbit/s bus of 1996–2007 GM vehicles, through an ELM327/OBDLink adapter (see [below](#gm-class-2-sae-j1850-vpw)) | Windows, Linux, macOS | None: the adapter's serial port, as for `elm327` | – |
 | *Elm327KLineBus* | `elm327_kline` | **K-Line** (ISO 9141-2 / ISO 14230 KWP, not CAN): the 10.4 kbit/s diagnostic bus of non-CAN OBD-II vehicles (~1996–2008), through an ELM327/OBDLink adapter (see [below](#k-line-iso-9141-2-iso-14230)) | Windows, Linux, macOS | None: the adapter's serial port, as for `elm327`, with an optional `@3`/`@4`/`@5` protocol suffix | – |
@@ -133,6 +135,54 @@ listen-only mode.
 RP1210 drivers are **32-bit** Windows DLLs. A 64-bit program cannot load them, so to use an RP1210 adapter run
 CANExplorer as 32-bit Python (from [python.org](https://www.python.org/downloads/windows/), *Windows installer
 (32-bit)*); opening an adapter from a 64-bit build says so plainly.
+
+## ZLG interfaces
+
+*ZlgBus* opens one channel of a ZLG CAN or CAN FD interface through ZLG's development library. The channel is
+`DEVICE[:INDEX[:CHANNEL]]`:
+
+| Channel | Bus |
+|---|---|
+| `USBCANFD-200U:0:1` | The second channel of the first USBCANFD-200U |
+| `USBCAN-2E-U` | The first channel of the first USBCAN-2E-U |
+| `USBCAN2:1:0` | The first channel of the second USBCAN-II (or ZLG's device type number instead of the name: `4:1:0`) |
+
+Device names: `USBCAN1`, `USBCAN2` (USBCAN-II), `USBCAN-2E-U`, `USBCAN-4E-U`, `USBCAN-8E-U`, `USBCANFD-100U`,
+`USBCANFD-200U`, `USBCANFD-400U`, `USBCANFD-800U`, `USBCANFD-800H`, `USBCANFD-MINI`. The USBCANFD series takes the
+bit rates 1000, 800, 500, 250, 125, 100 and 50 kbit/s and the data bit rates 5, 4, 2 and 1 Mbit/s, 800, 500, 250,
+125 and 100 kbit/s (ISO CAN FD; its 120 Ω termination is switched on); the classic devices 1000 down to 50 kbit/s.
+These are the standard rates of ZLG's property tables. **Receive own messages** uses the devices' self-reception;
+**Listen only** their listen-only mode.
+
+Install ZLG's driver, and the development library (*ZLGCAN上位机二次开发库*, `CAN_lib.zip` from zlg.cn): put
+`zlgcan.dll` with its `kerneldlls` folder on `PATH`, or set `CANEXPLORER_ZLGCAN` to the DLL's path. The library is
+Windows-only, so is this interface.
+
+!!! note "Experimental"
+    Written from ZLG's published header files and its interface manual (V1.21), with the structure layouts checked
+    against the headers, and tested against a simulated library — not yet on a device. Reports of it working, or
+    not, on your interface are welcome.
+
+## Toomoss adapters
+
+*ToomossBus* opens one CAN channel of a Toomoss USB2XXX adapter (the USB2CAN and USB2CANFD products) through
+Toomoss's USB2XXX library. The channel is `DEVICE[:CHANNEL]`: the adapter, numbered from 0 in the order the library
+finds them, and its CAN channel, 0 for CAN1 and 1 for CAN2 — `0:1` is CAN2 of the first adapter. **Detect** lists
+the channels of the connected adapters.
+
+Turn on **CAN FD** for USB2CANFD adapters, which use Toomoss's CAN FD functions (ISO CRC, automatic
+retransmission); the bit timing comes from the library, or else from Toomoss's 40 MHz formula at a 75 % sample
+point. Classic USB2CAN adapters take the bit timing from the library for the connection's bitrate and have a
+listen-only mode; CAN FD adapters do not. The adapter's 120 Ω termination is switched on.
+
+Install Toomoss's driver and put its USB2XXX library (with the `libusb` it comes with, from Toomoss's
+*USB2XXX_Example* or its software download) where the system finds libraries, or set `CANEXPLORER_TOOMOSS` to its
+path.
+
+!!! note "Experimental"
+    Written from Toomoss's published C headers (`usb_device.h`, `usb2can.h`, `usb2canfd.h`), with the structure
+    layouts checked against them, and tested against a simulated library — not yet on a device. Where Toomoss's own
+    Python and C headers differ (the size of `CANFD_INIT_CONFIG.Mode`), the C header is followed.
 
 ## ELM327 and OBDLink adapters
 

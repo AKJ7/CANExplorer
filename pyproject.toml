@@ -1,6 +1,6 @@
 [project]
 name = "can-explorer"
-version = "1.8.0"
+version = "1.9.0"
 description = "Monitor, analyse, diagnose, simulate and test CAN, CAN FD and LIN buses"
 authors = [{ name = "AKJ7", email = "akj123429@gmail.com" }]
 license = "MIT"
@@ -78,6 +78,10 @@ j1708 = "can_explorer.core.j1708:J1708Bus"
 j2534 = "can_explorer.core.j2534:J2534Bus"
 # TMC RP1210 heavy-duty adapters (Nexiq, DG DPA, Noregon, …), usable as python-can interface "rp1210"
 rp1210 = "can_explorer.core.rp1210:Rp1210Bus"
+# ZLG USBCAN and USBCANFD interfaces (zlgcan.dll, Windows), usable as python-can interface "zlg" — experimental
+zlg = "can_explorer.core.zlg:ZlgBus"
+# Toomoss USB2CAN and USB2CANFD adapters (USB2XXX library), usable as python-can interface "toomoss" — experimental
+toomoss = "can_explorer.core.toomoss:ToomossBus"
 
 [project.optional-dependencies]
 mf4 = [
@@ -100,6 +104,10 @@ drivers = [
 mqtt = [
     "aiomqtt>=2.3",
 ]
+# PKCS#11 tokens (smart cards, USB tokens, HSMs) as security profiles: the tester's key never leaves the token
+pkcs11 = [
+    "python-pkcs11>=0.10",
+]
 
 [dependency-groups]
 dev = [
@@ -116,6 +124,7 @@ test = [
     "pytest-mock",
     "hypothesis",
     "asammdf>=7",  # MF4 log files in the format round-trip tests
+    "python-pkcs11>=0.10",  # PKCS#11 constants for the token profile tests (against a simulated token)
 ]
 packaging = [
     "nuitka>=4.3.1",

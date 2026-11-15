@@ -1160,37 +1160,37 @@ B：%3</translation>
             <translation>%1 フレーム</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="529" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="535" />
             <source>Copy selected rows	Ctrl+C</source>
             <translation>選択した行をコピー	Ctrl+C</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="533" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="539" />
             <source>Select all	Ctrl+A</source>
             <translation>すべて選択	Ctrl+A</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="543" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="549" />
             <source>Bookmark / remove bookmark	Ctrl+B</source>
             <translation>ブックマークの追加/削除	Ctrl+B</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="553" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="559" />
             <source>Replay from here</source>
             <translation>ここから再生</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="557" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="563" />
             <source>Find…	Ctrl+F</source>
             <translation>検索…	Ctrl+F</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="586" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="592" />
             <source>Export trace</source>
             <translation>トレースをエクスポート</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="599" />
+            <location filename="../../gui/qt/CanExplorer/ConnectionView.qml" line="605" />
             <source>Load signal database</source>
             <translation>信号データベースを読み込み</translation>
         </message>
@@ -2002,417 +2002,537 @@ B：%3</translation>
             <translation>拡張 (29 ビット) ID</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="220" />
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="221" />
+            <source>Find ECUs</source>
+            <translation>ECU を検索</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="225" />
+            <source>Send a functional TesterPresent (0x7DF, or 0x18DB33F1 with 29-bit identifiers) and list the ECUs that answer</source>
+            <translation>機能アドレスで TesterPresent を送信し (0x7DF、29 ビット識別子では 0x18DB33F1)、応答した ECU を一覧表示します</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="229" />
             <source>NAD</source>
             <translation>NAD</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="230" />
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="239" />
             <source>Target address</source>
             <translation>ターゲットアドレス</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="238" />
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="247" />
             <source>Logical address of the ECU (hex), or of the DoIP entity itself</source>
             <translation>ECU（16 進）または DoIP エンティティ自体の論理アドレス</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="242" />
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="251" />
             <source>Diagnostic description</source>
             <translation>診断記述</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="246" />
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="255" />
             <source>Unload %1</source>
             <translation>%1 をアンロード</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="247" />
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="256" />
             <source>Load description (.cdd)…</source>
             <translation>記述を読み込む (.cdd)…</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="250" />
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="259" />
             <source>ECU description loaded; click to unload</source>
             <translation>ECU 記述を読み込み済み。クリックでアンロード</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="251" />
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="260" />
             <source>Load the ECU's diagnostic description (CANdelaStudio .cdd) to name and decode its DIDs</source>
             <translation>ECU の診断記述（CANdelaStudio .cdd）を読み込み、DID の命名と解読を行う</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="259" />
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="268" />
             <source>Session</source>
             <translation>セッション</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="271" />
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="280" />
             <source>Change</source>
             <translation>変更</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="287" />
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="296" />
             <source>Reset</source>
             <translation>リセット</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="291" />
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="300" />
             <source>ECU reset (0x11)</source>
             <translation>ECU リセット (0x11)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="300" />
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="309" />
             <source>Periodically send TesterPresent (0x3E) to keep a non-default session open</source>
             <translation>TesterPresent (0x3E) を定期的に送信し、デフォルト以外のセッションを維持します</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="306" />
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="315" />
             <source>Data identifiers</source>
             <translation>データ識別子</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="318" />
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="327" />
             <source>Read</source>
             <translation>読み取り</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="328" />
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="337" />
             <source>Data to write, hex</source>
             <translation>書き込むデータ (16 進)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="333" />
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="342" />
             <source>Write</source>
             <translation>書き込み</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="342" />
-            <source>Security access</source>
-            <translation>セキュリティアクセス</translation>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="351" />
+            <source>Periodic data</source>
+            <translation>周期データ</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="346" />
-            <source>Level</source>
-            <translation>レベル</translation>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="354" />
+            <source>Define a DID from other DIDs or memory (0x2C)</source>
+            <translation>他の DID またはメモリから DID を定義 (0x2C)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="356" />
-            <source>Unlock</source>
-            <translation>ロック解除</translation>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="363" />
+            <source>The dynamically defined DID (hex), usually F200-F3FF</source>
+            <translation>動的に定義する DID (16 進)、通常 F200-F3FF</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="367" />
-            <source>Key algorithm: %1</source>
-            <translation>キーアルゴリズム: %1</translation>
+            <source>0100:1:2 F190:1:4 or @20001000:4</source>
+            <translation>0100:1:2 F190:1:4 または @20001000:4</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="368" />
-            <source>Choose key algorithm…</source>
-            <translation>キーアルゴリズムを選択…</translation>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="371" />
+            <source>Sources: DID:position:size (DID hex, position from 1 and size in bytes) or memory @address:size (address hex)</source>
+            <translation>ソース: DID:位置:サイズ (DID は 16 進、位置は 1 から、サイズはバイト) またはメモリ @アドレス:サイズ (アドレスは 16 進)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="370" />
-            <source>Python file defining compute_key(level: int, seed: bytes) -&gt; bytes</source>
-            <translation>compute_key(level: int, seed: bytes) -&gt; bytes を定義する Python ファイル</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="381" />
-            <source>New session per seed</source>
-            <translation>シードごとに新しいセッション</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="382" />
-            <source>ECU reset per seed</source>
-            <translation>シードごとに ECU リセット</translation>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="377" />
+            <source>Define</source>
+            <translation>定義</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="383" />
-            <source>Repeated requests</source>
-            <translation>繰り返し要求</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="389" />
-            <source>How the ECU's seed is renewed between requests: many ECUs keep a seed until a key is sent</source>
-            <translation>要求の間で ECU のシードを更新する方法です。多くの ECU はキーが送られるまで同じシードを保持します</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="392" />
-            <source>Analyse Seeds</source>
-            <translation>シードを分析</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="396" />
-            <source>Request 32 seeds of the level and look for repeats, bytes that never change, predictable steps and short seeds</source>
-            <translation>このレベルのシードを 32 個要求し、繰り返し、変化しないバイト、予測可能な増分、短いシードを探します</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="403" />
-            <source>Then reset the ECU</source>
-            <translation>その後 ECU をリセット</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="405" />
-            <source>After the lockout, reset the ECU and check whether the delay survives</source>
-            <translation>ロックアウト後に ECU をリセットし、遅延が残るか確認します</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="409" />
-            <source>Test Lockout</source>
-            <translation>ロックアウトを試験</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="413" />
-            <source>Send up to 10 wrong keys and record when the ECU locks out (exceedNumberOfAttempts) and refuses seeds (requiredTimeDelayNotExpired). The ECU stays locked for its delay time</source>
-            <translation>誤ったキーを最大 10 回送り、ECU がロックアウトする時点 (exceedNumberOfAttempts) とシードを拒否する時点 (requiredTimeDelayNotExpired) を記録します。ECU は遅延時間の間ロックされたままです</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="422" />
-            <source>Authentication</source>
-            <translation>認証</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="432" />
-            <source>%1 (profile)</source>
-            <translation>%1（プロファイル）</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="447" />
-            <source>Method</source>
-            <translation>方式</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="450" />
-            <source>Certificate exchange</source>
-            <translation>証明書交換</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="450" />
-            <source>Challenge-response</source>
-            <translation>チャレンジレスポンス</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="453" />
-            <source>Certificate exchange (sub-functions 0x01–0x03) or challenge-response without certificates (0x05–0x07); authenticationConfiguration (0x08) tells which one the ECU offers</source>
-            <translation>証明書交換（サブファンクション 0x01–0x03）または証明書を使わないチャレンジレスポンス（0x05–0x07）。ECU がどちらに対応するかは authenticationConfiguration（0x08）で確認できます</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="458" />
-            <source>Key</source>
-            <translation>鍵</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="458" />
-            <source>Certificate</source>
-            <translation>証明書</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="461" />
-            <source>none in the Security Manager</source>
-            <translation>セキュリティ マネージャーにありません</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="468" />
-            <source>A shared authentication key (the proof is a MAC), a client certificate's private key (a signature), or a security profile, from the Security Manager (unlocked)</source>
-            <translation>共有認証鍵（証明は MAC）、クライアント証明書の秘密鍵（署名）、またはセキュリティプロファイル。Security Manager から（ロック解除が必要）</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="469" />
-            <source>A client certificate with its private key from the Security Manager (unlocked), or a security profile's certificate</source>
-            <translation>Security Manager のクライアント証明書と秘密鍵（ロック解除が必要）、またはセキュリティプロファイルの証明書</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="475" />
-            <source>Proof</source>
-            <translation>所有証明</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="483" />
-            <source>How the proof of ownership (the signature over the ECU's challenge) is made; the ECU's configuration decides which one it expects</source>
-            <translation>所有証明 (ECU のチャレンジに対する署名) の作成方式です。どの方式を期待するかは ECU の設定で決まります</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="489" />
-            <source>Algorithm</source>
-            <translation>アルゴリズム</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="492" />
-            <source>hex or OID, empty for zeros</source>
-            <translation>16 進または OID（空ならゼロ）</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="496" />
-            <source>The algorithm asked for in requestChallengeForAuthentication: 16 bytes in hex, or a dotted OID (DER encoded). The proof is made for the algorithm the ECU answers with</source>
-            <translation>requestChallengeForAuthentication で要求するアルゴリズム：16 バイトの 16 進、またはドット区切りの OID（DER エンコード）。証明は ECU が応答したアルゴリズムで作成されます</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="502" />
-            <source>Additional</source>
-            <translation>追加</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="505" />
-            <source>additional parameter, hex</source>
-            <translation>追加パラメータ（16 進）</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="509" />
-            <source>Sent when the ECU asks for an additional parameter; what it holds is manufacturer specific</source>
-            <translation>ECU が追加パラメータを要求したときに送信します。内容はメーカー固有です</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="516" />
-            <source>Bidirectional</source>
-            <translation>双方向</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="519" />
-            <source>The ECU also proves owning its key over a challenge of ours; checked with the shared key, the profile or trusted certificates</source>
-            <translation>ECU もこちらのチャレンジに対して鍵の所有を証明します。共有鍵、プロファイル、または信頼済み証明書で検証します</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="520" />
-            <source>The ECU also sends its certificate and proves owning it; check it against trusted certificates</source>
-            <translation>ECU も証明書を送り、その所有を証明します。信頼済み証明書で検証します</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="525" />
-            <source>Not checked</source>
-            <translation>検証しない</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="531" />
-            <source>Authenticated</source>
-            <translation>認証済み</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="539" />
-            <source>Configuration</source>
-            <translation>構成</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="543" />
-            <source>Ask the ECU which authentication it offers (authenticationConfiguration)</source>
-            <translation>ECU が対応する認証方式を問い合わせます（authenticationConfiguration）</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="546" />
-            <source>De-authenticate</source>
-            <translation>認証解除</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="551" />
-            <source>Authenticate</source>
-            <translation>認証</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="578" />
-            <source>Routine control</source>
-            <translation>ルーチン制御</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="591" />
-            <source>ID, hex</source>
-            <translation>ID、16 進</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="600" />
-            <source>Parameters, hex</source>
-            <translation>パラメータ (16 進)</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="605" />
-            <source>Run</source>
-            <translation>実行</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="614" />
-            <source>Raw request</source>
-            <translation>生リクエスト</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="621" />
-            <source>UDS request, hex</source>
-            <translation>UDS リクエスト、16 進</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="627" />
-            <source>Send</source>
-            <translation>送信</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="652" />
-            <source>Trouble codes</source>
-            <translation>故障コード</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="658" />
-            <source>Status mask</source>
-            <translation>ステータスマスク</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="665" />
-            <source>Only report DTCs with one of these status bits set (hex)</source>
-            <translation>これらのステータスビットのいずれかが立っている DTC のみ報告 (16 進)</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="673" />
             <source>Clear</source>
             <translation>クリア</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="676" />
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="387" />
+            <source>Clear this dynamically defined DID (all of them when the DID field is empty)</source>
+            <translation>この動的定義 DID を消去します (DID 欄が空のときはすべて)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="392" />
+            <source>Send periodically (0x2A)</source>
+            <translation>周期送信 (0x2A)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="401" />
+            <source>The periodic DIDs (F200-F2FF, hex, separated by spaces)</source>
+            <translation>周期 DID (F200-F2FF、16 進、スペース区切り)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="414" />
+            <source>Frames on CAN ID</source>
+            <translation>フレームの CAN ID</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="417" />
+            <source>diagnostic</source>
+            <translation>診断</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="421" />
+            <source>The CAN ID of the ECU's periodic frames (hex). Empty: they come on the response ID (0x6A messages), which turns on listening between requests</source>
+            <translation>ECU の周期フレームの CAN ID (16 進)。空の場合は応答 ID 上に届き (0x6A メッセージ)、リクエスト間の受信がオンになります</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="427" />
+            <source>Start</source>
+            <translation>開始</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="433" />
+            <source>Stop</source>
+            <translation>停止</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="461" />
+            <source>%1 messages, %2, %3</source>
+            <translation>%1 メッセージ、%2、%3</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="470" />
+            <source>Security access</source>
+            <translation>セキュリティアクセス</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="474" />
+            <source>Level</source>
+            <translation>レベル</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="484" />
+            <source>Unlock</source>
+            <translation>ロック解除</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="495" />
+            <source>Key algorithm: %1</source>
+            <translation>キーアルゴリズム: %1</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="496" />
+            <source>Choose key algorithm…</source>
+            <translation>キーアルゴリズムを選択…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="498" />
+            <source>Python file defining compute_key(level: int, seed: bytes) -&gt; bytes</source>
+            <translation>compute_key(level: int, seed: bytes) -&gt; bytes を定義する Python ファイル</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="509" />
+            <source>New session per seed</source>
+            <translation>シードごとに新しいセッション</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="510" />
+            <source>ECU reset per seed</source>
+            <translation>シードごとに ECU リセット</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="511" />
+            <source>Repeated requests</source>
+            <translation>繰り返し要求</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="517" />
+            <source>How the ECU's seed is renewed between requests: many ECUs keep a seed until a key is sent</source>
+            <translation>要求の間で ECU のシードを更新する方法です。多くの ECU はキーが送られるまで同じシードを保持します</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="520" />
+            <source>Analyse Seeds</source>
+            <translation>シードを分析</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="524" />
+            <source>Request 32 seeds of the level and look for repeats, bytes that never change, predictable steps and short seeds</source>
+            <translation>このレベルのシードを 32 個要求し、繰り返し、変化しないバイト、予測可能な増分、短いシードを探します</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="531" />
+            <source>Then reset the ECU</source>
+            <translation>その後 ECU をリセット</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="533" />
+            <source>After the lockout, reset the ECU and check whether the delay survives</source>
+            <translation>ロックアウト後に ECU をリセットし、遅延が残るか確認します</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="537" />
+            <source>Test Lockout</source>
+            <translation>ロックアウトを試験</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="541" />
+            <source>Send up to 10 wrong keys and record when the ECU locks out (exceedNumberOfAttempts) and refuses seeds (requiredTimeDelayNotExpired). The ECU stays locked for its delay time</source>
+            <translation>誤ったキーを最大 10 回送り、ECU がロックアウトする時点 (exceedNumberOfAttempts) とシードを拒否する時点 (requiredTimeDelayNotExpired) を記録します。ECU は遅延時間の間ロックされたままです</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="550" />
+            <source>Authentication</source>
+            <translation>認証</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="560" />
+            <source>%1 (profile)</source>
+            <translation>%1（プロファイル）</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="575" />
+            <source>Method</source>
+            <translation>方式</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="578" />
+            <source>Certificate exchange</source>
+            <translation>証明書交換</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="578" />
+            <source>Challenge-response</source>
+            <translation>チャレンジレスポンス</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="581" />
+            <source>Certificate exchange (sub-functions 0x01–0x03) or challenge-response without certificates (0x05–0x07); authenticationConfiguration (0x08) tells which one the ECU offers</source>
+            <translation>証明書交換（サブファンクション 0x01–0x03）または証明書を使わないチャレンジレスポンス（0x05–0x07）。ECU がどちらに対応するかは authenticationConfiguration（0x08）で確認できます</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="586" />
+            <source>Key</source>
+            <translation>鍵</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="586" />
+            <source>Certificate</source>
+            <translation>証明書</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="589" />
+            <source>none in the Security Manager</source>
+            <translation>セキュリティ マネージャーにありません</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="596" />
+            <source>A shared authentication key (the proof is a MAC), a client certificate's private key (a signature), or a security profile, from the Security Manager (unlocked)</source>
+            <translation>共有認証鍵（証明は MAC）、クライアント証明書の秘密鍵（署名）、またはセキュリティプロファイル。Security Manager から（ロック解除が必要）</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="597" />
+            <source>A client certificate with its private key from the Security Manager (unlocked), or a security profile's certificate</source>
+            <translation>Security Manager のクライアント証明書と秘密鍵（ロック解除が必要）、またはセキュリティプロファイルの証明書</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="603" />
+            <source>Proof</source>
+            <translation>所有証明</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="611" />
+            <source>How the proof of ownership (the signature over the ECU's challenge) is made; the ECU's configuration decides which one it expects</source>
+            <translation>所有証明 (ECU のチャレンジに対する署名) の作成方式です。どの方式を期待するかは ECU の設定で決まります</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="617" />
+            <source>Algorithm</source>
+            <translation>アルゴリズム</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="620" />
+            <source>hex or OID, empty for zeros</source>
+            <translation>16 進または OID（空ならゼロ）</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="624" />
+            <source>The algorithm asked for in requestChallengeForAuthentication: 16 bytes in hex, or a dotted OID (DER encoded). The proof is made for the algorithm the ECU answers with</source>
+            <translation>requestChallengeForAuthentication で要求するアルゴリズム：16 バイトの 16 進、またはドット区切りの OID（DER エンコード）。証明は ECU が応答したアルゴリズムで作成されます</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="630" />
+            <source>Additional</source>
+            <translation>追加</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="633" />
+            <source>additional parameter, hex</source>
+            <translation>追加パラメータ（16 進）</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="637" />
+            <source>Sent when the ECU asks for an additional parameter; what it holds is manufacturer specific</source>
+            <translation>ECU が追加パラメータを要求したときに送信します。内容はメーカー固有です</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="644" />
+            <source>Bidirectional</source>
+            <translation>双方向</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="647" />
+            <source>The ECU also proves owning its key over a challenge of ours; checked with the shared key, the profile or trusted certificates</source>
+            <translation>ECU もこちらのチャレンジに対して鍵の所有を証明します。共有鍵、プロファイル、または信頼済み証明書で検証します</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="648" />
+            <source>The ECU also sends its certificate and proves owning it; check it against trusted certificates</source>
+            <translation>ECU も証明書を送り、その所有を証明します。信頼済み証明書で検証します</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="653" />
+            <source>Not checked</source>
+            <translation>検証しない</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="659" />
+            <source>Authenticated</source>
+            <translation>認証済み</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="667" />
+            <source>Configuration</source>
+            <translation>構成</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="671" />
+            <source>Ask the ECU which authentication it offers (authenticationConfiguration)</source>
+            <translation>ECU が対応する認証方式を問い合わせます（authenticationConfiguration）</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="674" />
+            <source>De-authenticate</source>
+            <translation>認証解除</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="679" />
+            <source>Authenticate</source>
+            <translation>認証</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="706" />
+            <source>Routine control</source>
+            <translation>ルーチン制御</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="719" />
+            <source>ID, hex</source>
+            <translation>ID、16 進</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="728" />
+            <source>Parameters, hex</source>
+            <translation>パラメータ (16 進)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="733" />
+            <source>Run</source>
+            <translation>実行</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="742" />
+            <source>Raw request</source>
+            <translation>生リクエスト</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="749" />
+            <source>UDS request, hex</source>
+            <translation>UDS リクエスト、16 進</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="755" />
+            <source>Send</source>
+            <translation>送信</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="780" />
+            <source>Trouble codes</source>
+            <translation>故障コード</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="793" />
+            <source>The ReadDTCInformation (0x19) report to read</source>
+            <translation>読み取る ReadDTCInformation (0x19) のレポート</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="797" />
+            <source>Status mask</source>
+            <translation>ステータスマスク</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="806" />
+            <source>Only report DTCs with one of these status bits set (hex)</source>
+            <translation>これらのステータスビットのいずれかが立っている DTC のみ報告 (16 進)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="808" />
+            <source>Memory</source>
+            <translation>メモリ</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="816" />
+            <source>The memory selection of the user-defined DTC memory (hex)</source>
+            <translation>ユーザー定義 DTC メモリのメモリ選択 (16 進)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="827" />
             <source>Clear all diagnostic information in the ECU (0x14)</source>
             <translation>ECU の診断情報をすべて消去 (0x14)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="683" />
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="834" />
             <source>No trouble codes. Press Read to query the ECU.</source>
             <translation>故障コードはありません。読み取りを押して ECU に問い合わせます。</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="740" />
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="896" />
             <source>Confirmed</source>
             <translation>確定</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="740" />
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="896" />
             <source>Pending</source>
             <translation>保留</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="770" />
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="900" />
+            <source>Details</source>
+            <translation>詳細</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="904" />
+            <source>Read the snapshot (freeze frame) and extended data records of this DTC (0x19 0x04, 0x06)</source>
+            <translation>この DTC のスナップショット (フリーズフレーム) と拡張データレコードを読み取ります (0x19 0x04、0x06)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="943" />
             <source>History</source>
             <translation>履歴</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="786" />
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="951" />
+            <source>Listen between requests</source>
+            <translation>リクエスト間も受信</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="955" />
+            <source>Also show what the ECU sends between requests (event-triggered responses, late answers). It answers flow control on the response ID: turn it off while another tool (e.g. the OBD page) uses the same IDs</source>
+            <translation>リクエストの間に ECU が送るもの (イベントトリガー応答、遅れた応答) も表示します。応答 ID のフロー制御に応答するため、別のツール (OBD ページなど) が同じ ID を使う間はオフにしてください</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="971" />
             <source>Requests and the ECU's responses appear here.</source>
             <translation>リクエストと ECU の応答がここに表示されます。</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="898" />
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="1087" />
             <source>ECU diagnostic description</source>
             <translation>ECU 診断記述</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="900" />
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="1089" />
             <source>CANdelaStudio descriptions (*.cdd)</source>
             <translation>CANdelaStudio 記述 (*.cdd)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="900" />
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="1089" />
             <source>All files (*)</source>
             <translation>すべてのファイル (*)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="906" />
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="1095" />
             <source>Seed/key algorithm</source>
             <translation>シード/キーアルゴリズム</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="908" />
+            <location filename="../../gui/qt/CanExplorer/DiagnosticsView.qml" line="1097" />
             <source>Python files (*.py)</source>
             <translation>Python ファイル (*.py)</translation>
         </message>
@@ -3217,49 +3337,677 @@ B：%3</translation>
             <translation>最後に ECU リセット</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/FlashView.qml" line="152" />
+            <location filename="../../gui/qt/CanExplorer/FlashView.qml" line="149" />
+            <source>Quiet the bus, communication type</source>
+            <translation>バスを静かにする、通信タイプ</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlashView.qml" line="151" />
+            <source>Before programming, all ECUs (functionally) go to the extended session, stop DTC setting (0x85) and communication (0x28), kept there by TesterPresent; afterwards they are restored</source>
+            <translation>プログラミングの前に、すべての ECU を (機能アドレスで) 拡張セッションにし、DTC 設定 (0x85) と通信 (0x28) を停止して TesterPresent で維持します。終了後に元に戻します</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlashView.qml" line="159" />
+            <source>CommunicationControl communicationType: 01 normal messages, 03 normal and network management</source>
+            <translation>CommunicationControl の communicationType: 01 通常メッセージ、03 通常とネットワーク管理</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlashView.qml" line="163" />
+            <source>Data format</source>
+            <translation>データ形式</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlashView.qml" line="169" />
+            <source>RequestDownload dataFormatIdentifier (hex): compression and encryption method. Other than 00 needs an encoder</source>
+            <translation>RequestDownload の dataFormatIdentifier (16 進): 圧縮と暗号化の方式。00 以外にはエンコーダーが必要です</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlashView.qml" line="172" />
+            <source>Unload encoder</source>
+            <translation>エンコーダーを解除</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlashView.qml" line="172" />
+            <source>Encoder…</source>
+            <translation>エンコーダー…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlashView.qml" line="176" />
+            <source>A Python file defining encode(data, address): the compression/encryption your ECU expects</source>
+            <translation>encode(data, address) を定義する Python ファイル: ECU が想定する圧縮/暗号化</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlashView.qml" line="184" />
+            <source>Unload sequence %1</source>
+            <translation>シーケンス %1 を解除</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlashView.qml" line="185" />
+            <source>Sequence preset…</source>
+            <translation>シーケンスプリセット…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlashView.qml" line="187" />
+            <source>A JSON sequence preset replaces the steps chosen here with a manufacturer's own order of steps</source>
+            <translation>JSON のシーケンスプリセットは、ここで選んだ手順をメーカー独自の手順に置き換えます</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlashView.qml" line="198" />
             <source>Flash</source>
             <translation>フラッシュ</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/FlashView.qml" line="167" />
+            <location filename="../../gui/qt/CanExplorer/FlashView.qml" line="216" />
             <source>Cancel</source>
             <translation>キャンセル</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/FlashView.qml" line="189" />
+            <location filename="../../gui/qt/CanExplorer/FlashView.qml" line="238" />
             <source>Programming finished</source>
             <translation>プログラミング完了</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/FlashView.qml" line="190" />
+            <location filename="../../gui/qt/CanExplorer/FlashView.qml" line="239" />
             <source>Cancelled</source>
             <translation>キャンセルされました</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/FlashView.qml" line="190" />
+            <location filename="../../gui/qt/CanExplorer/FlashView.qml" line="239" />
             <source>Programming failed: %1</source>
             <translation>プログラミングに失敗しました：%1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/FlashView.qml" line="234" />
+            <location filename="../../gui/qt/CanExplorer/FlashView.qml" line="283" />
             <source>Open a firmware file to program the ECU addressed in the Diagnostics view.</source>
             <translation>診断ビューで指定した ECU をプログラムするためにファームウェアファイルを開いてください。</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/FlashView.qml" line="242" />
+            <location filename="../../gui/qt/CanExplorer/FlashView.qml" line="291" />
             <source>Firmware file</source>
             <translation>ファームウェアファイル</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/FlashView.qml" line="245" />
+            <location filename="../../gui/qt/CanExplorer/FlashView.qml" line="294" />
             <source>Firmware files (*.hex *.ihex *.ihx *.s19 *.s28 *.s37 *.srec *.mot *.bin)</source>
             <translation>ファームウェアファイル (*.hex *.ihex *.ihx *.s19 *.s28 *.s37 *.srec *.mot *.bin)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/FlashView.qml" line="246" />
+            <location filename="../../gui/qt/CanExplorer/FlashView.qml" line="295" />
             <source>All files (*)</source>
             <translation>すべてのファイル (*)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlashView.qml" line="305" />
+            <source>Sequence preset</source>
+            <translation>シーケンスプリセット</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlashView.qml" line="307" />
+            <source>Sequence presets (*.json)</source>
+            <translation>シーケンスプリセット (*.json)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlashView.qml" line="313" />
+            <source>Encoder</source>
+            <translation>エンコーダー</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlashView.qml" line="315" />
+            <source>Python files (*.py)</source>
+            <translation>Python ファイル (*.py)</translation>
+        </message>
+    </context>
+    <context>
+        <name>FlexRayView</name>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="31" />
+            <source>Cluster: %1</source>
+            <translation>クラスター：%1</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="31" />
+            <source>Load Cluster…</source>
+            <translation>クラスターを読み込む…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="34" />
+            <source>A FIBEX or AUTOSAR ARXML description of the FlexRay cluster: names the frames of each slot and decodes their signals</source>
+            <translation>FlexRay クラスターの FIBEX または AUTOSAR ARXML 記述：各スロットのフレームに名前を付け、信号をデコードします</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="44" />
+            <source>The file describes several FlexRay clusters: the one to use</source>
+            <translation>このファイルには複数の FlexRay クラスタがあります：使用するクラスタ</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="48" />
+            <source>Simulate</source>
+            <translation>シミュレート</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="52" />
+            <source>Send the cluster's frames in their slots and cycles, with changing signal values, to try the tool without hardware</source>
+            <translation>クラスターのフレームをスロットとサイクルどおりに、変化する信号値で送信し、ハードウェアなしでツールを試します</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="58" />
+            <source>auto</source>
+            <translation>自動</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="61" />
+            <source>Cycle time of the simulated cluster (auto: the description's, else 5 ms)</source>
+            <translation>シミュレーションするクラスタのサイクル時間（自動：記述のもの、なければ 5 ms）</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="64" />
+            <source>Open Log…</source>
+            <translation>ログを開く…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="67" />
+            <source>A pcap or pcapng capture (FlexRay or IEEE 1722), or a Vector BLF or ASC log</source>
+            <translation>pcap / pcapng キャプチャ（FlexRay または IEEE 1722）、または Vector の BLF / ASC ログ</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="69" />
+            <source>Stop</source>
+            <translation>停止</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="78" />
+            <source>Find Interfaces</source>
+            <translation>インターフェースを探す</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="81" />
+            <source>Look for the FlexRay channels of Vector (XL Driver Library) and Intrepid (icsneopy) interfaces</source>
+            <translation>Vector（XL Driver Library）と Intrepid（icsneopy）のインターフェースの FlexRay チャネルを探します</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="85" />
+            <source>No interface</source>
+            <translation>インターフェースなし</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="94" />
+            <source>Watch the bus</source>
+            <translation>バスを監視</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="94" />
+            <source>Take part (send)</source>
+            <translation>参加する（送信）</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="97" />
+            <source>Watch: receive without joining the cluster. Take part: the controller joins the cluster and can send frames</source>
+            <translation>監視：クラスタに参加せずに受信します。参加：コントローラがクラスタに参加し、フレームを送信できます</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="102" />
+            <source>No ECU in the description</source>
+            <translation>記述に ECU がありません</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="106" />
+            <source>The ECU of the description to be: its FlexRay controller's parameters configure the interface</source>
+            <translation>なりきる記述上の ECU：その FlexRay コントローラのパラメータでインターフェースを設定します</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="110" />
+            <source>Configuration: %1</source>
+            <translation>設定：%1</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="110" />
+            <source>Configuration…</source>
+            <translation>設定…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="113" />
+            <source>XLfrClusterConfig values (JSON or name = value lines), as Vector's tools give them; without one, the channel's own configuration is used</source>
+            <translation>XLfrClusterConfig の値（JSON または「名前 = 値」の行。Vector のツールが出力する形式）。指定しない場合はチャネル自身の設定を使います</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="118" />
+            <source>Coldstart</source>
+            <translation>コールドスタート</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="120" />
+            <source>Start the cluster as a coldstart node when no other node does</source>
+            <translation>他のノードが起動しないとき、コールドスタートノードとしてクラスタを起動します</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="123" />
+            <source>Start</source>
+            <translation>開始</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="129" />
+            <source>Experimental: written from the vendors' published interfaces, not yet tested on a device</source>
+            <translation>実験的：メーカーが公開しているインターフェースに基づいて作成。まだ実機ではテストしていません</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="134" />
+            <source>Taking part in the cluster</source>
+            <translation>クラスタに参加中</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="134" />
+            <source>Watching the bus</source>
+            <translation>バスを監視中</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="154" />
+            <source>Frames</source>
+            <translation>フレーム</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="155" />
+            <source>Slots</source>
+            <translation>スロット</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="156" />
+            <source>Cycle</source>
+            <translation>サイクル</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="157" />
+            <source>Null frames</source>
+            <translation>ヌルフレーム</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="158" />
+            <source>With errors</source>
+            <translation>エラーあり</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="159" />
+            <source>Events</source>
+            <translation>イベント</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="160" />
+            <source>Issues</source>
+            <translation>問題</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="172" />
+            <source>Recording to %1</source>
+            <translation>%1 に記録中</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="176" />
+            <source>Slots, e.g. 12 40-50</source>
+            <translation>スロット、例：12 40-50</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="181" />
+            <source>Stop Recording</source>
+            <translation>記録を停止</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="181" />
+            <source>Record…</source>
+            <translation>記録…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="185" />
+            <source>Write the frames that arrive to a pcap file (LINKTYPE_FLEXRAY), which Wireshark opens too</source>
+            <translation>受信したフレームを pcap ファイル（LINKTYPE_FLEXRAY）に書き込みます。Wireshark でも開けます</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="187" />
+            <source>Save…</source>
+            <translation>保存…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="188" />
+            <source>Clear</source>
+            <translation>クリア</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="195" />
+            <source>Trace</source>
+            <translation>トレース</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="197" />
+            <source>Analysis</source>
+            <translation>解析</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="199" />
+            <source>Signals</source>
+            <translation>信号</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="200" />
+            <source>Send</source>
+            <translation>送信</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="201" />
+            <source>Cluster</source>
+            <translation>クラスター</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="216" />
+            <source>Time [s]</source>
+            <translation>時間 [s]</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="216" />
+            <source>Ch</source>
+            <translation>Ch</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="216" />
+            <source>Slot</source>
+            <translation>スロット</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="216" />
+            <source>Len</source>
+            <translation>長さ</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="216" />
+            <source>Flags</source>
+            <translation>フラグ</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="216" />
+            <source>Data [hex]</source>
+            <translation>データ [hex]</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="222" />
+            <source>Info</source>
+            <translation>情報</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="260" />
+            <source>Segment</source>
+            <translation>セグメント</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="260" />
+            <source>Cycles</source>
+            <translation>サイクル</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="260" />
+            <source>Null</source>
+            <translation>ヌル</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="260" />
+            <source>Last data [hex]</source>
+            <translation>最新データ [hex]</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="266" />
+            <source>Last value</source>
+            <translation>最新値</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="287" />
+            <source> (%1 with errors)</source>
+            <translation>（%1 件エラー）</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="305" />
+            <source>Load the cluster description to check the frames against the schedule; without it only the bus health and the channels are compared.</source>
+            <translation>スケジュールに照らしてフレームを確認するにはクラスタ記述を読み込んでください。記述がない場合はバスの状態とチャネルの比較のみ行います。</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="310" />
+            <source>Channels</source>
+            <translation>チャネル</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="316" />
+            <source>Channel</source>
+            <translation>チャネル</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="317" />
+            <source>Cycle jumps</source>
+            <translation>サイクルの飛び</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="317" />
+            <source>Sync frames</source>
+            <translation>同期フレーム</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="317" />
+            <source>Cycles &lt; 2 sync</source>
+            <translation>同期 2 未満のサイクル</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="317" />
+            <source>Cycle time</source>
+            <translation>サイクル時間</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="334" />
+            <source>Errors on %1: %2</source>
+            <translation>%1 のエラー：%2</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="341" />
+            <source>The description gives no static slot timing (macrotick, static slot length): the frames' timing is not checked.</source>
+            <translation>記述に静的スロットのタイミング（マクロティック、静的スロット長）がないため、フレームのタイミングは確認しません。</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="352" />
+            <source>No issues</source>
+            <translation>問題なし</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="358" />
+            <source>Issue</source>
+            <translation>問題</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="358" />
+            <source>Frame</source>
+            <translation>フレーム</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="358" />
+            <source>Count</source>
+            <translation>回数</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="358" />
+            <source>Last cycle</source>
+            <translation>最後のサイクル</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="361" />
+            <source>Detail</source>
+            <translation>詳細</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="384" />
+            <source>No symbols, controller states or errors were reported.</source>
+            <translation>シンボル、コントローラ状態、エラーの報告はありません。</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="417" />
+            <source>Click a signal to plot it</source>
+            <translation>信号をクリックするとプロットします</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="417" />
+            <source>Load the cluster description to plot its signals.</source>
+            <translation>信号をプロットするにはクラスタ記述を読み込んでください。</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="434" />
+            <source>No signal plotted.</source>
+            <translation>プロット中の信号はありません。</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="442" />
+            <source>Fit</source>
+            <translation>全体表示</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="443" />
+            <source>Live</source>
+            <translation>ライブ</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="484" />
+            <source>Sending needs the simulation, or an interface taking part in the cluster (Take part).</source>
+            <translation>送信にはシミュレーション、またはクラスタに参加しているインターフェース（参加する）が必要です。</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="489" />
+            <source>A frame of the description</source>
+            <translation>記述のフレーム</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="493" />
+            <source>slot %1, %2</source>
+            <translation>スロット %1、%2</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="497" />
+            <source>Its channels</source>
+            <translation>既定のチャネル</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="504" />
+            <source>Send the frame in its slot and cycles with these physical values (empty: 0) until stopped; the PDUs' update bits are set</source>
+            <translation>これらの物理値（空欄は 0）でフレームを、停止するまでそのスロットとサイクルで送信します。PDU の更新ビットはセットされます</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="532" />
+            <source>Raw bytes in a slot</source>
+            <translation>スロットに生バイト</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="535" />
+            <source>from cycle</source>
+            <translation>開始サイクル</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="537" />
+            <source>every</source>
+            <translation>間隔</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="540" />
+            <source>Bytes (hex), an even number</source>
+            <translation>バイト（16 進、偶数個）</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="548" />
+            <source>Sending</source>
+            <translation>送信中</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="553" />
+            <source>Slot %1</source>
+            <translation>スロット %1</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="573" />
+            <source>Load the cluster description (FIBEX or ARXML) to name the frames and decode their signals.</source>
+            <translation>クラスター記述（FIBEX または ARXML）を読み込むと、フレームに名前が付き、信号がデコードされます。</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="593" />
+            <source>ECUs with a FlexRay controller: %1</source>
+            <translation>FlexRay コントローラを持つ ECU：%1</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="605" />
+            <source>%1 bytes</source>
+            <translation>%1 バイト</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="609" />
+            <source>PDUs</source>
+            <translation>PDU</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="613" />
+            <source>PDU</source>
+            <translation>PDU</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="613" />
+            <source>Byte</source>
+            <translation>バイト</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="613" />
+            <source>Length</source>
+            <translation>長さ</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="613" />
+            <source>Update bit</source>
+            <translation>更新ビット</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="637" />
+            <source>FlexRay cluster description</source>
+            <translation>FlexRay クラスター記述</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="638" />
+            <source>FIBEX and ARXML (*.xml *.fibex *.arxml)</source>
+            <translation>FIBEX と ARXML (*.xml *.fibex *.arxml)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="638" />
+            <source>All files (*)</source>
+            <translation>すべてのファイル (*)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="643" />
+            <source>FlexRay capture or log</source>
+            <translation>FlexRay キャプチャまたはログ</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="644" />
+            <source>Captures and logs (*.pcap *.pcapng *.blf *.asc)</source>
+            <translation>キャプチャとログ (*.pcap *.pcapng *.blf *.asc)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="649" />
+            <source>Vector FlexRay configuration (XLfrClusterConfig)</source>
+            <translation>Vector FlexRay 設定 (XLfrClusterConfig)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="650" />
+            <source>Configurations (*.json *.txt *.cfg)</source>
+            <translation>設定 (*.json *.txt *.cfg)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="658" />
+            <source>Record FlexRay frames</source>
+            <translation>FlexRay フレームを記録</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="661" />
+            <source>pcap (*.pcap)</source>
+            <translation>pcap (*.pcap)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/FlexRayView.qml" line="666" />
+            <source>Save FlexRay frames</source>
+            <translation>FlexRay フレームを保存</translation>
         </message>
     </context>
     <context>
@@ -3568,182 +4316,182 @@ B：%3</translation>
             <translation>InitiateDiagnosticOperation (0x10)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="272" />
+            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="274" />
             <source>Disable normal comms</source>
             <translation>通常通信を無効化</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="276" />
+            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="278" />
             <source>DisableNormalCommunication (0x28): stop the ECU's normal application messages</source>
             <translation>DisableNormalCommunication (0x28): ECU の通常のアプリケーションメッセージを停止します</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="280" />
+            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="282" />
             <source>Return to normal</source>
             <translation>通常モードに戻る</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="284" />
+            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="286" />
             <source>ReturnToNormalMode (0x20): end diagnostics and resume normal communication</source>
             <translation>ReturnToNormalMode (0x20): 診断を終了し、通常の通信を再開します</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="293" />
+            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="295" />
             <source>Periodically send TesterPresent (0x3E) so the ECU stays in diagnostics</source>
             <translation>ECU が診断状態を保つよう、TesterPresent (0x3E) を定期的に送信します</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="299" />
+            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="301" />
             <source>Data identifiers</source>
             <translation>データ識別子</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="303" />
+            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="305" />
             <source>DID</source>
             <translation>DID</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="307" />
+            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="309" />
             <source>hex</source>
             <translation>16 進</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="311" />
+            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="313" />
             <source>One-byte GMLAN data identifier (hex), e.g. 90 for the VIN</source>
             <translation>1 バイトの GMLAN データ識別子 (16 進)。例: VIN は 90</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="315" />
+            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="317" />
             <source>Read</source>
             <translation>読み取り</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="319" />
+            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="321" />
             <source>ReadDataByIdentifier (0x1A)</source>
             <translation>ReadDataByIdentifier (0x1A)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="327" />
+            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="329" />
             <source>Data to write, hex</source>
             <translation>書き込むデータ (16 進)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="332" />
+            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="334" />
             <source>Write</source>
             <translation>書き込み</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="336" />
+            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="338" />
             <source>WriteDataByIdentifier (0x3B)</source>
             <translation>WriteDataByIdentifier (0x3B)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="343" />
+            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="345" />
             <source>Security access</source>
             <translation>セキュリティアクセス</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="347" />
+            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="349" />
             <source>Level</source>
             <translation>レベル</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="357" />
+            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="359" />
             <source>The odd level that requests the seed (hex)</source>
             <translation>シードを要求する奇数のレベル (16 進)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="361" />
+            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="363" />
             <source>Unlock</source>
             <translation>ロック解除</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="365" />
+            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="367" />
             <source>SecurityAccess (0x27): request the seed and send the key</source>
             <translation>SecurityAccess (0x27): シードを要求してキーを送信します</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="374" />
+            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="377" />
             <source>Key algorithm: %1</source>
             <translation>キーアルゴリズム: %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="375" />
+            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="378" />
             <source>Choose key algorithm…</source>
             <translation>キーアルゴリズムを選択…</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="377" />
+            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="380" />
             <source>Python file defining compute_key(level: int, seed: bytes) -&gt; bytes</source>
             <translation>compute_key(level: int, seed: bytes) -&gt; bytes を定義する Python ファイル</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="385" />
+            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="388" />
             <source>Raw request</source>
             <translation>生リクエスト</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="392" />
+            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="395" />
             <source>GMLAN request, hex</source>
             <translation>GMLAN リクエスト (16 進)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="398" />
+            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="401" />
             <source>Send</source>
             <translation>送信</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="423" />
+            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="426" />
             <source>Trouble codes</source>
             <translation>故障コード</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="433" />
+            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="436" />
             <source>ReadDiagnosticInformation (0xA9) by status mask</source>
             <translation>ステータスマスクによる ReadDiagnosticInformation (0xA9)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="437" />
+            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="440" />
             <source>Clear</source>
             <translation>クリア</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="440" />
+            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="443" />
             <source>Clear all diagnostic information in the ECU (0x04)</source>
             <translation>ECU のすべての診断情報を消去します (0x04)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="447" />
+            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="450" />
             <source>No trouble codes. Press Read to query the ECU.</source>
             <translation>故障コードはありません。読み取りを押して ECU に問い合わせます。</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="485" />
+            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="488" />
             <source>status %1</source>
             <translation>ステータス %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="507" />
+            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="510" />
             <source>History</source>
             <translation>履歴</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="524" />
+            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="527" />
             <source>Requests and the ECU's responses appear here.</source>
             <translation>リクエストと ECU の応答がここに表示されます。</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="525" />
+            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="528" />
             <source>Connect to the bus first, then set the ECU's request and response identifiers.</source>
             <translation>まずバスに接続し、ECU のリクエスト ID とレスポンス ID を設定してください。</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="637" />
+            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="640" />
             <source>Seed/key algorithm</source>
             <translation>シード/キーアルゴリズム</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="639" />
+            <location filename="../../gui/qt/CanExplorer/GmlanView.qml" line="642" />
             <source>Python files (*.py)</source>
             <translation>Python ファイル (*.py)</translation>
         </message>
@@ -4682,6 +5430,294 @@ B：%3</translation>
         </message>
     </context>
     <context>
+        <name>PanelBuilderDialog</name>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="17" />
+            <source>Text</source>
+            <translation>テキスト</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="17" />
+            <source>Value</source>
+            <translation>値</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="17" />
+            <source>Gauge</source>
+            <translation>ゲージ</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="17" />
+            <source>Bar</source>
+            <translation>バー</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="17" />
+            <source>Lamp</source>
+            <translation>ランプ</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="18" />
+            <source>Trend</source>
+            <translation>トレンド</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="18" />
+            <source>Switch</source>
+            <translation>スイッチ</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="18" />
+            <source>Slider</source>
+            <translation>スライダー</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="18" />
+            <source>Button</source>
+            <translation>ボタン</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="21" />
+            <source>Panel builder</source>
+            <translation>パネルビルダー</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="36" />
+            <source>Font size</source>
+            <translation>フォントサイズ</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="37" />
+            <source>Bold</source>
+            <translation>太字</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="38" />
+            <source>Label</source>
+            <translation>ラベル</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="38" />
+            <source>Shows</source>
+            <translation>表示する値</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="41" />
+            <source>Minimum</source>
+            <translation>最小値</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="41" />
+            <source>Maximum</source>
+            <translation>最大値</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="42" />
+            <source>Red from</source>
+            <translation>赤になる値</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="46" />
+            <source>On above</source>
+            <translation>点灯するしきい値</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="46" />
+            <source>Colour</source>
+            <translation>色</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="49" />
+            <source>Seconds shown</source>
+            <translation>表示する秒数</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="50" />
+            <source>Sets variable</source>
+            <translation>設定する変数</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="53" />
+            <source>Step</source>
+            <translation>ステップ</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="54" />
+            <source>When clicked</source>
+            <translation>クリック時</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="60" />
+            <source>Variable</source>
+            <translation>変数</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="62" />
+            <source>Message</source>
+            <translation>メッセージ</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="62" />
+            <source>Signals</source>
+            <translation>信号</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="64" />
+            <source>Identifier</source>
+            <translation>ID</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="64" />
+            <source>Data</source>
+            <translation>データ</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="65" />
+            <source>Log text</source>
+            <translation>ログのテキスト</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="84" />
+            <source>Title</source>
+            <translation>タイトル</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="91" />
+            <source>Size</source>
+            <translation>サイズ</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="106" />
+            <source>New</source>
+            <translation>新規</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="107" />
+            <source>Open…</source>
+            <translation>開く…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="109" />
+            <source>Save</source>
+            <translation>保存</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="111" />
+            <source>Saved</source>
+            <translation>保存しました</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="114" />
+            <source>Save As…</source>
+            <translation>名前を付けて保存…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="119" />
+            <source>Use in Simulation</source>
+            <translation>シミュレーションで使う</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="123" />
+            <source>Added to the Simulation view's panels</source>
+            <translation>シミュレーションビューのパネルに追加しました</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="126" />
+            <source>Save the panel and open it in the Simulation view, where it acts on the running simulation</source>
+            <translation>パネルを保存してシミュレーションビューで開き、実行中のシミュレーションを操作します</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="141" />
+            <source>Widgets</source>
+            <translation>ウィジェット</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="188" />
+            <source>Design</source>
+            <translation>デザイン</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="189" />
+            <source>Preview</source>
+            <translation>プレビュー</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="330" />
+            <source>Fix the problems listed on the right to preview the panel</source>
+            <translation>右に表示された問題を直すとプレビューできます</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="349" />
+            <source>Select a widget, or drag one onto the panel</source>
+            <translation>ウィジェットを選択するか、パネルにドラッグしてください</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="361" />
+            <source>X, Y</source>
+            <translation>X, Y</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="424" />
+            <source>variable name</source>
+            <translation>変数名</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="428" />
+            <source>A signal of the connection's database (signal:Message.Signal) or a shared variable (variable:name)</source>
+            <translation>接続のデータベースの信号 (signal:Message.Signal) または共有変数 (variable:name)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="436" />
+            <source>Choose from the database's signals and the variables</source>
+            <translation>データベースの信号と変数から選択</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="468" />
+            <source>Duplicate</source>
+            <translation>複製</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="469" />
+            <source>Bring forward</source>
+            <translation>前面へ</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="470" />
+            <source>Send backward</source>
+            <translation>背面へ</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="471" />
+            <source>Delete</source>
+            <translation>削除</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="476" />
+            <source>To fix before saving:</source>
+            <translation>保存前に直す必要がある点：</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="516" />
+            <source>Open a panel</source>
+            <translation>パネルを開く</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="517" />
+            <source>QML panels (*.qml)</source>
+            <translation>QML パネル (*.qml)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="518" />
+            <source>Opened</source>
+            <translation>開きました</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PanelBuilderDialog.qml" line="522" />
+            <source>Save the panel</source>
+            <translation>パネルを保存</translation>
+        </message>
+    </context>
+    <context>
         <name>PhysicalIoView</name>
         <message>
             <location filename="../../gui/qt/CanExplorer/PhysicalIoView.qml" line="24" />
@@ -4837,54 +5873,144 @@ B：%3</translation>
     <context>
         <name>PlaybackBar</name>
         <message>
-            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="45" />
+            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="51" />
             <source>Play again</source>
             <translation>もう一度再生</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="45" />
+            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="51" />
             <source>Resume</source>
             <translation>再開</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="45" />
+            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="51" />
             <source>Pause</source>
             <translation>一時停止</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="83" />
+            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="77" />
+            <source>Step: play the next frame, then pause</source>
+            <translation>ステップ：次のフレームを再生して一時停止</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="86" />
+            <source>Breakpoints: pause the playback after a frame, a signal condition or a time</source>
+            <translation>ブレークポイント：フレーム、信号条件、時刻の後で再生を一時停止</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="107" />
             <source>%1 frames</source>
             <translation>%1 フレーム</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="95" />
+            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="119" />
             <source>10 s back</source>
             <translation>10 s 戻る</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="118" />
+            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="142" />
             <source>The length of the recording is being determined</source>
             <translation>記録の長さを判定中です</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="125" />
+            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="149" />
             <source>10 s forward</source>
             <translation>10 s 進む</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="141" />
+            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="165" />
             <source>Playback speed relative to the recorded timing</source>
             <translation>記録時のタイミングに対する再生速度</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="148" />
+            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="172" />
             <source>Stop</source>
             <translation>停止</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="155" />
+            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="179" />
             <source>Close</source>
             <translation>閉じる</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="214" />
+            <source>Breakpoints</source>
+            <translation>ブレークポイント</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="217" />
+            <source>The playback pauses right after a frame that hits a breakpoint; Resume or Step goes on.</source>
+            <translation>ブレークポイントに当たったフレームの直後に再生が一時停止します。再開またはステップで続行します。</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="234" />
+            <source>%1 hits (passes %2)</source>
+            <translation>%1 回ヒット（%2 回は通過）</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="235" />
+            <source>%1 hits</source>
+            <translation>%1 回ヒット</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="242" />
+            <source>Remove</source>
+            <translation>削除</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="252" />
+            <source>Frame</source>
+            <translation>フレーム</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="252" />
+            <source>Signal condition</source>
+            <translation>信号条件</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="252" />
+            <source>Time</source>
+            <translation>時刻</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="257" />
+            <source>Identifiers, e.g. 7DF or 100-1FF ext</source>
+            <translation>識別子（例：7DF、100-1FF ext）</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="258" />
+            <source>Message.Signal &gt; 3000, or … changes</source>
+            <translation>メッセージ.信号 &gt; 3000、または … changes</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="259" />
+            <source>Seconds, e.g. 12.5</source>
+            <translation>秒（例：12.5）</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="266" />
+            <source>Data, e.g. 02 10 ??</source>
+            <translation>データ（例：02 10 ??）</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="277" />
+            <source>Hits to let pass before pausing (e.g. 9 to stop at the 10th)</source>
+            <translation>一時停止までに通過させるヒット数（例：9 で 10 回目に停止）</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="281" />
+            <source>Add</source>
+            <translation>追加</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="290" />
+            <source>Not a number of seconds</source>
+            <translation>秒数ではありません</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/PlaybackBar.qml" line="312" />
+            <source>Remove All</source>
+            <translation>すべて削除</translation>
         </message>
     </context>
     <context>
@@ -5229,119 +6355,319 @@ B：%3</translation>
     <context>
         <name>RestbusView</name>
         <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="19" />
+            <source>Cyclic</source>
+            <translation>周期</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="20" />
+            <source>On change</source>
+            <translation>変化時</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="21" />
+            <source>Cyclic + on change</source>
+            <translation>周期 + 変化時</translation>
+        </message>
+        <message>
             <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="22" />
+            <source>If active</source>
+            <translation>アクティブ時</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="46" />
+            <source>sending</source>
+            <translation>送信中</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="47" />
+            <source>stopped</source>
+            <translation>停止</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="48" />
+            <source>inactive</source>
+            <translation>非アクティブ</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="49" />
+            <source>on change</source>
+            <translation>変化時</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="50" />
+            <source>ready</source>
+            <translation>準備完了</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="64" />
             <source>Default cycle</source>
             <translation>デフォルトのサイクル</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="34" />
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="76" />
             <source>Period (ms) for messages without a cycle time in the database</source>
             <translation>データベースにサイクル時間がないメッセージの周期 (ms)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="39" />
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="81" />
             <source>All</source>
             <translation>すべて</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="40" />
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="82" />
             <source>None</source>
             <translation>なし</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="42" />
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="84" />
             <source>Cyclic only</source>
             <translation>周期的のみ</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="45" />
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="87" />
             <source>Enable only the messages that have a cycle time</source>
             <translation>サイクル時間を持つメッセージのみを有効にする</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="51" />
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="93" />
             <source>Exclude</source>
             <translation>除外</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="59" />
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="101" />
             <source>Exclude node</source>
             <translation>ノードを除外</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="62" />
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="104" />
             <source>Stop sending the messages of the ECU you are testing</source>
             <translation>テスト中の ECU のメッセージ送信を停止する</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="63" />
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="105" />
             <source>%1 message(s) disabled</source>
             <translation>%1 件のメッセージを無効化</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="70" />
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="112" />
             <source>%1 / %2 on</source>
             <translation>%1 / %2 オン</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="74" />
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="117" />
+            <source>%1 stopped</source>
+            <translation>%1 件停止</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="121" />
             <source>Stop</source>
             <translation>停止</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="74" />
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="121" />
             <source>Start</source>
             <translation>開始</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="110" />
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="144" />
+            <source>Hardware timing</source>
+            <translation>ハードウェア タイミング</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="148" />
+            <source>Time the frames that never change with the interface's own periodic transmission, where it has one (less jitter). Frames that change every time — counters, checksums, E2E, SecOC, rotated multiplexer pages — are always timed by CANExplorer.</source>
+            <translation>変化しないフレームは、インターフェースに周期送信機能があればそれでタイミングを取ります (ジッターが減ります)。毎回変わるフレーム (カウンター、チェックサム、E2E、SecOC、切り替わるマルチプレクサー ページ) は常に CANExplorer がタイミングを取ります。</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="151" />
+            <source>Raw values</source>
+            <translation>生の値</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="155" />
+            <source>Show and enter signal values as raw (unscaled) numbers instead of physical values</source>
+            <translation>信号値を物理値ではなく生の (スケーリング前の) 数値で表示・入力します</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="161" />
+            <source>Expected bus load %1 %</source>
+            <translation>予想バス負荷 %1 %</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="164" />
+            <source>The enabled periodic messages at the connection's bitrate, without bit stuffing (which adds up to about 20 %). If-active messages count at their active period, on-change ones not at all.</source>
+            <translation>接続のビットレートでの有効な周期メッセージ (ビット スタッフィングは含みません。最大約 20 % 増えます)。アクティブ時メッセージはアクティブ時の周期で数え、変化時メッセージは数えません。</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="193" />
             <source>Load a signal database (DBC/ARXML/…) on this connection to simulate its messages.</source>
             <translation>メッセージをシミュレートするには、この接続に信号データベース（DBC/ARXML/…）を読み込みます。</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="124" />
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="207" />
             <source>Send</source>
             <translation>送信</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="125" />
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="208" />
             <source>ID</source>
             <translation>ID</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="126" />
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="209" />
             <source>Message</source>
             <translation>メッセージ</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="127" />
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="210" />
             <source>Sender</source>
             <translation>送信者</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="128" />
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="211" />
+            <source>Mode</source>
+            <translation>モード</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="212" />
             <source>Cycle</source>
             <translation>サイクル</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="129" />
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="213" />
+            <source>State</source>
+            <translation>状態</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="214" />
             <source>Signals</source>
             <translation>信号</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="172" />
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="246" />
+            <source>The database marks this message as not sent by its node (NoMsgSendType)</source>
+            <translation>データベースでは、このメッセージはノードから送信されないとされています (NoMsgSendType)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="266" />
             <source>Not sent: %1</source>
             <translation>送信しません: %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="173" />
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="267" />
             <source>Secured for every frame: a new freshness value and MAC, with the key from the Security Manager</source>
             <translation>フレームごとに保護します: セキュリティ マネージャーの鍵で新しいフレッシュネス値と MAC を付けます</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="178" />
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="276" />
+            <source>Protected for every frame: a new E2E counter and CRC, from the ARXML's E2E configuration</source>
+            <translation>フレームごとに保護します: ARXML の E2E 設定に基づく新しい E2E カウンターと CRC</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="281" />
+            <source>counted</source>
+            <translation>カウント</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="285" />
+            <source>Computed for every frame: %1</source>
+            <translation>フレームごとに計算: %1</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="300" />
+            <source>Timed by the interface</source>
+            <translation>インターフェースがタイミングを取ります</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="317" />
+            <source>The send mode of the database</source>
+            <translation>データベースの送信モード</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="318" />
+            <source>Changed from the database's send mode</source>
+            <translation>データベースの送信モードから変更されています</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="321" />
             <source>event</source>
             <translation>イベント</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="326" />
+            <source>No cycle time in the database: sent at the default cycle</source>
+            <translation>データベースにサイクル時間がありません: デフォルトのサイクルで送信します</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="370" />
+            <source>Send now</source>
+            <translation>今すぐ送信</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="373" />
+            <source>Send this message at once, with its repetitions — as an on-change message does when a value changes</source>
+            <translation>このメッセージを繰り返しとともに今すぐ送信します (変化時メッセージが値の変化時に行うのと同じです)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="382" />
+            <source>Multiplexer pages</source>
+            <translation>マルチプレクサー ページ</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="400" />
+            <source>Send this page; the selected pages take turns, one per frame</source>
+            <translation>このページを送信します。選択したページはフレームごとに 1 つずつ交互に送信します</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="418" />
+            <source>page %1</source>
+            <translation>ページ %1</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="436" />
+            <source>rotated</source>
+            <translation>切り替え</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="437" />
+            <source>counts</source>
+            <translation>カウント</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="438" />
+            <source>computed</source>
+            <translation>計算</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="443" />
+            <source>Range %1 … %2</source>
+            <translation>範囲 %1 … %2</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="455" />
+            <source>Value</source>
+            <translation>値</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="455" />
+            <source>Counter</source>
+            <translation>カウンター</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="455" />
+            <source>Checksum</source>
+            <translation>チェックサム</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="470" />
+            <source>Counter: counts up by one per frame and wraps at its maximum. Checksum: computed over the other bytes of the frame for every frame.</source>
+            <translation>カウンター: フレームごとに 1 ずつ増え、最大値の次は最初に戻ります。チェックサム: フレームごとにフレームの他のバイトから計算します。</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/RestbusView.qml" line="491" />
+            <source>A constant folded into the checksum (XORed into a CRC or XOR, added to a sum); 0 for the plain algorithm</source>
+            <translation>チェックサムに含める定数 (CRC や XOR には XOR、合計には加算)。0 で素のアルゴリズムになります</translation>
         </message>
     </context>
     <context>
@@ -6391,686 +7717,846 @@ B：%3</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="21" />
+            <source>PKCS#11 token key</source>
+            <translation>PKCS#11 トークンの鍵</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="22" />
             <source>Key server</source>
             <translation>鍵サーバー</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="30" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="34" />
             <source>Security Manager</source>
             <translation>セキュリティ マネージャー</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="75" />
-            <source>Choose the certificate and its private key</source>
-            <translation>証明書とその秘密鍵を選択してください</translation>
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="80" />
+            <source>Choose the certificate and its private key, or a PKCS#12 file</source>
+            <translation>証明書と秘密鍵、または PKCS#12 ファイルを選択してください</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="80" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="87" />
             <source>Choose the certificate file</source>
             <translation>証明書ファイルを選択してください</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="84" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="91" />
             <source>Choose the revocation list file</source>
             <translation>失効リストのファイルを選択してください</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="95" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="102" />
             <source>Choose the Python file defining compute_key(level, seed)</source>
             <translation>compute_key(level, seed) を定義する Python ファイルを選択してください</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="106" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="125" />
             <source>Added %1</source>
             <translation>%1 を追加しました</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="126" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="145" />
             <source>Keys and certificates for SecOC, DoIP over TLS, UDS authentication and seed/key access, and decrypting IPsec and MACsec in Ethernet captures. They are stored encrypted with your password.</source>
             <translation>SecOC、TLS 経由の DoIP、UDS 認証とシード/キー アクセス、Ethernet キャプチャの IPsec と MACsec の復号に使う鍵と証明書です。パスワードで暗号化して保存されます。</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="137" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="156" />
             <source>New password</source>
             <translation>新しいパスワード</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="139" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="158" />
             <source>Repeat</source>
             <translation>再入力</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="148" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="167" />
             <source>Create Key Store</source>
             <translation>キーストアを作成</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="152" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="171" />
             <source>Key store created</source>
             <translation>キーストアを作成しました</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="161" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="180" />
             <source>Password</source>
             <translation>パスワード</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="171" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="190" />
             <source>Remember</source>
             <translation>記憶する</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="173" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="192" />
             <source>Keep the password in the operating system's keychain, so the key store unlocks when CANExplorer starts</source>
             <translation>パスワードを OS のキーチェーンに保存し、CANExplorer の起動時にキーストアのロックを解除します</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="177" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="196" />
             <source>Unlock</source>
             <translation>ロック解除</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="180" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="199" />
             <source>Unlocked</source>
             <translation>ロックを解除しました</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="193" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="212" />
             <source>Unlocked; the keychain keeps the password, so the store unlocks at start.</source>
             <translation>ロック解除済み。キーチェーンがパスワードを保持しているため、起動時にロックが解除されます。</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="194" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="213" />
             <source>Unlocked: the keys are in use until you lock the store or quit.</source>
             <translation>ロック解除済み: ストアをロックするか終了するまで鍵が使われます。</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="200" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="219" />
             <source>Forget Password</source>
             <translation>パスワードを削除</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="202" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="221" />
             <source>The keychain no longer keeps the password</source>
             <translation>キーチェーンからパスワードを削除しました</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="204" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="223" />
             <source>Change Password…</source>
             <translation>パスワードを変更…</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="205" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="224" />
             <source>Lock</source>
             <translation>ロック</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="205" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="224" />
             <source>Locked</source>
             <translation>ロックしました</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="212" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="231" />
             <source>Current</source>
             <translation>現在のパスワード</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="213" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="232" />
             <source>New</source>
             <translation>新しいパスワード</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="214" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="233" />
             <source>Repeat new</source>
             <translation>新しいパスワードを再入力</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="216" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="235" />
             <source>Change</source>
             <translation>変更</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="219" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="238" />
             <source>Password changed</source>
             <translation>パスワードを変更しました</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="235" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="254" />
             <source>Entries</source>
             <translation>エントリ</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="238" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="257" />
             <source>No entries yet.</source>
             <translation>エントリはまだありません。</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="253" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="272" />
             <source>Select to export</source>
             <translation>エクスポートする項目を選択</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="267" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="286" />
             <source>Remove</source>
             <translation>削除</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="269" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="288" />
             <source>Removed %1</source>
             <translation>%1 を削除しました</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="280" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="299" />
             <source>Export %1…</source>
             <translation>%1 件をエクスポート…</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="280" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="299" />
             <source>Export…</source>
             <translation>エクスポート…</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="284" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="303" />
             <source>Write the selected entries to a file encrypted with a passphrase of its own, for another computer or a colleague</source>
             <translation>選択したエントリを専用のパスフレーズで暗号化したファイルに書き出します (別のコンピューターや同僚向け)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="286" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="305" />
             <source>Import…</source>
             <translation>インポート…</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="288" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="307" />
             <source>Create Test Certificates…</source>
             <translation>テスト証明書を作成…</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="296" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="315" />
             <source>Passphrase</source>
             <translation>パスフレーズ</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="304" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="323" />
             <source>Replace existing</source>
             <translation>既存のものを置き換える</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="306" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="325" />
             <source>Choose File and Import</source>
             <translation>ファイルを選んでインポート</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="306" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="325" />
             <source>Choose File and Export</source>
             <translation>ファイルを選んでエクスポート</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="320" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="339" />
             <source>Name</source>
             <translation>名前</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="322" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="341" />
             <source>Key type</source>
             <translation>鍵の種類</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="324" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="343" />
             <source>Valid for (days)</source>
             <translation>有効期間 (日)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="326" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="345" />
             <source>ECU addresses</source>
             <translation>ECU のアドレス</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="332" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="351" />
             <source>IP addresses or host names of the ECU certificate (subject alternative names), separated by commas</source>
             <translation>ECU 証明書の IP アドレスまたはホスト名 (サブジェクト代替名)。カンマ区切り</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="335" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="354" />
             <source>Adds '&lt;name&gt; CA' (trusted certificates), '&lt;name&gt; tester' and '&lt;name&gt; ECU' (certificates with their keys) — for benches and simulators, not for vehicles.</source>
             <translation>'&lt;name&gt; CA' (信頼済み証明書)、'&lt;name&gt; tester' と '&lt;name&gt; ECU' (鍵付き証明書) を追加します。テストベンチとシミュレーター用で、車両用ではありません。</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="342" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="361" />
             <source>Create</source>
             <translation>作成</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="348" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="367" />
             <source>Created the test certificates</source>
             <translation>テスト証明書を作成しました</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="355" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="374" />
             <source>Add</source>
             <translation>追加</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="363" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="382" />
             <source>Kind</source>
             <translation>種類</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="374" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="393" />
             <source>e.g. Powertrain SecOC</source>
             <translation>例: パワートレイン SecOC</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="377" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="396" />
             <source>Key</source>
             <translation>鍵</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="382" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="401" />
             <source>hex, e.g. 000102030405060708090A0B0C0D0E0F</source>
             <translation>16 進数、例: 000102030405060708090A0B0C0D0E0F</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="386" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="405" />
             <source>Used for</source>
             <translation>用途</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="393" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="412" />
             <source>* for every secured PDU, or PDU names and Data IDs separated by commas (e.g. EngineData, 0x12). A key named for a PDU wins over one for its Data ID, which wins over *</source>
             <translation>* はすべての保護 PDU。または PDU 名と Data ID をカンマ区切りで指定します (例: EngineData, 0x12)。PDU 名で指定した鍵は Data ID の鍵より優先され、Data ID の鍵は * より優先されます</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="395" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="414" />
             <source>Algorithm</source>
             <translation>アルゴリズム</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="399" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="418" />
             <source>As named in the ARXML</source>
             <translation>ARXML の名前に従う</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="402" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="421" />
             <source>ARXML names containing CMAC are CMAC/AES, HMAC with SHA256 is HMAC-SHA-256. Choose one here for PDUs whose algorithm name is not recognised</source>
             <translation>CMAC を含む ARXML の名前は CMAC/AES、HMAC と SHA256 を含む名前は HMAC-SHA-256 とみなします。アルゴリズム名を認識できない PDU にはここで選択してください</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="407" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="426" />
             <source>Certificate</source>
             <translation>証明書</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="413" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="432" />
             <source>Choose…</source>
             <translation>選択…</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="415" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="434" />
             <source>PEM file</source>
             <translation>PEM ファイル</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="421" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="440" />
             <source>Private key</source>
             <translation>秘密鍵</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="433" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="452" />
+            <source>File password</source>
+            <translation>ファイルのパスワード</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="452" />
             <source>Key password</source>
             <translation>鍵のパスワード</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="438" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="457" />
+            <source>the password of the PKCS#12 file</source>
+            <translation>PKCS#12 ファイルのパスワード</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="457" />
             <source>if the private key file is encrypted</source>
             <translation>秘密鍵ファイルが暗号化されている場合</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="443" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="462" />
             <source>SPI</source>
             <translation>SPI</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="447" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="466" />
             <source>hex, e.g. 0x00001000</source>
             <translation>16 進数、例: 0x00001000</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="451" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="470" />
             <source>Encryption</source>
             <translation>暗号化</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="460" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="479" />
             <source>key and 4-byte salt, hex</source>
             <translation>鍵と 4 バイトのソルト、16 進数</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="460" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="479" />
             <source>key, hex</source>
             <translation>鍵、16 進数</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="465" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="484" />
             <source>Integrity</source>
             <translation>完全性</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="481" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="500" />
             <source>SAK</source>
             <translation>SAK</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="486" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="505" />
             <source>16 bytes (GCM-AES-128) or 32 (GCM-AES-256), hex</source>
             <translation>16 バイト (GCM-AES-128) または 32 (GCM-AES-256)、16 進数</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="490" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="509" />
             <source>SCI</source>
             <translation>SCI</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="494" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="513" />
             <source>optional: MAC address and port, e.g. 0011223344550001</source>
             <translation>任意: MAC アドレスとポート、例: 0011223344550001</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="498" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="517" />
             <source>Leave empty to try this key on every secure channel. Needed for frames that carry no SCI and do not come from an end station</source>
             <translation>空欄にするとすべてのセキュア チャネルでこの鍵を試します。SCI を持たず、エンド ステーション以外から送られるフレームには必要です</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="502" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="521" />
             <source>Script</source>
             <translation>スクリプト</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="508" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="527" />
             <source>Python file defining compute_key(level, seed)</source>
             <translation>compute_key(level, seed) を定義する Python ファイル</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="513" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="532" />
             <source>The script is stored encrypted; the Diagnostics and GMLAN views can use it for security access without the file</source>
             <translation>スクリプトは暗号化して保存されます。診断ビューと GMLAN ビューはファイルなしでセキュリティ アクセスに使えます</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="526" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="545" />
             <source>hex, the key shared with the ECUs</source>
             <translation>16 進、ECU と共有する鍵</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="535" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="554" />
             <source>The proof of ownership is this MAC over the ECU's challenge (a choice: the standard leaves it to the manufacturer)</source>
             <translation>所有証明は ECU のチャレンジに対するこの MAC です（規格はメーカーに委ねているため、これは一つの選択です）</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="540" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="559" />
             <source>URL</source>
             <translation>URL</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="544" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="563" />
             <source>https://keys.example.com/api</source>
             <translation>https://keys.example.com/api</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="547" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="566" />
+            <source>Authentication</source>
+            <translation>認証</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="570" />
+            <source>Bearer token</source>
+            <translation>Bearer トークン</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="570" />
+            <source>OAuth: client credentials</source>
+            <translation>OAuth：クライアント資格情報</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="570" />
+            <source>OAuth: sign in on the web</source>
+            <translation>OAuth：Web でサインイン</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="573" />
+            <source>A static token, or OAuth 2.0 tokens from your identity provider: with this computer's own client ID and secret, or by signing in with your account (device sign-in) — the refresh token is kept encrypted</source>
+            <translation>固定トークン、または ID プロバイダーの OAuth 2.0 トークン：このコンピューター用のクライアント ID とシークレット、またはご自身のアカウントでのサインイン（デバイスサインイン）。リフレッシュトークンは暗号化して保存されます</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="575" />
             <source>Token</source>
             <translation>トークン</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="552" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="580" />
             <source>bearer token, kept encrypted (optional)</source>
             <translation>Bearer トークン（暗号化して保存、任意）</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="555" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="583" />
+            <source>Token endpoint</source>
+            <translation>トークンエンドポイント</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="587" />
+            <source>https://login.example.com/oauth2/token</source>
+            <translation>https://login.example.com/oauth2/token</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="590" />
+            <source>Device endpoint</source>
+            <translation>デバイスエンドポイント</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="594" />
+            <source>https://login.example.com/oauth2/devicecode</source>
+            <translation>https://login.example.com/oauth2/devicecode</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="597" />
+            <source>Client ID</source>
+            <translation>クライアント ID</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="603" />
+            <source>Client secret</source>
+            <translation>クライアントシークレット</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="608" />
+            <source>kept encrypted</source>
+            <translation>暗号化して保存</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="611" />
+            <source>Scope</source>
+            <translation>スコープ</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="615" />
+            <source>optional, e.g. keys.read</source>
+            <translation>任意、例：keys.read</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="618" />
             <source>Server certificate</source>
             <translation>サーバー証明書</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="559" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="622" />
             <source>Checked against the system's certificates</source>
             <translation>システムの証明書で検証</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="562" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="625" />
             <source>Trusted certificates of the Security Manager to check the key server's HTTPS certificate against</source>
             <translation>鍵サーバーの HTTPS 証明書を検証する Security Manager の信頼済み証明書</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="573" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="629" />
+            <source>Module</source>
+            <translation>モジュール</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="633" />
+            <source>the vendor's PKCS#11 library, e.g. /usr/lib/opensc-pkcs11.so</source>
+            <translation>メーカーの PKCS#11 ライブラリ、例：/usr/lib/opensc-pkcs11.so</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="640" />
+            <source>token label</source>
+            <translation>トークンのラベル</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="647" />
+            <source>label of the private key and its certificate</source>
+            <translation>秘密鍵とその証明書のラベル</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="650" />
+            <source>PIN</source>
+            <translation>PIN</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="655" />
+            <source>kept encrypted; the key never leaves the token</source>
+            <translation>暗号化して保存。鍵はトークンから出ません</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="667" />
             <source>Security profiles</source>
             <translation>セキュリティプロファイル</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="575" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="669" />
             <source>Load Profile…</source>
             <translation>プロファイルを読み込む…</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="578" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="672" />
             <source>A Python file defining profile or create_profile(); it is executed, so load only profiles you trust</source>
             <translation>profile または create_profile() を定義する Python ファイル。実行されるため、信頼できるプロファイルだけを読み込んでください</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="583" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="677" />
             <source>None. A profile supplies SecOC keys, freshness values, seed/key, certificates and signatures — from a manufacturer's plug-in, or a key server added above, so the secrets need not be on this computer.</source>
             <translation>なし。プロファイルは SecOC 鍵、フレッシュネス値、シード/キー、証明書、署名を提供します。メーカーのプラグインや上で追加した鍵サーバーから提供されるため、秘密をこのコンピューターに置く必要がありません。</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="597" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="691" />
             <source>no capabilities</source>
             <translation>機能なし</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="602" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="696" />
             <source>From %1</source>
             <translation>%1 から</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="615" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="701" />
+            <source>signed in</source>
+            <translation>サインイン済み</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="701" />
+            <source>not signed in</source>
+            <translation>未サインイン</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="706" />
+            <source>Sign Out</source>
+            <translation>サインアウト</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="706" />
+            <source>Sign In…</source>
+            <translation>サインイン…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="729" />
+            <source>Sign in to %1: open &lt;a href="%2"&gt;%2&lt;/a&gt; and enter the code &lt;b&gt;%3&lt;/b&gt;</source>
+            <translation>%1 にサインイン：&lt;a href="%2"&gt;%2&lt;/a&gt; を開き、コード &lt;b&gt;%3&lt;/b&gt; を入力してください</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="732" />
+            <source>Signed in to %1</source>
+            <translation>%1 にサインインしました</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="733" />
+            <source>Sign-in to %1 failed: %2</source>
+            <translation>%1 へのサインインに失敗しました：%2</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="741" />
+            <source>Cancel</source>
+            <translation>キャンセル</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="741" />
+            <source>Dismiss</source>
+            <translation>閉じる</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="747" />
             <source>SecOC freshness values</source>
             <translation>SecOC フレッシュネス値</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="623" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="755" />
             <source>AUTOSAR trip/reset counters, synchronised by %1</source>
             <translation>AUTOSAR トリップ/リセット カウンター (%1 で同期)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="623" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="755" />
             <source>(no synchronisation message)</source>
             <translation>(同期メッセージなし)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="624" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="756" />
             <source>Counters: the high bits continue from the last verified frame of each PDU</source>
             <translation>カウンター: 上位ビットは各 PDU の最後に検証したフレームから引き継ぎます</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="629" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="761" />
             <source>Script…</source>
             <translation>スクリプト…</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="631" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="763" />
             <source>Trip/Reset…</source>
             <translation>トリップ/リセット…</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="634" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="766" />
             <source>Freshness values from a trip counter, a reset counter and a message counter, synchronised by a TripResetSyncMsg (AUTOSAR SecOC, Annex A)</source>
             <translation>トリップ カウンター、リセット カウンター、メッセージ カウンターから作るフレッシュネス値。TripResetSyncMsg で同期します (AUTOSAR SecOC 付録 A)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="637" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="769" />
             <source>Counters</source>
             <translation>カウンター</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="639" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="771" />
             <source>Using counters</source>
             <translation>カウンターを使用します</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="649" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="781" />
             <source>Trip counter (bits)</source>
             <translation>トリップ カウンター (ビット)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="651" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="783" />
             <source>Reset counter (bits)</source>
             <translation>リセット カウンター (ビット)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="653" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="785" />
             <source>Message counter (bits)</source>
             <translation>メッセージ カウンター (ビット)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="655" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="787" />
             <source>Reset flag (bits)</source>
             <translation>リセット フラグ (ビット)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="657" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="789" />
             <source>Sync message</source>
             <translation>同期メッセージ</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="661" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="793" />
             <source>secured PDU name, e.g. TripResetSyncMsg</source>
             <translation>保護 PDU 名、例: TripResetSyncMsg</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="664" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="796" />
             <source>The secured PDU of the database carrying the trip and reset counters (trip counter | reset counter | authenticator)</source>
             <translation>トリップ カウンターとリセット カウンターを運ぶデータベースの保護 PDU (トリップ カウンター | リセット カウンター | 認証子)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="666" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="798" />
             <source>Clear acceptance window</source>
             <translation>クリア受け入れウィンドウ</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="670" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="802" />
             <source>Use</source>
             <translation>使用</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="676" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="808" />
             <source>Using the AUTOSAR trip/reset counters</source>
             <translation>AUTOSAR トリップ/リセット カウンターを使用します</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="683" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="815" />
             <source>Audit log</source>
             <translation>監査ログ</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="689" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="821" />
             <source>%1 recent records</source>
             <translation>最近の記録 %1 件</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="695" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="827" />
             <source>Verify</source>
             <translation>検証</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="698" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="830" />
             <source>Check that no record was changed, removed or reordered (needs the key store unlocked)</source>
             <translation>記録が変更、削除、並べ替えされていないことを確認します (キーストアのロック解除が必要)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="715" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="847" />
             <source>Stored in %1</source>
             <translation>保存先: %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="727" />
-            <source>Certificates and revocation lists (*.pem *.crt *.cer *.crl *.der)</source>
-            <translation>証明書と失効リスト (*.pem *.crt *.cer *.crl *.der)</translation>
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="859" />
+            <source>Certificates and revocation lists (*.pem *.crt *.cer *.crl *.der *.p12 *.pfx)</source>
+            <translation>証明書と失効リスト (*.pem *.crt *.cer *.crl *.der *.p12 *.pfx)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="727" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="859" />
             <source>All files (*)</source>
             <translation>すべてのファイル (*)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="733" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="865" />
             <source>PEM private keys (*.pem *.key)</source>
             <translation>PEM 秘密鍵 (*.pem *.key)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="739" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="871" />
             <source>Python files (*.py)</source>
             <translation>Python ファイル (*.py)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="744" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="876" />
             <source>Export the audit log</source>
             <translation>監査ログをエクスポート</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="747" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="879" />
             <source>JSON lines (*.jsonl)</source>
             <translation>JSON Lines (*.jsonl)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="752" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="884" />
             <source>Export key store entries</source>
             <translation>キーストアのエントリをエクスポート</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="755" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="887" />
             <source>CANExplorer key bundles (*.ckb)</source>
             <translation>CANExplorer キー バンドル (*.ckb)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="758" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="890" />
             <source>Exported %1 entries</source>
             <translation>%1 件のエントリをエクスポートしました</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="767" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="899" />
             <source>Import key store entries</source>
             <translation>キーストアにエントリをインポート</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="771" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="903" />
             <source>Imported %1</source>
             <translation>%1 をインポートしました</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="771" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="903" />
             <source>nothing</source>
             <translation>なし</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="772" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="904" />
             <source>kept the existing %1</source>
             <translation>既存の %1 を残しました</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="781" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="913" />
             <source>Security profile</source>
             <translation>セキュリティプロファイル</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="783" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="915" />
             <source>Loaded the security profile</source>
             <translation>セキュリティプロファイルを読み込みました</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="787" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="919" />
             <source>Freshness value script</source>
             <translation>フレッシュネス値スクリプト</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="789" />
+            <location filename="../../gui/qt/CanExplorer/SecurityManagerDialog.qml" line="921" />
             <source>Freshness values from the script</source>
             <translation>スクリプトのフレッシュネス値を使用します</translation>
         </message>
@@ -7137,141 +8623,151 @@ B：%3</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="47" />
+            <source>Receiving: %1</source>
+            <translation>受信中：%1</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="50" />
             <source>Open: %1</source>
             <translation>開いています: %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="50" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="53" />
             <source>Connected: %1</source>
             <translation>接続済み: %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="52" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="55" />
             <source>Discovering entities</source>
             <translation>エンティティを検出中</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="57" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="60" />
             <source>Listening · %1 messages</source>
             <translation>受信待機中 · %1 メッセージ</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="63" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="66" />
             <source>%1 high-severity security events</source>
             <translation>重大度の高いセキュリティ イベント %1 件</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="65" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="68" />
             <source>%1 security events</source>
             <translation>セキュリティ イベント %1 件</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="67" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="70" />
             <source>Capturing · %1 packets</source>
             <translation>キャプチャ中 · %1 パケット</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="73" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="76" />
             <source>%1 of %2 rules waiting for their connections</source>
             <translation>%2 ルール中 %1 ルールが接続を待っています</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="75" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="78" />
             <source>Forwarding, rules: %1</source>
             <translation>転送中、ルール: %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="212" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="215" />
             <source>CONNECTIONS</source>
             <translation>接続</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="236" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="239" />
             <source>Connected</source>
             <translation>接続済み</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="237" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="240" />
             <source>Error</source>
             <translation>エラー</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="238" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="241" />
             <source>Replay finished</source>
             <translation>再生が終了しました</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="238" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="241" />
             <source>Closed</source>
             <translation>切断</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="244" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="247" />
             <source>Replay a log file…</source>
             <translation>ログファイルを再生…</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="251" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="254" />
             <source>VIEWS</source>
             <translation>ビュー</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="266" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="269" />
             <source>TOOLS</source>
             <translation>ツール</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="269" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="272" />
             <source>Database editor</source>
             <translation>データベースエディター</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="277" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="280" />
             <source>Multi-bus trace</source>
             <translation>マルチバストレース</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="285" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="288" />
             <source>Compare recordings</source>
             <translation>記録を比較</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="293" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="296" />
+            <source>FlexRay</source>
+            <translation>FlexRay</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="304" />
             <source>EtherCAT (CoE)</source>
             <translation>EtherCAT (CoE)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="301" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="312" />
             <source>Physical I/O</source>
             <translation>物理 I/O</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="309" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="320" />
             <source>DoIP</source>
             <translation>DoIP</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="317" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="328" />
             <source>SOME/IP</source>
             <translation>SOME/IP</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="325" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="336" />
             <source>Ethernet capture</source>
             <translation>イーサネットキャプチャ</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="333" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="344" />
             <source>Bus gateway</source>
             <translation>バスゲートウェイ</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="351" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="362" />
             <source>Settings</source>
             <translation>設定</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="384" />
+            <location filename="../../gui/qt/CanExplorer/Sidebar.qml" line="395" />
             <source>Version %1</source>
             <translation>バージョン %1</translation>
         </message>
@@ -7473,46 +8969,56 @@ B：%3</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/SimulationView.qml" line="136" />
+            <source>Build Panel…</source>
+            <translation>パネルを作成…</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/SimulationView.qml" line="145" />
+            <source>Place gauges, lamps, trends, switches, sliders and buttons on a panel without writing QML</source>
+            <translation>QML を書かずにゲージ、ランプ、トレンド、スイッチ、スライダー、ボタンをパネルに配置します</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/SimulationView.qml" line="148" />
             <source>Reload panels</source>
             <translation>パネルを再読み込み</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SimulationView.qml" line="141" />
+            <location filename="../../gui/qt/CanExplorer/SimulationView.qml" line="153" />
             <source>Close panel</source>
             <translation>パネルを閉じる</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SimulationView.qml" line="149" />
-            <source>Panels are QML files with a 'property var panel'. See examples/simulation.</source>
-            <translation>パネルは 'property var panel' を持つ QML ファイルです。examples/simulation を参照。</translation>
+            <location filename="../../gui/qt/CanExplorer/SimulationView.qml" line="161" />
+            <source>Panels are QML files with a 'property var panel' (see examples/simulation), or built with Build Panel….</source>
+            <translation>パネルは 'property var panel' を持つ QML ファイル（examples/simulation を参照）、または「パネルを作成…」で作ったものです。</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SimulationView.qml" line="191" />
+            <location filename="../../gui/qt/CanExplorer/SimulationView.qml" line="203" />
             <source>Console</source>
             <translation>コンソール</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SimulationView.qml" line="194" />
+            <location filename="../../gui/qt/CanExplorer/SimulationView.qml" line="206" />
             <source>Clear</source>
             <translation>クリア</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SimulationView.qml" line="221" />
+            <location filename="../../gui/qt/CanExplorer/SimulationView.qml" line="233" />
             <source>Load simulation script</source>
             <translation>シミュレーションスクリプトを読み込み</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SimulationView.qml" line="223" />
+            <location filename="../../gui/qt/CanExplorer/SimulationView.qml" line="235" />
             <source>Python scripts (*.py)</source>
             <translation>Python スクリプト (*.py)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SimulationView.qml" line="229" />
+            <location filename="../../gui/qt/CanExplorer/SimulationView.qml" line="247" />
             <source>Add panel</source>
             <translation>パネルを追加</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/SimulationView.qml" line="231" />
+            <location filename="../../gui/qt/CanExplorer/SimulationView.qml" line="249" />
             <source>QML panels (*.qml)</source>
             <translation>QML パネル (*.qml)</translation>
         </message>
@@ -8962,106 +10468,111 @@ B：%3</translation>
         </message>
         <message>
             <location filename="../../gui/qt/main_window.qml" line="106" />
+            <source>FlexRay</source>
+            <translation>FlexRay</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/main_window.qml" line="107" />
             <source>Bus gateway</source>
             <translation>バスゲートウェイ</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="107" />
+            <location filename="../../gui/qt/main_window.qml" line="108" />
             <source>Tool</source>
             <translation>ツール</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="109" />
+            <location filename="../../gui/qt/main_window.qml" line="110" />
             <source>Theme</source>
             <translation>テーマ</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="111" />
+            <location filename="../../gui/qt/main_window.qml" line="112" />
             <source>Language</source>
             <translation>言語</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="223" />
+            <location filename="../../gui/qt/main_window.qml" line="224" />
             <source>Open workspace</source>
             <translation>ワークスペースを開く</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="231" />
+            <location filename="../../gui/qt/main_window.qml" line="232" />
             <source>Save workspace</source>
             <translation>ワークスペースを保存</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="245" />
+            <location filename="../../gui/qt/main_window.qml" line="246" />
             <source>The open connections are closed and replaced by those of the workspace.</source>
             <translation>開いている接続は閉じられ、ワークスペースの接続に置き換わります。</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="482" />
+            <location filename="../../gui/qt/main_window.qml" line="493" />
             <source>%1 frames</source>
             <translation>%1 フレーム</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="484" />
+            <location filename="../../gui/qt/main_window.qml" line="495" />
             <source>Rx %1/s  Tx %2/s</source>
             <translation>Rx %1/s  Tx %2/s</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="486" />
+            <location filename="../../gui/qt/main_window.qml" line="497" />
             <source>load %1%</source>
             <translation>負荷 %1%</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="488" />
+            <location filename="../../gui/qt/main_window.qml" line="499" />
             <source>bus %1</source>
             <translation>バス %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="491" />
+            <location filename="../../gui/qt/main_window.qml" line="502" />
             <source>%1 error frames</source>
             <translation>%1 個のエラーフレーム</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="495" />
+            <location filename="../../gui/qt/main_window.qml" line="506" />
             <source>DB: %1</source>
             <translation>DB: %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="497" />
+            <location filename="../../gui/qt/main_window.qml" line="508" />
             <source>● recording to %1</source>
             <translation>● %1 に記録中</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="550" />
+            <location filename="../../gui/qt/main_window.qml" line="561" />
             <source>Drag to resize, double-click to reset</source>
             <translation>ドラッグでサイズ変更、ダブルクリックでリセット</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="663" />
+            <location filename="../../gui/qt/main_window.qml" line="674" />
             <source>Detecting the CAN channels for the system report…</source>
             <translation>システムレポート用に CAN チャンネルを検出しています…</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="670" />
+            <location filename="../../gui/qt/main_window.qml" line="681" />
             <source>System report copied to the clipboard: paste it into your bug report</source>
             <translation>システムレポートをクリップボードにコピーしました。バグ報告に貼り付けてください</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="740" />
+            <location filename="../../gui/qt/main_window.qml" line="751" />
             <source>Unsaved database changes</source>
             <translation>未保存のデータベース変更</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="748" />
+            <location filename="../../gui/qt/main_window.qml" line="759" />
             <source>Save the changes to %1 before quitting?</source>
             <translation>終了する前に %1 への変更を保存しますか？</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="752" />
+            <location filename="../../gui/qt/main_window.qml" line="763" />
             <source>Use "Save as" in the database editor first</source>
             <translation>先にデータベースエディターで「名前を付けて保存」を使用してください</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/main_window.qml" line="808" />
+            <location filename="../../gui/qt/main_window.qml" line="819" />
             <source>CANExplorer %1 is available: ⋮ → Check for Updates…</source>
             <translation>CANExplorer %1 が利用可能です：⋮ → 更新を確認…</translation>
         </message>

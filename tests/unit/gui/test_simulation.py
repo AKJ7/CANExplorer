@@ -7,6 +7,7 @@ import pytest
 from PyQt6.QtCore import QUrl
 
 from can_explorer.gui.connection_manager import ConnectionManager
+from tests.unit.waiting import wait_until as wait_by_deadline
 
 EXAMPLES = Path(__file__).resolve().parents[3] / 'examples' / 'simulation'
 
@@ -37,7 +38,11 @@ async def test_example_simulation(connection):
     assert simulation.start() == 'Connect before starting the simulation'
     connection.open()
     assert 'Load a signal database' not in simulation.start()  # Starts; sending fails until a database is loaded
-    await asyncio.sleep(0.15)
+    await wait_by_deadline(
+        lambda: any(
+            line['level'] == 'error' and 'Load a signal database' in line['text'] for line in simulation.console
+        )
+    )
     assert any(line['level'] == 'error' and 'Load a signal database' in line['text'] for line in simulation.console)
     simulation.stop()
     simulation.clear_console()
@@ -51,8 +56,7 @@ async def test_example_simulation(connection):
     assert simulation.set_variable('ignition', 'true') == ''
     assert simulation.set_variable('target_speed', '3000') == ''
     await wait_until(lambda: simulation.runtime.variables.get('gear') == 'Second')
-    await asyncio.sleep(0.1)
-    panel._flush()
+    await wait_by_deadline(lambda: (panel._flush(), engine_speed.number > 2500)[1])
     assert engine_speed.number > 2500 and engine_speed.text.endswith(' rpm')
     assert gear.value == 'Second' and gear.text == 'Second'
     assert {'name': 'ignition', 'value': 'True'} in simulation.variables
@@ -82,7 +86,7 @@ async def test_database_loaded_while_running_restarts_the_simulation(connection)
     simulation.load_script(QUrl.fromLocalFile(str(EXAMPLES / 'engine_simulation.py')))
     connection.open()
     assert simulation.start() == ''
-    await asyncio.sleep(0.15)
+    await wait_by_deadline(lambda: any('Load a signal database' in line['text'] for line in simulation.console))
     assert any('Load a signal database' in line['text'] for line in simulation.console)
     connection.load_database(QUrl.fromLocalFile(str(EXAMPLES / 'vehicle.dbc')))
     assert simulation.running
@@ -93,7 +97,7 @@ async def test_database_loaded_while_running_restarts_the_simulation(connection)
     await wait_until(lambda: simulation.runtime.variables.get('gear') == 'Second')
     assert not any(line['level'] == 'error' for line in simulation.console)
     connection.unload_database()  # Restarted again: the nodes now report the missing database
-    await asyncio.sleep(0.15)
+    await wait_by_deadline(lambda: any(line['level'] == 'error' for line in simulation.console))
     assert simulation.running and any(line['level'] == 'error' for line in simulation.console)
     simulation.stop()
 

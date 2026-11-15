@@ -433,6 +433,7 @@ class DoipClient:
         # Acknowledgements (positive, source, target, code), None when the connection ended
         self._acks: asyncio.Queue[Optional[Tuple[bool, int, int, int]]] = asyncio.Queue()
         self._receivers: Dict[int, List[asyncio.Queue]] = {}
+        self._any_receivers: List = []  # listener(source, payload) for every diagnostic message (functional requests)
         self._close_listeners: List[Callable[[str], None]] = []
         self._closed = asyncio.Event()
 
@@ -548,6 +549,15 @@ class DoipClient:
         if queue in queues:
             queues.remove(queue)
 
+    def add_any_receiver(self, listener) -> None:
+        """`listener(source, payload)` for every diagnostic message to this tester, whatever its source (the
+        answers of several ECUs to a functional request)."""
+        self._any_receivers.append(listener)
+
+    def remove_any_receiver(self, listener) -> None:
+        if listener in self._any_receivers:
+            self._any_receivers.remove(listener)
+
     def transport(self, target: int) -> 'DoipTransport':
         """A UDS transport to a target address; close it when done."""
         return DoipTransport(self, target)
@@ -593,6 +603,8 @@ class DoipClient:
             if target == self.source_address:
                 for queue in self._receivers.get(source, []):
                     queue.put_nowait(bytes(payload[4:]))
+                for listener in list(self._any_receivers):
+                    listener(source, bytes(payload[4:]))
         elif payload_type in (DIAGNOSTIC_ACK, DIAGNOSTIC_NACK) and len(payload) >= 5:
             source, target = _addresses(payload)
             self._acks.put_nowait((payload_type == DIAGNOSTIC_ACK, source, target, payload[4]))

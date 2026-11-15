@@ -148,6 +148,7 @@ class CanService:
         self.allow_control = allow_control
         self._manage = True  # False when attached to a session owned by someone else (the GUI)
         self._markers: List[Marker] = []  # Moments the agent marked, for reaction_at_markers
+        self._flexray = None  # The FlexRay cluster description (a FlexRayDatabase), for the flexray_* tools
 
     @classmethod
     def attach(
@@ -402,6 +403,124 @@ class CanService:
             'description': database.describe(message),
             'signals': {name: _jsonable(value) for name, value in values.items()} if values else None,
         }
+
+    # FlexRay (files only: the cluster description and capture or log files)
+
+    def flexray_load_cluster(self, path: str, cluster: Optional[str] = None) -> Dict[str, Any]:
+        """Load a FlexRay cluster description (FIBEX or ARXML) for the other flexray_* tools."""
+        from can_explorer.core.flexray import FlexRayError
+        from can_explorer.core.flexray_database import load_database
+
+        try:
+            database = load_database(path, cluster)
+        except FlexRayError as e:
+            raise ValueError(str(e)) from e
+        self._flexray = database
+        return {
+            'file': str(database.path),
+            'cluster': database.cluster,
+            'clusters': database.clusters,
+            'parameters': dict(database.parameters.rows()),
+            'controllers': sorted(database.controllers),
+            'frames': [
+                {
+                    'name': d.name,
+                    'slot': d.slot,
+                    'cycles': d.cycles,
+                    'channels': '+'.join(sorted(d.channels)),
+                    'length': d.length,
+                    'pdus': [
+                        {
+                            'name': pdu.name,
+                            'offset': pdu.offset,
+                            'length': pdu.length,
+                            'update_bit': pdu.update_bit,
+                            'signals': pdu.signal_names,
+                        }
+                        for pdu in d.pdus
+                    ],
+                }
+                for d in database.definitions
+            ],
+        }
+
+    def _flexray_frame(self, frame, start: float, decode: bool) -> Dict[str, Any]:
+        row: Dict[str, Any] = {
+            'time': round(frame.timestamp - start, 6),
+            'channel': frame.channel,
+            'slot': frame.slot,
+            'cycle': frame.cycle,
+            'data': frame.payload.hex(' ').upper(),
+        }
+        for flag in ('null_frame', 'sync', 'startup', 'transmitted'):
+            if getattr(frame, flag):
+                row[flag] = True
+        if frame.errors:
+            row['errors'] = frame.errors
+        if decode and self._flexray is not None:
+            definition, pdus = self._flexray.decode_pdus(frame)
+            if definition is not None:
+                row['name'] = definition.name
+                row['pdus'] = {
+                    entry['pdu'].name: entry['values'] if entry['updated'] else 'not updated' for entry in pdus
+                }
+        return row
+
+    def flexray_read_log(
+        self, path: str, slot: Optional[int] = None, channel: Optional[str] = None, limit: int = 50, decode: bool = True
+    ) -> Dict[str, Any]:
+        """The FlexRay frames (first `limit`, optionally of one slot or channel) and events of a pcap, BLF or ASC
+        file, decoded with the loaded cluster description."""
+        from can_explorer.core.flexray import FlexRayError, read_log
+
+        try:
+            log = read_log(path)
+        except FlexRayError as e:
+            raise ValueError(str(e)) from e
+        frames = [
+            f for f in log.frames if (slot is None or f.slot == slot) and (channel is None or f.channel == channel)
+        ]
+        start = log.frames[0].timestamp if log.frames else 0.0
+        return {
+            'format': log.format,
+            'frames_in_file': len(log.frames),
+            'matching': len(frames),
+            'skipped_records': log.skipped,
+            'frames': [self._flexray_frame(frame, start, decode) for frame in frames[: max(0, limit)]],
+            'events': [
+                {'time': round(e.timestamp - start, 6), 'kind': e.kind, 'channel': e.channel, 'text': e.text}
+                for e in log.events[: max(0, limit)]
+            ],
+        }
+
+    def flexray_analyze_log(self, path: str) -> Dict[str, Any]:
+        """Check a log's frames against the loaded cluster's schedule and report the bus health."""
+        from can_explorer.core.flexray import FlexRayError, read_log
+        from can_explorer.core.flexray_analysis import analyse
+
+        try:
+            log = read_log(path)
+        except FlexRayError as e:
+            raise ValueError(str(e)) from e
+        report = analyse(log.frames, self._flexray, log.events)
+        report['described'] = self._flexray is not None
+        return report
+
+    def flexray_decode(self, slot: int, cycle: int, data: str, channel: str = 'A') -> Dict[str, Any]:
+        """Decode a FlexRay payload of a slot and cycle with the loaded cluster description."""
+        from can_explorer.core.flexray import FlexRayError, FlexRayFrame
+
+        if self._flexray is None:
+            raise ValueError('Load the FlexRay cluster description first (flexray_load_cluster)')
+        try:
+            frame = FlexRayFrame(0.0, channel.upper(), slot, cycle, parse_hex_bytes(data))
+        except FlexRayError as e:
+            raise ValueError(str(e)) from e
+        row = self._flexray_frame(frame, 0.0, True)
+        if 'name' not in row:
+            row['name'] = None
+            row['note'] = 'The cluster description has no frame in this slot, channel and cycle'
+        return row
 
     # Database
 
@@ -1117,6 +1236,70 @@ class CanService:
             }
 
         return await self._with_uds(request, response, operation)
+
+    async def uds_dtc_details(
+        self, dtc: Any, request: Any = DEFAULT_UDS_REQUEST, response: Any = ECU_RESPONSE
+    ) -> Dict[str, Any]:
+        """A DTC's snapshot (freeze frame) and extended data records (0x19 0x04 and 0x06, all records). Records whose
+        lengths the response does not give are returned undecoded (hex) instead of split at a guess."""
+        from can_explorer.core import uds_dtc
+
+        try:
+            code = int(str(dtc).strip().removeprefix('0x').removeprefix('0X'), 16) if isinstance(dtc, str) else int(dtc)
+        except ValueError:
+            return {'error': f'Invalid DTC {dtc!r}: expected 3 bytes in hex, e.g. "012345"'}
+
+        async def operation(uds):
+            result: Dict[str, Any] = {'dtc': uds_dtc.DtcRecord(code).text}
+            for key, subfunction in (('snapshots', 0x04), ('extended_data', 0x06)):
+                try:
+                    details = await uds.read_dtc_information(subfunction, dtc=code)
+                except UdsError as e:
+                    result[key] = {'error': str(e)}
+                    continue
+                result['status'] = f'0x{details.status:02X}'
+                if key == 'snapshots':
+                    result[key] = [
+                        {
+                            'record': snapshot.number,
+                            'values': [
+                                {'did': f'{v.did:04X}', 'data': v.data.hex(' ').upper()} for v in snapshot.values
+                            ],
+                            'undecoded': snapshot.undecoded.hex(' ').upper(),
+                        }
+                        for snapshot in details.snapshots
+                    ]
+                else:
+                    result[key] = {
+                        'records': [
+                            {'record': r.number, 'data': r.data.hex(' ').upper()} for r in details.extended_data
+                        ],
+                        'undecoded': details.undecoded.hex(' ').upper(),
+                    }
+            return result
+
+        return await self._with_uds(request, response, operation)
+
+    async def uds_find_ecus(self, extended: bool = False, timeout: float = 0.5) -> Dict[str, Any]:
+        """The ECUs answering a functional TesterPresent: 0x7DF (11-bit), or 0x18DB33F1 with `extended`."""
+        from can_explorer.core import uds_functional
+
+        self._require_diagnostics()
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        config = getattr(self.session.source, 'config', None)
+        fd = bool(getattr(config, 'fd', False))
+        transport = (
+            uds_functional.obd_29bit(self.session, fd=fd) if extended else uds_functional.obd_11bit(self.session, fd=fd)
+        )
+        try:
+            responders = await uds_functional.FunctionalUdsClient(transport, timeout=float(timeout)).discover()
+        except (UdsError, OSError, ValueError) as e:
+            return {'error': str(e)}
+        finally:
+            transport.close()
+        width = 8 if extended else 3
+        return {'ecus': [f'{address:0{width}X}' for address in responders]}
 
     async def uds_reset(
         self, reset_type: int = 1, request: Any = DEFAULT_UDS_REQUEST, response: Any = ECU_RESPONSE

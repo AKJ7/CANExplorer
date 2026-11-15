@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A FlexRay cluster in FIBEX for the CANExplorer tests: a frame on both channels every cycle, a frame from cycle 2
+     every 8th on channel B; little and big endian signals, a linear and a text table conversion. -->
+<fx:FIBEX xmlns:fx="http://www.asam.net/xml/fbx" xmlns:ho="http://www.asam.net/xml"
+          xmlns:flexray="http://www.asam.net/xml/fbx/flexray"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" VERSION="3.1.0">
+  <fx:ELEMENTS>
+    <fx:CLUSTERS>
+      <fx:CLUSTER ID="cluster" xsi:type="flexray:CLUSTER-TYPE">
+        <ho:SHORT-NAME>Powertrain</ho:SHORT-NAME>
+        <fx:PROTOCOL xsi:type="flexray:PROTOCOL-TYPE">FlexRay</fx:PROTOCOL>
+        <fx:CHANNEL-REFS>
+          <fx:CHANNEL-REF ID-REF="channelA"/>
+          <fx:CHANNEL-REF ID-REF="channelB"/>
+        </fx:CHANNEL-REFS>
+      </fx:CLUSTER>
+    </fx:CLUSTERS>
+    <fx:CHANNELS>
+      <fx:CHANNEL ID="channelA" xsi:type="flexray:CHANNEL-TYPE">
+        <ho:SHORT-NAME>Powertrain_A</ho:SHORT-NAME>
+        <fx:FRAME-TRIGGERINGS>
+          <fx:FRAME-TRIGGERING ID="ft_engine_a">
+            <fx:TIMINGS>
+              <fx:ABSOLUTELY-SCHEDULED-TIMING>
+                <fx:SLOT-ID xsi:type="flexray:SLOT-ID-TYPE">7</fx:SLOT-ID>
+                <fx:BASE-CYCLE xsi:type="flexray:BASE-CYCLE-TYPE">0</fx:BASE-CYCLE>
+                <fx:CYCLE-REPETITION xsi:type="flexray:CYCLE-REPETITION-TYPE">1</fx:CYCLE-REPETITION>
+              </fx:ABSOLUTELY-SCHEDULED-TIMING>
+            </fx:TIMINGS>
+            <fx:FRAME-REF ID-REF="frame_engine"/>
+          </fx:FRAME-TRIGGERING>
+        </fx:FRAME-TRIGGERINGS>
+        <flexray:FLEXRAY-CHANNEL-NAME>A</flexray:FLEXRAY-CHANNEL-NAME>
+      </fx:CHANNEL>
+      <fx:CHANNEL ID="channelB" xsi:type="flexray:CHANNEL-TYPE">
+        <ho:SHORT-NAME>Powertrain_B</ho:SHORT-NAME>
+        <fx:FRAME-TRIGGERINGS>
+          <fx:FRAME-TRIGGERING ID="ft_engine_b">
+            <fx:TIMINGS>
+              <fx:ABSOLUTELY-SCHEDULED-TIMING>
+                <fx:SLOT-ID xsi:type="flexray:SLOT-ID-TYPE">7</fx:SLOT-ID>
+                <fx:BASE-CYCLE xsi:type="flexray:BASE-CYCLE-TYPE">0</fx:BASE-CYCLE>
+                <fx:CYCLE-REPETITION xsi:type="flexray:CYCLE-REPETITION-TYPE">1</fx:CYCLE-REPETITION>
+              </fx:ABSOLUTELY-SCHEDULED-TIMING>
+            </fx:TIMINGS>
+            <fx:FRAME-REF ID-REF="frame_engine"/>
+          </fx:FRAME-TRIGGERING>
+          <fx:FRAME-TRIGGERING ID="ft_diag">
+            <fx:TIMINGS>
+              <fx:ABSOLUTELY-SCHEDULED-TIMING>
+                <fx:SLOT-ID xsi:type="flexray:SLOT-ID-TYPE">33</fx:SLOT-ID>
+                <fx:BASE-CYCLE xsi:type="flexray:BASE-CYCLE-TYPE">2</fx:BASE-CYCLE>
+                <fx:CYCLE-REPETITION xsi:type="flexray:CYCLE-REPETITION-TYPE">8</fx:CYCLE-REPETITION>
+              </fx:ABSOLUTELY-SCHEDULED-TIMING>
+            </fx:TIMINGS>
+            <fx:FRAME-REF ID-REF="frame_diag"/>
+          </fx:FRAME-TRIGGERING>
+        </fx:FRAME-TRIGGERINGS>
+        <flexray:FLEXRAY-CHANNEL-NAME>B</flexray:FLEXRAY-CHANNEL-NAME>
+      </fx:CHANNEL>
+    </fx:CHANNELS>
+    <fx:FRAMES>
+      <fx:FRAME ID="frame_engine">
+        <ho:SHORT-NAME>EngineStatus</ho:SHORT-NAME>
+        <fx:BYTE-LENGTH>8</fx:BYTE-LENGTH>
+        <fx:FRAME-TYPE>APPLICATION</fx:FRAME-TYPE>
+        <fx:SIGNAL-INSTANCES>
+          <fx:SIGNAL-INSTANCE ID="si_speed">
+            <fx:BIT-POSITION>0</fx:BIT-POSITION>
+            <fx:IS-HIGH-LOW-BYTE-ORDER>false</fx:IS-HIGH-LOW-BYTE-ORDER>
+            <fx:SIGNAL-REF ID-REF="sig_speed"/>
+          </fx:SIGNAL-INSTANCE>
+          <fx:SIGNAL-INSTANCE ID="si_gear">
+            <fx:BIT-POSITION>16</fx:BIT-POSITION>
+            <fx:IS-HIGH-LOW-BYTE-ORDER>false</fx:IS-HIGH-LOW-BYTE-ORDER>
+            <fx:SIGNAL-REF ID-REF="sig_gear"/>
+          </fx:SIGNAL-INSTANCE>
+          <fx:SIGNAL-INSTANCE ID="si_pressure">
+            <fx:BIT-POSITION>39</fx:BIT-POSITION>
+            <fx:IS-HIGH-LOW-BYTE-ORDER>true</fx:IS-HIGH-LOW-BYTE-ORDER>
+            <fx:SIGNAL-REF ID-REF="sig_pressure"/>
+          </fx:SIGNAL-INSTANCE>
+        </fx:SIGNAL-INSTANCES>
+      </fx:FRAME>
+      <fx:FRAME ID="frame_diag">
+        <ho:SHORT-NAME>Diagnostics</ho:SHORT-NAME>
+        <fx:BYTE-LENGTH>4</fx:BYTE-LENGTH>
+        <fx:FRAME-TYPE>APPLICATION</fx:FRAME-TYPE>
+        <fx:SIGNAL-INSTANCES>
+          <fx:SIGNAL-INSTANCE ID="si_counter">
+            <fx:BIT-POSITION>0</fx:BIT-POSITION>
+            <fx:IS-HIGH-LOW-BYTE-ORDER>false</fx:IS-HIGH-LOW-BYTE-ORDER>
+            <fx:SIGNAL-REF ID-REF="sig_counter"/>
+          </fx:SIGNAL-INSTANCE>
+        </fx:SIGNAL-INSTANCES>
+      </fx:FRAME>
+    </fx:FRAMES>
+    <fx:SIGNALS>
+      <fx:SIGNAL ID="sig_speed"><ho:SHORT-NAME>EngineSpeed</ho:SHORT-NAME><fx:CODING-REF ID-REF="coding_speed"/></fx:SIGNAL>
+      <fx:SIGNAL ID="sig_gear"><ho:SHORT-NAME>Gear</ho:SHORT-NAME><fx:CODING-REF ID-REF="coding_gear"/></fx:SIGNAL>
+      <fx:SIGNAL ID="sig_pressure"><ho:SHORT-NAME>OilPressure</ho:SHORT-NAME><fx:CODING-REF ID-REF="coding_pressure"/></fx:SIGNAL>
+      <fx:SIGNAL ID="sig_counter"><ho:SHORT-NAME>AliveCounter</ho:SHORT-NAME><fx:CODING-REF ID-REF="coding_counter"/></fx:SIGNAL>
+    </fx:SIGNALS>
+  </fx:ELEMENTS>
+  <fx:PROCESSING-INFORMATION>
+    <fx:CODINGS>
+      <fx:CODING ID="coding_speed">
+        <ho:SHORT-NAME>Speed</ho:SHORT-NAME>
+        <ho:CODED-TYPE CATEGORY="STANDARD-LENGTH-TYPE" ho:BASE-DATA-TYPE="A_UINT16"><ho:BIT-LENGTH>16</ho:BIT-LENGTH></ho:CODED-TYPE>
+        <ho:COMPU-METHODS>
+          <ho:COMPU-METHOD>
+            <ho:SHORT-NAME>SpeedLinear</ho:SHORT-NAME>
+            <ho:CATEGORY>LINEAR</ho:CATEGORY>
+            <ho:COMPU-INTERNAL-TO-PHYS><ho:COMPU-SCALES><ho:COMPU-SCALE><ho:COMPU-RATIONAL-COEFFS>
+              <ho:COMPU-NUMERATOR><ho:V>0</ho:V><ho:V>0.25</ho:V></ho:COMPU-NUMERATOR>
+            </ho:COMPU-RATIONAL-COEFFS></ho:COMPU-SCALE></ho:COMPU-SCALES></ho:COMPU-INTERNAL-TO-PHYS>
+          </ho:COMPU-METHOD>
+        </ho:COMPU-METHODS>
+      </fx:CODING>
+      <fx:CODING ID="coding_gear">
+        <ho:SHORT-NAME>Gear</ho:SHORT-NAME>
+        <ho:CODED-TYPE CATEGORY="STANDARD-LENGTH-TYPE" ho:BASE-DATA-TYPE="A_UINT8"><ho:BIT-LENGTH>4</ho:BIT-LENGTH></ho:CODED-TYPE>
+        <ho:COMPU-METHODS>
+          <ho:COMPU-METHOD>
+            <ho:SHORT-NAME>GearTable</ho:SHORT-NAME>
+            <ho:CATEGORY>TEXTTABLE</ho:CATEGORY>
+            <ho:COMPU-INTERNAL-TO-PHYS><ho:COMPU-SCALES>
+              <ho:COMPU-SCALE><ho:LOWER-LIMIT>0</ho:LOWER-LIMIT><ho:UPPER-LIMIT>0</ho:UPPER-LIMIT><ho:COMPU-CONST><ho:VT>Neutral</ho:VT></ho:COMPU-CONST></ho:COMPU-SCALE>
+              <ho:COMPU-SCALE><ho:LOWER-LIMIT>2</ho:LOWER-LIMIT><ho:UPPER-LIMIT>2</ho:UPPER-LIMIT><ho:COMPU-CONST><ho:VT>Second</ho:VT></ho:COMPU-CONST></ho:COMPU-SCALE>
+            </ho:COMPU-SCALES></ho:COMPU-INTERNAL-TO-PHYS>
+          </ho:COMPU-METHOD>
+        </ho:COMPU-METHODS>
+      </fx:CODING>
+      <fx:CODING ID="coding_pressure">
+        <ho:SHORT-NAME>Pressure</ho:SHORT-NAME>
+        <ho:CODED-TYPE CATEGORY="STANDARD-LENGTH-TYPE" ho:BASE-DATA-TYPE="A_UINT16"><ho:BIT-LENGTH>12</ho:BIT-LENGTH></ho:CODED-TYPE>
+        <ho:COMPU-METHODS>
+          <ho:COMPU-METHOD>
+            <ho:SHORT-NAME>PressureLinear</ho:SHORT-NAME>
+            <ho:CATEGORY>LINEAR</ho:CATEGORY>
+            <ho:COMPU-INTERNAL-TO-PHYS><ho:COMPU-SCALES><ho:COMPU-SCALE><ho:COMPU-RATIONAL-COEFFS>
+              <ho:COMPU-NUMERATOR><ho:V>0</ho:V><ho:V>1</ho:V></ho:COMPU-NUMERATOR>
+              <ho:COMPU-DENOMINATOR><ho:V>10</ho:V></ho:COMPU-DENOMINATOR>
+            </ho:COMPU-RATIONAL-COEFFS></ho:COMPU-SCALE></ho:COMPU-SCALES></ho:COMPU-INTERNAL-TO-PHYS>
+          </ho:COMPU-METHOD>
+        </ho:COMPU-METHODS>
+      </fx:CODING>
+      <fx:CODING ID="coding_counter">
+        <ho:SHORT-NAME>Counter</ho:SHORT-NAME>
+        <ho:CODED-TYPE CATEGORY="STANDARD-LENGTH-TYPE" ho:BASE-DATA-TYPE="A_UINT8"><ho:BIT-LENGTH>8</ho:BIT-LENGTH></ho:CODED-TYPE>
+        <ho:COMPU-METHODS/>
+      </fx:CODING>
+    </fx:CODINGS>
+  </fx:PROCESSING-INFORMATION>
+</fx:FIBEX>

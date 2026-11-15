@@ -12,6 +12,7 @@ from can_explorer.core.sources import BusConfig, LiveSource
 from can_explorer.scripting import ScriptRuntime
 from can_explorer.testing import TestRunner, Verdict, load_test_script, to_html, to_junit
 from can_explorer.testing.cli import main as can_test
+from tests.unit.waiting import wait_until as wait_by_deadline
 
 EXAMPLES = Path(__file__).resolve().parents[3] / 'examples'
 
@@ -207,7 +208,7 @@ async def test_stopping(script):
     runner = TestRunner(session, lambda: None)
     runner.load(script)
     task = runner.start({'Basics.too_slow', 'Basics.passes'})
-    await asyncio.sleep(0.05)
+    await wait_by_deadline(lambda: runner.current == 'Basics.too_slow')  # Stopped in the middle of a case
     assert runner.running
     runner.stop()
     report = await task
@@ -217,6 +218,20 @@ async def test_stopping(script):
         'Basics.passes': Verdict.PASSED,
         'Basics.too_slow': Verdict.ERROR,
     }
+
+
+async def test_stopping_right_after_starting(script):
+    """Stopped before its task began: the run reports being stopped instead of raising CancelledError."""
+    session = BusSession(LiveSource(BusConfig('virtual', f'tests-{uuid.uuid4().hex}')))
+    session.start()
+    runner = TestRunner(session, lambda: None)
+    runner.load(script)
+    task = runner.start({'Basics.passes'})
+    runner.stop()
+    report = await task
+    session.stop()
+    assert report.stopped and not runner.running
+    assert [result.verdict for result in report.results] == [Verdict.PENDING]
 
 
 def test_command_line(tmp_path, capsys):

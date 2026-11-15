@@ -56,6 +56,7 @@ def test_odx_structured_data_is_shown_as_hex(odx):
     """A DID whose data uses a structure (not a simple data object property) is named but shown in hex."""
     assert odx.decode(0x1004, bytes([1, 2, 3, 4])) is None
     assert odx.describe(0x1004, bytes([1, 2, 3, 4])) == 'Calibration: 01 02 03 04'
+    assert odx.byte_length(0x1004) is None and odx.byte_length(0x1001) == 2  # Undecodable layouts have no length
 
 
 def test_pdx_archive(pdx):

@@ -1,4 +1,3 @@
-import asyncio
 import uuid
 
 import can
@@ -20,6 +19,7 @@ from can_explorer.core.uds import (
     format_dtc,
     load_key_function,
 )
+from tests.unit.waiting import wait_until as wait_by_deadline
 
 
 @pytest.fixture
@@ -115,7 +115,8 @@ async def test_suppressed_responses_and_tester_present(ecu):
     assert result.response is None and result.description == 'No response expected'
     keeper = SessionKeepAlive(client.transport, interval=0.05)
     keeper.start()
-    await asyncio.sleep(0.22)
+    # By a deadline, not a fixed time: Windows rounds sleeps up to its ~15.6 ms timer resolution
+    await wait_by_deadline(lambda: keeper.sent >= 4 and server.tester_present_count >= 4)
     keeper.stop()
     assert keeper.sent >= 4 and server.tester_present_count >= 4
     assert not keeper.running

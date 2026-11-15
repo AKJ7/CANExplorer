@@ -99,6 +99,24 @@ class E2eConfig:
     def describe(self, data: bytes) -> str:
         return self.check(data).describe(self.label)
 
+    @property
+    def counter_modulus(self) -> int:
+        """How many counter values the profile has before it wraps (16 for profiles 2 and 22, 256 for 5)."""
+        return 256 if self.profile == 5 else 16
+
+    def protect(self, data: bytes, counter: int) -> bytes:
+        """`data` with the E2E header (counter and CRC) written, for sending, e.g. by a restbus simulation. Only the
+        protected bytes (`length`) are covered; the rest is passed through. Raises ValueError when frames with
+        this configuration cannot be protected (see `problem`)."""
+        checker = self._checker()
+        if isinstance(checker, str):
+            raise ValueError(checker)
+        length = self.length or len(data)
+        minimum = 3 if isinstance(checker, Profile5) else 2
+        if min(length, len(data)) < minimum:
+            raise ValueError(f'frame shorter than the {minimum}-byte E2E header')
+        return checker.protect(bytes(data[:length]), counter % self.counter_modulus) + bytes(data[length:])
+
 
 def e2e_config_of(message) -> Optional[E2eConfig]:
     """The E2E configuration cantools read for a database message (`message.autosar.e2e`), if it has one."""

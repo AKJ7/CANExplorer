@@ -75,6 +75,8 @@ def test_profile_files(tmp_path):
         'source': str(instance),
         'description': 'Bench keys',
         'capabilities': ['compute_key'],
+        'device_sign_in': False,
+        'signed_in': True,
     }
     assert security_profiles.load_profile_file(factory).name == 'Made'
     empty = tmp_path / 'empty.py'

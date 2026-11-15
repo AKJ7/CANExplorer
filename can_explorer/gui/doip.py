@@ -91,7 +91,7 @@ class DoipDiagnosticsController(DiagnosticsController):
     def _addressing_text(self) -> str:
         return f'target address 0x{self._target:04X}'
 
-    def _transport(self):
+    def _transport(self, receiving: bool = True):
         return self._doip.client.transport(self._target)
 
     def _transport_error(self) -> str:

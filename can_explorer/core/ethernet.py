@@ -132,6 +132,7 @@ class EthernetPacket:
     info: str = ''
     gptp: Optional[ptp.GptpMessage] = None  # The parsed gPTP message, for the time-sync summary
     can_frames: List[avtp_acf.AcfCanFrame] = field(default_factory=list)  # CAN tunnelled in AVTP ACF (TSCF/NTSCF)
+    flexray_frames: List[avtp_acf.AcfFlexRayFrame] = field(default_factory=list)  # FlexRay tunnelled likewise
     avtp: Optional[AvtpStreamRef] = None  # The stream id/sequence of an AVTP stream frame, for stream health
     decrypted: str = ''  # The ESP/MACsec association a protected frame was decrypted with (core/packet_decryption.py)
     tls_records: List[Any] = field(default_factory=list)  # TLS records this segment completed (core/tls_decrypt.py)
@@ -588,6 +589,7 @@ def _decode_avtp(packet: EthernetPacket, payload: bytes) -> None:
     if contents is None or not contents:
         return
     packet.can_frames = contents.can
+    packet.flexray_frames = contents.flexray
     packet.protocol = _acf_protocol(contents)
     packet.info = f'{packet.info}: {_acf_summary(contents)}'
 

@@ -53,8 +53,10 @@ from can_explorer.gui.doip import DoipController
 from can_explorer.gui.ethernet import EthernetController
 from can_explorer.gui.someip import SomeIpController
 from can_explorer.gui.gateway import GatewayController
+from can_explorer.gui.panel_builder import PanelBuilderController
 from can_explorer.gui.restbus import RestbusController
 from can_explorer.gui.ethercat import EtherCatController
+from can_explorer.gui.flexray import FlexRayController
 from can_explorer.gui.physical_io import PhysicalIoController
 from can_explorer.gui.canopen import CanOpenController
 from can_explorer.gui.bushealth import BusHealthController
@@ -173,6 +175,7 @@ class CanConnection(QObject):
         self._reverse = ReverseController(self, parent=self)
         self._simulation = SimulationController(self, parent=self)
         self._restbus = RestbusController(self, parent=self)
+        self._panel_builder = PanelBuilderController(self, parent=self)
         self._mqtt = MqttController(self, parent=self)
         self._mcp_server = McpServerController(self, parent=self)
         self._tests = TestController(self, parent=self)
@@ -875,6 +878,11 @@ class CanConnection(QObject):
         return self._restbus
 
     @pyqtProperty(QObject, constant=True)
+    def panel_builder(self) -> PanelBuilderController:
+        """The visual builder of simulation panels."""
+        return self._panel_builder
+
+    @pyqtProperty(QObject, constant=True)
     def mqtt(self) -> MqttController:
         """Publishing the connection to an MQTT broker."""
         return self._mqtt
@@ -1024,6 +1032,7 @@ class ConnectionManager(QObject):
         self._multi_bus = MultiBusController(self, parent=self)
         self._multi_bus.trace.set_time_format(self._app_state.trace_time_format)
         self._ethercat = EtherCatController(parent=self)
+        self._flexray = FlexRayController(parent=self)
         self._physical_io = PhysicalIoController(parent=self)
         self._doip = DoipController(security=self._security, parent=self)
         self._someip = SomeIpController(self._app_state.settings, parent=self)
@@ -1124,6 +1133,11 @@ class ConnectionManager(QObject):
     def ethercat(self) -> EtherCatController:
         """CANopen over EtherCAT: the slaves of a network adapter."""
         return self._ethercat
+
+    @pyqtProperty(QObject, constant=True)
+    def flexray(self) -> FlexRayController:
+        """FlexRay: frames from a simulated cluster, a capture or a Vector interface."""
+        return self._flexray
 
     @pyqtProperty(QObject, constant=True)
     def physical_io(self) -> PhysicalIoController:
@@ -1429,6 +1443,7 @@ class ConnectionManager(QObject):
         for connection in self._connections:
             connection.close()
         self._ethercat.shutdown()
+        self._flexray.shutdown()
         self._physical_io.shutdown()
         self._doip.shutdown()
         self._someip.shutdown()

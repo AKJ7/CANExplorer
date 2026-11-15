@@ -8,6 +8,7 @@ from typing import AsyncIterator, List, Optional, Protocol
 import can
 
 from can_explorer.core.log_formats import is_log_file, unsupported_message
+from can_explorer.core.breakpoints import BreakpointSet
 from can_explorer.core.playback import PlaybackClock, scan_log
 from can_explorer.sys.log_handler import get_logger
 
@@ -268,6 +269,7 @@ class FileSource:
     def __init__(self, path: str | Path, realtime: bool = True, speed: Optional[float] = None):
         self.path = Path(path)
         self.clock = PlaybackClock((1.0 if realtime else 0.0) if speed is None else speed)
+        self.breakpoints = BreakpointSet()  # Pause after a frame hitting one (see core/breakpoints.py)
         self.duration: Optional[float] = None
         self.first_timestamp: Optional[float] = None  # Of the log's first frame, once read
         self._bridge: Optional[ThreadBridge] = None
@@ -311,6 +313,7 @@ class FileSource:
             raise SourceError(unsupported_message(self.path))
         self._bridge = ThreadBridge(loop)
         self.clock.reset()  # A new replay starts at the beginning (unless seek() moves it before the first frame)
+        self.breakpoints.restart()
         self._start_reader()
         if self.duration is None:
             threading.Thread(target=self._scan, name=f'FileScan-{self.path.name}', daemon=True).start()
@@ -379,6 +382,7 @@ class FileSource:
         restart = position < self.clock.position
         if restart:
             self._start_reader()
+        self.breakpoints.seeked(position)
         self.clock.seek(position)
         return restart
 
@@ -398,6 +402,11 @@ class FileSource:
                     first_timestamp = self.first_timestamp = item[0].timestamp
                     if not clock.started:
                         clock.start()
+                if self.breakpoints.items or clock.stepping or clock.paused:
+                    # Frame by frame: a breakpoint or a single step pauses right after its frame
+                    async for due in self._frames_checked(item, first_timestamp, generation):
+                        yield due
+                    continue
                 if clock.speed <= 0:
                     # Only waits while paused
                     await clock.wait_until(
@@ -423,6 +432,34 @@ class FileSource:
                     due.append(msg)
                 if due and generation == self._generation:
                     yield due
+
+    async def _frames_checked(self, chunk, first_timestamp: float, generation: int):
+        """The frames of a chunk when they are due, each checked against the breakpoints; after a hit (or a single
+        step) the frames up to it are delivered and the replay holds until resumed, stepped or sought."""
+        clock = self.clock
+        due = []
+        for msg in chunk:
+            if generation != self._generation:
+                return
+            position = msg.timestamp - first_timestamp
+            if not clock.is_due(position):
+                if due:
+                    yield due
+                    due = []
+                await clock.wait_until(position, lambda: generation != self._generation)
+                if generation != self._generation:
+                    return
+            stepping = clock.stepping
+            due.append(msg)
+            if msg.is_error_frame and not stepping:
+                continue
+            if self.breakpoints.check(msg, position, stepping) is not None:
+                yield due
+                due = []
+                clock.pause_at(position)
+                await clock.wait_while_paused()
+        if due and generation == self._generation:
+            yield due
 
     def send(self, msg: can.Message) -> None:
         raise SourceError('Cannot transmit on a replayed log file')

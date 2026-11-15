@@ -219,7 +219,7 @@ def test_video_encoding_falls_back_to_a_working_codec(qtbot, tmp_path, monkeypat
     qtbot.waitUntil(lambda: recording.start is not None or bool(recording.error), timeout=10_000)
     qtbot.wait(300)
     recording.stop()
-    qtbot.wait(500)
+    qtbot.waitUntil(lambda: bool(recording.error) or (path.exists() and path.stat().st_size > 0), timeout=10_000)
     assert recording.error == '' and recording.start is not None
     assert recording.codec in ('H.264', 'MPEG-4 Part 2') and path.stat().st_size > 0
 

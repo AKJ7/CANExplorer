@@ -19,8 +19,8 @@ Profiles are loaded from a Python file defining `profile` (an instance) or `crea
 packages registering a factory in the entry point group `can_explorer.security_profiles` — the way a
 manufacturer would deliver one. Loading executes the code: only load profiles you trust.
 
-`KeyServerProfile` is the built-in remote provider: it talks to a key server over HTTPS with a bearer token
-(the REST API is below), so seed/key and proof-of-ownership signatures are computed by the server and the private
+`KeyServerProfile` is the built-in remote provider: it talks to a key server over HTTPS with a bearer token — a
+static one, or OAuth 2.0 access tokens (core/oauth.py: client credentials or device sign-in) — (the REST API is below), so seed/key and proof-of-ownership signatures are computed by the server and the private
 keys never reach this computer. SecOC keys are fetched once and held in memory only (never written to disk):
 verifying every frame on the bus cannot wait for a server.
 
@@ -85,6 +85,8 @@ class LoadedProfile:
             'source': self.source,
             'description': str(getattr(self.profile, 'description', '') or ''),
             'capabilities': capabilities(self.profile),
+            'device_sign_in': bool(getattr(self.profile, 'device_sign_in', False)),
+            'signed_in': bool(getattr(self.profile, 'signed_in', True)),
         }
 
 
@@ -210,7 +212,8 @@ class KeyServerProfile:
 
     description = 'Keys, seed/key and signatures from a key server'
 
-    def __init__(self, name: str, url: str, token: str = '', context: Optional[ssl.SSLContext] = None, timeout=5.0):
+    def __init__(self, name: str, url: str, token='', context: Optional[ssl.SSLContext] = None, timeout=5.0):
+        """`token` is a static bearer token, or an `oauth.TokenSource` giving access tokens (renewed as needed)."""
         if not url.startswith(('https://', 'http://')):
             raise SecurityProfileError('A key server URL starts with https:// (or http:// for local tests)')
         self.name = name
@@ -223,25 +226,51 @@ class KeyServerProfile:
     def __repr__(self) -> str:  # Never show the token
         return f'KeyServerProfile({self.name!r}, {self.url!r})'
 
+    @property
+    def signed_in(self) -> bool:
+        """False while an OAuth device sign-in is needed."""
+        return getattr(self._token, 'signed_in', True)
+
+    @property
+    def device_sign_in(self) -> bool:
+        """Whether the user signs in to this server (OAuth device grant)."""
+        return getattr(getattr(self._token, 'config', None), 'grant', '') == 'device'
+
+    def _bearer(self) -> str:
+        if isinstance(self._token, str):
+            return self._token
+        from can_explorer.core import oauth
+
+        try:
+            return self._token.access_token()
+        except oauth.OAuthError as e:
+            raise SecurityProfileError(f'Key server {self.name}: {e}') from e
+
     def _call(self, method: str, path: str, body: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
         """The JSON answer of an endpoint, or None when the server does not offer it (404)."""
-        request = urllib.request.Request(
-            self.url + path,
-            data=json.dumps(body).encode('utf-8') if body is not None else None,
-            method=method,
-            headers={'Content-Type': 'application/json', 'Accept': 'application/json'},
-        )
-        if self._token:
-            request.add_header('Authorization', f'Bearer {self._token}')
-        try:
-            with urllib.request.urlopen(request, timeout=self.timeout, context=self._context) as response:
-                return json.loads(response.read() or b'{}')
-        except urllib.error.HTTPError as e:
-            if e.code == 404:
-                return None
-            raise SecurityProfileError(f'The key server {self.url} refused {path}: HTTP {e.code} {e.reason}') from e
-        except (urllib.error.URLError, OSError, ValueError) as e:
-            raise SecurityProfileError(f'The key server {self.url} cannot be reached: {e}') from e
+        for attempt in range(2):
+            request = urllib.request.Request(
+                self.url + path,
+                data=json.dumps(body).encode('utf-8') if body is not None else None,
+                method=method,
+                headers={'Content-Type': 'application/json', 'Accept': 'application/json'},
+            )
+            token = self._bearer()
+            if token:
+                request.add_header('Authorization', f'Bearer {token}')
+            try:
+                with urllib.request.urlopen(request, timeout=self.timeout, context=self._context) as response:
+                    return json.loads(response.read() or b'{}')
+            except urllib.error.HTTPError as e:
+                if e.code == 404:
+                    return None
+                if e.code == 401 and attempt == 0 and not isinstance(self._token, str):
+                    self._token.invalidate()  # Revoked or expired early: one more try with a new access token
+                    continue
+                raise SecurityProfileError(f'The key server {self.url} refused {path}: HTTP {e.code} {e.reason}') from e
+            except (urllib.error.URLError, OSError, ValueError) as e:
+                raise SecurityProfileError(f'The key server {self.url} cannot be reached: {e}') from e
+        return None
 
     def secoc_key(self, pdu: str, data_id: Optional[int]) -> Optional[Tuple[bytes, str]]:
         if self._secoc_keys is None:

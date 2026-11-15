@@ -1,13 +1,30 @@
 """ECU flashing over UDS (ISO 14229): RequestDownload (0x34), TransferData (0x36) and RequestTransferExit (0x37),
-from Intel HEX, Motorola S-record or binary files."""
+from Intel HEX, Motorola S-record or binary files.
 
+The programming sequence is a list of steps: by default built from `FlashOptions` (programming session, security
+access, erase and download per segment, check routine, reset — optionally framed by the pre-programming steps that
+quiet the rest of the bus), or loaded from a JSON **sequence preset** (`load_sequence`) for a manufacturer's own
+order of steps. Steps marked `functional` go to all ECUs through a functional client (core/uds_functional.py).
+"""
+
+import asyncio
+import importlib.util
+import json
 import time
 import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
-from can_explorer.core.uds import UdsClient, UdsError
+from can_explorer.core.frames import parse_hex_bytes
+from can_explorer.core.uds import (
+    COMMUNICATION_CONTROL_TYPES,
+    SESSIONS,
+    SessionKeepAlive,
+    UdsClient,
+    UdsError,
+)
+from can_explorer.core.uds_file_transfer import transfer_blocks
 
 INTEL_HEX_SUFFIXES = ('.hex', '.ihex', '.ihx', '.h86')
 SREC_SUFFIXES = ('.s19', '.s28', '.s37', '.srec', '.mot', '.s', '.sx', '.mhx')
@@ -215,6 +232,10 @@ def _is_text(raw: bytes) -> bool:
 # Programming sequence
 
 
+class SequenceError(ValueError):
+    pass
+
+
 @dataclass
 class FlashOptions:
     programming_session: bool = True
@@ -224,9 +245,188 @@ class FlashOptions:
     check_routine: Optional[int] = None  # e.g. 0xFF01 checkProgrammingDependencies
     reset: bool = True
     max_block_length: int = 0  # Limit of the TransferData length (0: the ECU's maximum)
-    data_format: int = 0x00  # No compression or encryption
+    data_format: int = 0x00  # dataFormatIdentifier: compression (high nibble) and encryption (low nibble) method
     address_bytes: int = 4
     size_bytes: int = 4
+    # Pre-programming: before programming, all ECUs (functionally) go to the extended session, stop updating DTCs
+    # and stop sending normal messages, kept there by a functional TesterPresent; afterwards they are restored
+    pre_programming: bool = False
+    communication_type: int = 0x01  # CommunicationControl communicationType: 0x01 normal, 0x03 normal and NM
+    restore: bool = True
+    # Encodes a segment's data before the download (compression/encryption the ECU expects for `data_format`):
+    # encode(data, address) -> bytes. The schemes are manufacturer specific, so they are the user's own code.
+    encode: Optional[Callable[[bytes, int], bytes]] = None
+    encoded_size: bool = False  # RequestDownload memorySize: the encoded size instead of the segment's size
+
+
+def load_encoder(path: str | Path) -> Callable[[bytes, int], bytes]:
+    """Load `encode(data: bytes, address: int) -> bytes` from a Python file (the file is executed)."""
+    path = Path(path)
+    spec = importlib.util.spec_from_file_location(f'can_explorer_encoder_{path.stem}', path)
+    if spec is None or spec.loader is None:
+        raise SequenceError(f'Cannot load {path}')
+    module = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(module)
+    except Exception as e:
+        raise SequenceError(f'Error in encoder {path.name}: {e}') from e
+    function = getattr(module, 'encode', None)
+    if not callable(function):
+        raise SequenceError(f'{path.name} does not define encode(data, address)')
+    return function
+
+
+STEP_KINDS = (
+    'session',
+    'security',
+    'dtc_setting',
+    'communication_control',
+    'keep_alive',
+    'routine',
+    'request',
+    'write_did',
+    'program',
+    'check',
+    'reset',
+    'wait',
+)
+
+
+def default_sequence(options: FlashOptions) -> List[Dict[str, Any]]:
+    """The steps of `options` as a sequence (the format of a JSON preset)."""
+    steps: List[Dict[str, Any]] = []
+    if options.pre_programming:
+        steps += [
+            {'step': 'session', 'session': 0x03, 'functional': True},
+            {'step': 'keep_alive', 'functional': True},
+            {'step': 'dtc_setting', 'on': False, 'functional': True},
+            {
+                'step': 'communication_control',
+                'control': 0x03,
+                'communication': options.communication_type,
+                'functional': True,
+            },
+        ]
+    if options.programming_session:
+        steps.append({'step': 'session', 'session': 0x02})
+    if options.security_level:
+        steps.append({'step': 'security', 'level': options.security_level})
+    steps.append({'step': 'program', 'erase_routine': options.erase_routine})
+    if options.check_routine is not None:
+        steps.append({'step': 'check', 'routine': options.check_routine})
+    if options.reset:
+        steps.append({'step': 'reset', 'type': 0x01})
+    if options.pre_programming and options.restore:
+        steps += [
+            {
+                'step': 'communication_control',
+                'control': 0x00,
+                'communication': options.communication_type,
+                'functional': True,
+            },
+            {'step': 'dtc_setting', 'on': True, 'functional': True},
+            {'step': 'session', 'session': 0x01, 'functional': True},
+        ]
+    return steps
+
+
+def _number(value: Any, what: str, maximum: int) -> int:
+    if isinstance(value, bool):
+        raise SequenceError(f'{what}: expected a number')
+    if isinstance(value, str):
+        text = value.strip().lower()
+        try:
+            value = int(text[2:] if text.startswith('0x') else text, 16)  # Hex, as identifiers are written
+        except ValueError:
+            raise SequenceError(f'{what}: {value!r} is not a hex number') from None
+    if not isinstance(value, int) or not 0 <= value <= maximum:
+        raise SequenceError(f'{what}: expected 0-0x{maximum:X}')
+    return value
+
+
+def check_sequence(steps: List[Dict[str, Any]]) -> None:
+    """Raise SequenceError for an invalid sequence (unknown steps, missing or invalid parameters)."""
+    if not isinstance(steps, list) or not steps:
+        raise SequenceError('A sequence is a non-empty list of steps')
+    if sum(1 for step in steps if isinstance(step, dict) and step.get('step') == 'program') != 1:
+        raise SequenceError('A sequence has exactly one "program" step')
+    for index, step in enumerate(steps, 1):
+        if not isinstance(step, dict) or step.get('step') not in STEP_KINDS:
+            raise SequenceError(f'Step {index}: "step" must be one of {", ".join(STEP_KINDS)}')
+        kind, where = step['step'], f'Step {index} ({step["step"]})'
+        if kind == 'session':
+            _number(step.get('session'), f'{where} session', 0x7F)
+        elif kind == 'security':
+            if _number(step.get('level'), f'{where} level', 0x7F) % 2 == 0:
+                raise SequenceError(f'{where}: security access levels for requesting a seed are odd')
+        elif kind == 'communication_control':
+            _number(step.get('control', 0), f'{where} control', 0x05)
+            _number(step.get('communication', 1), f'{where} communication', 0xFF)
+        elif kind in ('routine', 'check'):
+            _number(step.get('routine'), f'{where} routine', 0xFFFF)
+        elif kind == 'request':
+            try:
+                if not parse_hex_bytes(str(step.get('payload', ''))):
+                    raise ValueError('empty')
+            except ValueError as e:
+                raise SequenceError(f'{where} payload: {e}') from None
+        elif kind == 'write_did':
+            _number(step.get('did'), f'{where} did', 0xFFFF)
+        elif kind == 'wait':
+            seconds = step.get('seconds')
+            if not isinstance(seconds, (int, float)) or isinstance(seconds, bool) or not 0 <= seconds <= 600:
+                raise SequenceError(f'{where}: seconds must be 0-600')
+        elif kind == 'program' and step.get('erase_routine') is not None:
+            _number(step['erase_routine'], f'{where} erase_routine', 0xFFFF)
+
+
+def load_sequence(path: str | Path) -> Tuple[str, List[Dict[str, Any]]]:
+    """A sequence preset: JSON {"name": ..., "steps": [{"step": "session", "session": 2}, ...]}. Returns
+    (name, steps)."""
+    path = Path(path)
+    try:
+        document = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, ValueError) as e:
+        raise SequenceError(f'Cannot read {path.name}: {e}') from e
+    if not isinstance(document, dict):
+        raise SequenceError(f'{path.name}: expected an object with "steps"')
+    steps = document.get('steps')
+    check_sequence(steps)
+    return str(document.get('name') or path.stem), steps
+
+
+def _step_name(step: Dict[str, Any]) -> str:
+    kind = step['step']
+    if step.get('name'):
+        return str(step['name'])
+    everyone = ' (all ECUs)' if step.get('functional') else ''
+    if kind == 'session':
+        session = _number(step['session'], 'session', 0x7F)
+        if session == 0x02 and not everyone:
+            return 'Programming session'
+        return f'{SESSIONS.get(session, f"Session 0x{session:02X}").capitalize()} session{everyone}'
+    if kind == 'security':
+        return f'Security access level {_number(step["level"], "level", 0x7F)}'
+    if kind == 'dtc_setting':
+        return f'DTC setting {"on" if step.get("on") else "off"}{everyone}'
+    if kind == 'communication_control':
+        control = _number(step.get('control', 0), 'control', 0x05)
+        return f'Communication control {COMMUNICATION_CONTROL_TYPES[control]}{everyone}'
+    if kind == 'keep_alive':
+        return f'Tester present{everyone or " (kept alive)"}'
+    if kind == 'check':
+        return f'Check routine 0x{_number(step["routine"], "routine", 0xFFFF):04X}'
+    if kind == 'routine':
+        return f'Routine 0x{_number(step["routine"], "routine", 0xFFFF):04X}{everyone}'
+    if kind == 'request':
+        return f'Request {step["payload"]}{everyone}'
+    if kind == 'write_did':
+        return f'Write DID 0x{_number(step["did"], "did", 0xFFFF):04X}'
+    if kind == 'reset':
+        return 'ECU reset'
+    if kind == 'wait':
+        return f'Wait {step["seconds"]} s'
+    return kind
 
 
 @dataclass
@@ -238,9 +438,13 @@ class FlashStep:
 
 @dataclass
 class FlashJob:
+    """Programs an image. `sequence` (a list of steps, see `load_sequence`) replaces the steps of `options`;
+    `options` still give the key function, block limits, data format and encoder."""
+
     image: FlashImage
     options: FlashOptions
     on_change: Optional[Callable[['FlashJob'], None]] = None
+    sequence: Optional[List[Dict[str, Any]]] = None
     steps: List[FlashStep] = field(default_factory=list)
     bytes_done: int = 0
     started: float = 0.0
@@ -248,19 +452,26 @@ class FlashJob:
     error: str = ''
 
     def __post_init__(self):
-        options = self.options
-        if options.programming_session:
-            self.steps.append(FlashStep('Programming session'))
-        if options.security_level:
-            self.steps.append(FlashStep(f'Security access level {options.security_level}'))
-        for segment in self.image.segments:
-            if options.erase_routine is not None:
-                self.steps.append(FlashStep(f'Erase 0x{segment.address:08X} ({len(segment.data)} bytes)'))
-            self.steps.append(FlashStep(f'Download 0x{segment.address:08X} ({len(segment.data)} bytes)'))
-        if options.check_routine is not None:
-            self.steps.append(FlashStep(f'Check routine 0x{options.check_routine:04X}'))
-        if options.reset:
-            self.steps.append(FlashStep('ECU reset'))
+        if self.sequence is None:
+            self.sequence = default_sequence(self.options)
+        else:
+            check_sequence(self.sequence)
+        self._plan: List[Tuple[FlashStep, Dict[str, Any], Optional[Segment], str]] = []
+        for spec in self.sequence:
+            if spec['step'] == 'program':
+                for segment in self.image.segments:
+                    if spec.get('erase_routine', self.options.erase_routine) is not None:
+                        self._add(f'Erase 0x{segment.address:08X} ({len(segment.data)} bytes)', spec, segment, 'erase')
+                    self._add(
+                        f'Download 0x{segment.address:08X} ({len(segment.data)} bytes)', spec, segment, 'download'
+                    )
+            else:
+                self._add(_step_name(spec), spec, None, spec['step'])
+
+    def _add(self, name: str, spec: Dict[str, Any], segment: Optional[Segment], action: str) -> None:
+        step = FlashStep(name)
+        self.steps.append(step)
+        self._plan.append((step, spec, segment, action))
 
     @property
     def total(self) -> int:
@@ -290,28 +501,20 @@ class FlashJob:
             + size.to_bytes(options.size_bytes, 'big')
         )
 
-    async def run(self, client: UdsClient) -> None:
-        """Run the steps; raises UdsError (or a transport error) at the first failing step."""
+    async def run(self, client: UdsClient, functional=None) -> None:
+        """Run the steps; raises UdsError (or a transport error) at the first failing step. `functional` (a
+        FunctionalUdsClient) receives the functional steps; without one they go to this ECU only."""
         self.started = time.monotonic()
-        steps = iter(self.steps)
-        options = self.options
+        keep_alive: Optional[SessionKeepAlive] = None
         try:
-            if options.programming_session:
-                await self._step(next(steps), client.diagnostic_session_control(0x02))
-            if options.security_level:
-                if options.compute_key is None:
-                    raise UdsError('Security access needs a key file')
-                await self._step(next(steps), client.security_access(options.security_level, options.compute_key))
-            for segment in self.image.segments:
-                if options.erase_routine is not None:
-                    memory = self._memory(segment.address, len(segment.data))
-                    await self._step(next(steps), client.routine_control(0x01, options.erase_routine, memory))
-                step = next(steps)
-                await self._step(step, self._download(client, segment, step))
-            if options.check_routine is not None:
-                await self._step(next(steps), client.routine_control(0x01, options.check_routine))
-            if options.reset:
-                await self._step(next(steps), client.ecu_reset(0x01))
+            for step, spec, segment, action in self._plan:
+                if action == 'keep_alive':
+                    target = functional if spec.get('functional', True) and functional is not None else client.transport
+                    keep_alive = SessionKeepAlive(target, float(spec.get('interval', 2.0)))
+                    await self._step(step, self._noop())
+                    keep_alive.start()
+                    continue
+                await self._step(step, self._action(client, functional, step, spec, segment, action))
         except Exception as e:
             self.error = str(e) or type(e).__name__
             for step in self.steps:
@@ -321,8 +524,63 @@ class FlashJob:
                     step.status = 'skipped'
             raise
         finally:
+            if keep_alive is not None:
+                keep_alive.stop()
             self.finished = time.monotonic()
             self._changed()
+
+    @staticmethod
+    async def _noop() -> None:
+        return None
+
+    def _action(self, client, functional, step: FlashStep, spec, segment, action) -> Awaitable:
+        options = self.options
+        everyone = bool(spec.get('functional')) and functional is not None
+        if spec.get('functional') and functional is None:
+            step.detail = 'sent to this ECU only (no functional addressing)'
+        if action == 'session':
+            session = _number(spec['session'], 'session', 0x7F)
+            if everyone:
+                return functional.diagnostic_session_control(session)
+            return client.diagnostic_session_control(session)
+        if action == 'security':
+            if options.compute_key is None:
+                raise UdsError('Security access needs a key file')
+            return client.security_access(_number(spec['level'], 'level', 0x7F), options.compute_key)
+        if action == 'dtc_setting':
+            if everyone:
+                return functional.control_dtc_setting(bool(spec.get('on')))
+            return client.control_dtc_setting(bool(spec.get('on')))
+        if action == 'communication_control':
+            control = _number(spec.get('control', 0), 'control', 0x05)
+            communication = _number(spec.get('communication', 1), 'communication', 0xFF)
+            if everyone:
+                return functional.communication_control(control, communication)
+            return client.communication_control(control, communication)
+        if action in ('routine', 'check'):
+            routine = _number(spec['routine'], 'routine', 0xFFFF)
+            control = _number(spec.get('control', 1), 'control', 0xFF)
+            data = parse_hex_bytes(str(spec.get('data', '')))
+            if everyone:
+                return functional.request(bytes([0x31, control, routine >> 8, routine & 0xFF]) + data)
+            return client.routine_control(control, routine, data)
+        if action == 'request':
+            payload = parse_hex_bytes(str(spec['payload']))
+            return functional.request(payload) if everyone else client.call(payload)
+        if action == 'write_did':
+            return client.write_data_by_identifier(
+                _number(spec['did'], 'did', 0xFFFF), parse_hex_bytes(str(spec.get('data', '')))
+            )
+        if action == 'reset':
+            return client.ecu_reset(_number(spec.get('type', 1), 'type', 0x7F))
+        if action == 'wait':
+            return asyncio.sleep(float(spec['seconds']))
+        if action == 'erase':
+            routine = _number(spec.get('erase_routine', options.erase_routine), 'erase_routine', 0xFFFF)
+            return client.routine_control(0x01, routine, self._memory(segment.address, len(segment.data)))
+        if action == 'download':
+            return self._download(client, segment, step)
+        raise SequenceError(f'Unknown step {action!r}')
 
     async def _step(self, step: FlashStep, operation) -> None:
         step.status = 'running'
@@ -332,31 +590,28 @@ class FlashJob:
         self._changed()
 
     async def _download(self, client: UdsClient, segment: Segment, step: FlashStep) -> None:
-        response = await client.call(
-            bytes([0x34, self.options.data_format]) + self._memory(segment.address, len(segment.data))
-        )
+        options = self.options
+        data = bytes(options.encode(segment.data, segment.address)) if options.encode is not None else segment.data
+        size = len(data) if options.encoded_size else len(segment.data)
+        response = await client.call(bytes([0x34, options.data_format]) + self._memory(segment.address, size))
         if len(response) < 2:
             raise UdsError('RequestDownload response too short')
         length_bytes = response[1] >> 4
         if not 1 <= length_bytes <= 4 or len(response) < 2 + length_bytes:
             raise UdsError('RequestDownload response without a valid block length')
         max_block = int.from_bytes(response[2 : 2 + length_bytes], 'big')  # Including SID and counter
-        limit = min(max_block, ISOTP_MAX_PAYLOAD)
-        if self.options.max_block_length:
-            limit = min(limit, self.options.max_block_length)
-        chunk = limit - 2
+        start = self.bytes_done
+        scale = len(segment.data) / len(data) if data else 1.0  # Progress in image bytes, also for encoded data
+        chunk = 0
+
+        def progress(done: int, total: int) -> None:
+            self.bytes_done = start + round(done * scale)
+            step.detail = f'{done} / {total} bytes, blocks of {chunk}'
+            self._changed()
+
+        limit = min(options.max_block_length or ISOTP_MAX_PAYLOAD, ISOTP_MAX_PAYLOAD)
+        chunk = min(max_block, limit) - 2
         if chunk < 1:
             raise UdsError(f'The ECU accepts blocks of {max_block} bytes, too short for data')
-        counter = 1
-        for offset in range(0, len(segment.data), chunk):
-            data = segment.data[offset : offset + chunk]
-            response = await client.call(bytes([0x36, counter]) + data)
-            if len(response) < 2 or response[1] != counter:
-                raise UdsError(
-                    f'TransferData answered block {response[1] if len(response) > 1 else "?"}, expected {counter}'
-                )
-            self.bytes_done += len(data)
-            step.detail = f'{offset + len(data)} / {len(segment.data)} bytes, blocks of {chunk}'
-            self._changed()
-            counter = (counter + 1) & 0xFF  # Wraps to 0 after 0xFF
-        await client.call(bytes([0x37]))
+        await transfer_blocks(client, data, max_block, limit, progress)
+        self.bytes_done = start + len(segment.data)

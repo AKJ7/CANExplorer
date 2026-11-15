@@ -9,6 +9,7 @@ from can_explorer.core.decoding import open_signal_database
 from can_explorer.core.recording import Recorder, Trigger, TriggeredRecorder, numbered_path
 from can_explorer.core.session import BusSession, SessionError
 from can_explorer.core.sources import BusConfig, LiveSource
+from tests.unit.waiting import wait_until as wait_by_deadline
 
 
 def message(can_id, timestamp, data=b'\x00'):
@@ -95,7 +96,7 @@ async def test_session_recording_options(tmp_path):
     for index, can_id in enumerate((0x100, 0x101, 0x123, 0x102)):
         peer.send(message(can_id, 1000.0 + index * 0.1))
         await asyncio.sleep(0.01)
-    await asyncio.sleep(0.1)
+    await wait_by_deadline(lambda: session.recorder.state == 'done' and events)
     peer.shutdown()
     assert session.recorder.state == 'done' and events
     # Wall clock minus frame clock: the frames were stamped about 1000 s after 1970, i.e. long before now

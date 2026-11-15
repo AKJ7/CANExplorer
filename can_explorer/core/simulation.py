@@ -9,6 +9,7 @@ They run on a BusSession, typically on python-can's virtual interface next to th
 """
 
 import asyncio
+import inspect
 import time
 from typing import Callable, Dict, List, Optional, Tuple
 
@@ -18,7 +19,8 @@ from can_explorer.core import gmlan
 from can_explorer.core.isotp_client import IsoTpClient, IsoTpError
 from can_explorer.core.lin import MASTER_REQUEST_ID, SLAVE_RESPONSE_ID, LinTpReassembler
 from can_explorer.core.session import BusSession, SessionError
-from can_explorer.core.uds import NEGATIVE_RESPONSE, RESPONSE_PENDING, SUPPRESS_POSITIVE_RESPONSE
+from can_explorer.core.uds import NEGATIVE_RESPONSE, RESPONSE_PENDING, SUBFUNCTION_SERVICES, SUPPRESS_POSITIVE_RESPONSE
+from can_explorer.core.uds_server_services import FUNCTIONAL_SILENT_CODES, PERIODIC_RATES, ExtendedServices
 
 
 def xor_key(level: int, seed: bytes) -> bytes:
@@ -26,8 +28,9 @@ def xor_key(level: int, seed: bytes) -> bytes:
     return bytes(byte ^ 0xFF for byte in seed)
 
 
-class UdsServer:
-    """UDS server logic. handle() returns the responses to send (several when answering 'pending')."""
+class UdsServer(ExtendedServices):
+    """UDS server logic. handle() returns the responses to send (several when answering 'pending'). The services
+    beyond sessions, DIDs, security access, DTCs, routines and downloads are in core/uds_server_services.py."""
 
     def __init__(
         self,
@@ -77,21 +80,35 @@ class UdsServer:
         self.memory: Dict[int, bytes] = {}
         self.erased: List[Tuple[int, int]] = []
         self._download: Optional[Dict] = None
+        self._init_extended_services()
 
     @staticmethod
     def _negative(sid: int, code: int) -> List[bytes]:
         return [bytes([NEGATIVE_RESPONSE, sid, code])]
 
-    def handle(self, request: bytes) -> List[bytes]:
+    def handle(self, request: bytes, functional: bool = False) -> List[bytes]:
+        """The responses to a request; for a `functional` request without the negative responses an ECU keeps to
+        itself then (serviceNotSupported, subFunctionNotSupported, requestOutOfRange, not in active session)."""
+        responses = self._handle(request)
+        if functional:
+            responses = [
+                r
+                for r in responses
+                if not (r[0] == NEGATIVE_RESPONSE and len(r) >= 3 and r[2] in FUNCTIONAL_SILENT_CODES)
+            ]
+        return responses
+
+    def _handle(self, request: bytes) -> List[bytes]:
         self.requests.append(request)
         if not request:
             return []
         sid = request[0]
         handler = {
+            **self._extended_handlers(),
             0x10: self._session_control,
             0x11: self._ecu_reset,
             0x14: self._clear_dtcs,
-            0x19: self._read_dtcs,
+            0x19: self._read_dtc_information,
             0x22: self._read_did,
             0x27: self._security_access,
             0x29: self._authentication,
@@ -109,7 +126,7 @@ class UdsServer:
         except (IndexError, ValueError):
             # A truncated or malformed request (e.g. from a fuzzer): a real ECU rejects it, it does not crash
             return self._negative(sid, 0x13)
-        suppress = len(request) >= 2 and sid in (0x10, 0x11, 0x3E) and request[1] & SUPPRESS_POSITIVE_RESPONSE
+        suppress = len(request) >= 2 and sid in SUBFUNCTION_SERVICES and request[1] & SUPPRESS_POSITIVE_RESPONSE
         positive = responses and responses[-1][0] == sid + 0x40
         return [] if suppress and positive else responses
 
@@ -119,13 +136,18 @@ class UdsServer:
         session = request[1] & 0x7F
         if session not in (0x01, 0x02, 0x03):
             return self._negative(0x10, 0x12)
+        if session != self.session:
+            self._end_transfers()
         self.session = session
         if session == 0x01:
             self.unlocked_level = None
+            self._reset_extended_state()
         return [bytes([0x50, session, 0x00, 0x32, 0x01, 0xF4])]
 
     def _ecu_reset(self, request: bytes) -> List[bytes]:
         self.session, self.unlocked_level = 0x01, None
+        self._reset_extended_state()
+        self._end_transfers()
         if not self.lockout_survives_reset:
             self._locked_until, self.failed_attempts = None, 0
         return [bytes([0x51, request[1] & 0x7F])]
@@ -150,6 +172,9 @@ class UdsServer:
             return self._negative(0x22, 0x34)
         if did == 0xF186:
             return [bytes([0x62]) + request[1:3] + bytes([self.session])]
+        dynamic = self._dynamic_data(did)
+        if dynamic is not None:
+            return [bytes([0x62]) + request[1:3] + dynamic]
         if did not in self.dids:
             return self._negative(0x22, 0x31)
         return [bytes([0x62]) + request[1:3] + self.dids[did]]
@@ -161,7 +186,9 @@ class UdsServer:
             return self._negative(0x2E, 0x34)
         if self.unlocked_level is None:
             return self._negative(0x2E, 0x33)
-        self.dids[int.from_bytes(request[1:3], 'big')] = bytes(request[3:])
+        did = int.from_bytes(request[1:3], 'big')
+        self.dids[did] = bytes(request[3:])
+        self.did_changed(did)
         return [bytes([0x6E]) + request[1:3]]
 
     def _security_access(self, request: bytes) -> List[bytes]:
@@ -192,14 +219,6 @@ class UdsServer:
         self.failed_attempts = 0
         self.unlocked_level = level - 1
         return [bytes([0x67, level])]
-
-    def _read_dtcs(self, request: bytes) -> List[bytes]:
-        if len(request) != 3 or request[1] != 0x02:
-            return self._negative(0x19, 0x12)
-        records = b''.join(
-            code.to_bytes(3, 'big') + bytes([status]) for code, status in self.dtcs if status & request[2]
-        )
-        return [bytes([0x59, 0x02, 0xFF]) + records]
 
     def _clear_dtcs(self, request: bytes) -> List[bytes]:
         self.dtcs.clear()
@@ -246,6 +265,9 @@ class UdsServer:
         return [bytes([0x74, 0x20]) + self.max_block_length.to_bytes(2, 'big')]
 
     def _transfer_data(self, request: bytes) -> List[bytes]:
+        upload = self._upload_block(request)
+        if upload is not None:
+            return upload
         download = self._download
         if download is None:
             return self._negative(0x36, 0x24)
@@ -262,6 +284,9 @@ class UdsServer:
         return [bytes([0x76, request[1]])]
 
     def _request_transfer_exit(self, request: bytes) -> List[bytes]:
+        finished = self._finish_file_transfer()
+        if finished is not None:
+            return finished
         download = self._download
         if download is None or len(download['data']) != download['size']:
             return self._negative(0x37, 0x24)
@@ -271,31 +296,87 @@ class UdsServer:
 
 
 class UdsEcuSimulator:
-    """A UdsServer answering over ISO-TP (normal addressing) on a session."""
+    """A UdsServer answering over ISO-TP (normal addressing) on a session.
 
-    def __init__(self, session: BusSession, request_id: int = 0x7E0, response_id: int = 0x7E8, server=None):
+    It also takes functional requests on `functional_id` (single frames; None: none), sends the server's
+    event-triggered (ResponseOnEvent) responses, and sends scheduled periodic data (ReadDataByPeriodicIdentifier):
+    as UUDT frames (PDID + data) on `periodic_id`, or — `periodic_id` None — as 0x6A messages on the response id."""
+
+    def __init__(
+        self,
+        session: BusSession,
+        request_id: int = 0x7E0,
+        response_id: int = 0x7E8,
+        server=None,
+        functional_id: Optional[int] = 0x7DF,
+        periodic_id: Optional[int] = None,
+        extended: bool = False,
+    ):
         self.server = server or UdsServer()
-        self._client = IsoTpClient(session, response_id, request_id)
-        self._task: Optional[asyncio.Task] = None
+        self.session = session
+        self.response_id, self.periodic_id, self.extended = response_id, periodic_id, extended
+        self._client = IsoTpClient(session, response_id, request_id, extended)
+        functional = functional_id is not None and functional_id != request_id
+        self._functional = IsoTpClient(session, response_id, functional_id, extended) if functional else None
+        # Servers without functional handling (e.g. the OBD server) get functional requests like physical ones
+        self._takes_functional = 'functional' in inspect.signature(self.server.handle).parameters
+        self._tasks: List[asyncio.Task] = []
 
     def start(self) -> None:
-        self._task = asyncio.get_running_loop().create_task(self._run(), name='UDS ECU simulator')
+        loop = asyncio.get_running_loop()
+        self._tasks = [loop.create_task(self._run(self._client, False), name='UDS ECU simulator')]
+        if self._functional is not None:
+            self._tasks.append(loop.create_task(self._run(self._functional, True), name='UDS ECU functional'))
+        self._tasks.append(loop.create_task(self._periodic(), name='UDS ECU periodic'))
 
     def stop(self) -> None:
-        if self._task is not None:
-            self._task.cancel()
+        for task in self._tasks:
+            task.cancel()
         self._client.close()
+        if self._functional is not None:
+            self._functional.close()
 
-    async def _run(self) -> None:
+    async def _run(self, receiver: IsoTpClient, functional: bool) -> None:
         while True:
             try:
-                request = await self._client.receive(3600)
+                request = await receiver.receive(3600)
             except IsoTpError:
                 continue
-            for index, response in enumerate(self.server.handle(request)):
+            if self._takes_functional:
+                responses = self.server.handle(request, functional)
+            else:
+                responses = self.server.handle(request)
+            for index, response in enumerate(responses):
                 if index:
                     await asyncio.sleep(0.05)  # After a 'response pending'
                 await self._client.send(response)
+            await self._send_events()
+
+    async def _send_events(self) -> None:
+        while getattr(self.server, 'outbox', None):
+            await self._client.send(self.server.outbox.pop(0))
+
+    async def _periodic(self) -> None:
+        last: Dict[int, float] = {}
+        while True:
+            await asyncio.sleep(0.01)
+            await self._send_events()
+            now = time.monotonic()
+            for pdid, mode in list(getattr(self.server, 'periodic', {}).items()):
+                if now - last.get(pdid, 0.0) < PERIODIC_RATES[mode]:
+                    continue
+                last[pdid] = now
+                data = self.server.periodic_data(pdid) or b''
+                try:
+                    if self.periodic_id is not None:
+                        frame = (bytes([pdid]) + data)[:8]
+                        self.session.send(
+                            can.Message(arbitration_id=self.periodic_id, is_extended_id=self.extended, data=frame)
+                        )
+                    else:
+                        await self._client.send(bytes([0x6A, pdid]) + data)
+                except (IsoTpError, SessionError):
+                    pass
 
 
 class GmlanServer:
