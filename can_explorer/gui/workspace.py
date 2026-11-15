@@ -73,6 +73,9 @@ def describe_connection(connection: 'CanConnection', base: Path) -> Optional[Dic
         'running': bool(simulation.running),
     }
     entry['tests'] = [_relative(str(script.path), base) for script in connection.tests.runner.scripts]
+    restbus = connection.restbus.to_dict()
+    if restbus:
+        entry['restbus'] = restbus
     return entry
 
 
@@ -177,6 +180,8 @@ def _restore(connection: 'CanConnection', entry: Dict[str, Any], base: Path) -> 
                 problems.append(f'{name}: bit field {field}: {e}')
         if entry.get('fields'):
             connection.tracked_signals_changed.emit()
+        restbus = entry.get('restbus') or {}
+        problems += [f'{name}: {problem}' for problem in connection.restbus.apply(restbus)]
 
         simulation = entry.get('simulation', {})
         for relative in simulation.get('scripts', []):
@@ -202,6 +207,10 @@ def _restore(connection: 'CanConnection', entry: Dict[str, Any], base: Path) -> 
                 error = connection.simulation.start()
                 if error:
                     problems.append(f'{name}: simulation: {error}')
+            if connection.connected and restbus.get('running'):
+                error = connection.restbus.start()
+                if error:
+                    problems.append(f'{name}: restbus: {error}')
     finally:
         connection.error_occurred.disconnect(errors.append)
     problems += [f'{name}: {error}' for error in errors]

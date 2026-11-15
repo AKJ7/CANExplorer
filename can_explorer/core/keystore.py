@@ -55,7 +55,9 @@ KEY_SERVER = (
     'key-server'  # A key server (core/security_profiles.py): params url, trusted (a tls-ca entry); secrets token
 )
 AUTH_KEY = 'uds-auth-key'  # A shared key for UDS Authentication by challenge-response: params mac; secrets {'key'}
-PURPOSES = (SECOC, TLS_CLIENT, TLS_CA, CRL, IPSEC, MACSEC, SEED_KEY, AUTH_KEY, KEY_SERVER)
+PKCS11 = 'pkcs11'  # A key on a PKCS#11 token (smart card, HSM): params module, token, key; secrets {'pin'}
+PURPOSES = (SECOC, TLS_CLIENT, TLS_CA, CRL, IPSEC, MACSEC, SEED_KEY, AUTH_KEY, PKCS11, KEY_SERVER)
+KEY_SERVER_AUTH = ('token', 'client-credentials', 'device')  # Static bearer token, or OAuth 2.0 (core/oauth.py)
 EXPIRY_WARNING_DAYS = 30  # Certificates expiring within this many days are announced
 
 SECOC_ALGORITHMS = ('', 'cmac-aes', 'hmac-sha256')  # '' takes the algorithm named in the ARXML
@@ -359,6 +361,16 @@ class KeyStore:
         """The decrypted secrets of an entry (needs the store unlocked)."""
         return self._decrypt(self._entry(name))
 
+    def update_secrets(self, name: str, **secrets: bytes) -> None:
+        """Replace some secrets of an entry, keeping its settings and other secrets (e.g. a rotated OAuth refresh
+        token)."""
+        info = self.entries_by_name().get(name)
+        if info is None:
+            raise KeyStoreError(f'No entry named {name!r}')
+        merged = dict(self.secrets(name))
+        merged.update({key: bytes(value) for key, value in secrets.items()})
+        self.add(name, info.purpose, info.params, merged, replace=True)
+
     # Bundles: entries exported for another computer or a colleague
 
     def export_bundle(self, path: Path, names: Sequence[str], passphrase: str) -> int:
@@ -466,9 +478,24 @@ class KeyStore:
         params = _certificate_params(certificates)
         return self.add(name, TLS_CLIENT, params, {'private_key': unencrypted}, replace)
 
-    def add_key_server(self, name: str, url: str, token: str = '', trusted: str = '', replace: bool = False) -> KeyInfo:
-        """A key server answering the REST API of core/security_profiles.py, with its bearer token (kept encrypted)
-        and optionally the trusted certificates its HTTPS certificate is checked against."""
+    def add_key_server(
+        self,
+        name: str,
+        url: str,
+        token: str = '',
+        trusted: str = '',
+        replace: bool = False,
+        auth: str = 'token',
+        token_url: str = '',
+        client_id: str = '',
+        client_secret: str = '',
+        scope: str = '',
+        device_url: str = '',
+    ) -> KeyInfo:
+        """A key server answering the REST API of core/security_profiles.py, optionally with the trusted certificates
+        its HTTPS certificate is checked against. `auth` is 'token' (a static bearer token, kept encrypted), or OAuth
+        2.0 (core/oauth.py): 'client-credentials' (the client secret kept encrypted) or 'device' (the user signs in;
+        the refresh token is kept encrypted)."""
         url = url.strip()
         if not url.startswith(('https://', 'http://')):
             raise KeyStoreError('A key server URL starts with https:// (or http:// for local tests)')
@@ -476,7 +503,55 @@ class KeyStore:
             self.entries_by_name().get(trusted) is None or self.entries_by_name()[trusted].purpose != TLS_CA
         ):
             raise KeyStoreError(f'No trusted certificates named {trusted!r}')
-        return self.add(name, KEY_SERVER, {'url': url, 'trusted': trusted}, {'token': token.encode('utf-8')}, replace)
+        if auth not in KEY_SERVER_AUTH:
+            raise KeyStoreError(f'Unknown key server authentication {auth!r}; one of {", ".join(KEY_SERVER_AUTH)}')
+        params = {'url': url, 'trusted': trusted, 'auth': auth}
+        if auth == 'token':
+            return self.add(name, KEY_SERVER, params, {'token': token.encode('utf-8')}, replace)
+        from can_explorer.core import oauth
+
+        try:
+            oauth.OAuthConfig(
+                auth, token_url.strip(), client_id.strip(), client_secret, scope.strip(), device_url.strip()
+            )
+        except oauth.OAuthError as e:
+            raise KeyStoreError(str(e)) from e
+        params.update(
+            token_url=token_url.strip(), client_id=client_id.strip(), scope=scope.strip(), device_url=device_url.strip()
+        )
+        secrets = {'client_secret': client_secret.encode('utf-8'), 'refresh_token': b''}
+        return self.add(name, KEY_SERVER, params, secrets, replace)
+
+    def add_pkcs11_key(
+        self, name: str, module: str, token: str, key: str, pin: str = '', replace: bool = False
+    ) -> KeyInfo:
+        """A key on a PKCS#11 token (smart card, USB token, HSM), used through the vendor's PKCS#11 module (a .so,
+        .dylib or .dll): `token` is the token label, `key` the label of its private key and certificate. The PIN is
+        kept encrypted. Used as a security profile (core/pkcs11.py) while the store is unlocked."""
+        module, token, key = module.strip(), token.strip(), key.strip()
+        if not module or not token or not key:
+            raise KeyStoreError('A PKCS#11 key needs the module, the token label and the key label')
+        params = {'module': module, 'token': token, 'key': key}
+        return self.add(name, PKCS11, params, {'pin': pin.encode('utf-8')}, replace)
+
+    def add_tls_client_pkcs12(self, name: str, data: bytes, password: str = '', replace: bool = False) -> KeyInfo:
+        """A TLS client certificate with its private key (and chain) from a PKCS#12 file (.p12, .pfx), as browsers,
+        Windows and many PKIs export them. The private key is kept encrypted under the store's password."""
+        from cryptography.hazmat.primitives.serialization import pkcs12
+
+        try:
+            private_key, certificate, chain = pkcs12.load_key_and_certificates(
+                bytes(data), password.encode('utf-8') if password else None
+            )
+        except (ValueError, TypeError) as e:
+            raise KeyStoreError(f'Cannot read the PKCS#12 file (wrong password?): {e}') from e
+        if private_key is None or certificate is None:
+            raise KeyStoreError('The PKCS#12 file holds no certificate with its private key')
+        pem = b''.join(c.public_bytes(serialization.Encoding.PEM) for c in [certificate, *(chain or [])])
+        key_pem = private_key.private_bytes(
+            serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()
+        )
+        return self.add_tls_client(name, pem, key_pem, None, replace)
 
     def add_crl(self, name: str, data: bytes, replace: bool = False) -> KeyInfo:
         """A certificate revocation list (PEM or DER): certificates it lists are refused for UDS Authentication

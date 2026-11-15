@@ -18,8 +18,12 @@ Dialog {
         { value: "macsec", text: qsTr("MACsec association") },
         { value: "seed-key", text: qsTr("Seed/key algorithm") },
         { value: "uds-auth-key", text: qsTr("UDS authentication key") },
+        { value: "pkcs11", text: qsTr("PKCS#11 token key") },
         { value: "key-server", text: qsTr("Key server") },
     ]
+    // A PKCS#12 file (.p12/.pfx) holds the certificate with its key: no separate key file
+    readonly property bool pkcs12: /\.(p12|pfx)$/i.test(certificateFile.toString())
+    readonly property string serverAuth: ["token", "client-credentials", "device"][serverAuthBox.currentIndex]
     readonly property var trustedSets: security.entries.filter(entry => entry.purpose === "tls-ca").map(entry => entry.name)
     property string purpose: "secoc"
     property url certificateFile
@@ -52,7 +56,8 @@ Dialog {
     function clearSecrets() {
         for (const field of [passwordField, repeatField, oldPasswordField, newPasswordField, newRepeatField,
                              nameField, secocKeyField, keyPasswordField, encryptionKeyField, integrityKeyField,
-                             sakField, sciField, spiField, authKeyField, serverTokenField])
+                             sakField, sciField, spiField, authKeyField, serverTokenField, clientSecretField,
+                             pkcs11PinField])
             field.text = ""
         certificateFile = ""
         keyFile = ""
@@ -71,8 +76,10 @@ Dialog {
                                            algorithmBox.currentIndex === 0 ? "" : algorithmBox.currentText)
             break
         case "tls-client":
-            if (certificateFile.toString() === "" || keyFile.toString() === "")
-                error = qsTr("Choose the certificate and its private key")
+            if (certificateFile.toString() === "" || (!pkcs12 && keyFile.toString() === ""))
+                error = qsTr("Choose the certificate and its private key, or a PKCS#12 file")
+            else if (pkcs12)
+                error = security.add_tls_client(name, certificateFile, "", keyPasswordField.text)
             else
                 error = security.add_tls_client(name, certificateFile, keyFile, keyPasswordField.text)
             break
@@ -98,9 +105,21 @@ Dialog {
         case "uds-auth-key":
             error = security.add_auth_key(name, authKeyField.text, authMacBox.currentText)
             break
-        case "key-server":
-            error = security.add_key_server(name, serverUrlField.text, serverTokenField.text,
-                                            serverTrustedBox.currentIndex > 0 ? serverTrustedBox.currentText : "")
+        case "key-server": {
+            const trusted = serverTrustedBox.currentIndex > 0 ? serverTrustedBox.currentText : ""
+            if (serverAuth === "token")
+                error = security.add_key_server(name, serverUrlField.text, serverTokenField.text, trusted)
+            else
+                error = security.add_oauth_key_server(name, {
+                    url: serverUrlField.text, trusted: trusted, auth: serverAuth, token_url: tokenUrlField.text,
+                    client_id: clientIdField.text, client_secret: clientSecretField.text, scope: scopeUrlField.text,
+                    device_url: deviceUrlField.text,
+                })
+            break
+        }
+        case "pkcs11":
+            error = security.add_pkcs11_key(name, pkcs11ModuleField.text, pkcs11TokenField.text, pkcs11KeyField.text,
+                                             pkcs11PinField.text)
             break
         }
         if (done(error, qsTr("Added %1").arg(name)))
@@ -418,9 +437,9 @@ Dialog {
                         Layout.fillWidth: true
                     }
                 }
-                Label { text: qsTr("Private key"); visible: dialog.purpose === "tls-client" }
+                Label { text: qsTr("Private key"); visible: dialog.purpose === "tls-client" && !dialog.pkcs12 }
                 RowLayout {
-                    visible: dialog.purpose === "tls-client"
+                    visible: dialog.purpose === "tls-client" && !dialog.pkcs12
                     Layout.fillWidth: true
                     Button { text: qsTr("Choose…"); onClicked: keyChooser.open() }
                     Label {
@@ -430,12 +449,12 @@ Dialog {
                         Layout.fillWidth: true
                     }
                 }
-                Label { text: qsTr("Key password"); visible: dialog.purpose === "tls-client" }
+                Label { text: dialog.pkcs12 ? qsTr("File password") : qsTr("Key password"); visible: dialog.purpose === "tls-client" }
                 TextField {
                     id: keyPasswordField
                     visible: dialog.purpose === "tls-client"
                     echoMode: TextInput.Password
-                    placeholderText: qsTr("if the private key file is encrypted")
+                    placeholderText: dialog.pkcs12 ? qsTr("the password of the PKCS#12 file") : qsTr("if the private key file is encrypted")
                     Layout.fillWidth: true
                 }
 
@@ -544,12 +563,56 @@ Dialog {
                     placeholderText: qsTr("https://keys.example.com/api")
                     Layout.fillWidth: true
                 }
-                Label { text: qsTr("Token"); visible: dialog.purpose === "key-server" }
+                Label { text: qsTr("Authentication"); visible: dialog.purpose === "key-server" }
+                ComboBox {
+                    id: serverAuthBox
+                    visible: dialog.purpose === "key-server"
+                    model: [qsTr("Bearer token"), qsTr("OAuth: client credentials"), qsTr("OAuth: sign in on the web")]
+                    Layout.preferredWidth: 280
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("A static token, or OAuth 2.0 tokens from your identity provider: with this computer's own client ID and secret, or by signing in with your account (device sign-in) — the refresh token is kept encrypted")
+                }
+                Label { text: qsTr("Token"); visible: dialog.purpose === "key-server" && dialog.serverAuth === "token" }
                 TextField {
                     id: serverTokenField
-                    visible: dialog.purpose === "key-server"
+                    visible: dialog.purpose === "key-server" && dialog.serverAuth === "token"
                     echoMode: TextInput.Password
                     placeholderText: qsTr("bearer token, kept encrypted (optional)")
+                    Layout.fillWidth: true
+                }
+                Label { text: qsTr("Token endpoint"); visible: dialog.purpose === "key-server" && dialog.serverAuth !== "token" }
+                TextField {
+                    id: tokenUrlField
+                    visible: dialog.purpose === "key-server" && dialog.serverAuth !== "token"
+                    placeholderText: qsTr("https://login.example.com/oauth2/token")
+                    Layout.fillWidth: true
+                }
+                Label { text: qsTr("Device endpoint"); visible: dialog.purpose === "key-server" && dialog.serverAuth === "device" }
+                TextField {
+                    id: deviceUrlField
+                    visible: dialog.purpose === "key-server" && dialog.serverAuth === "device"
+                    placeholderText: qsTr("https://login.example.com/oauth2/devicecode")
+                    Layout.fillWidth: true
+                }
+                Label { text: qsTr("Client ID"); visible: dialog.purpose === "key-server" && dialog.serverAuth !== "token" }
+                TextField {
+                    id: clientIdField
+                    visible: dialog.purpose === "key-server" && dialog.serverAuth !== "token"
+                    Layout.fillWidth: true
+                }
+                Label { text: qsTr("Client secret"); visible: dialog.purpose === "key-server" && dialog.serverAuth === "client-credentials" }
+                TextField {
+                    id: clientSecretField
+                    visible: dialog.purpose === "key-server" && dialog.serverAuth === "client-credentials"
+                    echoMode: TextInput.Password
+                    placeholderText: qsTr("kept encrypted")
+                    Layout.fillWidth: true
+                }
+                Label { text: qsTr("Scope"); visible: dialog.purpose === "key-server" && dialog.serverAuth !== "token" }
+                TextField {
+                    id: scopeUrlField
+                    visible: dialog.purpose === "key-server" && dialog.serverAuth !== "token"
+                    placeholderText: qsTr("optional, e.g. keys.read")
                     Layout.fillWidth: true
                 }
                 Label { text: qsTr("Server certificate"); visible: dialog.purpose === "key-server" }
@@ -560,6 +623,37 @@ Dialog {
                     Layout.fillWidth: true
                     ToolTip.visible: hovered
                     ToolTip.text: qsTr("Trusted certificates of the Security Manager to check the key server's HTTPS certificate against")
+                }
+
+                // PKCS#11 token
+                Label { text: qsTr("Module"); visible: dialog.purpose === "pkcs11" }
+                TextField {
+                    id: pkcs11ModuleField
+                    visible: dialog.purpose === "pkcs11"
+                    placeholderText: qsTr("the vendor's PKCS#11 library, e.g. /usr/lib/opensc-pkcs11.so")
+                    Layout.fillWidth: true
+                }
+                Label { text: qsTr("Token"); visible: dialog.purpose === "pkcs11" }
+                TextField {
+                    id: pkcs11TokenField
+                    visible: dialog.purpose === "pkcs11"
+                    placeholderText: qsTr("token label")
+                    Layout.fillWidth: true
+                }
+                Label { text: qsTr("Key"); visible: dialog.purpose === "pkcs11" }
+                TextField {
+                    id: pkcs11KeyField
+                    visible: dialog.purpose === "pkcs11"
+                    placeholderText: qsTr("label of the private key and its certificate")
+                    Layout.fillWidth: true
+                }
+                Label { text: qsTr("PIN"); visible: dialog.purpose === "pkcs11" }
+                TextField {
+                    id: pkcs11PinField
+                    visible: dialog.purpose === "pkcs11"
+                    echoMode: TextInput.Password
+                    placeholderText: qsTr("kept encrypted; the key never leaves the token")
+                    Layout.fillWidth: true
                 }
 
                 Item { width: 1; height: 1 }
@@ -602,12 +696,50 @@ Dialog {
                         ToolTip.text: (modelData.description ? modelData.description + "\n" : "") + qsTr("From %1").arg(modelData.source)
                         HoverHandler { id: profileHover }
                     }
+                    Label {
+                        visible: modelData.device_sign_in
+                        text: modelData.signed_in ? qsTr("signed in") : qsTr("not signed in")
+                        color: modelData.signed_in ? Theme.success : Theme.warning
+                    }
+                    Button {
+                        visible: modelData.device_sign_in
+                        text: modelData.signed_in ? qsTr("Sign Out") : qsTr("Sign In…")
+                        flat: modelData.signed_in
+                        onClicked: modelData.signed_in ? dialog.security.sign_out(modelData.name)
+                                                       : dialog.report(dialog.security.start_sign_in(modelData.name))
+                    }
                     Button {
                         text: qsTr("Remove")
                         flat: true
-                        visible: !keyServer && !modelData.source.startsWith("entry point ")
+                        visible: !keyServer && !modelData.source.startsWith("entry point ") && !modelData.source.startsWith("pkcs11 ")
                         onClicked: { dialog.security.remove_profile(modelData.name); dialog.done("", qsTr("Removed %1").arg(modelData.name)) }
                     }
+                }
+            }
+
+            // OAuth device sign-in in progress: the code to enter at the identity provider
+            RowLayout {
+                readonly property var signIn: dialog.security.sign_in
+                visible: signIn.server !== undefined
+                spacing: 8
+                Layout.fillWidth: true
+                Label {
+                    text: !parent.signIn.server ? ""
+                        : parent.signIn.status === "waiting"
+                        ? qsTr("Sign in to %1: open <a href=\"%2\">%2</a> and enter the code <b>%3</b>")
+                            .arg(parent.signIn.server).arg(parent.signIn.verification_uri_complete || parent.signIn.verification_uri)
+                            .arg(parent.signIn.user_code)
+                        : parent.signIn.status === "done" ? qsTr("Signed in to %1").arg(parent.signIn.server)
+                        : qsTr("Sign-in to %1 failed: %2").arg(parent.signIn.server).arg(parent.signIn.status)
+                    textFormat: Text.StyledText
+                    color: parent.signIn.status === "waiting" || parent.signIn.status === "done" ? Theme.text : Theme.danger
+                    wrapMode: Text.Wrap
+                    Layout.fillWidth: true
+                    onLinkActivated: link => Qt.openUrlExternally(link)
+                }
+                Button {
+                    text: parent.signIn.status === "waiting" ? qsTr("Cancel") : qsTr("Dismiss")
+                    onClicked: dialog.security.cancel_sign_in()
                 }
             }
 
@@ -724,7 +856,7 @@ Dialog {
     FileChooser {
         id: certificateChooser
         title: qsTr("Certificate")
-        nameFilters: [qsTr("Certificates and revocation lists (*.pem *.crt *.cer *.crl *.der)"), qsTr("All files (*)")]
+        nameFilters: [qsTr("Certificates and revocation lists (*.pem *.crt *.cer *.crl *.der *.p12 *.pfx)"), qsTr("All files (*)")]
         onAccepted: dialog.certificateFile = selectedFile
     }
     FileChooser {

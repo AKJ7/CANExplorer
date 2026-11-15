@@ -42,6 +42,9 @@ Rectangle {
         const ethercat = connectionManager.ethercat
         if (ethercat.is_open)
             mark("ethercat", "ok", qsTr("Open on %1").arg(ethercat.adapter_description || ethercat.adapter))
+        const flexray = connectionManager.flexray
+        if (flexray.running)
+            mark("flexray", "ok", qsTr("Receiving: %1").arg(flexray.source_name))
         const io = connectionManager.physical_io
         if (io.is_open)
             mark("physical-io", "ok", qsTr("Open: %1").arg(io.device_name))
@@ -287,6 +290,14 @@ Rectangle {
                     active: root.currentTool === "compare"
                     activity: root.toolActivity["compare"] || null
                     onClicked: root.toolSelected("compare")
+                }
+
+                NavItem {
+                    text: qsTr("FlexRay")
+                    glyph: "≋"
+                    active: root.currentTool === "flexray"
+                    activity: root.toolActivity["flexray"] || null
+                    onClicked: root.toolSelected("flexray")
                 }
 
                 NavItem {

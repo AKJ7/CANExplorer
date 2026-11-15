@@ -491,6 +491,12 @@ async def test_uds_diagnostics_against_simulated_ecu(channel):
     try:
         assert 'WDB1234567890ABCD' in (await svc.uds_read_did('F190'))['text']
         assert (await svc.uds_read_dtcs())['dtcs']
+        details = await svc.uds_dtc_details('012345')
+        assert details['dtc'] == 'P0123-45' and details['status'] == '0x09'
+        assert details['snapshots'][0]['record'] == 1 and details['snapshots'][0]['undecoded']  # DID lengths unknown
+        assert details['extended_data']['undecoded'].startswith('01 03')
+        assert (await svc.uds_dtc_details('xyz'))['error'].startswith('Invalid DTC')
+        assert (await svc.uds_find_ecus(timeout=0.3))['ecus'] == ['7E8']
         assert (await svc.uds_reset(1))['reset']
     finally:
         svc.stop()
@@ -578,3 +584,41 @@ async def test_attach_wraps_an_external_session(channel):
     svc.stop()  # Must not close a session it does not own
     assert session.is_open
     session.stop()
+
+
+def test_flexray_tools(channel, tmp_path):
+    from pathlib import Path
+
+    from can_explorer.core import flexray
+    from can_explorer.core.flexray_database import ClusterSimulator, load_database
+
+    data = Path(__file__).resolve().parents[2] / 'data'
+    svc = service_unstarted(channel)
+    with pytest.raises(ValueError, match='Load the FlexRay cluster'):
+        svc.flexray_decode(12, 0, '00')
+    summary = svc.flexray_load_cluster(str(data / 'flexray_pdus.arxml'))
+    assert summary['cluster'] == 'Chassis' and summary['clusters'] == ['Chassis', 'Body']
+    assert summary['parameters']['Static slots'] == '50' and summary['controllers'] == ['EngineEcu']
+    combined = next(frame for frame in summary['frames'] if frame['name'] == 'FrCombined')
+    assert [(pdu['name'], pdu['offset'], pdu['update_bit']) for pdu in combined['pdus']] == [
+        ('EnginePdu', 0, 120),
+        ('WheelPdu', 8, 121),
+    ]
+    decoded = svc.flexray_decode(60, 0, 'A00F0000000000003930000000000001')
+    assert decoded['name'] == 'FrCombined'
+    assert decoded['pdus']['EnginePdu']['EngineSpeed'] == 1000 and decoded['pdus']['WheelPdu'] == 'not updated'
+    assert svc.flexray_decode(33, 0, '0000')['name'] is None
+
+    path = tmp_path / 'drive.pcap'
+    flexray.write_capture(
+        path, ClusterSimulator(load_database(data / 'flexray_pdus.arxml'), start=0.0).frames_until(0.05)
+    )
+    log = svc.flexray_read_log(str(path), slot=12, channel='B', limit=3)
+    assert log['format'] == 'pcap' and log['matching'] == 10 and len(log['frames']) == 3
+    assert log['frames'][0]['name'] == 'FrEngine' and log['frames'][0]['sync'] is True
+    report = svc.flexray_analyze_log(str(path))
+    assert report['described'] and report['issues'] == [] and report['channels']['A']['cycles'] == 10
+    with pytest.raises(ValueError, match='Not a pcap, pcapng, BLF or ASC'):
+        svc.flexray_read_log(str(data / 'example.dbc'))
+    with pytest.raises(ValueError, match='no FlexRay cluster'):
+        svc.flexray_load_cluster(str(data / 'example.arxml'))

@@ -153,6 +153,8 @@ def test_cdd_identifiers_and_decoding(cdd):
     assert cdd.fields(0xF100)[0] == {'name': 'EngineSpeed', 'unit': 'rpm'}
     assert cdd.describe(0x9999, b'\x00') is None
     assert cdd.describe(0xF100, b'\x00') is None  # Too short
+    # Data lengths, for splitting snapshot records and periodic data
+    assert (cdd.byte_length(0xF100), cdd.byte_length(0xF190), cdd.byte_length(0x9999)) == (4, 17, None)
 
 
 def test_cdd_rejects_other_files(data_dir):

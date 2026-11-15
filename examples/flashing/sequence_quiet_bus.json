@@ -1,0 +1,17 @@
+{
+  "name": "Quiet bus, programming session, check dependencies",
+  "steps": [
+    {"step": "session", "session": "03", "functional": true},
+    {"step": "keep_alive", "functional": true},
+    {"step": "dtc_setting", "on": false, "functional": true},
+    {"step": "communication_control", "control": "03", "communication": "01", "functional": true},
+    {"step": "session", "session": "02"},
+    {"step": "security", "level": 1},
+    {"step": "program", "erase_routine": "FF00"},
+    {"step": "routine", "routine": "FF01", "name": "Check programming dependencies"},
+    {"step": "reset", "type": 1},
+    {"step": "communication_control", "control": "00", "communication": "01", "functional": true},
+    {"step": "dtc_setting", "on": true, "functional": true},
+    {"step": "session", "session": "01", "functional": true}
+  ]
+}

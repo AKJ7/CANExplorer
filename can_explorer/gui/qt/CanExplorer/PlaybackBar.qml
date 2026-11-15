@@ -3,7 +3,8 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import CanExplorer 1.0
 
-// Controls of a playback (a replayed log file, or a log file transmitted on the bus): pause, progress and speed.
+// Controls of a playback (a replayed log file, or a log file transmitted on the bus): pause, single step,
+// breakpoints, progress and speed.
 Card {
     id: root
     required property var playback
@@ -14,7 +15,7 @@ Card {
     property var dismissAction: null
 
     padding: 12
-    implicitHeight: 64
+    implicitHeight: root.playback.hit_text ? 88 : 64
 
     function formatTime(seconds) {
         if (seconds < 0)
@@ -29,8 +30,13 @@ Card {
         : playback.state === "paused" ? Theme.warning
         : playback.state === "error" ? Theme.danger : Theme.muted
 
+    ColumnLayout {
+    anchors.fill: parent
+    spacing: 4
+
     RowLayout {
-        anchors.fill: parent
+        Layout.fillWidth: true
+        Layout.fillHeight: true
         spacing: 12
 
         RoundButton {
@@ -61,6 +67,24 @@ Card {
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
             }
+        }
+
+        ToolButton {
+            text: "⏭"
+            enabled: root.running
+            font.pixelSize: 14
+            ToolTip.visible: hovered
+            ToolTip.text: qsTr("Step: play the next frame, then pause")
+            onClicked: root.playback.step()
+        }
+        ToolButton {
+            id: breakpointsButton
+            text: root.playback.breakpoint_rows.length > 0 ? "● " + root.playback.breakpoint_rows.length : "●"
+            font.pixelSize: 13
+            palette.buttonText: root.playback.breakpoint_rows.some(b => b.enabled) ? Theme.danger : Theme.muted
+            ToolTip.visible: hovered
+            ToolTip.text: qsTr("Breakpoints: pause the playback after a frame, a signal condition or a time")
+            onClicked: breakpointsPopup.open()
         }
 
         ColumnLayout {
@@ -154,6 +178,143 @@ Card {
             ToolTip.visible: hovered
             ToolTip.text: qsTr("Close")
             onClicked: root.dismissAction()
+        }
+    }
+
+    // Where the playback stopped
+    Label {
+        visible: text.length > 0
+        text: root.playback.hit_text
+        color: Theme.warning
+        font.family: "monospace"
+        font.pixelSize: 12
+        elide: Text.ElideRight
+        Layout.fillWidth: true
+    }
+    }
+
+    Popup {
+        id: breakpointsPopup
+        y: -height - 8
+        x: Math.max(0, breakpointsButton.x - 40)
+        width: 560
+        padding: 12
+        modal: false
+        focus: true
+        closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+        function report(error) {
+            breakpointError.text = error || ""
+        }
+
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 8
+
+            Label { text: qsTr("Breakpoints"); font.bold: true }
+            Label {
+                visible: root.playback.breakpoint_rows.length === 0
+                text: qsTr("The playback pauses right after a frame that hits a breakpoint; Resume or Step goes on.")
+                color: Theme.muted
+                wrapMode: Text.Wrap
+                Layout.fillWidth: true
+            }
+            Repeater {
+                model: root.playback.breakpoint_rows
+                delegate: RowLayout {
+                    required property var modelData
+                    required property int index
+                    Layout.fillWidth: true
+                    CheckBox {
+                        checked: modelData.enabled
+                        onToggled: root.playback.set_breakpoint_enabled(index, checked)
+                    }
+                    Label { text: modelData.label; elide: Text.ElideRight; Layout.fillWidth: true }
+                    Label {
+                        text: modelData.skip > 0 ? qsTr("%1 hits (passes %2)").arg(modelData.hits).arg(modelData.skip)
+                                                 : qsTr("%1 hits").arg(modelData.hits)
+                        color: Theme.muted
+                        font.pixelSize: 12
+                    }
+                    ToolButton {
+                        text: "✕"
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Remove")
+                        onClicked: root.playback.remove_breakpoint(index)
+                    }
+                }
+            }
+            MenuSeparator { Layout.fillWidth: true }
+            RowLayout {
+                Layout.fillWidth: true
+                ComboBox {
+                    id: kindBox
+                    model: [qsTr("Frame"), qsTr("Signal condition"), qsTr("Time")]
+                    Layout.preferredWidth: 150
+                }
+                TextField {
+                    id: firstField
+                    placeholderText: kindBox.currentIndex === 0 ? qsTr("Identifiers, e.g. 7DF or 100-1FF ext")
+                                   : kindBox.currentIndex === 1 ? qsTr("Message.Signal > 3000, or … changes")
+                                   : qsTr("Seconds, e.g. 12.5")
+                    Layout.fillWidth: true
+                    onAccepted: addButton.clicked()
+                }
+                TextField {
+                    id: dataField
+                    visible: kindBox.currentIndex === 0
+                    placeholderText: qsTr("Data, e.g. 02 10 ??")
+                    Layout.preferredWidth: 130
+                    onAccepted: addButton.clicked()
+                }
+                SpinBox {
+                    id: skipBox
+                    visible: kindBox.currentIndex !== 2
+                    from: 0; to: 100000; value: 0
+                    editable: true
+                    Layout.preferredWidth: 110
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Hits to let pass before pausing (e.g. 9 to stop at the 10th)")
+                }
+                Button {
+                    id: addButton
+                    text: qsTr("Add")
+                    onClicked: {
+                        let error = ""
+                        if (kindBox.currentIndex === 0)
+                            error = root.playback.add_frame_breakpoint(firstField.text, dataField.text, skipBox.value)
+                        else if (kindBox.currentIndex === 1)
+                            error = root.playback.add_signal_breakpoint(firstField.text, skipBox.value)
+                        else {
+                            const seconds = Number(firstField.text.replace(",", "."))
+                            error = isNaN(seconds) ? qsTr("Not a number of seconds") : root.playback.add_time_breakpoint(seconds)
+                        }
+                        breakpointsPopup.report(error)
+                        if (!error) {
+                            firstField.text = ""
+                            dataField.text = ""
+                            skipBox.value = 0
+                        }
+                    }
+                }
+            }
+            Label {
+                id: breakpointError
+                visible: text.length > 0
+                color: text.startsWith("Added") ? Theme.muted : Theme.danger
+                wrapMode: Text.Wrap
+                Layout.fillWidth: true
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Item { Layout.fillWidth: true }
+                Button {
+                    text: qsTr("Remove All")
+                    enabled: root.playback.breakpoint_rows.length > 0
+                    onClicked: root.playback.clear_breakpoints()
+                }
+                Button { text: qsTr("Close"); onClicked: breakpointsPopup.close() }
+            }
         }
     }
 }

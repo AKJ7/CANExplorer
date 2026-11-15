@@ -96,6 +96,37 @@ async def test_hardware_periodic_transmission(channel, peer):
     session.stop()
 
 
+async def test_periodic_transmission_with_a_delayed_start(channel, peer):
+    session = live_session(channel)
+    session.start()
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    session.start_periodic(can.Message(arbitration_id=0x210, is_extended_id=False), 0.02, delay=0.1)
+    await wait_until(lambda: session.trace.total >= 1)
+    assert loop.time() - started >= 0.09  # Not before the delay
+    with pytest.raises(SessionError, match='starts at once'):
+        session.start_periodic(can.Message(arbitration_id=0x211, is_extended_id=False), 0.02, True, delay=0.1)
+    session.stop_periodic()
+    session.stop()
+
+
+async def test_periodic_transmission_records_why_it_stopped(channel, peer):
+    session = live_session(channel)
+    session.start()
+
+    def broken(msg):
+        raise ValueError('no key')
+
+    periodic = session.start_periodic(can.Message(arbitration_id=0x220, is_extended_id=False), 0.02, prepare=broken)
+    await wait_until(lambda: periodic.finished)
+    assert periodic.error == 'no key' and session.periodic == []
+    # Stopped before its first step: unregistered all the same
+    early = session.start_periodic(can.Message(arbitration_id=0x221, is_extended_id=False), 0.02)
+    early.stop()
+    assert early.finished and early.error == '' and session.periodic == []
+    session.stop()
+
+
 async def test_message_listeners_see_rx_and_tx(channel, peer):
     session = live_session(channel)
     seen = []

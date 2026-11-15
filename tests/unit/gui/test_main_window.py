@@ -9,6 +9,7 @@ from can_explorer.gui.application_metadata import ApplicationMetadata
 from can_explorer.gui.connection_manager import ConnectionManager
 from can_explorer.gui.help import HelpController
 from can_explorer.main_application import create_qml_engine
+from tests.unit.waiting import wait_until
 
 
 @pytest.fixture
@@ -98,7 +99,6 @@ def test_dashboard_pages_and_themes_render_without_warnings(window, qtbot):
 async def test_reverse_engineering_page_renders_without_warnings(window, qapp, qtbot, tmp_path, data_dir):
     """The bit grid, byte table and bit field form with traffic, a notch, a plotted field and a field added to the
     database editor, and the tabs of the analysis tools with results."""
-    import asyncio
 
     from PyQt6 import sip
     from PyQt6.QtCore import QObject, QUrl
@@ -112,17 +112,17 @@ async def test_reverse_engineering_page_renders_without_warnings(window, qapp, q
     generate(open_signal_database(data_dir / 'complex.dbc'), duration=2.0).write(path)
     manager.open_log_file(QUrl.fromLocalFile(str(path)), 'Raw', 0.0)
     connection = manager.connections[-1]
-    for _ in range(50):
-        await asyncio.sleep(0.01)
-        qapp.processEvents()
+    await wait_until(
+        lambda: connection.session.trace.total > 0 and not connection.session.is_open, pump=qapp.processEvents
+    )
     stack = [sip.cast(engine.rootObjects()[0], QQuickWindow).contentItem()]
     while not stack[-1].metaObject().className().startswith('ConnectionView'):
         item = stack.pop()
         stack.extend(item.childItems())
     view = stack[-1]
     view.setProperty('page', 'reverse')
-    qtbot.wait(300)
     tools = connection.reverse
+    await wait_until(lambda: tools.active and tools.identifiers, pump=qapp.processEvents)
     assert tools.active and tools.identifiers
     tools.select('100')
     tools.notch()
@@ -138,12 +138,7 @@ async def test_reverse_engineering_page_renders_without_warnings(window, qapp, q
 
     # The tabs of the automatic analysis, reference signals and markers, with results
     async def finished(tool):
-        for _ in range(500):
-            if not tool.running:
-                return
-            await asyncio.sleep(0.01)
-            qapp.processEvents()
-        raise AssertionError('The tool did not finish')
+        assert await wait_until(lambda: not tool.running, timeout=30, pump=qapp.processEvents), 'Did not finish'
 
     view.setProperty('page', 'reverse')
     tabs = view.findChild(QObject, 'reverseTabs')
@@ -171,11 +166,7 @@ async def test_reverse_engineering_page_renders_without_warnings(window, qapp, q
     tools.reaction.start_baseline()
     tools.reaction.mark_action()
     tools.reaction.capture()
-    for _ in range(200):
-        if not tools.reaction.running:
-            break
-        await asyncio.sleep(0.01)
-        qapp.processEvents()
+    await wait_until(lambda: not tools.reaction.running, timeout=10, pump=qapp.processEvents)
     qtbot.wait(50)
 
     tools.analysis.use(0)
@@ -184,11 +175,7 @@ async def test_reverse_engineering_page_renders_without_warnings(window, qapp, q
 
     # Temporal replay: the scrubber bar and the bit grid at a playback position render
     tools.start_replay()
-    for _ in range(200):
-        if tools.timeline.active:
-            break
-        await asyncio.sleep(0.01)
-        qapp.processEvents()
+    await wait_until(lambda: tools.timeline.active, pump=qapp.processEvents)
     assert tools.timeline.active
     tools.timeline.set_position(0.5)
     tools.timeline.play()
@@ -210,11 +197,17 @@ async def test_playback_bars_render_without_warnings(window, qapp, tmp_path):
         for i in range(200):
             logger.on_message_received(can.Message(arbitration_id=i, timestamp=i * 0.01))
     manager.open_log_file(QUrl.fromLocalFile(str(path)), 'Raw', 1.0)
+    manager.connections[0].replay.add_frame_breakpoint('3', '', 0)  # Stopped at a breakpoint: the hit line shows
     manager.add_connection({'name': 'Bus', 'interface': 'VirtualBus', 'channel': f'qml-{uuid.uuid4().hex}'})
     bus = manager.connections[-1]
     bus.open()
+    assert bus.bus_replay.add_time_breakpoint(0.05) == ''
     assert bus.bus_replay.start(QUrl.fromLocalFile(str(path)), 1.0, True, '') == ''
-    for _ in range(20):
+    replay = manager.connections[0].replay
+    await wait_until(lambda: replay.hit_text.startswith('Breakpoint 3'), pump=qapp.processEvents)
+    assert replay.hit_text.startswith('Breakpoint 3')
+    bus.bus_replay.step()
+    for _ in range(5):
         await asyncio.sleep(0.01)
         qapp.processEvents()
     manager.connections[0].replay.set_paused(True)
@@ -426,11 +419,7 @@ async def test_tests_view_renders_while_running(window, qapp):
     )
     connection_view.setProperty('page', 'tests')
     assert tests.run_case('GearboxTests') == ''  # Fails without database and simulation: renders errors too
-    for _ in range(60):
-        await asyncio.sleep(0.02)
-        qapp.processEvents()
-        if not tests.running:
-            break
+    await wait_until(lambda: not tests.running, timeout=10, pump=qapp.processEvents)
     tests.show_case('GearboxTests.obd_vehicle_speed_request')
     for _ in range(5):
         await asyncio.sleep(0.01)
@@ -647,7 +636,8 @@ async def test_trace_tools_and_record_dialog_render(window, qapp, tmp_path):
             )
     manager.open_log_file(QUrl.fromLocalFile(str(path)), 'Raw', 0.0)
     connection = manager.connections[-1]
-    await settle(30)
+    await wait_until(lambda: connection.session.trace.total == 200, pump=qapp.processEvents)
+    await settle()
     connection_view = next(i for i in _visual_items(view) if i.metaObject().className().startswith('ConnectionView'))
     connection_view.setProperty('page', 'trace')
     await settle()
@@ -933,8 +923,7 @@ async def test_ethercat_tool_renders_without_warnings(window, qapp):
         for _ in range(10):
             await asyncio.sleep(0.01)
             qapp.processEvents()
-        while ethercat.busy:
-            await asyncio.sleep(0.01)
+        assert await wait_until(lambda: not ethercat.busy, timeout=10), 'EtherCAT stayed busy'
         qapp.processEvents()
 
     await settle()  # Closed: no slaves
@@ -981,8 +970,7 @@ async def test_physical_io_tool_renders_without_warnings(window, qapp):
 
     await settle()  # Closed
     assert io.open_device('simulated') == ''
-    while not io.is_open:
-        await asyncio.sleep(0.01)
+    assert await wait_until(lambda: io.is_open)
     for line, output in ((0, True), (1, True), (4, False)):
         assert io.configure_line(line, output, 'up' if not output else 'none', False) == ''
         await settle()
@@ -1221,10 +1209,10 @@ async def test_status_dots_show_the_state_by_shape(window, qapp):
     assert statuses() == ['idle']  # Added closed: a hollow ring
     connection = manager.connections[0]
     connection.open()
-    await settle()
+    await wait_until(lambda: statuses() == ['ok'], pump=qapp.processEvents)
     assert statuses() == ['ok']  # Open: a filled circle
     connection.close()
-    await settle()
+    await wait_until(lambda: statuses() == ['idle'], pump=qapp.processEvents)
     assert statuses() == ['idle']
     assert warnings == []
 
@@ -1258,12 +1246,12 @@ async def test_views_show_their_activity_in_the_sidebar(window, qapp):
 
     assert views()['Diagnostics'].property('status') == ''
     connection.diagnostics.set_tester_present(True)
-    await settle()
+    await wait_until(lambda: views()['Diagnostics'].property('status') == 'ok', pump=qapp.processEvents)
     diagnostics = views()['Diagnostics']
     assert diagnostics.property('status') == 'ok'
     assert diagnostics.property('activity').toVariant() == {'status': 'ok', 'text': 'Tester present'}
     connection.diagnostics.set_tester_present(False)
-    await settle()
+    await wait_until(lambda: views()['Diagnostics'].property('status') == '', pump=qapp.processEvents)
     assert views()['Diagnostics'].property('status') == ''
     assert warnings == []
 
@@ -1317,7 +1305,7 @@ async def test_tools_show_their_activity_in_the_sidebar(window, qapp):
     await settle()
     assert activity('Multi-bus trace') == ('idle', 'Waiting for A to connect')
     manager.connections[0].open()
-    await settle()
+    await wait_until(lambda: activity('Multi-bus trace') == ('ok', 'Merging A'), pump=qapp.processEvents)
     assert activity('Multi-bus trace') == ('ok', 'Merging A')
     multi_bus.set_paused(True)
     await settle()
@@ -1325,7 +1313,7 @@ async def test_tools_show_their_activity_in_the_sidebar(window, qapp):
     multi_bus.set_paused(False)
     multi_bus.set_selected('A', False)
     manager.connections[0].close()
-    await settle()
+    await wait_until(lambda: activity('Multi-bus trace') == ('', ''), pump=qapp.processEvents)
     assert activity('Multi-bus trace') == ('', '')
     gateway.set_enabled(True)
     try:
@@ -1335,7 +1323,8 @@ async def test_tools_show_their_activity_in_the_sidebar(window, qapp):
         assert item.property('activity').toVariant()['text'] == '1 of 1 rules waiting for their connections'
         for connection in manager.connections:
             connection.open()
-        await settle(40)  # The gateway refreshes its rules periodically
+        # The gateway refreshes its rules periodically
+        await wait_until(lambda: gateway_item().property('status') == 'ok', pump=qapp.processEvents)
         item = gateway_item()
         assert item.property('status') == 'ok'
         assert item.property('activity').toVariant()['text'] == 'Forwarding, rules: 1'
@@ -1549,7 +1538,8 @@ async def test_table_rows_are_selected_by_clicks(window, qapp, tmp_path):
                 can.Message(arbitration_id=0x100 + i % 8, data=bytes([i % 256]), timestamp=i * 0.01)
             )
     manager.open_log_file(QUrl.fromLocalFile(str(path)), 'Raw', 0.0)
-    await settle(30)
+    await wait_until(lambda: manager.connections[-1].session.trace.total == 200, pump=qapp.processEvents)
+    await settle()
     connection_view = next(i for i in _visual_items(view) if i.metaObject().className().startswith('ConnectionView'))
     shift, control = Qt.KeyboardModifier.ShiftModifier, Qt.KeyboardModifier.ControlModifier
 
@@ -1722,10 +1712,7 @@ async def test_trace_auto_scroll_continues_with_selected_rows(window, qapp):
         with can.Bus(interface='virtual', channel=channel) as bus:
             for i in range(count):
                 bus.send(can.Message(arbitration_id=0x100 + i % 8, data=bytes([i % 256])))
-        for _ in range(100):
-            await settle(2)
-            if model.rowCount(QModelIndex()) >= expected:
-                break
+        await wait_until(lambda: model.rowCount(QModelIndex()) >= expected, pump=qapp.processEvents)
         await settle()
 
     def at_bottom():
@@ -1787,4 +1774,68 @@ def test_someip_e2e_dialog_renders_without_warnings(window, qtbot):
     someip.remove_e2e(0)
     root.setProperty('tool', '')
     qtbot.wait(50)
+    assert warnings == []
+
+
+async def test_restbus_page_with_expanded_messages_renders_without_warnings(window, qtbot, tmp_path):
+    """The restbus table with expanded rows (choices, multiplexer pages, counters, a checksum), while running and
+    with raw values: no QML warnings, and editing a value keeps the row expanded (the list is not rebuilt)."""
+    from PyQt6 import sip
+    from PyQt6.QtCore import QUrl
+    from PyQt6.QtQuick import QQuickWindow
+
+    from tests.unit.gui.test_restbus_gui import RICH_DBC
+
+    engine, manager, warnings = window
+    path = tmp_path / 'rich.dbc'
+    path.write_text(RICH_DBC)
+    manager.add_connection({'name': 'Bus', 'interface': 'VirtualBus', 'channel': f'qml-{uuid.uuid4().hex}'})
+    connection = manager.connections[-1]
+    connection.open()
+    connection.load_database(QUrl.fromLocalFile(str(path)))
+    window_item = sip.cast(engine.rootObjects()[0], QQuickWindow)
+    window_item.resize(1400, 900)
+    window_item.show()
+    qtbot.wait(50)
+
+    def items(root, prefix):
+        stack, found = [root], []
+        while stack:
+            item = stack.pop()
+            if item.metaObject().className().startswith(prefix) and item.isVisible():
+                found.append(item)
+            stack.extend(item.childItems())
+        return found
+
+    def find(prefix):
+        stack = [sip.cast(engine.rootObjects()[0], QQuickWindow).contentItem()]
+        while stack:
+            item = stack.pop()
+            if item.metaObject().className().startswith(prefix):
+                return item
+            stack.extend(item.childItems())
+        return None
+
+    find('ConnectionView').setProperty('page', 'restbus')
+    qtbot.wait(50)
+    view = find('RestbusView')
+    assert view is not None
+    view.setProperty('expanded', {'EngineData': True, 'Gearbox': True})
+    qtbot.wait(50)
+    # The editors of the expanded rows exist: value fields, the Gear choices, role boxes, the page check boxes
+    assert len(items(view, 'TextField_')) >= 3
+    assert len(items(view, 'ComboBox_')) >= 6
+    page_boxes = [box for box in items(view, 'CheckBox_') if box.property('text') in ('0', '1')]
+    assert len(page_boxes) == 2
+    restbus = connection.restbus
+    assert restbus.set_role('EngineData', 'Crc', 'checksum', 'xor', '0x10') == ''
+    assert restbus.start() == ''
+    qtbot.wait(80)
+    restbus.set_value('Gearbox', 'Gear', 'R')
+    restbus.set_raw_values(True)
+    qtbot.wait(50)
+    assert view.property('expanded').toVariant() == {'EngineData': True, 'Gearbox': True}
+    restbus.set_raw_values(False)
+    restbus.stop()
+    qtbot.wait(30)
     assert warnings == []

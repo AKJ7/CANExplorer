@@ -64,7 +64,11 @@ class IsoTpClient:
         block_size: int = 0,
         st_min: int = 0,
         timeout: float = 1.0,
+        listen: bool = True,
+        on_payload=None,
     ):
+        """`listen` False: frames are not taken from the session but passed to `feed` (e.g. by a functional
+        transport serving several ECUs); `on_payload` receives the reassembled payloads instead of `receive`."""
         self.session = session
         self.tx_id, self.rx_id, self.extended, self.fd = tx_id, rx_id, extended, fd
         self.padding = padding
@@ -74,10 +78,25 @@ class IsoTpClient:
         self._received: asyncio.Queue[bytes] = asyncio.Queue()
         self._flow_control: asyncio.Queue[bytes] = asyncio.Queue()
         self._reception: Optional[_Reception] = None
-        session.add_message_listener(self._on_message)
+        self._on_payload = on_payload
+        self._listening = listen
+        if listen:
+            session.add_message_listener(self._on_message)
 
     def close(self) -> None:
-        self.session.remove_message_listener(self._on_message)
+        if self._listening:
+            self.session.remove_message_listener(self._on_message)
+            self._listening = False
+
+    def feed(self, msg: can.Message) -> None:
+        """Process a received frame (for a client created with listen=False)."""
+        self._on_message(msg)
+
+    def _deliver(self, payload: bytes) -> None:
+        if self._on_payload is not None:
+            self._on_payload(payload)
+        else:
+            self._received.put_nowait(payload)
 
     def __enter__(self) -> 'IsoTpClient':
         return self
@@ -179,7 +198,7 @@ class IsoTpClient:
                     length, offset = data[1], 2
                 if 0 < length <= len(data) - offset:
                     self._reception = None
-                    self._received.put_nowait(bytes(data[offset : offset + length]))
+                    self._deliver(bytes(data[offset : offset + length]))
             case 1:
                 if len(data) < 2:
                     return
@@ -199,7 +218,7 @@ class IsoTpClient:
                 reception.next_sn = (reception.next_sn + 1) & 0x0F
                 if len(reception.data) >= reception.length:
                     self._reception = None
-                    self._received.put_nowait(bytes(reception.data[: reception.length]))
+                    self._deliver(bytes(reception.data[: reception.length]))
                     return
                 reception.block_count += 1
                 if self.block_size and reception.block_count % self.block_size == 0:

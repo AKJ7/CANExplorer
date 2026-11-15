@@ -1,7 +1,8 @@
 # QML panel API
 
 A panel is a QML file whose root object declares `property var panel`. CANExplorer sets it to the panel bridge of
-the connection when the panel is created:
+the connection when the panel is created (the [panel builder](../user-guide/simulation.md#building-panels-without-writing-qml)
+writes such files too):
 
 ```qml
 import QtQuick 2.15

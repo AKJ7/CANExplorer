@@ -5,6 +5,7 @@ from typing import List, Optional
 
 from PyQt6.QtCore import QObject, QUrl, pyqtProperty, pyqtSignal, pyqtSlot
 
+from can_explorer.core.breakpoints import Breakpoint, BreakpointSet
 from can_explorer.core.filters import MessageFilter
 from can_explorer.core.playback import SPEEDS, LogPlayer, PlaybackClock, speed_label
 from can_explorer.core.session import SessionState
@@ -27,6 +28,7 @@ class PlaybackController(QObject):
         super().__init__(parent)
         self.connection = connection
         self._snapshot: tuple = ()
+        self.breakpoints = BreakpointSet(lambda: self.connection.session.decoder.database)
 
     # Implemented by the subclasses
 
@@ -56,6 +58,8 @@ class PlaybackController(QObject):
             clock.speed if clock else None,
             self._frames(),
             self._iteration(),
+            self.breakpoints.version,
+            clock.paused if clock else False,
         )
         if snapshot != self._snapshot:
             self._snapshot = snapshot
@@ -160,14 +164,85 @@ class PlaybackController(QObject):
             clock.pause() if paused else clock.resume()
             self.refresh()
 
+    # Breakpoints and single stepping
+
+    @pyqtSlot()
+    def step(self):
+        """Play the next frame, then pause."""
+        clock = self._clock()
+        if clock is not None and self._state() in ('playing', 'paused'):
+            clock.step()
+            self.refresh()
+
+    @pyqtProperty('QVariantList', notify=changed)
+    def breakpoint_rows(self) -> List[dict]:
+        return self.breakpoints.rows()
+
+    @pyqtProperty(str, notify=changed)
+    def hit_text(self) -> str:
+        """Where the playback stopped: the breakpoint (or step), its time and frame; '' while not stopped at one."""
+        hit = self.breakpoints.last_hit
+        clock = self._clock()
+        if hit is None or clock is None or not clock.paused or self._state() != 'paused':
+            return ''
+        return hit.text
+
+    def _added(self, make) -> str:
+        try:
+            self.breakpoints.add(make())
+        except ValueError as e:
+            return str(e)
+        self.refresh()
+        return ''
+
+    @pyqtSlot(str, str, int, result=str)
+    def add_frame_breakpoint(self, identifiers: str, data: str, skip: int) -> str:
+        """Pause after frames matching the identifiers (display filter syntax) and the data pattern ("02 10 ??").
+        Returns an error, or ''."""
+        return self._added(lambda: Breakpoint.frame(identifiers, data, max(0, skip)))
+
+    @pyqtSlot(str, int, result=str)
+    def add_signal_breakpoint(self, condition: str, skip: int) -> str:
+        """Pause when a database signal's condition becomes true ("Message.Signal > 3000", "… changes")."""
+        error = self._added(lambda: Breakpoint.condition(condition, max(0, skip)))
+        if error or self.connection.session.decoder.database is not None:
+            return error
+        return 'Added; it hits once a database with the signal is loaded'
+
+    @pyqtSlot(float, result=str)
+    def add_time_breakpoint(self, seconds: float) -> str:
+        return self._added(lambda: Breakpoint.at(seconds))
+
+    @pyqtSlot(int)
+    def remove_breakpoint(self, index: int):
+        self.breakpoints.remove(index)
+        self.refresh()
+
+    @pyqtSlot(int, bool)
+    def set_breakpoint_enabled(self, index: int, enabled: bool):
+        self.breakpoints.set_enabled(index, enabled)
+        self.refresh()
+
+    @pyqtSlot()
+    def clear_breakpoints(self):
+        self.breakpoints.clear()
+        self.refresh()
+
 
 class ReplayPlayback(PlaybackController):
     """Playback of a connection replaying a log file into the views."""
 
+    def __init__(self, connection, parent: Optional[QObject] = None):
+        super().__init__(connection, parent)
+        _ = self.source  # The replay's source checks these breakpoints from its first frame
+
     @property
     def source(self) -> Optional[FileSource]:
         source = self.connection.session.source
-        return source if isinstance(source, FileSource) else None
+        if not isinstance(source, FileSource):
+            return None
+        source.breakpoints = self.breakpoints  # Kept across replays of the connection
+        return source
 
     def _clock(self) -> Optional[PlaybackClock]:
         return self.source.clock if self.source else None
@@ -256,7 +331,15 @@ class BusReplay(PlaybackController):
         except ValueError as e:
             return f'Invalid filter: {e}'
         self.stop()
-        self._player = LogPlayer(self.connection.session, path, speed, loop, message_filter, on_finished=self._finished)
+        self._player = LogPlayer(
+            self.connection.session,
+            path,
+            speed,
+            loop,
+            message_filter,
+            on_finished=self._finished,
+            breakpoints=self.breakpoints,
+        )
         try:
             self._player.start()
         except OSError as e:

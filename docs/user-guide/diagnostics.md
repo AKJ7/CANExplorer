@@ -6,7 +6,7 @@ On CAN it uses ISO-TP (ISO 15765-2); on [LIN](lin.md) connections the LIN transp
 ![Diagnostics view](../assets/screenshots/diagnostics.png)
 
 The view has three parts: the services on the left, grouped into sections (Target ECU, Session, Data identifiers,
-Security access, Routine control, Raw request); the ECU's **Trouble codes** at the top right; and the request
+Periodic data, Security access, Routine control, Raw request); the ECU's **Trouble codes** at the top right; and the request
 **History** below them. The panes can be resized by dragging the dividers. The header shows the transport, whether
 the connection is open, whether tester present is running and which diagnostic description is loaded. Errors appear
 in a banner below the header until the next request succeeds or you dismiss them.
@@ -39,22 +39,84 @@ Workshop interfaces with a J2534 driver work as
 | Data identifiers | ReadDataByIdentifier (0x22) and WriteDataByIdentifier (0x2E) |
 | Security access | SecurityAccess (0x27), see below |
 | Routine control | RoutineControl (0x31): start, stop, request results, with parameters |
+| Target ECU: **Find ECUs** | A functional TesterPresent (0x3E 0x00 to 0x7DF, or 0x18DB33F1 with 29-bit identifiers), listing the ECUs that answer |
 | Raw request | Any request as hex bytes |
-| Trouble codes: **Read** / **Clear** | ReadDTCInformation 0x19 0x02 (report DTCs by status mask) and ClearDiagnosticInformation (0x14) |
+| Trouble codes: **Read** / **Clear** | ReadDTCInformation (0x19) reports, see [Trouble codes](#trouble-codes), and ClearDiagnosticInformation (0x14) |
+| Trouble codes: **Details** | A DTC's snapshot (0x19 0x04) and extended data (0x19 0x06) records |
+| Periodic data | DynamicallyDefineDataIdentifier (0x2C) and ReadDataByPeriodicIdentifier (0x2A), see [Periodic data](#periodic-data) |
 
 Every request and its response are added to the **History**, numbered, with the service name above the request
 bytes and the interpretation above the response bytes. A coloured stripe and a status mark show the outcome: a
 filled circle for a positive response, a diamond for a negative response, a circle with "!" for a timeout or
 transport error. Responses are interpreted: standardised data identifiers by name (VIN, ECU serial number, …) with
-text values, negative response codes by name (e.g. *securityAccessDenied*). "Response pending" answers are waited
-for (up to 5 s each); other responses time out after 1 s.
+text values, negative response codes by name (e.g. *securityAccessDenied*), sub-functions by name (e.g.
+*reportDTCSnapshotRecordByDTCNumber*, *disableRxAndTx*).
+
+Responses time out after 1 s (P2) and "response pending" answers are waited for up to 5 s each (P2*). When the ECU
+reports its own P2 and P2* times in its DiagnosticSessionControl response, those times plus 0.5 s are used for the
+new session, but never shorter than 1 s and 5 s, so a slow transport (DoIP over WiFi, an ELM327 adapter) is not cut
+short. An ECU that needs 40 s to erase its flash memory and says so is therefore waited for.
+
+### Messages between requests
+
+Some messages an ECU sends answer no request: event-triggered responses set up with ResponseOnEvent (0x86), a late
+answer to a request that already timed out, periodic data on the diagnostic channel. They are listed in the
+**History** as *Unsolicited (sent by the ECU)*, marked with ↯, instead of being dropped. A response must echo the
+request's sub-function or identifier to count as its answer, so an event response for another DID arriving during a
+read is listed as unsolicited and the read still gets its own answer.
+
+Messages arriving **during** a request are always listed. To receive them **between** requests too, turn on
+**Listen between requests** in the History header (CAN only). It is off by default because receiving a segmented
+message means answering its flow control on the response ID, and two tools doing that for the same IDs (e.g. this
+view and the [OBD-II](obd.md) page, both on 0x7E8) would disturb the ECU's transfer. While it is on, everything this
+view's addressing uses — requests, tester present, [flashing](flashing.md), [UDS discovery](uds-discovery.md) — shares
+one ISO-TP receiver, so each flow control is answered once.
+
+To try ResponseOnEvent, send the setup as **Raw request**s: `86 03 02 F1 90 22 F1 90` reports a change of DID F190
+(onChangeOfDataIdentifier, infinite window, DID F190, service to respond to `22 F1 90`), then `86 05 02` starts it.
+
+## Periodic data
+
+The **Periodic data** section (CAN connections) makes the ECU send data on its own, without polling:
+
+1. Optionally **Define** a DID combining parts of others (DynamicallyDefineDataIdentifier 0x2C), e.g. DID `F201`
+   from `0100:1:2 F190:1:4` — 2 bytes of DID 0100 from its first byte, 4 bytes of the VIN — or from memory areas
+   such as `@20001000:4` (address in hex, size in bytes). **Clear** removes it (all of them with the DID field
+   empty). Many ECUs only allow this in the extended session.
+2. **Start** sends the periodic DIDs (F200-F2FF, several separated by spaces) at the slow, medium or fast rate
+   (ReadDataByPeriodicIdentifier 0x2A). The rates themselves are configured in the ECU. **Stop** ends it.
+
+The list shows each DID's latest value (decoded with the [diagnostic description](#diagnostic-descriptions-cdd-odxpdx)
+if it knows the DID), the number of messages and the measured rate.
+
+ECUs send periodic data in two ways. Per ISO 14229-1:2020 it is the DID's low byte followed by the data in single CAN
+frames, usually on a CAN ID of their own: enter it as **Frames on CAN ID**. A CAN frame carries no data length, so
+the shown data includes the frame's padding unless the description knows the DID's length. Earlier ECUs send it on
+the diagnostic response ID with the service ID 0x6A in front: leave the field empty, which turns on listening
+between requests. Periodic messages are not added to the History.
 
 ## Trouble codes
 
-**Read** in the **Trouble codes** pane lists the DTCs matching the **Status mask** (hexadecimal, `FF` for all) in
-SAE J2012 notation, e.g. `P0123-45` (code and failure type) with their status byte and the names of the status bits
-set (testFailed, confirmedDTC, …). Confirmed DTCs are marked with a red mark and a *Confirmed* label, pending ones
-with an amber diamond and *Pending*. **Clear** clears all diagnostic information (group 0xFFFFFF).
+**Read** in the **Trouble codes** pane lists the DTCs of the chosen report in SAE J2012 notation, e.g. `P0123-45`
+(code and failure type) with their status byte and the names of the status bits set (testFailed, confirmedDTC, …).
+Confirmed DTCs are marked with a red mark and a *Confirmed* label, pending ones with an amber diamond and *Pending*.
+**Clear** clears all diagnostic information (group 0xFFFFFF).
+
+| Report | ReadDTCInformation sub-function |
+|---|---|
+| By status mask | 0x02 reportDTCByStatusMask: the DTCs with one of the **Status mask** bits set (`FF` for all) |
+| Supported DTCs | 0x0A reportSupportedDTC: every DTC the ECU can report, whatever its status |
+| Fault detection counters | 0x14 reportDTCFaultDetectionCounter: how close each DTC is to failing (−128 passed … 127 failed) |
+| User-defined memory | 0x17 reportUserDefMemoryDTCByStatusMask: the DTCs of a secondary fault memory (**Memory** selection) |
+| Permanent, WWH-OBD | 0x55 reportWWHOBDDTCWithPermanentStatus: the emissions-related permanent DTCs |
+
+**Details** on a DTC reads its **snapshot records** (freeze frames: the conditions when the fault was stored) and its
+**extended data records** (counters such as occurrence and ageing), all record numbers. A snapshot record is a list
+of data identifiers with their values. The response does not give their lengths, so they are split with the loaded
+[diagnostic description](#diagnostic-descriptions-cdd-odxpdx), which also decodes the values into fields. Without one,
+or for a DID it does not know, the rest of the record is shown in hex as *not decoded*, and not split at a guess.
+Extended data records are manufacturer-defined bytes and are shown in hex; in scripts, give their lengths as
+`record_lengths` to split them.
 
 ## Security access
 
@@ -193,10 +255,91 @@ DID structures are read too. From ODX, the ReadDataByIdentifier services with fi
 (IDENTICAL, LINEAR and TEXTTABLE compu methods) are read; a `.pdx` archive's ODX documents are all read and their
 identifiers combined. Data of other types (structures, variable-length or multiplexed fields) is shown in hex.
 
+## More services in scripts
+
+`UdsClient` (`can_explorer.core.uds`) covers the rest of ISO 14229-1 for [test scripts](test-automation.md) and
+your own code:
+
+| Service | Methods |
+|---|---|
+| ReadDTCInformation (0x19) | `read_dtc_information(sub, …)` for 0x01, 0x02, 0x03, 0x04, 0x06, 0x07, 0x0A, 0x14, 0x17, 0x18, 0x19, 0x42 and 0x55 (`can_explorer.core.uds_dtc`) |
+| ReadScalingDataByIdentifier (0x24) | `read_scaling_data_by_identifier(did)`: the data types and lengths of a DID |
+| CommunicationControl (0x28), ControlDTCSetting (0x85) | `communication_control(control, communication)`, `control_dtc_setting(on)` |
+| DynamicallyDefineDataIdentifier (0x2C) | `dynamically_define_by_identifier(dddid, [(did, position, size), …])`, `dynamically_define_by_memory_address(dddid, [(address, size), …])`, `clear_dynamically_defined()` |
+| ReadDataByPeriodicIdentifier (0x2A) | `read_data_by_periodic_identifier(mode, [pdid, …])`, with a `PeriodicDataReceiver` (`can_explorer.core.uds_periodic`) collecting the data, its counts and rates |
+| RequestFileTransfer (0x38) | `write_file(path, data)`, `read_file(path)`, `read_directory(path)`, `delete_file(path)` |
+| ResponseOnEvent (0x86) | `response_on_event(event_type, …)`, with an `EventCollector` (`can_explorer.core.uds_events`) collecting the event-triggered responses |
+| LinkControl (0x87) | `link_control(control, mode=…, baudrate=…)` |
+
+```python
+from can_explorer.core import uds_dtc, uds_events, uds_periodic
+
+details = await uds.read_dtc_information(uds_dtc.REPORT_SNAPSHOT_BY_DTC, dtc=0x012345, description=description)
+print(details.describe())
+
+# The ECU sends data on its own: DID F201 built from two bytes of DID 0100, at the fast rate, on CAN id 0x5E8
+await uds.dynamically_define_by_identifier(0xF201, [(0x0100, 1, 2)])
+receiver = uds_periodic.PeriodicDataReceiver(lengths={0xF201: 2})
+receiver.attach(session, 0x5E8)
+await uds.read_data_by_periodic_identifier(uds_periodic.SEND_AT_FAST_RATE, [0xF201])
+
+# Tell me when DID F190 changes
+events = uds_events.EventCollector(uds)
+await uds.response_on_event(
+    uds_events.ON_CHANGE_OF_DATA_IDENTIFIER,
+    event_record=uds_events.data_identifier_record(0xF190),
+    service_to_respond=bytes([0x22, 0xF1, 0x90]),
+)
+await uds.response_on_event(uds_events.START)
+await uds.listen(10)  # Receive for 10 s; the event responses land in events.events
+```
+
+Responses that do not answer the current request (event-triggered responses, periodic data on the diagnostic
+channel, stale answers of an earlier request) go to the `add_unsolicited_listener` callbacks instead of being
+dropped. A response must echo the request's sub-function or identifier, so an event response for one DID is not
+taken as the answer to a read of another.
+
+**Periodic data** arrives, per ISO 14229-1:2020, as the periodic identifier followed by the data, without a service
+ID, in single CAN frames usually sent on an identifier of their own (give it to `attach`). Older ECUs send it on the
+diagnostic response identifier with the service ID 0x6A in front (`listen_to(uds)`). A CAN frame has no data length,
+so the data includes the frame's padding unless `lengths` (or a diagnostic description) gives the DID's length.
+
+**Functional requests** (`can_explorer.core.uds_functional`) go to all ECUs at once and collect every answer:
+
+```python
+from can_explorer.core.uds_functional import FunctionalUdsClient, obd_11bit
+
+with obd_11bit(session) as transport:  # 0x7DF; ECUs answer on 0x7E8-0x7EF (obd_29bit: 0x18DB33F1)
+    everyone = FunctionalUdsClient(transport)
+    print(await everyone.discover())  # [0x7E8, 0x7E9]
+    print(await everyone.read_dtcs())  # {response id: [DTC, …]}
+```
+
+On CAN a functional request must fit a single frame (7 bytes, 62 on CAN FD). The ECUs' answers may be segmented;
+the flow control for each goes to that ECU's physical request identifier. `mapped(session, functional_id, {response
+id: request id})` covers other addressing schemes, and `DoipFunctional(client, address)` sends to a functional logical
+address over [DoIP](doip.md); the functional addresses are vehicle specific, so none is assumed.
+
+!!! note "What is not decoded"
+    ISO 14229-1 is a paywalled standard. These services were checked against free references: the AUTOSAR
+    Diagnostic Communication Manager specification (R23-11), the udsoncan library and Wireshark's UDS dissector.
+    Where they leave a layout open it is kept as bytes:
+
+    - The scaling byte extensions of the bit-mapped types (0x24); formula and unit/format extensions are returned
+      as bytes, not evaluated.
+    - The durations of the ResponseOnEvent window times other than *infinite*, and the per-event records of
+      *reportActivatedEvents* (their length depends on each event's service to respond to).
+    - SecuredDataTransmission (0x84) is named but not decoded: its security layout is manufacturer specific.
+    - Directory information of RequestFileTransfer *readDir* is returned as bytes: its format is manufacturer specific.
+    - For 0x19 0x55 the references disagree: udsoncan reads 5-byte records (with a severity), the AUTOSAR
+      specification returns DTCAndStatusRecords (4 bytes). CANExplorer follows AUTOSAR.
+
 ## Simulated ECU
 
 `can_explorer.core.simulation` contains a UDS server (sessions, DIDs, security access with the key *seed XOR 0xFF*,
-DTCs, routines, downloads for [flashing](flashing.md), and Authentication by certificate exchange when given a
+DTCs with snapshot and extended data records, routines, downloads for [flashing](flashing.md), communication
+control, DTC setting, scaling data, dynamically defined and periodic DIDs, a small file system for RequestFileTransfer,
+ResponseOnEvent, link control, functional requests on 0x7DF, and Authentication by certificate exchange when given a
 `can_explorer.core.uds_auth.AuthenticationServer` with the trusted certificates and the DIDs it protects, and by
 challenge-response when given a `ChallengeResponseConfig`, e.g. `symmetric_challenge_response(key, 'aes-cmac')`)
 reachable over ISO-TP (`UdsEcuSimulator`) or behind simulated LIN slaves (`LinSlaveSimulator`). The

@@ -1,4 +1,3 @@
-import asyncio
 import socket
 import struct
 
@@ -14,6 +13,7 @@ from can_explorer.core.someip import (
     parse_messages,
     parse_sd,
 )
+from tests.unit.waiting import wait_until as wait_by_deadline
 
 
 def _tp(service, method, offset_units, more, segment, message_type=0x02):
@@ -173,10 +173,7 @@ async def test_monitor_receives_real_udp_on_loopback():
     try:
         sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sender.sendto(someip(0x4321, 0x0001, 0x00, b'\xaa'), ('127.0.0.1', port))
-        for _ in range(200):
-            if received:
-                break
-            await asyncio.sleep(0.01)
+        await wait_by_deadline(lambda: received)
         assert received and received[0].message.service_id == 0x4321
         assert received[0].local_port == port
         sender.close()

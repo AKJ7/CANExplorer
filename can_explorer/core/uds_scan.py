@@ -27,7 +27,15 @@ from dataclasses import dataclass
 from typing import AsyncIterator, Callable, Iterable, Optional
 
 from can_explorer.core.frames import format_hex
-from can_explorer.core.uds import NEGATIVE_RESPONSE, UdsClient, describe_response, nrc_name, service_name
+from can_explorer.core.uds import (
+    NEGATIVE_RESPONSE,
+    SUBFUNCTION_SERVICES,
+    SUPPRESS_POSITIVE_RESPONSE,
+    UdsClient,
+    describe_response,
+    nrc_name,
+    service_name,
+)
 
 # Scan kinds
 SERVICES = 'services'
@@ -47,8 +55,11 @@ KNOWN_SERVICES = (
     0x19,
     0x22,
     0x23,
+    0x24,
     0x27,
     0x28,
+    0x2A,
+    0x2C,
     0x2E,
     0x2F,
     0x31,
@@ -56,9 +67,13 @@ KNOWN_SERVICES = (
     0x35,
     0x36,
     0x37,
+    0x38,
     0x3D,
     0x3E,
+    0x84,
     0x85,
+    0x86,
+    0x87,
 )
 
 # Negative response codes that mean the probed item exists but is locked or needs another state; a fuzzer should
@@ -87,8 +102,14 @@ NO_RESPONSE = 'no-response'
 _INTERESTING = (POSITIVE, SECURITY, CONDITIONS, REJECTED, UNRESPONSIVE)
 
 
+def _suppressed(request: bytes) -> bool:
+    return len(request) >= 2 and request[0] in SUBFUNCTION_SERVICES and bool(request[1] & SUPPRESS_POSITIVE_RESPONSE)
+
+
 def classify(kind: str, request: bytes, response: Optional[bytes], error: Optional[str]) -> str:
     """One of POSITIVE, SECURITY, CONDITIONS, REJECTED, UNRESPONSIVE, ABSENT, NO_RESPONSE for a probe's outcome."""
+    if error is None and response is None and _suppressed(request):
+        return NO_RESPONSE  # The request asked for no positive response: silence is the expected answer
     if error is not None or response is None:
         # For a fuzzer a missing answer is an anomaly worth flagging; for a scan it just means "nothing there"
         return UNRESPONSIVE if kind == FUZZ else NO_RESPONSE

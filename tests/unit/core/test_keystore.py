@@ -366,6 +366,6 @@ def test_key_servers(store):
     with pytest.raises(KeyStoreError, match="No trusted certificates named 'OEM'"):
         store.add_key_server('Server', 'https://keys.example.com', 'token', 'OEM')
     info = store.add_key_server('Server', ' https://keys.example.com/api ', 'bearer-s3cr3t')
-    assert info.params == {'url': 'https://keys.example.com/api', 'trusted': ''}
+    assert info.params == {'url': 'https://keys.example.com/api', 'trusted': '', 'auth': 'token'}
     assert store.secrets('Server') == {'token': b'bearer-s3cr3t'}  # The token is a secret, kept encrypted
     assert 'bearer-s3cr3t' not in store.path.read_text()

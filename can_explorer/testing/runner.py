@@ -231,6 +231,8 @@ class TestRunner:
         self.report: Optional[TestReport] = None
         self._on_change = on_change
         self._task: Optional[asyncio.Task] = None
+        self._executing = False  # The run's task has started (before, cancelling it would skip its own cleanup)
+        self._stop_requested = False
         self._waiters: List[tuple] = []
         self._collectors: List[tuple] = []
         self._own: Set[int] = set()
@@ -275,12 +277,16 @@ class TestRunner:
         if self.running:
             raise ScriptError('Tests are running already')
         plan = self._prepare(selection, title)  # The report exists at once, also if the run is stopped right away
+        self._executing, self._stop_requested = False, False
         self._task = asyncio.ensure_future(self._execute(*plan))
         return self._task
 
     def stop(self) -> None:
         if self.running:
-            self._task.cancel()
+            if self._executing:
+                self._task.cancel()
+            else:  # Not started yet: cancelling now would end the task before it could report being stopped
+                self._stop_requested = True
             if self.report is not None:
                 self.report.stopped = True
             self._changed()
@@ -306,6 +312,11 @@ class TestRunner:
         return report, modules
 
     async def _execute(self, report: TestReport, modules: List) -> TestReport:
+        self._executing = True
+        if self._stop_requested:  # Stopped before it began: nothing ran
+            report.stopped = True
+            self._changed()
+            return report
         results = {result.key: result for result in report.results}
         started = time.monotonic()
         self.session.add_message_listener(self._on_message)

@@ -71,6 +71,8 @@ length of the recording and the number of frames, and controls the replay while 
 |---|---|
 | ▶ / ❚❚ | Pause and resume the replay (unlike **Pause view**, no frames are read while paused); ▶ plays a finished replay again |
 | Position slider | Drag to another point of the recording; the replay continues there when the slider is released |
+| ⏭ | Step: play the next frame, then pause |
+| ● | [Breakpoints](#breakpoints-and-stepping): pause after a frame, a signal condition or a time |
 | ⏪ / ⏩ | 10 seconds back or forward |
 | Speed | Change the speed at any time |
 
@@ -83,6 +85,23 @@ with databases and exported like live connections, but nothing can be transmitte
 reopens recent replays with their settings.
 
 ![Replay of a log file, paused](../assets/screenshots/replay.png)
+
+### Breakpoints and stepping
+
+To find the moment something happens in a long recording, set breakpoints with **●** in the playback bar: the
+replay runs (at any speed, also as fast as possible) and **pauses right after the frame that hits one**. The line
+under the bar says which breakpoint stopped it, when, and the frame, which is the newest one in the trace. **▶**
+resumes until the next hit, **⏭** plays exactly one more frame and pauses again. A breakpoint is one of:
+
+| Kind | Example | Pauses |
+|---|---|---|
+| Frame | `7DF` with data `02 10 ??` | After every frame matching the identifiers ([display filter](filters.md) syntax: `100-1FF`, `ext`, `!7E8 rx`) and, when given, the data pattern: hex bytes from the first byte on, `?` for any digit |
+| Signal condition | `EngineData.EngineSpeed > 3000`, `EngineData.Gear == Reverse`, `EngineData.Gear changes` | When the condition of a signal of the loaded database becomes true (not again while it stays true), or when the value changes. `==`, `!=`, `<`, `<=`, `>`, `>=`; value texts with `==` and `!=` |
+| Time | `12.5` | Once, at the first frame at or after that position (again after jumping back before it) |
+
+Each breakpoint counts its hits; **Hits to let pass** makes it pause only from a later hit, e.g. 9 to stop at the
+10th request. Untick a breakpoint to keep it without stopping. Frames passed over by jumping forward do not hit
+breakpoints. The breakpoints stay with the connection when the replay is played again.
 
 ## Replaying on the bus
 
@@ -99,7 +118,9 @@ recorded timing, e.g. to reproduce a situation for an ECU on the bench:
 Error frames are not sent. The transmitted frames appear as Tx frames in the trace, overview and statistics, and
 can be recorded. A playback bar shows the progress (and the pass when repeating); pause, resume, change the
 speed and jump within the recording there — the frames jumped over are not sent —, **■** stops and **✕** closes
-the bar. Disconnecting stops the replay; if transmitting fails, it
+the bar. [Breakpoints and stepping](#breakpoints-and-stepping) work the same way: the replay pauses right after
+sending the frame that hits a breakpoint, e.g. to watch an ECU react before going on; a breakpoint can be set before
+**Replay to bus…** starts it. Disconnecting stops the replay; if transmitting fails, it
 stops with a notification.
 
 ![Log file replayed on the bus](../assets/screenshots/bus-replay.png)

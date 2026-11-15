@@ -142,6 +142,52 @@ ColumnLayout {
             checked: true
         }
         Item {}
+
+        RowLayout {
+            CheckBox {
+                id: preBox
+                text: qsTr("Quiet the bus, communication type")
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Before programming, all ECUs (functionally) go to the extended session, stop DTC setting (0x85) and communication (0x28), kept there by TesterPresent; afterwards they are restored")
+            }
+            TextField {
+                id: communicationField
+                text: "01"
+                enabled: preBox.checked
+                Layout.preferredWidth: 44
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("CommunicationControl communicationType: 01 normal messages, 03 normal and network management")
+            }
+        }
+        RowLayout {
+            Label { text: qsTr("Data format") }
+            TextField {
+                id: formatField
+                text: "00"
+                Layout.preferredWidth: 44
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("RequestDownload dataFormatIdentifier (hex): compression and encryption method. Other than 00 needs an encoder")
+            }
+            Button {
+                text: root.flashing.encoder_file ? qsTr("Unload encoder") : qsTr("Encoder…")
+                ToolTip.visible: hovered
+                ToolTip.text: root.flashing.encoder_file
+                    ? root.flashing.encoder_file
+                    : qsTr("A Python file defining encode(data, address): the compression/encryption your ECU expects")
+                onClicked: root.flashing.encoder_file ? root.flashing.clear_encoder() : encoderDialog.open()
+            }
+        }
+        RowLayout {
+            Layout.columnSpan: 2
+            Button {
+                text: root.flashing.sequence_name
+                    ? qsTr("Unload sequence %1").arg(root.flashing.sequence_name)
+                    : qsTr("Sequence preset…")
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("A JSON sequence preset replaces the steps chosen here with a manufacturer's own order of steps")
+                onClicked: root.flashing.sequence_name ? root.flashing.clear_sequence() : sequenceDialog.open()
+            }
+        }
     }
 
     RowLayout {
@@ -161,6 +207,9 @@ ColumnLayout {
                 check_routine: checkField.text,
                 reset: resetBox.checked,
                 max_block: blockBox.value,
+                pre_programming: preBox.checked,
+                communication_type: communicationField.text,
+                data_format: formatField.text,
             }))
         }
         Button {
@@ -249,5 +298,21 @@ ColumnLayout {
             root.lastFile = selectedFile
             root.report(root.flashing.load_file(selectedFile, baseField.text))
         }
+    }
+
+    FileChooser {
+        id: sequenceDialog
+        title: qsTr("Sequence preset")
+        fileMode: FileChooser.OpenFile
+        nameFilters: [qsTr("Sequence presets (*.json)"), qsTr("All files (*)")]
+        onAccepted: root.report(root.flashing.load_sequence(selectedFile))
+    }
+
+    FileChooser {
+        id: encoderDialog
+        title: qsTr("Encoder")
+        fileMode: FileChooser.OpenFile
+        nameFilters: [qsTr("Python files (*.py)"), qsTr("All files (*)")]
+        onAccepted: root.report(root.flashing.load_encoder(selectedFile))
     }
 }

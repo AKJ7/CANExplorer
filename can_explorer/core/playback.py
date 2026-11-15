@@ -7,6 +7,7 @@ from typing import Callable, Optional, Tuple
 
 import can
 
+from can_explorer.core.breakpoints import BreakpointSet
 from can_explorer.core.filters import MessageFilter
 from can_explorer.sys.log_handler import get_logger
 
@@ -33,6 +34,8 @@ class PlaybackClock:
         self._offset = 0.0  # Position at _since
         self._since: Optional[float] = None  # None until started
         self._changed: Optional[asyncio.Event] = None
+        self._step = False  # A single step was asked for: the next frame is due now, then the playback pauses
+        self.seeks = 0  # Counts seeks, so a wait for resuming ends when the user jumps elsewhere
 
     @property
     def speed(self) -> float:
@@ -81,12 +84,36 @@ class PlaybackClock:
     def seek(self, position: float) -> None:
         """Continue at `position`: frames before it are due at once, also while paused."""
         self._offset, self._since = max(0.0, position), time.monotonic()
+        self._step = False
+        self.seeks += 1
         self._notify()
+
+    def pause_at(self, position: float) -> None:
+        """Pause with the position at `position` (the frame a breakpoint or a step stopped at)."""
+        self._offset, self._paused, self._step = max(0.0, position), True, False
+        self._notify()
+
+    def step(self) -> None:
+        """Play the next frame now, then pause (see pause_at). Pauses first when playing."""
+        if not self._paused:
+            self.pause()
+        self._step = True
+        self._notify()
+
+    @property
+    def stepping(self) -> bool:
+        return self._step
+
+    async def wait_while_paused(self) -> None:
+        """Wait until resumed, stepped or sought (a playback stopped at a breakpoint holds here)."""
+        seeks = self.seeks
+        while self._paused and not self._step and self.seeks == seeks:
+            await self._wait_for_change(None)
 
     def is_due(self, position: float) -> bool:
         """Whether a frame at this recording time can be played now (as fast as possible, it moves the position on)."""
         if self._paused:
-            return position <= self._offset
+            return self._step or position <= self._offset
         if self._speed <= 0:
             self._offset = max(self._offset, position)
             return True
@@ -99,7 +126,7 @@ class PlaybackClock:
             if interrupted is not None and interrupted():
                 return
             if self._paused:
-                if position <= self._offset:
+                if position <= self._offset or self._step:
                     return
                 await self._wait_for_change(None)
                 continue
@@ -139,6 +166,8 @@ class LogPlayer:
     """Transmits the frames of a log file on a session with their recorded timing (scaled by the speed).
 
     Error frames are skipped; `message_filter` (display filter syntax, e.g. "rx !7DF") selects the frames to send.
+    It pauses right after sending a frame that hits one of `breakpoints`, and after each single step
+    (`clock.step()`).
     """
 
     PLAYING, PAUSED, FINISHED, STOPPED, ERROR = 'playing', 'paused', 'finished', 'stopped', 'error'
@@ -151,12 +180,14 @@ class LogPlayer:
         loop: bool = False,
         message_filter: Optional[MessageFilter] = None,
         on_finished: Optional[Callable[['LogPlayer'], None]] = None,
+        breakpoints: Optional[BreakpointSet] = None,
     ):
         self.session = session
         self.path = Path(path)
         self.loop = loop
         self.clock = PlaybackClock(speed)
         self.filter = message_filter or MessageFilter()
+        self.breakpoints = breakpoints if breakpoints is not None else BreakpointSet()
         self.sent = 0
         self.iteration = 0  # Completed passes when looping
         self.duration: Optional[float] = None
@@ -198,6 +229,7 @@ class LogPlayer:
         if position < self.clock.position:
             self._restart = True
         self._skip_until = position
+        self.breakpoints.seeked(position)
         self.clock.seek(position)
 
     async def _scan(self) -> None:
@@ -211,6 +243,7 @@ class LogPlayer:
 
         try:
             fresh = True
+            self.breakpoints.restart()
             while True:
                 await self._play_once(FileSource(self.path, speed=0), fresh)
                 if self._restart:  # Seeking back: the same pass again, skipping up to the position
@@ -220,6 +253,7 @@ class LogPlayer:
                     break
                 self.iteration += 1
                 self._skip_until, fresh = 0.0, True
+                self.breakpoints.seeked(0.0)  # A new pass: time breakpoints and conditions again
             self._state = self.FINISHED
         except asyncio.CancelledError:
             self._state = self.STOPPED
@@ -252,8 +286,12 @@ class LogPlayer:
                         return
                     if position < self._skip_until:  # Seeking forward ended the wait for this frame
                         continue
+                    stepping = self.clock.stepping
                     self.session.send(self._copy(msg))
                     self.sent += 1
+                    if (stepping or self.breakpoints.items) and self.breakpoints.check(msg, position, stepping):
+                        self.clock.pause_at(position)
+                        await self.clock.wait_while_paused()
                 await asyncio.sleep(0)  # Let the GUI run between batches sent as fast as possible
         finally:
             source.close()

@@ -1,7 +1,14 @@
 """Unified Diagnostic Services (ISO 14229-1): service client, response decoding and a passive decoder.
 
 The client works over any transport offering `send(payload)` and `receive(timeout)` coroutines:
-ISO-TP on CAN (IsoTpClient) or the LIN transport layer (LinTpClient).
+ISO-TP on CAN (IsoTpClient), the LIN transport layer (LinTpClient) or DoIP (DoipTransport).
+
+The services beyond the basic ones live in their own modules, reached through `UdsClient` methods:
+ReadDTCInformation sub-functions (core/uds_dtc.py), ReadDataByPeriodicIdentifier and
+DynamicallyDefineDataIdentifier (core/uds_periodic.py), RequestFileTransfer (core/uds_file_transfer.py),
+ResponseOnEvent (core/uds_events.py) and functional addressing (core/uds_functional.py). ISO 14229 is paywalled:
+their layouts were checked against the free AUTOSAR Dcm specification (R23-11), the udsoncan library and Wireshark's
+UDS dissector; parts none of them pins down are labelled and kept raw rather than guessed.
 """
 
 import asyncio
@@ -23,9 +30,12 @@ SERVICES = {
     0x19: 'ReadDTCInformation',
     0x22: 'ReadDataByIdentifier',
     0x23: 'ReadMemoryByAddress',
+    0x24: 'ReadScalingDataByIdentifier',
     0x27: 'SecurityAccess',
     0x28: 'CommunicationControl',
     0x29: 'Authentication',
+    0x2A: 'ReadDataByPeriodicIdentifier',
+    0x2C: 'DynamicallyDefineDataIdentifier',
     0x2E: 'WriteDataByIdentifier',
     0x2F: 'InputOutputControlByIdentifier',
     0x31: 'RoutineControl',
@@ -33,10 +43,17 @@ SERVICES = {
     0x35: 'RequestUpload',
     0x36: 'TransferData',
     0x37: 'RequestTransferExit',
+    0x38: 'RequestFileTransfer',
     0x3D: 'WriteMemoryByAddress',
     0x3E: 'TesterPresent',
+    0x84: 'SecuredDataTransmission',
     0x85: 'ControlDTCSetting',
+    0x86: 'ResponseOnEvent',
+    0x87: 'LinkControl',
 }
+
+# Services whose sub-function byte carries the suppressPosRspMsgIndicationBit (0x80)
+SUBFUNCTION_SERVICES = (0x10, 0x11, 0x27, 0x28, 0x2C, 0x31, 0x3E, 0x85, 0x86, 0x87)
 
 NEGATIVE_RESPONSE_CODES = {
     0x10: 'generalReject',
@@ -67,6 +84,54 @@ NEGATIVE_RESPONSE_CODES = {
 SESSIONS = {0x01: 'default', 0x02: 'programming', 0x03: 'extended', 0x04: 'safety system'}
 RESET_TYPES = {0x01: 'hard reset', 0x02: 'key off on reset', 0x03: 'soft reset'}
 ROUTINE_CONTROL_TYPES = {0x01: 'start', 0x02: 'stop', 0x03: 'request results'}
+
+# CommunicationControl (0x28): control types, and the communication types of the low two bits of the
+# communicationType byte (its high nibble is the subnet: 0x0 all networks, 0xF the network of the request)
+COMMUNICATION_CONTROL_TYPES = {
+    0x00: 'enableRxAndTx',
+    0x01: 'enableRxAndDisableTx',
+    0x02: 'disableRxAndEnableTx',
+    0x03: 'disableRxAndTx',
+    0x04: 'enableRxAndDisableTxWithEnhancedAddressInformation',
+    0x05: 'enableRxAndTxWithEnhancedAddressInformation',
+}
+COMMUNICATION_TYPES = {0x01: 'normal communication', 0x02: 'network management', 0x03: 'normal and network management'}
+DTC_SETTING_TYPES = {0x01: 'on', 0x02: 'off'}  # ControlDTCSetting (0x85)
+
+# LinkControl (0x87)
+LINK_CONTROL_TYPES = {
+    0x01: 'verifyModeTransitionWithFixedParameter',
+    0x02: 'verifyModeTransitionWithSpecificParameter',
+    0x03: 'transitionMode',
+}
+LINK_CONTROL_MODES = {  # linkControlModeIdentifier of verifyModeTransitionWithFixedParameter
+    0x01: 'PC 9600 baud',
+    0x02: 'PC 19200 baud',
+    0x03: 'PC 38400 baud',
+    0x04: 'PC 57600 baud',
+    0x05: 'PC 115200 baud',
+    0x10: 'CAN 125 kbit/s',
+    0x11: 'CAN 250 kbit/s',
+    0x12: 'CAN 500 kbit/s',
+    0x13: 'CAN 1 Mbit/s',
+    0x20: 'programming setup',
+}
+
+# ReadScalingDataByIdentifier (0x24): the high nibble of a scalingByte; its low nibble is a byte count
+SCALING_DATA_TYPES = {
+    0x0: 'unsigned numeric',
+    0x1: 'signed numeric',
+    0x2: 'bit mapped reported without mask',
+    0x3: 'bit mapped reported with mask',
+    0x4: 'binary coded decimal',
+    0x5: 'state encoded variable',
+    0x6: 'ASCII',
+    0x7: 'signed floating point',
+    0x8: 'packet',
+    0x9: 'formula',
+    0xA: 'unit/format',
+    0xB: 'state and connection type',
+}
 
 # Standardised data identifiers (ISO 14229-1 annex C)
 DATA_IDENTIFIERS = {
@@ -110,6 +175,8 @@ SUPPRESS_POSITIVE_RESPONSE = 0x80
 # P2 server timeout, and P2* for answers after "response pending"
 P2_TIMEOUT = 1.0
 P2_EXTENDED_TIMEOUT = 5.0
+# Added to the P2/P2* times an ECU reports in its DiagnosticSessionControl response, for the network and the tester
+TIMING_MARGIN = 0.5
 TESTER_PRESENT_INTERVAL = 2.0
 
 
@@ -124,7 +191,98 @@ def _is_response_to(request: bytes, response: bytes) -> bool:
         return False
     if response[0] == NEGATIVE_RESPONSE:
         return len(response) >= 2 and response[1] == request[0]
-    return response[0] == request[0] + 0x40
+    if response[0] != request[0] + 0x40:
+        return False
+    if request[0] == 0x2A:
+        return len(response) == 1  # 0x6A alone; 0x6A with a PDID and data is a periodic message
+    # The echoed sub-function or identifier must match too: an event-triggered (ResponseOnEvent) or stale answer of
+    # the same service for another DID is not this request's answer
+    echo = _ECHOED_BYTES.get(request[0], 0)
+    if echo and len(request) > echo:
+        first = request[1] & 0x7F if request[0] in _ECHOED_SUBFUNCTION else request[1]
+        return len(response) > echo and response[1] == first and response[2 : 1 + echo] == request[2 : 1 + echo]
+    return True
+
+
+# Bytes after the service ID that a positive response echoes (sub-function, DID or routine control type and id)
+_ECHOED_BYTES = {
+    0x10: 1, 0x11: 1, 0x19: 1, 0x22: 2, 0x24: 2, 0x27: 1, 0x28: 1, 0x2C: 1, 0x2E: 2, 0x2F: 2, 0x31: 3, 0x3E: 1,
+    0x85: 1, 0x87: 1,
+}  # fmt: skip
+_ECHOED_SUBFUNCTION = (0x10, 0x11, 0x19, 0x27, 0x28, 0x2C, 0x31, 0x3E, 0x85, 0x87)  # Without the suppress bit
+
+
+@dataclass(frozen=True, slots=True)
+class SessionTiming:
+    """The timing an ECU reports in its DiagnosticSessionControl response (sessionParameterRecord)."""
+
+    p2: float  # P2server_max, seconds (sent in 1 ms steps)
+    p2_extended: float  # P2*server_max, seconds (sent in 10 ms steps)
+
+    @classmethod
+    def parse(cls, record: bytes) -> Optional['SessionTiming']:
+        if len(record) < 4:
+            return None
+        return cls(int.from_bytes(record[0:2], 'big') / 1000, int.from_bytes(record[2:4], 'big') / 100)
+
+    def describe(self) -> str:
+        return f'P2 {self.p2 * 1000:g} ms, P2* {self.p2_extended * 1000:g} ms'
+
+
+@dataclass(frozen=True, slots=True)
+class ScalingByte:
+    """One scalingByte of a ReadScalingDataByIdentifier response, with its scalingByteExtension (if any)."""
+
+    data_type: int
+    length: int
+    extension: bytes = b''
+
+    @property
+    def type_name(self) -> str:
+        return SCALING_DATA_TYPES.get(self.data_type, f'type 0x{self.data_type:X}')
+
+    def describe(self) -> str:
+        text = f'{self.type_name}, {self.length} byte{"s" if self.length != 1 else ""}'
+        return text + (f' (extension {format_hex(self.extension)})' if self.extension else '')
+
+
+@dataclass(frozen=True, slots=True)
+class ScalingData:
+    did: int
+    scaling: Tuple[ScalingByte, ...]
+    undecoded: bytes = b''  # Bytes after a scalingByte whose extension layout is not decoded (bit-mapped types)
+
+    def describe(self) -> str:
+        parts = [item.describe() for item in self.scaling]
+        if self.undecoded:
+            parts.append(f'not decoded: {format_hex(self.undecoded)}')
+        return f'{did_name(self.did)}: ' + '; '.join(parts)
+
+
+def parse_scaling_data(response: bytes) -> ScalingData:
+    """A ReadScalingDataByIdentifier positive response (0x64, DID, scalingByte [scalingByteExtension]...).
+
+    A scalingByte is a data type (high nibble) and a byte count (low nibble). For formula and unit/format types the
+    count is the length of the extension that follows. For the bit-mapped types the extension's layout is not pinned
+    down by the free references, so the remaining bytes are kept undecoded rather than guessed."""
+    if len(response) < 3 or response[0] != 0x64:
+        raise UdsError('Not a ReadScalingDataByIdentifier response')
+    did = int.from_bytes(response[1:3], 'big')
+    scaling: List[ScalingByte] = []
+    offset = 3
+    while offset < len(response):
+        byte = response[offset]
+        data_type, length = byte >> 4, byte & 0x0F
+        offset += 1
+        if data_type in (0x2, 0x3):
+            scaling.append(ScalingByte(data_type, length))
+            return ScalingData(did, tuple(scaling), bytes(response[offset:]))
+        extension = b''
+        if data_type in (0x9, 0xA):
+            extension = bytes(response[offset : offset + length])
+            offset += length
+        scaling.append(ScalingByte(data_type, length, extension))
+    return ScalingData(did, tuple(scaling))
 
 
 class UdsTransport(Protocol):
@@ -151,12 +309,59 @@ def nrc_name(code: int) -> str:
     return NEGATIVE_RESPONSE_CODES.get(code, f'0x{code:02X}')
 
 
+def subfunction_text(sid: int, value: int) -> Optional[str]:
+    """The name of a request's sub-function (or mode) byte for the services that name them here."""
+    sub = value & 0x7F
+    if sid == 0x10:
+        return SESSIONS.get(sub)
+    if sid == 0x11:
+        return RESET_TYPES.get(sub)
+    if sid == 0x19:
+        from can_explorer.core import uds_dtc
+
+        return uds_dtc.SUBFUNCTIONS.get(sub)
+    if sid == 0x28:
+        return COMMUNICATION_CONTROL_TYPES.get(sub)
+    if sid == 0x2A:
+        from can_explorer.core import uds_periodic
+
+        return uds_periodic.TRANSMISSION_MODES.get(value)
+    if sid == 0x2C:
+        from can_explorer.core import uds_periodic
+
+        return uds_periodic.DDDI_TYPES.get(sub)
+    if sid == 0x31:
+        return ROUTINE_CONTROL_TYPES.get(sub)
+    if sid == 0x38:
+        from can_explorer.core import uds_file_transfer
+
+        return uds_file_transfer.MODES.get(value)
+    if sid == 0x85:
+        return DTC_SETTING_TYPES.get(sub)
+    if sid == 0x86:
+        from can_explorer.core import uds_events
+
+        return uds_events.EVENT_TYPES.get(value & 0x3F)
+    if sid == 0x87:
+        return LINK_CONTROL_TYPES.get(sub)
+    return None
+
+
+_NAMED_SUBFUNCTIONS = (0x19, 0x28, 0x2A, 0x2C, 0x38, 0x85, 0x86, 0x87)
+
+
 def describe_request(payload: bytes, description=None) -> str:
     if not payload:
         return ''
     if payload[0] == uds_auth.SID and len(payload) >= 2:
         return uds_auth.describe(payload)
     text = service_name(payload[0]) + (f' {format_hex(payload[1:])}' if len(payload) > 1 else '')
+    if payload[0] in _NAMED_SUBFUNCTIONS and len(payload) >= 2:
+        name = subfunction_text(payload[0], payload[1])
+        if name:
+            text += f' ({name})'
+    if payload[0] == 0x84:
+        text += ' (secured: content not decoded)'  # SecuredDataTransmission: OEM-specific security layout
     if payload[0] in (0x22, 0x2E) and len(payload) >= 3 and description is not None:
         name = description.name(int.from_bytes(payload[1:3], 'big'))
         if name:
@@ -176,9 +381,18 @@ def describe_response(payload: bytes, description=None) -> str:
         decoded = description.describe(int.from_bytes(payload[1:3], 'big'), payload[3:])
         if decoded is not None:
             return f'Positive response to ReadDataByIdentifier: {decoded}'
+    if payload[0] == 0x50 and len(payload) >= 6:
+        timing = SessionTiming.parse(payload[2:6])
+        name = SESSIONS.get(payload[1], f'session 0x{payload[1]:02X}')
+        return f'Positive response to DiagnosticSessionControl: {name}, {timing.describe()}'
     if payload[0] >= 0x40:
         rest = payload[1:]
-        return f'Positive response to {service_name(payload[0] - 0x40)}' + (f': {format_hex(rest)}' if rest else '')
+        text = f'Positive response to {service_name(payload[0] - 0x40)}'
+        if payload[0] - 0x40 in _NAMED_SUBFUNCTIONS and rest:
+            name = subfunction_text(payload[0] - 0x40, rest[0])
+            if name:
+                text += f' ({name})'
+        return text + (f': {format_hex(rest)}' if rest else '')
     return f'Unexpected response: {format_hex(payload)}'
 
 
@@ -321,11 +535,71 @@ class UdsResult:
 
 
 class UdsClient:
-    """UDS client over a transport (ISO-TP on CAN, LIN transport layer)."""
+    """UDS client over a transport (ISO-TP on CAN, LIN transport layer, DoIP).
 
-    def __init__(self, transport: UdsTransport, timeout: float = P2_TIMEOUT):
+    `timeout` is the P2 client time (the wait for a response) and `extended_timeout` the P2* time (the wait after
+    "response pending"). With `adopt_timing`, a DiagnosticSessionControl response's reported P2/P2* times (plus
+    TIMING_MARGIN) lengthen them for the new session; they are never shortened below the times given here, so a slow
+    transport (DoIP over WiFi, an ELM327) is not cut short by an optimistic ECU.
+
+    Responses that do not answer the current request — stale answers, ResponseOnEvent messages, periodic data sent
+    on the diagnostic channel — are passed to the `add_unsolicited_listener` callbacks instead of being lost.
+    """
+
+    def __init__(
+        self,
+        transport: UdsTransport,
+        timeout: float = P2_TIMEOUT,
+        extended_timeout: float = P2_EXTENDED_TIMEOUT,
+        adopt_timing: bool = True,
+    ):
         self.transport = transport
         self.timeout = timeout
+        self.extended_timeout = extended_timeout
+        self.base_timeout, self.base_extended_timeout = timeout, extended_timeout
+        self.adopt_timing = adopt_timing
+        self.server_timing: Optional[SessionTiming] = None  # From the last DiagnosticSessionControl response
+        self._unsolicited: List[Callable[[bytes], None]] = []
+
+    # Unsolicited responses
+
+    def add_unsolicited_listener(self, listener: Callable[[bytes], None]) -> None:
+        self._unsolicited.append(listener)
+
+    def remove_unsolicited_listener(self, listener: Callable[[bytes], None]) -> None:
+        if listener in self._unsolicited:
+            self._unsolicited.remove(listener)
+
+    def _dispatch_unsolicited(self, payload: bytes) -> None:
+        for listener in list(self._unsolicited):
+            listener(payload)
+
+    async def listen(self, duration: float) -> List[bytes]:
+        """Receive for `duration` seconds without sending, passing every message to the unsolicited listeners;
+        returns the messages (e.g. ResponseOnEvent or periodic data between requests)."""
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + duration
+        received: List[bytes] = []
+        while (remaining := deadline - loop.time()) > 0:
+            try:
+                payload = await self.transport.receive(remaining)
+            except Exception:
+                break  # Timeout (or the transport ended): nothing more arrived
+            received.append(payload)
+            self._dispatch_unsolicited(payload)
+        return received
+
+    # Timing
+
+    def apply_session_timing(self, timing: Optional[SessionTiming]) -> None:
+        """Use an ECU's reported P2/P2* (plus TIMING_MARGIN), never below the base times."""
+        self.server_timing = timing
+        if timing is None or not self.adopt_timing:
+            return
+        self.timeout = max(self.base_timeout, timing.p2 + TIMING_MARGIN)
+        self.extended_timeout = max(self.base_extended_timeout, timing.p2_extended + TIMING_MARGIN)
+
+    # Requests
 
     async def request(self, payload: bytes) -> UdsResult:
         """Send a request and wait for the final response, skipping 'response pending' answers.
@@ -333,17 +607,22 @@ class UdsClient:
         Never raises: transport errors are reported in the result.
         """
         payload = bytes(payload)
-        suppressed = len(payload) >= 2 and payload[0] in (0x10, 0x11, 0x3E, 0x85, 0x28) and payload[1] & 0x80
+        suppressed = (
+            len(payload) >= 2 and payload[0] in SUBFUNCTION_SERVICES and payload[1] & SUPPRESS_POSITIVE_RESPONSE
+        )
         try:
             await self.transport.send(payload)
             if suppressed:
                 return UdsResult(payload, None)
             response = await self.transport.receive(self.timeout)
             while _is_pending(response) or not _is_response_to(payload, response):
-                # Skip "response pending", and skip a stale response that does not match this request — one left on
-                # a shared response id by an earlier or cancelled transaction (e.g. a live poll that was stopped).
-                timeout = P2_EXTENDED_TIMEOUT if _is_pending(response) else self.timeout
-                response = await self.transport.receive(timeout)
+                # Skip "response pending". A response that does not match this request — one left on a shared
+                # response id by an earlier or cancelled transaction, or an event-triggered message — goes to the
+                # unsolicited listeners.
+                pending = _is_pending(response)
+                if not pending:
+                    self._dispatch_unsolicited(response)
+                response = await self.transport.receive(self.extended_timeout if pending else self.timeout)
         except Exception as e:  # Transport errors (timeouts, bus errors)
             return UdsResult(payload, None, str(e))
         return UdsResult(payload, response)
@@ -363,7 +642,11 @@ class UdsClient:
         return response
 
     async def diagnostic_session_control(self, session: int) -> bytes:
-        return (await self.call(bytes([0x10, session])))[2:]
+        """Change the session; returns the sessionParameterRecord, whose P2/P2* times are adopted (see the class)."""
+        record = (await self.call(bytes([0x10, session])))[2:]
+        if record:  # Not with a suppressed response
+            self.apply_session_timing(SessionTiming.parse(record))
+        return record
 
     async def ecu_reset(self, reset_type: int) -> None:
         await self.call(bytes([0x11, reset_type]))
@@ -380,6 +663,13 @@ class UdsClient:
     async def write_data_by_identifier(self, did: int, data: bytes) -> None:
         await self.call(bytes([0x2E, did >> 8, did & 0xFF]) + bytes(data))
 
+    async def read_scaling_data_by_identifier(self, did: int) -> ScalingData:
+        """ReadScalingDataByIdentifier (0x24): the data types and lengths of a DID's data record."""
+        response = await self.call(bytes([0x24, did >> 8, did & 0xFF]))
+        if response[1:3] != bytes([did >> 8, did & 0xFF]):
+            raise UdsError(f'Scaling data for DID 0x{int.from_bytes(response[1:3], "big"):04X}, expected 0x{did:04X}')
+        return parse_scaling_data(response)
+
     async def security_access(self, level: int, compute_key: Callable[[int, bytes], bytes]) -> bool:
         """Unlock a security level (odd request-seed level). Returns False if it was already unlocked."""
         if level % 2 == 0:
@@ -391,6 +681,41 @@ class UdsClient:
         await self.call(bytes([0x27, level + 1]) + key)
         return True
 
+    async def communication_control(
+        self, control_type: int, communication_type: int = 0x01, node: Optional[int] = None, suppress: bool = False
+    ) -> None:
+        """CommunicationControl (0x28), e.g. (0x03, 0x01): disable sending and receiving normal messages.
+        `node` is the nodeIdentificationNumber of the enhanced-address control types 0x04/0x05."""
+        payload = bytes([0x28, control_type | (SUPPRESS_POSITIVE_RESPONSE if suppress else 0), communication_type])
+        if control_type in (0x04, 0x05):
+            if node is None:
+                raise UdsError('Control types 0x04 and 0x05 need a node identification number')
+            payload += node.to_bytes(2, 'big')
+        await self.call(payload)
+
+    async def control_dtc_setting(self, on: bool, option_record: bytes = b'', suppress: bool = False) -> None:
+        """ControlDTCSetting (0x85): resume (on) or stop (off) updating the DTC status bits."""
+        setting = (0x01 if on else 0x02) | (SUPPRESS_POSITIVE_RESPONSE if suppress else 0)
+        await self.call(bytes([0x85, setting]) + bytes(option_record))
+
+    async def link_control(
+        self, control_type: int, mode: Optional[int] = None, baudrate: Optional[int] = None, suppress: bool = False
+    ) -> None:
+        """LinkControl (0x87): verify a transition with a fixed mode (0x01, `mode` from LINK_CONTROL_MODES) or a
+        specific baud rate (0x02, `baudrate` in bit/s), then perform it (0x03, usually suppressed and sent
+        functionally). Changing the connection's own bitrate afterwards is up to the caller (reconnect at the new
+        rate)."""
+        payload = bytes([0x87, control_type | (SUPPRESS_POSITIVE_RESPONSE if suppress else 0)])
+        if control_type == 0x01:
+            if mode is None:
+                raise UdsError('verifyModeTransitionWithFixedParameter needs a link control mode')
+            payload += bytes([mode])
+        elif control_type == 0x02:
+            if baudrate is None or not 0 < baudrate < 1 << 24:
+                raise UdsError('verifyModeTransitionWithSpecificParameter needs a baud rate below 16777216 bit/s')
+            payload += baudrate.to_bytes(3, 'big')
+        await self.call(payload)
+
     async def read_dtcs(self, status_mask: int = 0xFF) -> Tuple[int, List[Dtc]]:
         """ReadDTCInformation reportDTCByStatusMask. Returns (status availability mask, DTCs)."""
         response = await self.call(bytes([0x19, 0x02, status_mask]))
@@ -400,12 +725,70 @@ class UdsClient:
         dtcs = [Dtc(int.from_bytes(records[i : i + 3], 'big'), records[i + 3]) for i in range(0, len(records) - 3, 4)]
         return response[2], dtcs
 
+    async def read_dtc_information(self, subfunction: int, *args, **kwargs):
+        """Any supported ReadDTCInformation sub-function: see `can_explorer.core.uds_dtc.read`."""
+        from can_explorer.core import uds_dtc
+
+        return await uds_dtc.read(self, subfunction, *args, **kwargs)
+
     async def clear_diagnostic_information(self, group: int = 0xFFFFFF) -> None:
         await self.call(bytes([0x14]) + group.to_bytes(3, 'big'))
 
     async def routine_control(self, control_type: int, routine: int, data: bytes = b'') -> bytes:
         response = await self.call(bytes([0x31, control_type, routine >> 8, routine & 0xFF]) + bytes(data))
         return response[4:]
+
+    async def dynamically_define_by_identifier(self, dddid: int, sources) -> None:
+        """DynamicallyDefineDataIdentifier defineByIdentifier: see `can_explorer.core.uds_periodic`."""
+        from can_explorer.core import uds_periodic
+
+        await uds_periodic.define_by_identifier(self, dddid, sources)
+
+    async def dynamically_define_by_memory_address(
+        self, dddid: int, areas, address_bytes: int = 4, size_bytes: int = 1
+    ) -> None:
+        """DynamicallyDefineDataIdentifier defineByMemoryAddress: see `can_explorer.core.uds_periodic`."""
+        from can_explorer.core import uds_periodic
+
+        await uds_periodic.define_by_memory_address(self, dddid, areas, address_bytes, size_bytes)
+
+    async def clear_dynamically_defined(self, dddid: Optional[int] = None) -> None:
+        from can_explorer.core import uds_periodic
+
+        await uds_periodic.clear_dynamically_defined(self, dddid)
+
+    async def read_data_by_periodic_identifier(self, transmission_mode: int, periodic_ids=()) -> None:
+        """ReadDataByPeriodicIdentifier (0x2A): see `can_explorer.core.uds_periodic.read_periodic`."""
+        from can_explorer.core import uds_periodic
+
+        await uds_periodic.read_periodic(self, transmission_mode, periodic_ids)
+
+    async def write_file(self, path: str, data: bytes, replace: bool = False, **kwargs) -> None:
+        """RequestFileTransfer addFile/replaceFile: see `can_explorer.core.uds_file_transfer.write_file`."""
+        from can_explorer.core import uds_file_transfer
+
+        await uds_file_transfer.write_file(self, path, data, replace, **kwargs)
+
+    async def read_file(self, path: str, **kwargs) -> bytes:
+        from can_explorer.core import uds_file_transfer
+
+        return await uds_file_transfer.read_file(self, path, **kwargs)
+
+    async def read_directory(self, path: str) -> bytes:
+        from can_explorer.core import uds_file_transfer
+
+        return await uds_file_transfer.read_directory(self, path)
+
+    async def delete_file(self, path: str) -> None:
+        from can_explorer.core import uds_file_transfer
+
+        await uds_file_transfer.delete_file(self, path)
+
+    async def response_on_event(self, *args, **kwargs):
+        """ResponseOnEvent (0x86): see `can_explorer.core.uds_events.response_on_event`."""
+        from can_explorer.core import uds_events
+
+        return await uds_events.response_on_event(self, *args, **kwargs)
 
     async def authenticate(
         self, certificate, private_key, scheme: str, bidirectional: bool = False, trusted=(), crls=()

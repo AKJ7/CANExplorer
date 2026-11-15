@@ -195,8 +195,8 @@ The server is read-only by default. Each flag (or each dialog tier) grants the o
 
 | Flag / tier | Adds | Tools |
 |---|---|---|
-| *(none)* / `read-only` | Connecting, inspection and reverse engineering (reads files, sends nothing) | `bus_status`, `list_interfaces`, `connect`, `disconnect`, `list_identifiers`, `get_frames`, `decode_frame`, `decode_protocol`, `timing`, `analyze_identifier`, `bit_activity`, `extract_field`, `related_signals`, `capture_reaction`, `mark`, `clear_markers`, `reaction_at_markers`, `correlate`, `promote_to_dbc`, `load_database`, `unload_database`, `secoc_status` |
-| `--allow-diagnostics` / `diagnostics` | Safe diagnostic **reads** (they put a request on the bus) | `query_obd`, `obd_status`, `obd_dtcs`, `obd_vin`, `obd_supported`, `obd_read`, `uds_read_did`, `uds_read_dtcs` |
+| *(none)* / `read-only` | Connecting, inspection and reverse engineering (reads files, sends nothing) | `bus_status`, `list_interfaces`, `connect`, `disconnect`, `list_identifiers`, `get_frames`, `decode_frame`, `decode_protocol`, `timing`, `analyze_identifier`, `bit_activity`, `extract_field`, `related_signals`, `capture_reaction`, `mark`, `clear_markers`, `reaction_at_markers`, `correlate`, `promote_to_dbc`, `load_database`, `unload_database`, `secoc_status`, `flexray_load_cluster`, `flexray_read_log`, `flexray_analyze_log`, `flexray_decode` |
+| `--allow-diagnostics` / `diagnostics` | Safe diagnostic **reads** (they put a request on the bus) | `query_obd`, `obd_status`, `obd_dtcs`, `obd_vin`, `obd_supported`, `obd_read`, `uds_read_did`, `uds_read_dtcs`, `uds_dtc_details`, `uds_find_ecus` |
 | `--allow-control` / `control` | **Active** diagnostics (changes ECU state) | `obd_clear`, `uds_reset`, `uds_routine`, `uds_request` |
 | `--allow-send` / `send` | Arbitrary transmit | `send_frame`, `send_message` |
 
@@ -226,6 +226,10 @@ A tool that is not enabled is not even offered to the agent, so it cannot be cal
 | `promote_to_dbc` | Write the found fields — or field specs you supply (`fields=[…]`) — as signals to a DBC, creating their messages |
 | `load_database` / `unload_database` | Load a DBC/ARXML/KCD/SYM/DBF for decoding, or forget it (back to raw bytes) |
 | `secoc_status` | The SecOC secured PDUs of an ARXML and the outcome of their live checks (ok, MAC and freshness errors) and the key store entry used — never a key. `can-mcp` uses the key store unlocked with `CANEXPLORER_KEYSTORE_PASSWORD` |
+| `flexray_load_cluster` | Load a [FlexRay](flexray.md) cluster description (FIBEX or ARXML, `cluster` to pick one of several): its timing, frames and PDUs |
+| `flexray_read_log` | The FlexRay frames and events of a pcap/pcapng, BLF or ASC file (optionally of one slot or channel), decoded into PDUs and signals |
+| `flexray_analyze_log` | Check a FlexRay log against the cluster's schedule (missing, undescribed, wrong-length and mistimed frames, channel A/B mismatches) and report the bus health |
+| `flexray_decode` | Decode a FlexRay payload of a slot, cycle and channel with the loaded cluster (sends nothing) |
 
 **Diagnostics** (`--allow-diagnostics`; the control tools need `--allow-control`):
 
@@ -236,6 +240,8 @@ A tool that is not enabled is not even offered to the agent, so it cannot be cal
 | `obd_dtcs` | Stored (service 03) or pending (service 07) trouble codes, decoded to P/C/B/U |
 | `obd_supported` / `obd_read` | The supported PIDs; read and decode live values |
 | `uds_read_did` / `uds_read_dtcs` | Read a UDS data identifier (0x22) or trouble codes (0x19) |
+| `uds_dtc_details` | A DTC's snapshot (freeze frame) and extended data records (0x19 0x04/0x06); records of unknown length are returned undecoded |
+| `uds_find_ecus` | The ECUs answering a functional TesterPresent (0x7DF, or 0x18DB33F1 with `extended`) |
 | `obd_clear` | Clear trouble codes and the MIL (service 04) — `--allow-control` |
 | `uds_reset` / `uds_routine` / `uds_request` | ECU reset, routine control, or a raw UDS request — `--allow-control` |
 
@@ -251,10 +257,26 @@ diagnostics tools let it read and explain a vehicle's trouble codes over OBD-II 
 ## Resources and prompts
 
 The server also exposes the bus as read-only MCP **resources**, so a client can browse (or `read_resource`) them
-like documents: `can://status`, `can://identifiers`, `can://frames` and `can://database`.
+like documents (JSON):
 
-And it ships guided **prompts** for the common workflows: `reverse_engineer_identifier`, `diagnose_trouble_codes`
-and `find_signal`.
+| URI | Name | Holds |
+|---|---|---|
+| `can://status` | `status` | Connection state, loaded database, enabled capabilities, frame counts, rates and bus load |
+| `can://identifiers` | `identifiers` | Every identifier seen, with direction, count, cycle time, last data and database name |
+| `can://frames` | `frames` | The 100 most recent frames, decoded into signals |
+| `can://database` | `database` | The loaded database's path and its messages with their identifiers and signal names |
+
+And it ships guided **prompts** for the common workflows:
+
+| Prompt | Argument | Guides the agent through |
+|---|---|---|
+| `reverse_engineer_identifier` | `identifier` | Timing, automatic analysis, pinning down meaning, writing a DBC |
+| `diagnose_trouble_codes` | — | Reading and explaining the OBD-II trouble codes with supporting live values (diagnostics tier) |
+| `find_signal` | `description` | Finding the field that carries a described signal, with or without a reference |
+
+Every tool, resource and prompt carries a **title** (a readable name a client can show, such as *Analyse an
+identifier*) and a **description** the agent reads to choose it. The description of each diagnostics, control and
+send tool also states the tier it needs and what it does to the bus or the ECU.
 
 ## How it relates to the rest of CANExplorer
 

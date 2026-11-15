@@ -1,4 +1,3 @@
-import asyncio
 import math
 import random
 
@@ -20,6 +19,7 @@ from can_explorer.core.reverse.reference import (
 )
 from can_explorer.core.secoc_check import SecOcConfig
 from can_explorer.core.reverse.synthetic import Behaviour, discoverable, generate, score_fields
+from tests.unit.waiting import wait_until as wait_by_deadline
 
 FULL = Behaviour('sine', period=20, amplitude=0.95)
 
@@ -250,7 +250,8 @@ async def test_obd_polling():
     sent = []
     poller = ObdPoller(sent.append, [0x0C, 0x0D], interval=0.01)
     poller.start()
-    await asyncio.sleep(0.05)
+    # By a deadline, not a fixed time: Windows sleeps last ~15.6 ms (its timer resolution), not the 10 ms interval
+    await wait_by_deadline(lambda: poller.requests >= 4)
     poller.stop()
     assert poller.requests >= 4 and not poller.running
     assert [bytes(msg.data[:3]) for msg in sent[:2]] == [b'\x02\x01\x0c', b'\x02\x01\x0d']
@@ -271,7 +272,7 @@ async def test_obd_polling():
 
     broken = ObdPoller(failing, [0x0D], extended=True)
     broken.start()
-    await asyncio.sleep(0.01)
+    await wait_by_deadline(lambda: not broken.running)
     assert broken.error == 'Session is not open' and not broken.running
     assert request(0x0D, extended=True).arbitration_id == 0x18DB33F1
     with pytest.raises(ValueError):

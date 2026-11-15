@@ -133,6 +133,18 @@ SplitView {
                     onClicked: panelDialog.open()
                 }
                 Button {
+                    text: qsTr("Build Panel…")
+                    onClicked: {
+                        // The current panel when the builder made it, else the panel being built
+                        const current = root.simulation.panels[panelTabs.currentIndex]
+                        if (current && root.connection.panel_builder.open(current.url) !== "")
+                            root.connection.panel_builder.select(-1)
+                        builderDialog.open()
+                    }
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Place gauges, lamps, trends, switches, sliders and buttons on a panel without writing QML")
+                }
+                Button {
                     text: qsTr("Reload panels")
                     enabled: root.simulation.panels.length > 0
                     onClicked: root.simulation.reload_panels(root)
@@ -146,7 +158,7 @@ SplitView {
 
             Label {
                 visible: root.simulation.panels.length === 0
-                text: qsTr("Panels are QML files with a 'property var panel'. See examples/simulation.")
+                text: qsTr("Panels are QML files with a 'property var panel' (see examples/simulation), or built with Build Panel….")
                 padding: 8
             }
 
@@ -222,6 +234,12 @@ SplitView {
         fileMode: FileChooser.OpenFile
         nameFilters: [qsTr("Python scripts (*.py)")]
         onAccepted: root.simulation.load_script(selectedFile)
+    }
+
+    PanelBuilderDialog {
+        id: builderDialog
+        connection: root.connection
+        onClosed: root.simulation.reload_panels(root)
     }
 
     FileChooser {

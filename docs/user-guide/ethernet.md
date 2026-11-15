@@ -111,9 +111,28 @@ traffic needs a **network tap** or a **mirror/SPAN port**, since a plain host on
 traffic addressed to it. You can also always capture with another tool (Wireshark and the like) and open the saved
 pcap/pcapng here.
 
+## 10BASE-T1S
+
+10BASE-T1S (IEEE 802.3cg) is a multidrop automotive Ethernet physical layer: several nodes share one twisted pair
+and take turns with **PLCA** (Physical Layer Collision Avoidance). It changes only the physical layer, so the frames
+are ordinary Ethernet frames and the tool needs nothing special for them:
+
+- A 10BASE-T1S adapter (a USB adapter or a MAC-PHY with a driver for your OS) is a normal network interface, so
+  you [capture live](#capturing-live) from it like any other interface.
+- A capture of a 10BASE-T1S segment is an ordinary pcap/pcapng file with the Ethernet link type, and everything
+  carried on it is decoded as described on this page — including CAN, LIN and FlexRay tunnelled in
+  [IEEE 1722 ACF](#fieldbus-tunnelled-over-ethernet-avtp-acf), common in zonal architectures.
+
+PLCA itself is not visible: beacons, transmit opportunities, node IDs and collisions are handled inside the PHY
+and never reach a packet capture. Analysing PLCA timing or physical-layer errors needs a dedicated bus analyser.
+On Linux, the PLCA configuration and status of a local PHY can be read with `ethtool --get-plca-cfg <interface>`
+and `ethtool --get-plca-status <interface>`.
+
 ## Limits
 
 - pcap and pcapng are read for the **Ethernet** link type only.
+- 10BASE-T1S PLCA (beacons, transmit opportunities, collisions) is not visible in a capture; see
+  [10BASE-T1S](#10base-t1s).
 - The packet list is a summary per packet; click a packet for its field-by-field **details** (see above). To decode
   SOME/IP payloads into named signals, load a FIBEX or ARXML file in the [SOME/IP](someip.md) tool.
 - TCP reassembly follows the stream in capture order (a 4 GiB sequence-number wrap within one connection is not

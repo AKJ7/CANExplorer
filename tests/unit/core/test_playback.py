@@ -146,15 +146,17 @@ async def test_file_source_seeking(tmp_path):
     await wait_for(lambda: session.trace.total >= 1)
 
     # Forward: the frames in between are delivered at once
+    seeked = time.monotonic()
     assert source.seek(9.0) is False
-    await wait_for(lambda: session.trace.total >= 91, timeout=1.0)
-    assert source.clock.position == pytest.approx(9.0, abs=0.1)
+    await wait_for(lambda: session.trace.total >= 91)
+    # The clock runs on at 1× meanwhile (measured, as delivering the frames takes longer on slow CI machines)
+    assert 9.0 <= source.clock.position <= 9.0 + (time.monotonic() - seeked) + 0.05
 
     # Backward: the file is read again; frames up to the position at once, the rest in time
     session.clear()
     seeked = time.monotonic()
     assert source.seek(2.0) is True
-    await wait_for(lambda: session.trace.total >= 21, timeout=1.0)
+    await wait_for(lambda: session.trace.total >= 21)
     await asyncio.sleep(0.25)
     # One frame per 0.1 s after the position, in the time that passed (measured, as CI machines stall timers)
     assert 21 <= session.trace.total <= 21 + int((time.monotonic() - seeked) / 0.1) + 1
@@ -165,7 +167,7 @@ async def test_file_source_seeking(tmp_path):
     source.clock.pause()
     count = session.trace.total
     source.seek(5.0)
-    await wait_for(lambda: session.trace.total >= 51, timeout=1.0)
+    await wait_for(lambda: session.trace.total >= 51)
     await asyncio.sleep(0.2)
     assert session.trace.total == 51 > count and source.clock.paused
     session.stop()

@@ -2,7 +2,7 @@ import asyncio
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
-from PyQt6.QtCore import QObject, QUrl, pyqtProperty, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QObject, QTimer, QUrl, pyqtProperty, pyqtSignal, pyqtSlot
 
 from can_explorer.core.diagnostic_description import DiagnosticDescription
 from can_explorer.core.frames import format_hex, parse_can_id, parse_hex_bytes
@@ -23,7 +23,8 @@ from can_explorer.core.uds import (
     format_did_value,
     load_key_source,
 )
-from can_explorer.core import audit, keystore, uds_auth
+from can_explorer.core import audit, keystore, uds_auth, uds_dtc, uds_functional, uds_periodic
+from can_explorer.core.uds_shared import SharedIsoTp
 from can_explorer.core.uds_auth import UdsAuthenticationError
 from can_explorer.core.uds_security_test import SecurityTestError
 from can_explorer.sys.log_handler import get_logger
@@ -31,6 +32,21 @@ from can_explorer.sys.log_handler import get_logger
 logger = get_logger(__name__)
 
 MAX_HISTORY = 200
+PERIODIC_REFRESH_MS = 250
+PERIODIC_RATES = [
+    {'value': uds_periodic.SEND_AT_SLOW_RATE, 'name': 'Slow'},
+    {'value': uds_periodic.SEND_AT_MEDIUM_RATE, 'name': 'Medium'},
+    {'value': uds_periodic.SEND_AT_FAST_RATE, 'name': 'Fast'},
+]
+
+# The ReadDTCInformation reports of the Trouble codes pane: value -> (sub-function, name)
+DTC_REPORTS = {
+    'status': (uds_dtc.REPORT_BY_STATUS_MASK, 'By status mask (0x02)'),
+    'supported': (uds_dtc.REPORT_SUPPORTED, 'Supported DTCs (0x0A)'),
+    'counters': (uds_dtc.REPORT_FAULT_DETECTION_COUNTER, 'Fault detection counters (0x14)'),
+    'memory': (uds_dtc.REPORT_USER_MEMORY_BY_STATUS_MASK, 'User-defined memory (0x17)'),
+    'permanent': (uds_dtc.REPORT_WWH_OBD_PERMANENT, 'Permanent, WWH-OBD (0x55)'),
+}
 
 
 def _parse_int(text: str, maximum: int, what: str) -> int:
@@ -59,11 +75,24 @@ class DiagnosticsController(QObject):
         self._busy = False
         self._history: List[Dict[str, Any]] = []
         self._dtcs: List[Dict[str, str]] = []
+        self._dtc_memory: Optional[int] = None  # The user-defined memory the listed DTCs came from
         self._key_file = ''
         self._authenticated = False
         self._description: Optional[DiagnosticDescription] = None
         self._keep_alive: Optional[SessionKeepAlive] = None
         self._keep_alive_transport = None
+        # Listening between requests: one ISO-TP receiver shared by all users of the addressing (see uds_shared)
+        self._listening = False
+        self._shared: Optional[SharedIsoTp] = None
+        # Periodic data (0x2A): the receiver, the PDIDs started and the CAN id of their UUDT frames (None: on the
+        # diagnostic channel)
+        self._periodic: Optional[uds_periodic.PeriodicDataReceiver] = None
+        self._periodic_ids: List[int] = []
+        self._periodic_id: Optional[int] = None
+        self._periodic_dirty = False
+        self._periodic_timer = QTimer(self)
+        self._periodic_timer.setInterval(PERIODIC_REFRESH_MS)
+        self._periodic_timer.timeout.connect(self._refresh_periodic)
 
     @property
     def session(self):
@@ -192,6 +221,9 @@ class DiagnosticsController(QObject):
         except ValueError as e:
             return str(e)
         self.set_tester_present(False)
+        if self._shared is not None and not self._shared.busy:
+            self._shared.close()  # Created again with the new identifiers
+            self._shared = None
         return ''
 
     @pyqtProperty(str, notify=changed)
@@ -205,7 +237,8 @@ class DiagnosticsController(QObject):
         return f'request 0x{self._request_id:0{width}X}, response 0x{self._response_id:0{width}X}'
 
     def create_transport(self):
-        """A transport with the current addressing, e.g. for flashing; the caller closes it."""
+        """A transport with the current addressing, e.g. for flashing; the caller closes it. While listening it
+        shares the view's ISO-TP receiver."""
         return self._transport()
 
     def transport_error(self) -> str:
@@ -219,10 +252,78 @@ class DiagnosticsController(QObject):
             return 'Connect first'
         return ''
 
-    def _transport(self):
+    def _transport(self, receiving: bool = True):
+        """A transport for one user; `receiving` False for send-only users (tester present). While listening, all
+        share one ISO-TP receiver, so a flow control frame is never answered twice."""
         if self.is_lin:
             return LinTpClient(self.session, self._nad)
+        if self._listening:
+            return self._shared_isotp().transport(receiving)
         return IsoTpClient(self.session, self._request_id, self._response_id, self._extended, fd=self._connection.fd)
+
+    def _shared_isotp(self) -> SharedIsoTp:
+        key = (self.session, self._request_id, self._response_id, self._extended, self._connection.fd)
+        if self._shared is None or not self._shared.matches(*key):
+            if self._shared is not None:
+                self._shared.close()
+            self._shared = SharedIsoTp(*key, on_idle=self._on_unsolicited)
+        return self._shared
+
+    # Listening between requests and unsolicited responses
+
+    @pyqtProperty(bool, constant=True)
+    def listening_available(self) -> bool:
+        """Listening needs ISO-TP on CAN (LIN slaves only answer polls; DoIP is not covered yet)."""
+        return not self.is_lin and self._addressing() == 'can'
+
+    @pyqtProperty(bool, notify=changed)
+    def listening(self) -> bool:
+        return self._listening
+
+    @pyqtSlot(bool, result=str)
+    def set_listening(self, enabled: bool) -> str:
+        """Receive what the ECU sends between requests (event-triggered responses, periodic data, late answers).
+        Off by default: it answers the flow control of segmented messages on the response id, which another tool on
+        the same identifiers (e.g. the OBD page on 0x7E8) would answer too. Returns an error or ''."""
+        if enabled == self._listening:
+            return ''
+        if enabled and not self.listening_available:
+            return 'Listening between requests needs ISO-TP on CAN'
+        if self._busy:
+            return 'A request is in progress'
+        if self._shared is not None and self._shared.busy:
+            return 'The connection is in use (flashing or a scan)'
+        keep_alive = self.tester_present
+        self.set_tester_present(False)
+        self._listening = enabled
+        if enabled:
+            self._shared_isotp()
+        elif self._shared is not None:
+            self._shared.close()
+            self._shared = None
+        if keep_alive:
+            self.set_tester_present(True)
+        self.changed.emit()
+        return ''
+
+    def _on_unsolicited(self, payload: bytes) -> None:
+        """A message that answers no request: periodic data goes to the periodic panel, the rest to the History."""
+        if self._periodic is not None and self._periodic_id is None and self._periodic.feed_usdt(payload):
+            return
+        negative = payload[:1] == bytes([0x7F])
+        self._history.append(
+            {
+                'request': '',
+                'request_description': 'Unsolicited (sent by the ECU)',
+                'response': format_hex(payload),
+                'description': describe_response(payload, self._description),
+                'positive': not negative,
+                'error': False,
+                'unsolicited': True,
+            }
+        )
+        del self._history[:-MAX_HISTORY]
+        self.changed.emit()
 
     # Running requests
 
@@ -235,6 +336,7 @@ class DiagnosticsController(QObject):
                 'description': description,
                 'positive': positive,
                 'error': error,
+                'unsolicited': False,
             }
         )
         del self._history[:-MAX_HISTORY]
@@ -253,7 +355,10 @@ class DiagnosticsController(QObject):
     async def _run(self, request: bytes, operation: Callable[[UdsClient], Awaitable[tuple]]):
         transport = self._transport()
         try:
-            response, description, positive = await operation(UdsClient(transport))
+            client = UdsClient(transport)
+            if not self.is_lin:
+                client.add_unsolicited_listener(self._on_unsolicited)  # Messages that answer no request
+            response, description, positive = await operation(client)
             self._record(request, response, description, positive, error=False)
         except (UdsError, UdsAuthenticationError, SecurityTestError) as e:
             self._record(request, None, str(e), positive=False, error=True)
@@ -473,23 +578,139 @@ class DiagnosticsController(QObject):
         """Whether the last authentication on this connection completed (and was not ended since)."""
         return self._authenticated
 
+    @pyqtProperty('QVariantList', constant=True)
+    def dtc_reports(self) -> List[Dict[str, str]]:
+        return [{'value': key, 'name': name} for key, (_, name) in DTC_REPORTS.items()]
+
+    @staticmethod
+    def _dtc_row(dtc) -> Dict[str, str]:
+        extra = []
+        if dtc.severity is not None:
+            extra.append(f'severity 0x{dtc.severity:02X}')
+        if dtc.fault_detection_counter is not None:
+            extra.append(f'fault detection counter {dtc.fault_detection_counter}')
+        return {
+            'code': dtc.text,
+            'value': f'{dtc.code:06X}',
+            'status': f'0x{dtc.status:02X}' if dtc.status is not None else '',
+            'flags': ', '.join(dtc.status_flags),
+            'extra': ', '.join(extra),
+            'details': '',
+        }
+
     @pyqtSlot(str, result=str)
     def read_dtcs(self, status_mask: str) -> str:
+        return self.read_dtc_report('status', status_mask, '')
+
+    @pyqtSlot(str, str, str, result=str)
+    def read_dtc_report(self, report: str, status_mask: str, memory: str) -> str:
+        """Read a ReadDTCInformation report (see DTC_REPORTS) into the Trouble codes pane. `status_mask` filters the
+        status-mask reports, `memory` is the memory selection of the user-defined memory report (hex)."""
+        if report not in DTC_REPORTS:
+            return f'Unknown report {report!r}'
+        subfunction, name = DTC_REPORTS[report]
         try:
             mask = _parse_int(status_mask or 'FF', 0xFF, 'status mask')
-        except ValueError as e:
+            selection = _parse_int(memory or '00', 0xFF, 'memory selection')
+            request = uds_dtc.request(subfunction, status_mask=mask, memory_selection=selection)
+        except (ValueError, UdsError) as e:
             return str(e)
-        request = bytes([0x19, 0x02, mask])
 
         async def operation(client: UdsClient):
-            _, dtcs = await client.read_dtcs(mask)
-            self._dtcs = [
-                {'code': dtc.text, 'status': f'0x{dtc.status:02X}', 'flags': ', '.join(dtc.status_flags)}
-                for dtc in dtcs
-            ]
-            return None, f'{len(dtcs)} DTC{"s" if len(dtcs) != 1 else ""} with status mask 0x{mask:02X}', True
+            if report == 'status':
+                _, dtcs = await client.read_dtcs(mask)
+                rows = [self._dtc_row(uds_dtc.DtcRecord(dtc.code, dtc.status)) for dtc in dtcs]
+                text = f'{len(rows)} DTC{"s" if len(rows) != 1 else ""} with status mask 0x{mask:02X}'
+            else:
+                listed = await client.read_dtc_information(subfunction, status_mask=mask, memory_selection=selection)
+                rows = [self._dtc_row(dtc) for dtc in listed.dtcs]
+                text = f'{name}: {listed.describe()}'
+            self._dtcs = rows
+            self._dtc_memory = selection if report == 'memory' else None
+            return None, text, True
 
         return self._start(request, operation)
+
+    @pyqtSlot(str, result=str)
+    def read_dtc_details(self, code: str) -> str:
+        """Read a listed DTC's snapshot (freeze frame) and extended data records (all record numbers), decoding
+        snapshot DIDs with the loaded diagnostic description; records of unknown length are shown in hex."""
+        try:
+            value = _parse_int(code, 0xFFFFFF, 'DTC')
+        except ValueError as e:
+            return str(e)
+        memory = self._dtc_memory
+        snapshot_sub = uds_dtc.REPORT_SNAPSHOT_BY_DTC if memory is None else uds_dtc.REPORT_USER_MEMORY_SNAPSHOT_BY_DTC
+        extended_sub = (
+            uds_dtc.REPORT_EXTENDED_DATA_BY_DTC if memory is None else uds_dtc.REPORT_USER_MEMORY_EXTENDED_DATA_BY_DTC
+        )
+        request = uds_dtc.request(snapshot_sub, dtc=value, memory_selection=memory or 0)
+
+        async def operation(client: UdsClient):
+            parts = []
+            for subfunction in (snapshot_sub, extended_sub):
+                try:
+                    details = await client.read_dtc_information(
+                        subfunction, dtc=value, memory_selection=memory or 0, description=self._description
+                    )
+                    parts.append(details.describe().split(': ', 1)[-1])
+                except UdsError as e:  # E.g. the ECU keeps no snapshots: report it, try the other
+                    parts.append(f'{uds_dtc.subfunction_name(subfunction)}: {e}')
+            text = ' | '.join(parts)
+            for row in self._dtcs:
+                if row['value'] == f'{value:06X}':
+                    row['details'] = text
+            return None, f'{uds_dtc.DtcRecord(value).text}: {text}', True
+
+        return self._start(request, operation)
+
+    # Functional addressing
+
+    def _functional_transport(self):
+        """A functional transport for this connection (OBD conventions), or None where there is none."""
+        if self.is_lin:
+            return None
+        if self._extended:
+            return uds_functional.obd_29bit(self.session, tester=self._request_id & 0xFF, fd=self._connection.fd)
+        return uds_functional.obd_11bit(self.session, fd=self._connection.fd)
+
+    @pyqtProperty(bool, constant=True)
+    def functional_available(self) -> bool:
+        return not self.is_lin and self._addressing() != 'doip'
+
+    @pyqtSlot(result=str)
+    def discover_ecus(self) -> str:
+        """Send a functional TesterPresent (0x7DF, or 0x18DB33F1 with 29-bit identifiers) and list the ECUs that
+        answer, by response identifier."""
+        if self._busy:
+            return 'A request is already in progress'
+        error = self._transport_error()
+        if error:
+            return error
+        if not self.functional_available:
+            return 'Functional requests are not available on this connection'
+        self._busy = True
+        self.changed.emit()
+        asyncio.ensure_future(self._discover())
+        return ''
+
+    async def _discover(self):
+        transport = self._functional_transport()
+        request = bytes([0x3E, 0x00])
+        try:
+            responders = await uds_functional.FunctionalUdsClient(transport).discover()
+            width = 8 if self._extended else 3
+            names = ', '.join(f'0x{address:0{width}X}' for address in responders)
+            text = f'{len(responders)} ECU{"s" if len(responders) != 1 else ""} answered' + (
+                f': {names}' if names else ''
+            )
+            self._record(request, None, f'Functional TesterPresent: {text}', positive=bool(responders), error=False)
+        except Exception as e:
+            self._record(request, None, str(e), positive=False, error=True)
+        finally:
+            transport.close()
+            self._busy = False
+            self.changed.emit()
 
     @pyqtSlot(result=str)
     def clear_dtcs(self) -> str:
@@ -518,7 +739,7 @@ class DiagnosticsController(QObject):
     @pyqtSlot(bool)
     def set_tester_present(self, enabled: bool):
         if enabled and not self.tester_present and not self._transport_error():
-            self._keep_alive_transport = self._transport()
+            self._keep_alive_transport = self._transport(receiving=False)
             self._keep_alive = SessionKeepAlive(self._keep_alive_transport)
             self._keep_alive.start()
         elif not enabled and self._keep_alive is not None:
@@ -532,5 +753,144 @@ class DiagnosticsController(QObject):
         self._history.clear()
         self.changed.emit()
 
+    # Periodic data (ReadDataByPeriodicIdentifier 0x2A, DynamicallyDefineDataIdentifier 0x2C)
+
+    periodic_changed = pyqtSignal()
+
+    @pyqtProperty('QVariantList', constant=True)
+    def periodic_rates(self) -> List[Dict[str, Any]]:
+        return PERIODIC_RATES
+
+    @pyqtProperty(bool, notify=changed)
+    def periodic_running(self) -> bool:
+        return bool(self._periodic_ids)
+
+    @pyqtProperty('QVariantList', notify=periodic_changed)
+    def periodic_rows(self) -> List[Dict[str, Any]]:
+        receiver = self._periodic
+        if receiver is None:
+            return []
+        rows = []
+        for pdid, item in sorted(receiver.latest.items()):
+            decoded = self._description.describe(item.did, item.data) if self._description is not None else None
+            rows.append(
+                {
+                    'did': f'{item.did:04X}',
+                    'name': self._did_name(item.did),
+                    'data': format_hex(item.data),
+                    'decoded': decoded or '',
+                    'count': receiver.counts.get(pdid, 0),
+                    'rate': f'{receiver.rate(pdid):.1f} /s',
+                    'source': 'own CAN id' if item.source == 'uudt' else 'diagnostic channel',
+                }
+            )
+        return rows
+
+    def _refresh_periodic(self):
+        if self._periodic_dirty:
+            self._periodic_dirty = False
+            self.periodic_changed.emit()
+
+    def _on_periodic(self, _item) -> None:
+        self._periodic_dirty = True
+
+    @pyqtSlot(str, str, result=str)
+    def define_dynamic(self, dddid: str, sources: str) -> str:
+        """DynamicallyDefineDataIdentifier: DDDID (hex, e.g. F201) from `DID:position:size` sources or
+        `@address:size` memory areas (see uds_periodic.parse_sources). Returns an error or ''."""
+        try:
+            identifier = _parse_int(dddid, 0xFFFF, 'dynamically defined DID')
+            kind, items = uds_periodic.parse_sources(sources)
+            if kind == 'did':
+                request = uds_periodic.define_by_identifier_request(identifier, items)
+            else:
+                address_bytes = max(1, max((address.bit_length() + 7) // 8 for address, _ in items))
+                size_bytes = max(1, max((size.bit_length() + 7) // 8 for _, size in items))
+                request = uds_periodic.define_by_memory_address_request(identifier, items, address_bytes, size_bytes)
+        except (ValueError, UdsError) as e:
+            return str(e)
+        what = 'DID' if kind == 'did' else 'memory'
+        count = len(items)
+        return self._service(request, lambda _: f'DID 0x{identifier:04X} defined from {count} {what} source(s)')
+
+    @pyqtSlot(str, result=str)
+    def clear_dynamic(self, dddid: str) -> str:
+        """Clear one dynamically defined DID (hex), or all of them (empty)."""
+        try:
+            identifier = _parse_int(dddid, 0xFFFF, 'dynamically defined DID') if dddid.strip() else None
+        except ValueError as e:
+            return str(e)
+        request = bytes([0x2C, 0x03]) + (identifier.to_bytes(2, 'big') if identifier is not None else b'')
+        text = 'Dynamically defined DIDs cleared' if identifier is None else f'DID 0x{identifier:04X} cleared'
+        return self._service(request, lambda _: text)
+
+    @pyqtSlot(str, int, str, result=str)
+    def start_periodic(self, identifiers: str, rate: int, can_id: str) -> str:
+        """ReadDataByPeriodicIdentifier: send the DIDs (0xF2xx or their low byte, hex, separated by spaces) at the
+        rate (1 slow, 2 medium, 3 fast). `can_id` (hex) is the CAN id of the ECU's periodic frames; empty: they come
+        on the diagnostic response id as 0x6A messages, which needs listening between requests (turned on).
+        Returns an error or ''."""
+        if not self.listening_available:
+            return 'Periodic data needs ISO-TP on CAN'
+        if self._busy:
+            return 'A request is already in progress'
+        try:
+            tokens = identifiers.replace(',', ' ').split()
+            pdids = [uds_periodic.periodic_id(_parse_int(token, 0xFFFF, 'periodic DID')) for token in tokens]
+            request = uds_periodic.read_periodic_request(rate, pdids)
+            frame_id = parse_can_id(can_id, self._extended) if can_id.strip() else None
+        except (ValueError, UdsError) as e:
+            return str(e)
+        if frame_id is None:
+            error = self.set_listening(True)
+            if error:
+                return error
+        self._stop_receiver()
+        receiver = uds_periodic.PeriodicDataReceiver(description=self._description, on_data=self._on_periodic)
+        if frame_id is not None:
+            receiver.attach(self.session, frame_id, self._extended)
+        self._periodic, self._periodic_id = receiver, frame_id
+
+        async def operation(client: UdsClient):
+            await client.call(request)
+            self._periodic_ids = pdids
+            self._periodic_timer.start()
+            names = ', '.join(f'0x{0xF200 | pdid:04X}' for pdid in pdids)
+            where = f'CAN id 0x{frame_id:X}' if frame_id is not None else 'the diagnostic channel'
+            return None, f'Periodic data {uds_periodic.TRANSMISSION_MODES[rate]}: {names}, on {where}', True
+
+        self.periodic_changed.emit()
+        return self._start(request, operation)
+
+    @pyqtSlot(result=str)
+    def stop_periodic(self) -> str:
+        """stopSending for the started DIDs; the last values stay listed."""
+        request = uds_periodic.read_periodic_request(uds_periodic.STOP_SENDING, list(self._periodic_ids))
+
+        async def operation(client: UdsClient):
+            try:
+                await client.call(request)
+            finally:
+                self._periodic_ids = []
+                self._periodic_timer.stop()
+                if self._periodic is not None:
+                    self._periodic.close()  # Stops receiving frames; the values stay
+                self._periodic_dirty = True
+                self._refresh_periodic()
+            return None, 'Periodic data stopped', True
+
+        return self._start(request, operation)
+
+    def _stop_receiver(self) -> None:
+        if self._periodic is not None:
+            self._periodic.close()
+        self._periodic = None
+        self._periodic_ids = []
+        self._periodic_timer.stop()
+
     def shutdown(self):
         self.set_tester_present(False)
+        self._stop_receiver()
+        if self._shared is not None:
+            self._shared.close()
+            self._shared = None

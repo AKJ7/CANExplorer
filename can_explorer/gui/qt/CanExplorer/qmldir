@@ -19,6 +19,8 @@ J1939View 1.0 J1939View.qml
 CanOpenView 1.0 CanOpenView.qml
 LinScheduleView 1.0 LinScheduleView.qml
 SimulationView 1.0 SimulationView.qml
+PanelBuilderDialog 1.0 PanelBuilderDialog.qml
+FlexRayView 1.0 FlexRayView.qml
 singleton Actions 1.0 Actions.qml
 Card 1.0 Card.qml
 Pill 1.0 Pill.qml

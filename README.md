@@ -45,6 +45,8 @@
 - Splitting into numbered files by size or time, and triggered recording with conditions such as
   `EngineData.EngineSpeed > 6000`, keeping the time before and after the event
 - Replay at 0.25× to 10× or as fast as possible, with pause and jumping to any position
+- Breakpoints and single stepping in replays (also onto a bus): pause after a frame (identifiers and a data pattern
+  such as `02 10 ??`), when a signal condition like `EngineData.EngineSpeed > 3000` becomes true, or at a time
 - Camera video and GPS map in step with recordings: record a camera next to the log, attach a GPX/NMEA track, and
   replay the bus, the video and the position on a map together
 - Replay of a recording onto a real bus, filtered and repeated
@@ -69,6 +71,9 @@
 - SOME/IP over automotive Ethernet: listens on UDP, discovers the services offered through SOME/IP-SD and shows the
   decoded messages; load a FIBEX or ARXML file to deserialize the payloads into named signals; E2E checks of
   protected methods and events (profiles 4, 6, 7)
+- FlexRay: frames decoded with a FIBEX or ARXML cluster (PDUs with update bits, multiplexing), from a simulation,
+  pcap, Vector BLF/ASC logs, or Vector and Intrepid interfaces (experimental) watching the bus or taking part and
+  sending; checked against the schedule (missing, mistimed, A/B mismatches) and the bus health, signals plotted
 - Automotive Ethernet capture: open a pcap/pcapng file (or capture live on Linux, macOS and Windows), dissect each
   packet field by field, and decode the stack (Ethernet, VLAN, 802.1CB R-TAG, IPv4/IPv6, ARP, ICMP, IGMP/MLD,
   UDP/TCP) and the protocols on top — SOME/IP, DoIP, gPTP, LLDP, the SRP/TSN control protocols (MVRP/MSRP/MMRP),
@@ -181,6 +186,8 @@ support and the Linux kernel drivers.
 | GVRET (`gvret`) | ESP32RET boards, Macchina M2 (M2RET), CANDue: SavvyCAN's GVRET protocol over USB serial or WiFi | Windows, Linux, macOS |
 | J2534 (`j2534`) | J2534 pass-thru devices: Mongoose, CarDAQ, OpenPort 2.0, Bosch, Autel …; 32-bit drivers through a bridge process | Windows |
 | RP1210 (`rp1210`) | TMC RP1210 heavy-duty (truck/bus/off-highway) adapters: Nexiq USB-Link, DG DPA 5, Noregon DLA+, Cummins INLINE …; 32-bit Windows drivers | Windows |
+| ZLG (`zlg`) | ZLG USBCAN-II, USBCAN-E-U and USBCANFD series (experimental) | Windows |
+| Toomoss (`toomoss`) | Toomoss USB2CAN and USB2CANFD adapters (experimental) | Windows, Linux, macOS |
 | ELM327 / OBDLink (`elm327`) | OBDLink MX+, LX, SX, EX and ELM327 compatible OBD adapters over USB, Bluetooth or WiFi, for diagnostics | Windows, Linux, macOS |
 | J1850 VPW / GM Class 2 (`elm327_vpw`) | GM "Class 2" 10.4 kbit/s single-wire bus of 1996–2007 GM vehicles, through an ELM327/OBDLink adapter (not CAN) | Windows, Linux, macOS |
 | K-Line (`elm327_kline`) | ISO 9141-2 / ISO 14230 (KWP2000) K-Line diagnostic bus of non-CAN OBD-II vehicles (~1996–2008), through an ELM327/OBDLink adapter (not CAN); `@3`/`@4`/`@5` chooses the protocol | Windows, Linux, macOS |

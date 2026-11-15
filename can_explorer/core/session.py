@@ -49,6 +49,8 @@ class PeriodicTransmit:
         self.period = period
         self.prepare = prepare  # Makes each frame before it is sent (e.g. a new SecOC freshness value and MAC)
         self._session = session
+        self.finished = False  # Stopped, or ended by an error
+        self.error = ''  # Why it ended by itself (a send error, a frame that cannot be prepared); '' otherwise
 
     @property
     def hardware(self) -> bool:
@@ -61,7 +63,8 @@ class PeriodicTransmit:
 class SoftwarePeriodicTransmit(PeriodicTransmit):
     """Sends from the event loop, scheduled against the loop clock so it does not drift.
 
-    The frames go through the session, so they appear in the trace and recordings.
+    The frames go through the session, so they appear in the trace and recordings. The first frame is sent after
+    `delay` seconds (0: at once), e.g. to spread the transmissions of many messages over their period.
     """
 
     def __init__(
@@ -70,14 +73,18 @@ class SoftwarePeriodicTransmit(PeriodicTransmit):
         msg: can.Message,
         period: float,
         prepare: Optional[Callable[[can.Message], can.Message]] = None,
+        delay: float = 0.0,
     ):
         super().__init__(session, msg, period, prepare)
+        self.delay = max(0.0, delay)
         self._task = asyncio.get_running_loop().create_task(self._run(), name=f'Periodic {msg.arbitration_id:#x}')
 
     async def _run(self) -> None:
         loop = asyncio.get_running_loop()
-        deadline = loop.time()
+        deadline = loop.time() + self.delay
         try:
+            if self.delay:
+                await asyncio.sleep(self.delay)
             while True:
                 msg = clone_message(self.message)
                 self._session.send(self.prepare(msg) if self.prepare is not None else msg)
@@ -86,12 +93,17 @@ class SoftwarePeriodicTransmit(PeriodicTransmit):
         except asyncio.CancelledError:
             raise
         except Exception as e:  # A session error, or a frame that cannot be prepared (e.g. no SecOC key)
+            self.error = str(e) or type(e).__name__
             logger.warning(f'Stopping periodic transmission of {self.message.arbitration_id:#x}: {e}')
         finally:
+            self.finished = True
             self._session._periodic_finished(self)
 
     def stop(self) -> None:
         self._task.cancel()
+        # A task cancelled before its first step never runs its `finally`: unregister here as well (idempotent)
+        self.finished = True
+        self._session._periodic_finished(self)
 
 
 class HardwarePeriodicTransmit(PeriodicTransmit):
@@ -115,6 +127,7 @@ class HardwarePeriodicTransmit(PeriodicTransmit):
         try:
             self._task.stop()
         finally:
+            self.finished = True
             self._session._periodic_finished(self)
 
 
@@ -307,9 +320,11 @@ class BusSession:
         period: float,
         hardware: bool = False,
         prepare: Optional[Callable[[can.Message], can.Message]] = None,
+        delay: float = 0.0,
     ) -> PeriodicTransmit:
-        """Send `msg` every `period` seconds. `prepare` makes each frame from a copy of `msg` before it is sent;
-        it needs software timing, since the hardware repeats one fixed frame."""
+        """Send `msg` every `period` seconds, the first after `delay` seconds. `prepare` makes each frame from a
+        copy of `msg` before it is sent; it needs software timing, since the hardware repeats one fixed frame (and
+        starts at once, so a delay needs software timing too)."""
         if not self.source.can_send:
             raise SessionError('This source cannot transmit')
         if not self.is_open:
@@ -318,10 +333,14 @@ class BusSession:
             raise SessionError(
                 'This frame changes every period (e.g. a SecOC freshness value and MAC); send it with software timing'
             )
+        if hardware and delay > 0:
+            raise SessionError(
+                'Hardware periodic transmission starts at once; send a delayed start with software timing'
+            )
         if hardware:
             periodic: PeriodicTransmit = HardwarePeriodicTransmit(self, msg, period)
         else:
-            periodic = SoftwarePeriodicTransmit(self, msg, period, prepare)
+            periodic = SoftwarePeriodicTransmit(self, msg, period, prepare, delay)
         self._periodic.append(periodic)
         self._notify_periodic()
         return periodic

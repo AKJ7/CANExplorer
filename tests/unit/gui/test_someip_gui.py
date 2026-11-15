@@ -1,10 +1,10 @@
-import asyncio
 import socket
 import struct
 
 import pytest
 
 from can_explorer.gui.someip import SomeIpController, _parse_ports
+from tests.unit.waiting import wait_until as wait_by_deadline
 
 
 def someip(service, method, message_type, payload=b''):
@@ -47,19 +47,13 @@ async def test_controller_listens_and_decodes(qapp):
         port = sock.getsockname()[1]
         sock.close()
         assert controller.open(str(port), '') == ''  # No multicast for the loopback test
-        for _ in range(200):
-            if controller.is_open:
-                break
-            await asyncio.sleep(0.01)
+        await wait_by_deadline(lambda: controller.is_open)
         assert controller.is_open
 
         sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sender.sendto(sd_offer(), ('127.0.0.1', port))
         sender.sendto(someip(0x1234, 0x8001, 0x02, b'\xaa\xbb'), ('127.0.0.1', port))
-        for _ in range(200):
-            if controller.message_count >= 2:
-                break
-            await asyncio.sleep(0.01)
+        await wait_by_deadline(lambda: controller.message_count >= 2)
         sender.close()
 
         assert controller.message_count == 2
@@ -102,17 +96,11 @@ async def test_controller_decodes_payloads_with_fibex(qapp, data_dir):
         port = sock.getsockname()[1]
         sock.close()
         assert controller.open(str(port), '') == ''
-        for _ in range(200):
-            if controller.is_open:
-                break
-            await asyncio.sleep(0.01)
+        await wait_by_deadline(lambda: controller.is_open)
 
         sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sender.sendto(someip(0x1234, 0x8001, 0x02, bytes([0x0F, 0xA0])), ('127.0.0.1', port))  # SpeedEvent
-        for _ in range(200):
-            if controller.message_count >= 1:
-                break
-            await asyncio.sleep(0.01)
+        await wait_by_deadline(lambda: controller.message_count >= 1)
         sender.close()
 
         row = controller.messages[0]
@@ -140,17 +128,11 @@ async def test_controller_decodes_payloads_with_arxml(qapp, data_dir):
         port = sock.getsockname()[1]
         sock.close()
         assert controller.open(str(port), '') == ''
-        for _ in range(200):
-            if controller.is_open:
-                break
-            await asyncio.sleep(0.01)
+        await wait_by_deadline(lambda: controller.is_open)
 
         sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sender.sendto(someip(0x1234, 0x8001, 0x02, struct.pack('>ff', 1.0, 2.0)), ('127.0.0.1', port))  # Target event
-        for _ in range(200):
-            if controller.message_count >= 1:
-                break
-            await asyncio.sleep(0.01)
+        await wait_by_deadline(lambda: controller.message_count >= 1)
         sender.close()
 
         row = controller.messages[0]

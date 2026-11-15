@@ -222,7 +222,29 @@ async def test_diagnostics_against_simulated_ecu(manager, channel, tmp_path):
     assert (await run(lambda: diagnostics.write_did('F198', '41 42')))['description'] == 'Repair shop code written'
     entry = await run(lambda: diagnostics.read_dtcs('FF'))
     assert entry['description'] == '2 DTCs with status mask 0xFF'
-    assert diagnostics.dtcs[0] == {'code': 'P0123-45', 'status': '0x09', 'flags': 'testFailed, confirmedDTC'}
+    assert diagnostics.dtcs[0] == {
+        'code': 'P0123-45',
+        'value': '012345',
+        'status': '0x09',
+        'flags': 'testFailed, confirmedDTC',
+        'extra': '',
+        'details': '',
+    }
+    entry = await run(lambda: diagnostics.read_dtc_details('012345'))
+    assert diagnostics.dtcs[0]['details'] == entry['description'].split(': ', 1)[1]
+    assert 'snapshot 0x01' in entry['description'] and 'not decoded (DID lengths unknown)' in entry['description']
+    assert 'extended data' in entry['description'] or 'record lengths unknown' in entry['description']
+    entry = await run(lambda: diagnostics.read_dtc_report('counters', '', ''))
+    assert entry['description'].startswith('Fault detection counters (0x14): 2 DTCs')
+    assert diagnostics.dtcs[0]['extra'] == 'fault detection counter 127' and diagnostics.dtcs[0]['status'] == ''
+    entry = await run(lambda: diagnostics.read_dtc_report('memory', 'FF', '01'))
+    assert diagnostics.dtcs[0]['code'] == 'B1A00-11' and 'in memory 0x01' in entry['description']
+    assert diagnostics.read_dtc_report('nope', '', '') == "Unknown report 'nope'"
+    assert {report['value'] for report in diagnostics.dtc_reports} >= {'status', 'supported', 'permanent'}
+    assert diagnostics.functional_available
+    entry = await run(diagnostics.discover_ecus)
+    assert entry['description'] == 'Functional TesterPresent: 1 ECU answered: 0x7E8'
+    await run(lambda: diagnostics.read_dtcs('FF'))
     await run(diagnostics.clear_dtcs)
     assert diagnostics.dtcs == []
     entry = await run(lambda: diagnostics.routine_control(1, '0203', '01'))
@@ -738,6 +760,32 @@ async def test_flashing(manager, channel, tmp_path, monkeypatch):
         assert flashing.start(options) == ''
         await wait_until(lambda: not flashing.running, timeout=10)
         assert flashing.state == 'cancelled' and 'skipped' in [step['status'] for step in flashing.steps]
+        monkeypatch.undo()
+
+        # A sequence preset with functional steps: the other ECUs are quieted and restored
+        assert flashing.load_sequence(QUrl.fromLocalFile(str(firmware.parent / 'sequence_quiet_bus.json'))) == ''
+        assert flashing.sequence_name == 'Quiet bus, programming session, check dependencies'
+        ecu.server.memory.clear()
+        assert flashing.start({'max_block': 0x202}) == ''
+        await wait_until(lambda: not flashing.running, timeout=20)
+        assert flashing.state == 'done', flashing.error
+        assert flashing.steps[0]['name'] == 'Extended session (all ECUs)' and flashing.steps[0]['detail'] == ''
+        assert ecu.server.memory == {segment.address: segment.data for segment in image.segments}
+        assert ecu.server.communication['control'] == 0x00 and ecu.server.dtc_setting_on
+        flashing.clear_sequence()
+        assert flashing.sequence_name == ''
+        (tmp_path / 'bad.json').write_text('{"steps": []}')
+        assert 'non-empty list' in flashing.load_sequence(QUrl.fromLocalFile(str(tmp_path / 'bad.json')))
+        assert (
+            flashing.start({'data_format': '11'})
+            == 'A data format other than 00 needs an encoder (encode(data, address))'
+        )
+        (tmp_path / 'encoder.py').write_text('def encode(data, address):\n    return data\n')
+        assert flashing.load_encoder(QUrl.fromLocalFile(str(tmp_path / 'encoder.py'))) == ''
+        assert flashing.encoder_file.endswith('encoder.py')
+        flashing.clear_encoder()
+        (tmp_path / 'other.py').write_text('x = 1\n')
+        assert 'does not define encode' in flashing.load_encoder(QUrl.fromLocalFile(str(tmp_path / 'other.py')))
     finally:
         ecu.stop()
         ecu_session.stop()

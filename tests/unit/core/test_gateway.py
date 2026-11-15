@@ -8,6 +8,7 @@ from can_explorer.core.filters import MessageFilter
 from can_explorer.core.gateway import Gateway, GatewayRule
 from can_explorer.core.session import BusSession
 from can_explorer.core.sources import BusConfig, LiveSource
+from tests.unit.waiting import wait_until as wait_by_deadline
 
 
 def _session(channel: str) -> BusSession:
@@ -119,7 +120,7 @@ async def test_dropped_when_destination_is_closed(buses):
     gateway.start()
     sessions['B'].stop()
     peer_a.send(_frame(0x100))
-    await asyncio.sleep(0.1)
+    await wait_by_deadline(lambda: gateway.rules[0].dropped >= 1)
     assert gateway.rules[0].dropped >= 1 and gateway.rules[0].forwarded == 0
 
 

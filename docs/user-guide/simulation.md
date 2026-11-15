@@ -114,6 +114,39 @@ Column {
 Panels can use all QtQuick modules; errors in a panel are shown in the console. The complete API is in the
 [QML panel API reference](../reference/panel-api.md).
 
+### Building panels without writing QML
+
+**Build Panel…** in the Simulation view opens the panel builder. Drag widgets from the palette onto the panel (or
+click one to add it at the top left), move them, and resize them by the handle at their corner; positions snap to
+an 8-pixel grid. Select a widget to set what it shows or does in the inspector on the right:
+
+| Widget | Shows or does |
+|---|---|
+| Text | A fixed text, at a font size, optionally bold |
+| Value | A signal or variable, with its unit |
+| Gauge | A signal or variable on a dial between a minimum and a maximum, red from a threshold |
+| Bar | A signal or variable as a bar between a minimum and a maximum |
+| Lamp | On (in green, red, amber or blue) while the value is true or above a threshold |
+| Trend | The last seconds of a signal or variable as a line |
+| Switch | Sets a variable to true or false |
+| Slider | Sets a variable to a number between a minimum and a maximum, in steps |
+| Button | Sets a variable to a value, sends a database message (`Pressure=50, Mode=2`), sends raw hex data, or writes to the console |
+
+A widget shows `signal:Message.Signal` (a signal of the connection's database) or `variable:name` (a shared
+variable); **▾** lists both. What keeps the panel from working (a widget without a source, a minimum above its
+maximum) is listed below the inspector, and the panel cannot be saved until it is fixed. **Preview** runs the panel
+on the live simulation, as the Simulation view will.
+
+![The panel builder: an engine panel with a gauge, a trend, a lamp, a value, a switch, a slider and a button](../assets/screenshots/panel-builder.png)
+
+![The same panel in the preview, on the running example simulation](../assets/screenshots/panel-builder-preview.png)
+
+**Save** writes an ordinary panel file: QML with `property var panel`, using only the panel API, so it works like a
+hand-written panel and can be edited by hand. **Use in Simulation** saves it and opens it in the Simulation view.
+The first line of the file keeps the layout, so **Open…** (or **Build Panel…** while the panel is shown) opens it in
+the builder again; changes made to the QML by hand are not seen by the builder, which writes the file anew. Panels
+written by hand open in a text editor, not in the builder.
+
 ## Timing
 
 Timers and handlers run on the application's event loop. Periodic timers do not drift, but their precision is about

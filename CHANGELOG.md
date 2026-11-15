@@ -8,6 +8,136 @@ development stages are listed by date and commit, newest first.
 
 ## [Unreleased]
 
+## [1.9.0] – 2026-11-15
+
+### Added
+
+- **Breakpoints and single stepping in playbacks**, for replays of recordings and recordings replayed on a bus:
+  pause right after a frame (identifiers and an optional data pattern with wildcards), when a database signal's
+  condition becomes true or its value changes, or at a time; let a breakpoint pass its first hits; step frame by
+  frame. The playback bar shows where it stopped.
+- **FlexRay tool**: the frames of a FlexRay cluster with their slot, cycle and channel, named and decoded with a
+  FIBEX or AUTOSAR ARXML cluster description, from a simulated cluster, a capture or log file, or a Vector or
+  Intrepid interface; records to pcap (LINKTYPE_FLEXRAY, as Wireshark reads it).
+    - **PDUs**: frames carrying several PDUs, each at its position, with **update bits** (a PDU its sender did not
+      refresh is shown "not updated", not decoded as current); FIBEX multiplexed PDUs and CYCLE-COUNTER timings.
+    - **Cluster parameters** (cycle, macrotick, static slots, payload length, minislots, network idle time, bit rate)
+      and the ECUs' FlexRay controllers; the cluster to use when a file describes several.
+    - **Logs**: pcap/pcapng (frames, symbols, and FlexRay tunnelled in IEEE 1722 ACF), **Vector BLF** (frames with
+      their errors, symbols, the protocol state, interface errors) and **Vector ASC**.
+    - **Schedule and bus check** (Analysis tab): missing, undescribed, wrong-length and mistimed frames, dynamic slot
+      order, channel A/B mismatches; per channel null frames, errors, sync frames per cycle, cycle counter jumps and
+      the cycle time. Symbols, protocol states and interface errors in an Events tab.
+    - **Signal plots** of the cluster's signals, and **sending**: frames of the description encoded from physical
+      values (update bits set) or raw bytes, sent in their slot and cycles — in the simulation, or with an interface
+      taking part in the cluster.
+    - **Interfaces** (experimental, written from the vendors' published interfaces and tested against simulated
+      drivers): Vector (XL Driver Library) in spy mode or as a node with the channel's or a given cluster
+      configuration; Intrepid (`pip install icsneopy`) watching with the device's configuration or as a node
+      configured from the ARXML cluster and ECU controller.
+    - **MCP tools** on files: `flexray_load_cluster`, `flexray_read_log`, `flexray_analyze_log`, `flexray_decode`.
+- **Panel builder**: build simulation panels without writing QML (**Build Panel…** in the Simulation view). Drag
+  text, values, gauges, bars, lamps, trends, switches, sliders and buttons onto a panel, bind them to signals and
+  shared variables, set what buttons send, and preview the panel live on the running simulation. It saves an
+  ordinary QML panel (the panel API, editable by hand), which the builder opens again from the layout it keeps.
+- **Key servers behind OAuth 2.0.** A key server entry can use the client credentials grant (a bench computer's own
+  client ID and secret, kept encrypted) or sign in on the web with the device authorization grant (RFC 8628): the
+  Security Manager shows an address and a code, the user signs in at their identity provider, and the refresh token
+  is kept encrypted for later sessions. Access tokens are renewed before they expire and once more when a server
+  refuses one. Works with any provider implementing the RFCs (Entra ID, Okta, Keycloak, …).
+- **PKCS#11 tokens** (smart cards, USB tokens, HSMs) as a key store entry: the tester certificate and the proof of
+  ownership of UDS Authentication (certificate exchange and challenge-response) come from the token, so the private
+  key never leaves it. ECDSA, RSA (PSS and PKCS#1 v1.5) and Ed25519. Needs the new optional `pkcs11` extra
+  (python-pkcs11); tested against a simulated token so far.
+- **ZLG and Toomoss adapters** (experimental): the ZLG USBCAN-II, USBCAN-E-U and USBCANFD series (interface `zlg`,
+  Windows) and Toomoss USB2CAN and USB2CANFD adapters (interface `toomoss`, Windows, Linux, macOS), CAN and CAN FD.
+  Written from the vendors' published headers and manuals, with the structure layouts checked against the headers,
+  and tested against simulated libraries; not yet tested on the devices.
+- **PKCS#12 files** (`.p12`, `.pfx`) as TLS client certificates: the certificate, its chain and its key in one file,
+  as browsers, Windows and many PKIs export them.
+- **10BASE-T1S** documented in the Ethernet capture guide: T1S adapters and captures work with the Ethernet tool as
+  they are (ordinary Ethernet frames); PLCA beacons, transmit opportunities and collisions are not visible in a
+  capture.
+- **More ReadDTCInformation reports.** The Trouble codes pane reads supported DTCs (0x19 0x0A), fault detection
+  counters (0x14), a user-defined DTC memory (0x17) and the permanent WWH-OBD DTCs (0x55) besides DTCs by status
+  mask, and **Details** reads a DTC's snapshot (freeze frame, 0x04) and extended data (0x06) records. Snapshot DIDs
+  are split and decoded with the loaded CDD/ODX description; records whose lengths are unknown are shown in hex, not
+  split at a guess. In scripts also 0x01, 0x03, 0x07, 0x18, 0x19 and 0x42 (`can_explorer.core.uds_dtc`).
+- **Functional addressing**: **Find ECUs** in the Diagnostics view lists the ECUs answering a functional
+  TesterPresent (0x7DF, or 0x18DB33F1 with 29-bit identifiers). In scripts, `FunctionalUdsClient` sends a request to
+  all ECUs and collects every answer, including segmented ones and "response pending" (`can_explorer.core.uds_functional`;
+  CAN with the OBD conventions or an explicit mapping, and DoIP functional addresses).
+- **More UDS services in scripts**: ReadScalingDataByIdentifier (0x24), CommunicationControl (0x28),
+  DynamicallyDefineDataIdentifier (0x2C), ReadDataByPeriodicIdentifier (0x2A) with a receiver for the periodic data,
+  RequestFileTransfer (0x38), ResponseOnEvent (0x86) with a collector for the event-triggered responses,
+  ControlDTCSetting (0x85) and LinkControl (0x87). SecuredDataTransmission (0x84) is named, not decoded. Checked
+  against the AUTOSAR Dcm specification, udsoncan and Wireshark's UDS dissector; what they leave open is kept as bytes.
+- **Flashing: quieting the bus, sequence presets and encoders.** **Quiet the bus** puts all ECUs in the extended
+  session, stops their DTC setting and communication before programming (kept there by a functional TesterPresent)
+  and restores them afterwards. **Sequence preset…** loads a JSON file with a manufacturer's own order of steps
+  (sessions, security access, DID writes, routines, raw requests, waits; `examples/flashing/sequence_quiet_bus.json`).
+  **Data format** and **Encoder…** send compressed or encrypted downloads, encoded by your own `encode(data, address)`.
+- **Periodic data in the Diagnostics view**: define a DID from parts of other DIDs or memory areas
+  (DynamicallyDefineDataIdentifier 0x2C) and have the ECU send DIDs at its slow, medium or fast rate
+  (ReadDataByPeriodicIdentifier 0x2A), with the latest values, message counts and rates listed. Both ways ECUs send
+  periodic data are received: single frames on a CAN ID of their own (ISO 14229-1:2020) and 0x6A messages on the
+  diagnostic response ID.
+- **Unsolicited messages in the Diagnostics History.** Event-triggered (ResponseOnEvent) responses, late answers and
+  other messages that answer no request are listed as *Unsolicited (sent by the ECU)* instead of being dropped.
+  **Listen between requests** (off by default) receives them between requests too; requests, tester present,
+  flashing and scans then share one ISO-TP receiver, so flow control is never answered twice.
+- **MCP**: `uds_dtc_details` (a DTC's snapshot and extended data records) and `uds_find_ecus` (functional
+  TesterPresent), in the diagnostics tier.
+- The simulated ECU answers all of these services, takes functional requests on 0x7DF, sends periodic data and
+  event-triggered responses, and has a small file system.
+- **Restbus simulation sends what the nodes would send**, not frozen frames:
+  - **Send modes** from the DBC `GenMsgSendType`, changeable per message: cyclic, on change (with
+    `GenMsgNrOfRepetition` repetitions), cyclic + on change, and if active (at `GenMsgCycleTimeFast` while a
+    signal differs from its `GenSigInactiveValue`). `GenMsgStartDelayTime` and `GenMsgDelayTime` are used;
+    `NoMsgSendType` messages are listed off. **Send now** sends a message with its repetitions.
+  - **Counters** count and wrap at their range (signals named like counters by default), and **checksum** signals
+    are computed over the other bytes for every frame (CRC-8 SAE J1850, CRC-8H2F, SMBus, Maxim, CDMA2000, XOR,
+    sum, inverted sum, with an optional constant).
+  - **AUTOSAR E2E** protected PDUs of an ARXML get a new counter and CRC in every frame (profiles 2, 5, 22),
+    before SecOC secures them.
+  - **Multiplexed messages** take turns through their pages, which can be chosen.
+  - **Timing**: cyclic messages start staggered 1 ms apart instead of all at once; frames that never change can use
+    the interface's **hardware timing**; the **expected bus load** is shown.
+  - Each message shows its **state** (sending, on change, inactive, stopped, with the reason), values with a value
+    table offer its choices, and **raw values** can be entered.
+  - The setup is kept when the database is reloaded (and the simulation keeps running), and saved in
+    **workspaces**.
+
+### Changed
+
+- **The UDS client uses the timing the ECU reports.** The P2 and P2* times of a DiagnosticSessionControl response
+  (plus 0.5 s) lengthen the response timeouts for the new session, never below 1 s and 5 s; an ECU needing longer
+  than 5 s between "response pending" answers (erasing a large flash) is no longer timed out.
+- **UDS responses must echo the request's sub-function or identifier.** A response of the same service for another
+  DID, routine or sub-function (a stale answer, an event-triggered response) is not taken as the answer; such
+  responses go to the new unsolicited-response listeners instead of being dropped.
+- **UDS discovery** also probes the services 0x24, 0x2A, 0x2C, 0x38, 0x84, 0x86 and 0x87.
+
+- **MCP tools, resources and prompts have titles and descriptions.** Each carries an explicit name, a
+  human-readable title for clients to show, and a description. The diagnostics, control and send tools now say in
+  their description which permission tier they need and what they do to the bus or the ECU. The resources have
+  descriptions for the first time, and are named for what they hold (`status`, `identifiers`, `frames`, `database`)
+  instead of `status_resource` etc.; their URIs (`can://…`) and every tool and prompt name are unchanged.
+
+### Fixed
+
+- **Test runs** stopped right after starting report being stopped; before, the run ended with an internal
+  cancellation error instead of its report.
+- **Preferences**: Cancel and Escape restore the previous theme at once, not after the dialog has faded out.
+- **UDS fuzzing** no longer reports a request with the suppress-positive-response bit set (e.g. `10 81`) as an
+  unresponsive ECU: silence is the expected answer to it.
+- The simulated ECU ends an unfinished download when the session changes or it is reset, as ECUs do.
+- **Restbus**: CAN FD messages of 8 bytes or less were sent as classic CAN frames, and CAN FD frames without bit
+  rate switching; the database's frame format and `CANFD_BRS` are now used. A message whose transmission ended (a
+  send error, a bus-off) still showed as sending; it now shows as stopped, with the reason. Editing a value no longer
+  collapses the expanded messages.
+- A periodic transmission stopped before it sent its first frame stayed registered with the connection.
+
 ## [1.8.0] – 2026-11-14
 
 ### Added
@@ -1142,7 +1272,8 @@ Called "Milestone 0.1.0" in the commit message and the README roadmap.
 - Qt Widgets user interface: main window, new connection dialog, about dialog and a raw CAN frame table.
 - Pipenv based project setup, VS Code development container, Dockerfile and a CI workflow skeleton.
 
-[Unreleased]: https://github.com/AKJ7/CANExplorer/compare/v1.8.0...HEAD
+[Unreleased]: https://github.com/AKJ7/CANExplorer/compare/v1.9.0...HEAD
+[1.9.0]: https://github.com/AKJ7/CANExplorer/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/AKJ7/CANExplorer/compare/v1.7.1...v1.8.0
 [1.7.1]: https://github.com/AKJ7/CANExplorer/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/AKJ7/CANExplorer/compare/v1.6.0...v1.7.0

@@ -4,7 +4,17 @@ from typing import Any, Dict, List, Optional
 
 from PyQt6.QtCore import QObject, QTimer, QUrl, pyqtProperty, pyqtSignal, pyqtSlot
 
-from can_explorer.core.flashing import FlashImage, FlashJob, FlashOptions, ImageError, load_image
+from can_explorer.core.flashing import (
+    FlashImage,
+    FlashJob,
+    FlashOptions,
+    ImageError,
+    SequenceError,
+    load_encoder,
+    load_image,
+    load_sequence,
+)
+from can_explorer.core.uds_functional import FunctionalUdsClient
 from can_explorer.core.uds import UdsClient, UdsError, load_key_source
 from can_explorer.sys.log_handler import get_logger
 
@@ -46,6 +56,10 @@ class FlashController(QObject):
         self._timer = QTimer(self)
         self._timer.setInterval(REFRESH_MS)
         self._timer.timeout.connect(self._refresh)
+        self._sequence_name = ''
+        self._sequence: Optional[List[Dict[str, Any]]] = None
+        self._encoder_file = ''
+        self._encoder = None
 
     def _refresh(self):
         if self._dirty:
@@ -147,15 +161,58 @@ class FlashController(QObject):
             return []
         return [{'name': step.name, 'status': step.status, 'detail': step.detail} for step in self._job.steps]
 
+    # Sequence preset and encoder
+
+    @pyqtSlot(QUrl, result=str)
+    def load_sequence(self, url: QUrl) -> str:
+        """Use a JSON sequence preset instead of the step options. Returns an error or ''."""
+        try:
+            self._sequence_name, self._sequence = load_sequence(url.toLocalFile())
+        except SequenceError as e:
+            return str(e)
+        self.changed.emit()
+        return ''
+
+    @pyqtSlot()
+    def clear_sequence(self):
+        self._sequence_name, self._sequence = '', None
+        self.changed.emit()
+
+    @pyqtProperty(str, notify=changed)
+    def sequence_name(self) -> str:
+        return self._sequence_name
+
+    @pyqtSlot(QUrl, result=str)
+    def load_encoder(self, url: QUrl) -> str:
+        """A Python file defining encode(data, address) for compressed/encrypted downloads. Returns an error or ''."""
+        path = url.toLocalFile()
+        try:
+            self._encoder = load_encoder(path)
+        except SequenceError as e:
+            return str(e)
+        self._encoder_file = path
+        self.changed.emit()
+        return ''
+
+    @pyqtSlot()
+    def clear_encoder(self):
+        self._encoder_file, self._encoder = '', None
+        self.changed.emit()
+
+    @pyqtProperty(str, notify=changed)
+    def encoder_file(self) -> str:
+        return self._encoder_file
+
     # Running
 
     def _options(self, options: Dict[str, Any]) -> FlashOptions:
         diagnostics = self._diagnostics
         level = int(options.get('security_level', 0) or 0)
         compute_key = None
-        if level:
-            if level % 2 == 0:
-                raise ValueError('Security access levels for requesting a seed are odd')
+        if level and level % 2 == 0:
+            raise ValueError('Security access levels for requesting a seed are odd')
+        preset_security = self._sequence is not None and any(step['step'] == 'security' for step in self._sequence)
+        if (level and self._sequence is None) or preset_security:
             if not diagnostics.key_file:
                 raise ValueError('Choose the key algorithm in the Diagnostics view for security access')
             compute_key = load_key_source(diagnostics.key_file)
@@ -175,11 +232,16 @@ class FlashController(QObject):
             ),
             reset=bool(options.get('reset', True)),
             max_block_length=int(options.get('max_block', 0) or 0),
+            pre_programming=bool(options.get('pre_programming', False)),
+            communication_type=_hex_option(options, 'communication_type', '01', 0xFF, 'communication type'),
+            data_format=_hex_option(options, 'data_format', '00', 0xFF, 'data format'),
+            encode=self._encoder,
         )
 
     @pyqtSlot('QVariantMap', result=str)
     def start(self, options: Dict[str, Any]) -> str:
-        """Options: session, security_level, erase, erase_routine, check, check_routine, reset, max_block."""
+        """Options: session, security_level, erase, erase_routine, check, check_routine, reset, max_block,
+        pre_programming, communication_type (hex), data_format (hex). A loaded sequence preset replaces the steps."""
         if self.running:
             return 'Flashing is in progress'
         if self._image is None:
@@ -195,7 +257,12 @@ class FlashController(QObject):
             return str(e)
         if flash_options.max_block_length and flash_options.max_block_length < 3:
             return 'Blocks need at least 3 bytes'
-        self._job = FlashJob(self._image, flash_options, on_change=self._on_job_change)
+        if flash_options.data_format and self._encoder is None:
+            return 'A data format other than 00 needs an encoder (encode(data, address))'
+        try:
+            self._job = FlashJob(self._image, flash_options, on_change=self._on_job_change, sequence=self._sequence)
+        except SequenceError as e:
+            return str(e)
         self._state = 'running'
         self._running = True
         self._task = asyncio.ensure_future(self._run(self._job))
@@ -205,8 +272,12 @@ class FlashController(QObject):
 
     async def _run(self, job: FlashJob):
         transport = self._diagnostics.create_transport()
+        functional_transport = None
+        if any(step.get('functional') for step in job.sequence) and self._diagnostics.functional_available:
+            functional_transport = self._diagnostics._functional_transport()
         try:
-            await job.run(UdsClient(transport))
+            functional = FunctionalUdsClient(functional_transport) if functional_transport is not None else None
+            await job.run(UdsClient(transport), functional)
             self._state = 'done'
             logger.info(f'Flashed {job.total} bytes in {job.finished - job.started:.1f} s')
         except asyncio.CancelledError:
@@ -222,6 +293,8 @@ class FlashController(QObject):
             self._state = 'failed'
         finally:
             transport.close()
+            if functional_transport is not None:
+                functional_transport.close()
             self._running = False
             self._timer.stop()
             self._dirty = False

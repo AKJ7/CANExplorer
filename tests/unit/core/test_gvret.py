@@ -16,6 +16,7 @@ from can_explorer.core.gvret import (
     parse_parameters,
     setup_command,
 )
+from tests.unit.waiting import wait_until as wait_by_deadline
 
 
 class GvretDevice:
@@ -269,7 +270,7 @@ async def test_connection_through_a_session(device):
             assert time.monotonic() < deadline, 'Timed out'
             await asyncio.sleep(0.01)
         session.send(can.Message(arbitration_id=0x55, is_extended_id=False, data=[1]))
-        await asyncio.sleep(0.2)
+        await wait_by_deadline(lambda: device.sent)
         assert device.sent == [(0, 0x55, False, b'\x01')]
         assert device.setups[0][:4] == (0xC0000000 | 125_000).to_bytes(4, 'little')
     finally:

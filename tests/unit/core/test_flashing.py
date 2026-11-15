@@ -8,7 +8,11 @@ from can_explorer.core.flashing import (
     FlashOptions,
     ImageError,
     Segment,
+    SequenceError,
+    default_sequence,
     intel_hex_text,
+    load_encoder,
+    load_sequence,
     load_image,
     parse_intel_hex,
     parse_srec,
@@ -18,6 +22,7 @@ from can_explorer.core.session import BusSession
 from can_explorer.core.simulation import UdsEcuSimulator, UdsServer, xor_key
 from can_explorer.core.sources import BusConfig, LiveSource
 from can_explorer.core.uds import UdsClient, UdsNegativeResponse
+from can_explorer.core.uds_functional import FunctionalUdsClient, obd_11bit
 
 FIRMWARE = bytes((i * 7 + 3) & 0xFF for i in range(3000))
 
@@ -170,3 +175,127 @@ async def test_flashing_over_isotp():
         ecu.stop()
         tester.stop()
         ecu_session.stop()
+
+
+async def test_pre_programming_quiets_the_bus_and_restores_it():
+    channel = f'flash-{uuid.uuid4().hex}'
+    tester = BusSession(LiveSource(BusConfig('virtual', channel)))
+    ecu_session = BusSession(LiveSource(BusConfig('virtual', channel)))
+    tester.start()
+    ecu_session.start()
+    target, other = UdsServer(), UdsServer()
+    ecus = [
+        UdsEcuSimulator(ecu_session, 0x7E0, 0x7E8, server=target),
+        UdsEcuSimulator(ecu_session, 0x7E1, 0x7E9, server=other),
+    ]
+    for ecu in ecus:
+        ecu.start()
+    transport = IsoTpClient(tester, 0x7E0, 0x7E8)
+    functional_transport = obd_11bit(tester)
+    states = []
+    try:
+        job = FlashJob(
+            FlashImage([Segment(0x4000, FIRMWARE[:500])]),
+            FlashOptions(pre_programming=True),
+            on_change=lambda job: states.append((other.session, other.communication['control'], other.dtc_setting_on)),
+        )
+        assert [step.name for step in job.steps] == [
+            'Extended session (all ECUs)',
+            'Tester present (all ECUs)',
+            'DTC setting off (all ECUs)',
+            'Communication control disableRxAndTx (all ECUs)',
+            'Programming session',
+            'Erase 0x00004000 (500 bytes)',
+            'Download 0x00004000 (500 bytes)',
+            'ECU reset',
+            'Communication control enableRxAndTx (all ECUs)',
+            'DTC setting on (all ECUs)',
+            'Default session (all ECUs)',
+        ]
+        await job.run(UdsClient(transport), FunctionalUdsClient(functional_transport, timeout=0.2))
+        assert target.memory == {0x4000: FIRMWARE[:500]}
+        # While programming, the other ECU was in the extended session with communication and DTC setting off
+        assert (0x03, 0x03, False) in states
+        assert (other.session, other.communication['control'], other.dtc_setting_on) == (0x01, 0x00, True)
+        assert other.tester_present_count >= 1  # The functional keep-alive reached it
+    finally:
+        transport.close()
+        functional_transport.close()
+        for ecu in ecus:
+            ecu.stop()
+        tester.stop()
+        ecu_session.stop()
+
+
+async def test_functional_steps_without_a_functional_client_go_to_the_ecu():
+    server = UdsServer()
+    job = FlashJob(FlashImage([Segment(0, FIRMWARE[:10])]), FlashOptions(pre_programming=True, restore=False))
+    await job.run(UdsClient(ServerTransport(server)))
+    assert job.steps[0].detail == 'sent to this ECU only (no functional addressing)'
+    assert server.memory == {0: FIRMWARE[:10]}
+
+
+async def test_sequence_presets(tmp_path):
+    preset = tmp_path / 'oem.json'
+    preset.write_text(
+        '{"name": "OEM X", "steps": ['
+        '{"step": "session", "session": "03"},'
+        '{"step": "security", "level": 1},'
+        '{"step": "write_did", "did": "F199", "data": "26 11 15"},'
+        '{"step": "session", "session": 2},'
+        '{"step": "program", "erase_routine": null},'
+        '{"step": "routine", "routine": "FF01", "name": "Check dependencies"},'
+        '{"step": "wait", "seconds": 0},'
+        '{"step": "request", "payload": "11 01"}]}'
+    )
+    name, steps = load_sequence(preset)
+    assert name == 'OEM X'
+    server = UdsServer()
+    job = FlashJob(FlashImage([Segment(0x100, FIRMWARE[:64])]), FlashOptions(compute_key=xor_key), sequence=steps)
+    assert [step.name for step in job.steps] == [
+        'Extended session',
+        'Security access level 1',
+        'Write DID 0xF199',
+        'Programming session',
+        'Download 0x00000100 (64 bytes)',
+        'Check dependencies',
+        'Wait 0 s',
+        'Request 11 01',
+    ]
+    await job.run(UdsClient(ServerTransport(server)))
+    assert server.dids[0xF199] == bytes([0x26, 0x11, 0x15]) and server.memory == {0x100: FIRMWARE[:64]}
+    assert server.erased == [] and server.session == 0x01
+
+    for bad, message in (
+        ('[]', 'expected an object'),
+        ('{"steps": [{"step": "session", "session": 2}]}', 'exactly one "program"'),
+        ('{"steps": [{"step": "program"}, {"step": "fly"}]}', 'must be one of'),
+        ('{"steps": [{"step": "program"}, {"step": "security", "level": 2}]}', 'odd'),
+        ('{"steps": [{"step": "program"}, {"step": "routine", "routine": "xyz"}]}', 'not a hex number'),
+        ('{"steps": [{"step": "program"}, {"step": "wait", "seconds": -1}]}', 'seconds'),
+    ):
+        preset.write_text(bad)
+        with pytest.raises(SequenceError, match=message):
+            load_sequence(preset)
+    assert default_sequence(FlashOptions())[-1] == {'step': 'reset', 'type': 0x01}
+
+
+async def test_encoder_hook(tmp_path):
+    encoder = tmp_path / 'encoder.py'
+    encoder.write_text('def encode(data, address):\n    return bytes(b ^ 0x55 for b in data)\n')
+    encode = load_encoder(encoder)
+
+    class EncodedServer(UdsServer):
+        def _request_download(self, request):
+            request = bytes([request[0], 0x00]) + request[2:]  # Accepts the encoded format
+            return super()._request_download(request)
+
+    server = EncodedServer()
+    options = FlashOptions(data_format=0x11, encode=encode, erase_routine=None)
+    job = FlashJob(FlashImage([Segment(0, FIRMWARE[:40])]), options)
+    await job.run(UdsClient(ServerTransport(server)))
+    assert server.memory[0] == bytes(b ^ 0x55 for b in FIRMWARE[:40]) and job.progress == 1.0
+    assert [r for r in server.requests if r[0] == 0x34][0][1] == 0x11
+    (tmp_path / 'bad.py').write_text('x = 1\n')
+    with pytest.raises(SequenceError, match='does not define encode'):
+        load_encoder(tmp_path / 'bad.py')

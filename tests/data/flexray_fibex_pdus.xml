@@ -1,0 +1,272 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- FlexRay clusters in FIBEX 3 for the CANExplorer tests: Chassis with its timing (cluster parameters named as in
+     NI-XNET's FIBEX files), a frame with two PDU instances that have update bits, a multiplexed PDU, a frame in one
+     cycle only (CYCLE-COUNTER); and a second cluster, Comfort. -->
+<fx:FIBEX xmlns:fx="http://www.asam.net/xml/fbx" xmlns:ho="http://www.asam.net/xml"
+          xmlns:flexray="http://www.asam.net/xml/fbx/flexray"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" VERSION="3.1.0">
+  <fx:ELEMENTS>
+    <fx:CLUSTERS>
+      <fx:CLUSTER ID="chassis" xsi:type="flexray:CLUSTER-TYPE">
+        <ho:SHORT-NAME>Chassis</ho:SHORT-NAME>
+        <fx:SPEED>10000000</fx:SPEED>
+        <fx:PROTOCOL xsi:type="flexray:PROTOCOL-TYPE">FlexRay</fx:PROTOCOL>
+        <fx:CHANNEL-REFS>
+          <fx:CHANNEL-REF ID-REF="chassisA"/>
+        </fx:CHANNEL-REFS>
+        <flexray:MINISLOT>5</flexray:MINISLOT>
+        <flexray:N-I-T>40</flexray:N-I-T>
+        <flexray:STATIC-SLOT>50</flexray:STATIC-SLOT>
+        <flexray:MACRO-PER-CYCLE>5000</flexray:MACRO-PER-CYCLE>
+        <flexray:MACROTICK>1</flexray:MACROTICK>
+        <flexray:NUMBER-OF-MINISLOTS>289</flexray:NUMBER-OF-MINISLOTS>
+        <flexray:NUMBER-OF-STATIC-SLOTS>60</flexray:NUMBER-OF-STATIC-SLOTS>
+        <flexray:PAYLOAD-LENGTH-STATIC>8</flexray:PAYLOAD-LENGTH-STATIC>
+        <flexray:CYCLE>5000</flexray:CYCLE>
+      </fx:CLUSTER>
+      <fx:CLUSTER ID="comfort" xsi:type="flexray:CLUSTER-TYPE">
+        <ho:SHORT-NAME>Comfort</ho:SHORT-NAME>
+        <fx:PROTOCOL xsi:type="flexray:PROTOCOL-TYPE">FlexRay</fx:PROTOCOL>
+        <fx:CHANNEL-REFS>
+          <fx:CHANNEL-REF ID-REF="comfortB"/>
+        </fx:CHANNEL-REFS>
+      </fx:CLUSTER>
+    </fx:CLUSTERS>
+    <fx:CHANNELS>
+      <fx:CHANNEL ID="chassisA" xsi:type="flexray:CHANNEL-TYPE">
+        <ho:SHORT-NAME>Chassis_A</ho:SHORT-NAME>
+        <fx:FRAME-TRIGGERINGS>
+          <fx:FRAME-TRIGGERING ID="ft_drive">
+            <fx:TIMINGS>
+              <fx:ABSOLUTELY-SCHEDULED-TIMING>
+                <fx:SLOT-ID>10</fx:SLOT-ID>
+                <fx:BASE-CYCLE>0</fx:BASE-CYCLE>
+                <fx:CYCLE-REPETITION>1</fx:CYCLE-REPETITION>
+              </fx:ABSOLUTELY-SCHEDULED-TIMING>
+            </fx:TIMINGS>
+            <fx:FRAME-REF ID-REF="frame_drive"/>
+          </fx:FRAME-TRIGGERING>
+          <fx:FRAME-TRIGGERING ID="ft_mux">
+            <fx:TIMINGS>
+              <fx:ABSOLUTELY-SCHEDULED-TIMING>
+                <fx:SLOT-ID>20</fx:SLOT-ID>
+                <fx:BASE-CYCLE>1</fx:BASE-CYCLE>
+                <fx:CYCLE-REPETITION>2</fx:CYCLE-REPETITION>
+              </fx:ABSOLUTELY-SCHEDULED-TIMING>
+            </fx:TIMINGS>
+            <fx:FRAME-REF ID-REF="frame_mux"/>
+          </fx:FRAME-TRIGGERING>
+          <fx:FRAME-TRIGGERING ID="ft_once">
+            <fx:TIMINGS>
+              <fx:ABSOLUTELY-SCHEDULED-TIMING>
+                <fx:SLOT-ID>30</fx:SLOT-ID>
+                <fx:CYCLE-COUNTER>5</fx:CYCLE-COUNTER>
+              </fx:ABSOLUTELY-SCHEDULED-TIMING>
+            </fx:TIMINGS>
+            <fx:FRAME-REF ID-REF="frame_once"/>
+          </fx:FRAME-TRIGGERING>
+        </fx:FRAME-TRIGGERINGS>
+        <flexray:FLEXRAY-CHANNEL-NAME>A</flexray:FLEXRAY-CHANNEL-NAME>
+      </fx:CHANNEL>
+      <fx:CHANNEL ID="comfortB" xsi:type="flexray:CHANNEL-TYPE">
+        <ho:SHORT-NAME>Comfort_B</ho:SHORT-NAME>
+        <fx:FRAME-TRIGGERINGS>
+          <fx:FRAME-TRIGGERING ID="ft_seat">
+            <fx:TIMINGS>
+              <fx:ABSOLUTELY-SCHEDULED-TIMING>
+                <fx:SLOT-ID>3</fx:SLOT-ID>
+                <fx:BASE-CYCLE>0</fx:BASE-CYCLE>
+                <fx:CYCLE-REPETITION>4</fx:CYCLE-REPETITION>
+              </fx:ABSOLUTELY-SCHEDULED-TIMING>
+            </fx:TIMINGS>
+            <fx:FRAME-REF ID-REF="frame_once"/>
+          </fx:FRAME-TRIGGERING>
+        </fx:FRAME-TRIGGERINGS>
+        <flexray:FLEXRAY-CHANNEL-NAME>B</flexray:FLEXRAY-CHANNEL-NAME>
+      </fx:CHANNEL>
+    </fx:CHANNELS>
+    <fx:FRAMES>
+      <fx:FRAME ID="frame_drive">
+        <ho:SHORT-NAME>Drive</ho:SHORT-NAME>
+        <fx:BYTE-LENGTH>8</fx:BYTE-LENGTH>
+        <fx:FRAME-TYPE>APPLICATION</fx:FRAME-TYPE>
+        <fx:PDU-INSTANCES>
+          <fx:PDU-INSTANCE ID="pi_torque">
+            <fx:PDU-REF ID-REF="pdu_torque"/>
+            <fx:BIT-POSITION>0</fx:BIT-POSITION>
+            <fx:IS-HIGH-LOW-BYTE-ORDER>false</fx:IS-HIGH-LOW-BYTE-ORDER>
+            <fx:PDU-UPDATE-BIT-POSITION>24</fx:PDU-UPDATE-BIT-POSITION>
+          </fx:PDU-INSTANCE>
+          <fx:PDU-INSTANCE ID="pi_brake">
+            <fx:PDU-REF ID-REF="pdu_brake"/>
+            <fx:BIT-POSITION>32</fx:BIT-POSITION>
+            <fx:IS-HIGH-LOW-BYTE-ORDER>false</fx:IS-HIGH-LOW-BYTE-ORDER>
+            <fx:PDU-UPDATE-BIT-POSITION>56</fx:PDU-UPDATE-BIT-POSITION>
+          </fx:PDU-INSTANCE>
+        </fx:PDU-INSTANCES>
+      </fx:FRAME>
+      <fx:FRAME ID="frame_mux">
+        <ho:SHORT-NAME>Diagnosis</ho:SHORT-NAME>
+        <fx:BYTE-LENGTH>4</fx:BYTE-LENGTH>
+        <fx:FRAME-TYPE>APPLICATION</fx:FRAME-TYPE>
+        <fx:PDU-INSTANCES>
+          <fx:PDU-INSTANCE ID="pi_mux">
+            <fx:PDU-REF ID-REF="pdu_mux"/>
+            <fx:BIT-POSITION>0</fx:BIT-POSITION>
+            <fx:IS-HIGH-LOW-BYTE-ORDER>false</fx:IS-HIGH-LOW-BYTE-ORDER>
+          </fx:PDU-INSTANCE>
+        </fx:PDU-INSTANCES>
+      </fx:FRAME>
+      <fx:FRAME ID="frame_once">
+        <ho:SHORT-NAME>Configuration</ho:SHORT-NAME>
+        <fx:BYTE-LENGTH>2</fx:BYTE-LENGTH>
+        <fx:FRAME-TYPE>APPLICATION</fx:FRAME-TYPE>
+        <fx:PDU-INSTANCES>
+          <fx:PDU-INSTANCE ID="pi_config">
+            <fx:PDU-REF ID-REF="pdu_config"/>
+            <fx:BIT-POSITION>0</fx:BIT-POSITION>
+            <fx:IS-HIGH-LOW-BYTE-ORDER>false</fx:IS-HIGH-LOW-BYTE-ORDER>
+          </fx:PDU-INSTANCE>
+        </fx:PDU-INSTANCES>
+      </fx:FRAME>
+    </fx:FRAMES>
+    <fx:PDUS>
+      <fx:PDU ID="pdu_torque">
+        <ho:SHORT-NAME>TorquePdu</ho:SHORT-NAME>
+        <fx:BYTE-LENGTH>4</fx:BYTE-LENGTH>
+        <fx:PDU-TYPE>APPLICATION</fx:PDU-TYPE>
+        <fx:SIGNAL-INSTANCES>
+          <fx:SIGNAL-INSTANCE ID="si_torque">
+            <fx:BIT-POSITION>0</fx:BIT-POSITION>
+            <fx:IS-HIGH-LOW-BYTE-ORDER>false</fx:IS-HIGH-LOW-BYTE-ORDER>
+            <fx:SIGNAL-REF ID-REF="sig_torque"/>
+          </fx:SIGNAL-INSTANCE>
+        </fx:SIGNAL-INSTANCES>
+      </fx:PDU>
+      <fx:PDU ID="pdu_brake">
+        <ho:SHORT-NAME>BrakePdu</ho:SHORT-NAME>
+        <fx:BYTE-LENGTH>4</fx:BYTE-LENGTH>
+        <fx:PDU-TYPE>APPLICATION</fx:PDU-TYPE>
+        <fx:SIGNAL-INSTANCES>
+          <fx:SIGNAL-INSTANCE ID="si_brake">
+            <fx:BIT-POSITION>0</fx:BIT-POSITION>
+            <fx:IS-HIGH-LOW-BYTE-ORDER>false</fx:IS-HIGH-LOW-BYTE-ORDER>
+            <fx:SIGNAL-REF ID-REF="sig_brake"/>
+          </fx:SIGNAL-INSTANCE>
+        </fx:SIGNAL-INSTANCES>
+      </fx:PDU>
+      <fx:PDU ID="pdu_mux">
+        <ho:SHORT-NAME>DiagnosisPdu</ho:SHORT-NAME>
+        <fx:BYTE-LENGTH>4</fx:BYTE-LENGTH>
+        <fx:PDU-TYPE>APPLICATION</fx:PDU-TYPE>
+        <fx:MULTIPLEXER>
+          <fx:SWITCH ID="sw_page">
+            <ho:SHORT-NAME>Page</ho:SHORT-NAME>
+            <fx:BIT-POSITION>0</fx:BIT-POSITION>
+            <fx:IS-HIGH-LOW-BYTE-ORDER>false</fx:IS-HIGH-LOW-BYTE-ORDER>
+            <ho:BIT-LENGTH>8</ho:BIT-LENGTH>
+          </fx:SWITCH>
+          <fx:DYNAMIC-PART ID="dyn">
+            <ho:SHORT-NAME>Pages</ho:SHORT-NAME>
+            <fx:SEGMENT-POSITIONS>
+              <fx:SEGMENT-POSITION>
+                <fx:BIT-POSITION>8</fx:BIT-POSITION>
+                <fx:IS-HIGH-LOW-BYTE-ORDER>false</fx:IS-HIGH-LOW-BYTE-ORDER>
+                <ho:BIT-LENGTH>16</ho:BIT-LENGTH>
+              </fx:SEGMENT-POSITION>
+            </fx:SEGMENT-POSITIONS>
+            <fx:SWITCHED-PDU-INSTANCES>
+              <fx:SWITCHED-PDU-INSTANCE ID="swi_voltage">
+                <fx:PDU-REF ID-REF="pdu_voltage"/>
+                <fx:SWITCH-CODE>1</fx:SWITCH-CODE>
+              </fx:SWITCHED-PDU-INSTANCE>
+              <fx:SWITCHED-PDU-INSTANCE ID="swi_temperature">
+                <fx:PDU-REF ID-REF="pdu_temperature"/>
+                <fx:SWITCH-CODE>2</fx:SWITCH-CODE>
+              </fx:SWITCHED-PDU-INSTANCE>
+            </fx:SWITCHED-PDU-INSTANCES>
+          </fx:DYNAMIC-PART>
+          <fx:STATIC-PART ID="static">
+            <ho:SHORT-NAME>Common</ho:SHORT-NAME>
+            <fx:SEGMENT-POSITIONS>
+              <fx:SEGMENT-POSITION>
+                <fx:BIT-POSITION>24</fx:BIT-POSITION>
+                <fx:IS-HIGH-LOW-BYTE-ORDER>false</fx:IS-HIGH-LOW-BYTE-ORDER>
+                <ho:BIT-LENGTH>8</ho:BIT-LENGTH>
+              </fx:SEGMENT-POSITION>
+            </fx:SEGMENT-POSITIONS>
+            <fx:STATIC-PDU-INSTANCE ID="spi_common">
+              <fx:PDU-REF ID-REF="pdu_common"/>
+            </fx:STATIC-PDU-INSTANCE>
+          </fx:STATIC-PART>
+        </fx:MULTIPLEXER>
+      </fx:PDU>
+      <fx:PDU ID="pdu_voltage">
+        <ho:SHORT-NAME>VoltagePage</ho:SHORT-NAME>
+        <fx:BYTE-LENGTH>2</fx:BYTE-LENGTH>
+        <fx:SIGNAL-INSTANCES>
+          <fx:SIGNAL-INSTANCE ID="si_voltage">
+            <fx:BIT-POSITION>8</fx:BIT-POSITION>
+            <fx:IS-HIGH-LOW-BYTE-ORDER>false</fx:IS-HIGH-LOW-BYTE-ORDER>
+            <fx:SIGNAL-REF ID-REF="sig_voltage"/>
+          </fx:SIGNAL-INSTANCE>
+        </fx:SIGNAL-INSTANCES>
+      </fx:PDU>
+      <fx:PDU ID="pdu_temperature">
+        <ho:SHORT-NAME>TemperaturePage</ho:SHORT-NAME>
+        <fx:BYTE-LENGTH>2</fx:BYTE-LENGTH>
+        <fx:SIGNAL-INSTANCES>
+          <fx:SIGNAL-INSTANCE ID="si_temperature">
+            <fx:BIT-POSITION>8</fx:BIT-POSITION>
+            <fx:IS-HIGH-LOW-BYTE-ORDER>false</fx:IS-HIGH-LOW-BYTE-ORDER>
+            <fx:SIGNAL-REF ID-REF="sig_temperature"/>
+          </fx:SIGNAL-INSTANCE>
+        </fx:SIGNAL-INSTANCES>
+      </fx:PDU>
+      <fx:PDU ID="pdu_common">
+        <ho:SHORT-NAME>CommonPart</ho:SHORT-NAME>
+        <fx:BYTE-LENGTH>1</fx:BYTE-LENGTH>
+        <fx:SIGNAL-INSTANCES>
+          <fx:SIGNAL-INSTANCE ID="si_alive">
+            <fx:BIT-POSITION>24</fx:BIT-POSITION>
+            <fx:IS-HIGH-LOW-BYTE-ORDER>false</fx:IS-HIGH-LOW-BYTE-ORDER>
+            <fx:SIGNAL-REF ID-REF="sig_alive"/>
+          </fx:SIGNAL-INSTANCE>
+        </fx:SIGNAL-INSTANCES>
+      </fx:PDU>
+      <fx:PDU ID="pdu_config">
+        <ho:SHORT-NAME>ConfigurationPdu</ho:SHORT-NAME>
+        <fx:BYTE-LENGTH>2</fx:BYTE-LENGTH>
+        <fx:SIGNAL-INSTANCES>
+          <fx:SIGNAL-INSTANCE ID="si_variant">
+            <fx:BIT-POSITION>0</fx:BIT-POSITION>
+            <fx:IS-HIGH-LOW-BYTE-ORDER>false</fx:IS-HIGH-LOW-BYTE-ORDER>
+            <fx:SIGNAL-REF ID-REF="sig_variant"/>
+          </fx:SIGNAL-INSTANCE>
+        </fx:SIGNAL-INSTANCES>
+      </fx:PDU>
+    </fx:PDUS>
+    <fx:SIGNALS>
+      <fx:SIGNAL ID="sig_torque"><ho:SHORT-NAME>Torque</ho:SHORT-NAME><fx:CODING-REF ID-REF="c16"/></fx:SIGNAL>
+      <fx:SIGNAL ID="sig_brake"><ho:SHORT-NAME>BrakePressure</ho:SHORT-NAME><fx:CODING-REF ID-REF="c16"/></fx:SIGNAL>
+      <fx:SIGNAL ID="sig_voltage"><ho:SHORT-NAME>Voltage</ho:SHORT-NAME><fx:CODING-REF ID-REF="c16"/></fx:SIGNAL>
+      <fx:SIGNAL ID="sig_temperature"><ho:SHORT-NAME>Temperature</ho:SHORT-NAME><fx:CODING-REF ID-REF="c16"/></fx:SIGNAL>
+      <fx:SIGNAL ID="sig_alive"><ho:SHORT-NAME>Alive</ho:SHORT-NAME><fx:CODING-REF ID-REF="c8"/></fx:SIGNAL>
+      <fx:SIGNAL ID="sig_variant"><ho:SHORT-NAME>Variant</ho:SHORT-NAME><fx:CODING-REF ID-REF="c16"/></fx:SIGNAL>
+    </fx:SIGNALS>
+  </fx:ELEMENTS>
+  <fx:PROCESSING-INFORMATION>
+    <fx:CODINGS>
+      <fx:CODING ID="c16">
+        <ho:SHORT-NAME>Raw16</ho:SHORT-NAME>
+        <ho:CODED-TYPE CATEGORY="STANDARD-LENGTH-TYPE" ho:BASE-DATA-TYPE="A_UINT16"><ho:BIT-LENGTH>16</ho:BIT-LENGTH></ho:CODED-TYPE>
+        <ho:COMPU-METHODS/>
+      </fx:CODING>
+      <fx:CODING ID="c8">
+        <ho:SHORT-NAME>Raw8</ho:SHORT-NAME>
+        <ho:CODED-TYPE CATEGORY="STANDARD-LENGTH-TYPE" ho:BASE-DATA-TYPE="A_UINT8"><ho:BIT-LENGTH>8</ho:BIT-LENGTH></ho:CODED-TYPE>
+        <ho:COMPU-METHODS/>
+      </fx:CODING>
+    </fx:CODINGS>
+  </fx:PROCESSING-INFORMATION>
+</fx:FIBEX>

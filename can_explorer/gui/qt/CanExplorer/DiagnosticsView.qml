@@ -216,6 +216,15 @@ ColumnLayout {
                         text: qsTr("Extended (29-bit) identifiers")
                         onToggled: root.applyAddressing()
                     }
+                    Button {
+                        visible: root.diagnostics.functional_available
+                        text: qsTr("Find ECUs")
+                        enabled: root.ready
+                        Layout.fillWidth: true
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Send a functional TesterPresent (0x7DF, or 0x18DB33F1 with 29-bit identifiers) and list the ECUs that answer")
+                        onClicked: root.report(root.diagnostics.discover_ecus())
+                    }
 
                     FieldLabel { text: qsTr("NAD"); visible: root.addressing === "lin" }
                     TextField {
@@ -334,6 +343,125 @@ ColumnLayout {
                             enabled: root.ready
                             Layout.preferredWidth: 90
                             onClicked: root.report(root.diagnostics.write_did(root.selectedDid(), didDataField.text))
+                        }
+                    }
+                }
+
+                Section {
+                    title: qsTr("Periodic data")
+                    visible: root.diagnostics.listening_available
+
+                    FieldLabel { text: qsTr("Define a DID from other DIDs or memory (0x2C)") }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        TextField {
+                            id: dddidField
+                            text: "F201"
+                            font.family: "monospace"
+                            Layout.preferredWidth: 64
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("The dynamically defined DID (hex), usually F200-F3FF")
+                        }
+                        TextField {
+                            id: sourcesField
+                            placeholderText: qsTr("0100:1:2 F190:1:4 or @20001000:4")
+                            font.family: "monospace"
+                            Layout.fillWidth: true
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("Sources: DID:position:size (DID hex, position from 1 and size in bytes) or memory @address:size (address hex)")
+                        }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Button {
+                            text: qsTr("Define")
+                            enabled: root.ready
+                            Layout.fillWidth: true
+                            onClicked: root.report(root.diagnostics.define_dynamic(dddidField.text, sourcesField.text))
+                        }
+                        Button {
+                            text: qsTr("Clear")
+                            enabled: root.ready
+                            Layout.fillWidth: true
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("Clear this dynamically defined DID (all of them when the DID field is empty)")
+                            onClicked: root.report(root.diagnostics.clear_dynamic(dddidField.text))
+                        }
+                    }
+
+                    FieldLabel { text: qsTr("Send periodically (0x2A)") }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        TextField {
+                            id: periodicIdsField
+                            text: "F201"
+                            font.family: "monospace"
+                            Layout.fillWidth: true
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("The periodic DIDs (F200-F2FF, hex, separated by spaces)")
+                        }
+                        ComboBox {
+                            id: rateBox
+                            model: root.diagnostics.periodic_rates
+                            textRole: "name"
+                            valueRole: "value"
+                            currentIndex: 2
+                            Layout.preferredWidth: 100
+                        }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        FieldLabel { text: qsTr("Frames on CAN ID") }
+                        TextField {
+                            id: periodicCanField
+                            placeholderText: qsTr("diagnostic")
+                            font.family: "monospace"
+                            Layout.fillWidth: true
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("The CAN ID of the ECU's periodic frames (hex). Empty: they come on the response ID (0x6A messages), which turns on listening between requests")
+                        }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Button {
+                            text: qsTr("Start")
+                            enabled: root.ready && !root.diagnostics.periodic_running
+                            Layout.fillWidth: true
+                            onClicked: root.report(root.diagnostics.start_periodic(periodicIdsField.text, rateBox.currentValue, periodicCanField.text))
+                        }
+                        Button {
+                            text: qsTr("Stop")
+                            enabled: root.ready && root.diagnostics.periodic_running
+                            Layout.fillWidth: true
+                            onClicked: root.report(root.diagnostics.stop_periodic())
+                        }
+                    }
+                    Repeater {
+                        model: root.diagnostics.periodic_rows
+                        delegate: ColumnLayout {
+                            required property var modelData
+                            spacing: 0
+                            Layout.fillWidth: true
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Label {
+                                    text: modelData.did
+                                    color: Theme.text
+                                    font.family: "monospace"
+                                    font.bold: true
+                                }
+                                Label {
+                                    text: modelData.decoded || modelData.data
+                                    color: Theme.text
+                                    elide: Text.ElideRight
+                                    Layout.fillWidth: true
+                                }
+                            }
+                            Label {
+                                text: qsTr("%1 messages, %2, %3").arg(modelData.count).arg(modelData.rate).arg(modelData.source)
+                                color: Theme.muted
+                                font.pixelSize: 11
+                            }
                         }
                     }
                 }
@@ -655,19 +783,42 @@ ColumnLayout {
                         tint: root.diagnostics.dtcs.length > 0 ? Theme.warning : Theme.muted
                     }
                     Item { Layout.fillWidth: true }
-                    FieldLabel { text: qsTr("Status mask") }
+                    ComboBox {
+                        id: reportBox
+                        model: root.diagnostics.dtc_reports
+                        textRole: "name"
+                        valueRole: "value"
+                        Layout.preferredWidth: 220
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("The ReadDTCInformation (0x19) report to read")
+                    }
+                    FieldLabel {
+                        visible: reportBox.currentValue === "status" || reportBox.currentValue === "memory"
+                        text: qsTr("Status mask")
+                    }
                     TextField {
                         id: maskField
+                        visible: reportBox.currentValue === "status" || reportBox.currentValue === "memory"
                         text: "FF"
                         font.family: "monospace"
                         Layout.preferredWidth: 56
                         ToolTip.visible: hovered
                         ToolTip.text: qsTr("Only report DTCs with one of these status bits set (hex)")
                     }
+                    FieldLabel { visible: reportBox.currentValue === "memory"; text: qsTr("Memory") }
+                    TextField {
+                        id: memoryField
+                        visible: reportBox.currentValue === "memory"
+                        text: "01"
+                        font.family: "monospace"
+                        Layout.preferredWidth: 44
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("The memory selection of the user-defined DTC memory (hex)")
+                    }
                     Button {
                         text: qsTr("Read")
                         enabled: root.ready
-                        onClicked: root.report(root.diagnostics.read_dtcs(maskField.text))
+                        onClicked: root.report(root.diagnostics.read_dtc_report(reportBox.currentValue, maskField.text, memoryField.text))
                     }
                     Button {
                         text: qsTr("Clear")
@@ -734,11 +885,24 @@ ColumnLayout {
                                         color: Theme.muted
                                         font.family: "monospace"
                                     }
+                                    Label {
+                                        visible: text.length > 0
+                                        text: dtcRow.modelData.extra
+                                        color: Theme.muted
+                                    }
                                     Item { Layout.fillWidth: true }
                                     Pill {
                                         visible: dtcRow.confirmed || dtcRow.pending
                                         text: dtcRow.confirmed ? qsTr("Confirmed") : qsTr("Pending")
                                         tint: dtcRow.confirmed ? Theme.danger : Theme.warning
+                                    }
+                                    Button {
+                                        text: qsTr("Details")
+                                        flat: true
+                                        enabled: root.ready
+                                        ToolTip.visible: hovered
+                                        ToolTip.text: qsTr("Read the snapshot (freeze frame) and extended data records of this DTC (0x19 0x04, 0x06)")
+                                        onClicked: root.report(root.diagnostics.read_dtc_details(dtcRow.modelData.value))
                                     }
                                 }
                                 Label {
@@ -747,6 +911,15 @@ ColumnLayout {
                                     color: Theme.muted
                                     font.pixelSize: 11
                                     wrapMode: Text.WordWrap
+                                    Layout.fillWidth: true
+                                }
+                                Label {
+                                    visible: text.length > 0
+                                    text: dtcRow.modelData.details
+                                    color: Theme.text
+                                    font.family: "monospace"
+                                    font.pixelSize: 11
+                                    wrapMode: Text.WrapAnywhere
                                     Layout.fillWidth: true
                                 }
                             }
@@ -773,6 +946,18 @@ ColumnLayout {
                         tint: Theme.muted
                     }
                     Item { Layout.fillWidth: true }
+                    CheckBox {
+                        visible: root.diagnostics.listening_available
+                        text: qsTr("Listen between requests")
+                        checked: root.diagnostics.listening
+                        enabled: root.connected
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Also show what the ECU sends between requests (event-triggered responses, late answers). It answers flow control on the response ID: turn it off while another tool (e.g. the OBD page) uses the same IDs")
+                        onToggled: {
+                            root.report(root.diagnostics.set_listening(checked))
+                            checked = Qt.binding(() => root.diagnostics.listening)
+                        }
+                    }
                     Button {
                         text: qsTr("Clear")
                         flat: true
@@ -836,10 +1021,14 @@ ColumnLayout {
                             RowLayout {
                                 Layout.fillWidth: true
                                 spacing: 8
-                                Label { text: "→"; color: Theme.muted; font.family: "monospace" }
+                                Label {
+                                    text: entry.modelData.unsolicited ? "↯" : "→"
+                                    color: entry.modelData.unsolicited ? Theme.accent : Theme.muted
+                                    font.family: "monospace"
+                                }
                                 Label {
                                     text: entry.modelData.request_description || entry.modelData.request
-                                    color: Theme.text
+                                    color: entry.modelData.unsolicited ? Theme.accent : Theme.text
                                     font.bold: true
                                     elide: Text.ElideRight
                                     Layout.fillWidth: true
@@ -851,7 +1040,7 @@ ColumnLayout {
                                 }
                             }
                             Label {
-                                visible: entry.modelData.request_description !== ""
+                                visible: entry.modelData.request !== ""
                                 text: entry.modelData.request
                                 color: Theme.muted
                                 font.family: "monospace"

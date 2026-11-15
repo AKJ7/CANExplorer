@@ -761,3 +761,82 @@ async def test_diagnostics_with_security_profiles_and_challenge_response(manager
     finally:
         simulator.stop()
         ecu_session.stop()
+
+
+async def test_key_server_device_sign_in(security, qapp):
+    """OAuth device sign-in from the Security Manager: the code is shown, the sign-in completes, the refresh token is
+    kept encrypted and survives locking, and the key server's seed/key works."""
+    import threading
+    from http.server import ThreadingHTTPServer
+
+    from tests.unit.core.test_oauth import IdentityProvider
+
+    IdentityProvider.state = {'requests': [], 'issued': 0, 'refresh': '', 'valid_access': set(), 'device_answers': []}
+    server = ThreadingHTTPServer(('127.0.0.1', 0), IdentityProvider)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    url = f'http://127.0.0.1:{server.server_address[1]}'
+    try:
+        assert security.create('pw', 'pw') == ''
+        options = {'url': f'{url}/keys', 'auth': 'device', 'token_url': f'{url}/token', 'client_id': 'tester'}
+        assert 'device authorization endpoint' in security.add_oauth_key_server('Keys', options)
+        assert security.add_oauth_key_server('Keys', {**options, 'device_url': f'{url}/device'}) == ''
+        [entry] = security.entries
+        assert entry['details'] == f'{url}/keys · OAuth sign-in'
+        [profile] = security.security_profiles
+        assert profile['device_sign_in'] and not profile['signed_in']
+
+        IdentityProvider.state['device_answers'] = ['authorization_pending']
+        assert security.start_sign_in('Keys') == ''
+        await wait_until(lambda: security.sign_in.get('status') == 'done', timeout=5)
+        assert security.sign_in['user_code'] == 'WDJB-MJHT'
+        assert security.security_profiles[0]['signed_in']
+        assert security.store.secrets('Keys')['refresh_token'] == b'refresh-1'
+        from can_explorer.core.uds import load_key_source
+
+        assert await asyncio.to_thread(load_key_source('profile:Keys'), 1, b'\x01') == bytes.fromhex('abcd')
+        security.cancel_sign_in()
+        assert security.sign_in == {}
+
+        security.lock()
+        assert security.unlock('pw') == ''  # A later session: signed in with the kept refresh token
+        assert security.security_profiles[0]['signed_in']
+        security.sign_out('Keys')
+        assert not security.security_profiles[0]['signed_in'] and security.store.secrets('Keys')['refresh_token'] == b''
+        assert 'not a key server with device sign-in' in security.start_sign_in('Nope')
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_oauth_client_credentials_pkcs11_and_pkcs12_entries(security, tmp_path):
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.primitives.serialization import pkcs12
+
+    from tests.unit.core.test_uds_auth import issue
+
+    assert security.create('pw', 'pw') == ''
+    assert security.key_server_auths == ['token', 'client-credentials', 'device']
+    options = {'url': 'https://keys.example.com', 'auth': 'client-credentials', 'token_url': 'https://idp/token'}
+    assert 'needs the client secret' in security.add_oauth_key_server('Bench', {**options, 'client_id': 'bench'})
+    assert security.add_oauth_key_server('Bench', {**options, 'client_id': 'bench', 'client_secret': 's'}) == ''
+    assert security.add_pkcs11_key('Card', '/usr/lib/opensc-pkcs11.so', 'Workshop card', 'tester', '1234') == ''
+    profiles = {profile['name']: profile for profile in security.security_profiles}
+    assert profiles['Bench']['signed_in'] and not profiles['Bench']['device_sign_in']
+    assert profiles['Card']['source'] == 'pkcs11 Card' and {'certificate', 'sign'} <= set(
+        profiles['Card']['capabilities']
+    )
+    entries = {entry['name']: entry for entry in security.entries}
+    assert entries['Card']['kind'] == 'PKCS#11 token key' and entries['Card']['details'] == 'tester on Workshop card'
+    assert entries['Bench']['details'] == 'https://keys.example.com · OAuth client'
+
+    key = ec.generate_private_key(ec.SECP256R1())
+    path = tmp_path / 'tester.p12'
+    path.write_bytes(
+        pkcs12.serialize_key_and_certificates(
+            b'tester', key, issue('Tester', key), None, serialization.BestAvailableEncryption(b'secret')
+        )
+    )
+    assert 'wrong password' in security.add_tls_client('Tester', QUrl.fromLocalFile(str(path)), QUrl(), 'nope')
+    assert security.add_tls_client('Tester', QUrl.fromLocalFile(str(path)), QUrl(), 'secret') == ''
+    assert {entry['name'] for entry in security.entries} >= {'Tester', 'Card', 'Bench'}
