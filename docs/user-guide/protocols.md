@@ -9,8 +9,9 @@ frame in arrival order, so multi-frame transfers are reassembled.
 | ISO-TP | ISO 15765-2 single, first, consecutive and flow control frames; reassembled payloads |
 | UDS | ISO-TP, plus the UDS services in the reassembled payloads |
 | KWP2000 | ISO-TP, plus the Keyword Protocol 2000 (ISO 14230) services — the diagnostic protocol that preceded UDS, in vehicles from roughly 1996–2006; same ISO-TP transport and request/response convention, the older ISO 14230-3 service set |
+| ISO-TP (extended), UDS (extended), KWP2000 (extended) | The same with ISO-TP **extended or mixed addressing**: the first data byte of every frame is an address byte (the target address N_TA, or the address extension N_AE of mixed addressing), shown in brackets, e.g. `ISO-TP [12] SF`. Transfers to different addresses on one identifier are reassembled separately |
 | K-Line | KWP2000 (ISO 14230) and OBD-II/J1979 services on a [K-Line bus](../reference/interfaces.md#k-line-iso-9141-2-iso-14230) (the `elm327_kline` interface), where each frame already carries one bare service payload (no ISO-TP). Use this rather than KWP2000, which expects ISO-TP on CAN |
-| J1939 | Priority, PGN with names of common PGNs, source and destination address, requests, address claims with the NAME, DM1/DM2 lamps and trouble codes, transport protocol (BAM and RTS/CTS) with reassembly; see also the [J1939 view](j1939.md) |
+| J1939 | Priority, PGN with names of common PGNs, source and destination address, requests, acknowledgments (ACK, NACK, access denied, cannot respond), address claims and commanded addresses with the NAME, DM1/DM2 lamps and trouble codes, identification text (software, component, vehicle), the transport protocol (BAM and RTS/CTS, including packets a receiver asks for again) and the extended transport protocol (ETP, messages over 1785 bytes) with reassembly, and the reasons of connection aborts; see also the [J1939 view](j1939.md) |
 | J1939-22 | SAE J1939-22 (J1939-FD): J1939 on CAN FD. Single-PG frames decode like J1939 on the longer FD payload; the FD transport (FD.TP) and multiplexed-PG (Multi-PG) frames are recognised and labelled |
 | NMEA 2000 | The marine protocol, built on J1939: PGN with names of common marine PGNs, source address, Fast Packet reassembly, and fields of the common PGNs (engine, position, COG/SOG, heading, wind, depth, speed, battery) in marine units |
 | CANopen | NMT, SYNC, EMCY, TIME, PDOs, SDO requests and responses, heartbeat and node guarding; with an object dictionary loaded in the [CANopen view](canopen.md), SDO object names and PDO values |
@@ -29,6 +30,9 @@ Examples:
 ```text
 ISO-TP complete (20 B): 62 F1 90 57 44 42 … | UDS Positive response to ReadDataByIdentifier: F1 90 57 44 42 …
 PGN 0x0FECA DM1 SA=0x00 DA=0xFF P6: TP.DT #2: complete PGN 0x0FECA DM1 (10 B): 01 02 03 …
+PGN 0x0E800 Acknowledgment SA=0x00 DA=0xFF P6: NACK for PGN 0x0FEDA requested by 0xF9
+PGN 0x0C800 ETP.CM SA=0x42 DA=0xF9 P7: ETP.CTS 16 packets from #257 for PGN 0x0D700
+ISO-TP [12] SF (2 B): 10 03 | UDS DiagnosticSessionControl 03
 PGN 127488 Engine Parameters, Rapid Update SA=35 P2: engine 0: 2400 rpm
 SDO response node 5: read response 0x1018:01 = 78 56 34 12
 ISO-TP SF (2 B): 10 81 | KWP StartDiagnosticSession 81
@@ -75,8 +79,10 @@ with can.LogReader('diagnostics.asc') as log:
 
 ## Limits
 
-- ISO-TP: normal addressing; the extended and mixed addressing formats are not decoded.
-- J1939: names are known for common PGNs and SPNs; signals of J1939 messages are decoded with a DBC.
+- ISO-TP: normal addressing with **ISO-TP**, **UDS** and **KWP2000**; extended and mixed addressing with their
+  *(extended)* variants. Pick the one the bus uses: one decoder cannot tell an address byte from an ISO-TP header.
+- J1939: names are known for common PGNs and SPNs; signals of J1939 messages are decoded with a DBC. The text of
+  identification groups is shown as it is; its fields are not split.
 - J1939-22: single-PG frames are decoded; expanding a Multi-PG frame into its contained PGs and reassembling the
   FD transport (FD.TP) need the C-PG / FD-TP byte layout from the SAE J1939-22 standard (which is not public), so
   those frames are recognised and labelled but not expanded.

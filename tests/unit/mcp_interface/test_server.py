@@ -28,12 +28,13 @@ DIAGNOSTIC_READS = {
     'obd_supported',
     'obd_read',
     'uds_read_did',
+    'j1939_request',
     'uds_read_dtcs',
     'uds_dtc_details',
     'uds_find_ecus',
 }
-CONTROL_TOOLS = {'obd_clear', 'uds_reset', 'uds_routine', 'uds_request'}
-SEND_TOOLS = {'send_frame', 'send_message'}
+CONTROL_TOOLS = {'obd_clear', 'uds_reset', 'uds_routine', 'uds_request', 'uds_secured_request'}
+SEND_TOOLS = {'send_frame', 'send_message', 'j1939_send'}
 
 
 async def test_tools_registered_read_only():

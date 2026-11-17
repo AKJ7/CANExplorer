@@ -196,9 +196,9 @@ The server is read-only by default. Each flag (or each dialog tier) grants the o
 | Flag / tier | Adds | Tools |
 |---|---|---|
 | *(none)* / `read-only` | Connecting, inspection and reverse engineering (reads files, sends nothing) | `bus_status`, `list_interfaces`, `connect`, `disconnect`, `list_identifiers`, `get_frames`, `decode_frame`, `decode_protocol`, `timing`, `analyze_identifier`, `bit_activity`, `extract_field`, `related_signals`, `capture_reaction`, `mark`, `clear_markers`, `reaction_at_markers`, `correlate`, `promote_to_dbc`, `load_database`, `unload_database`, `secoc_status`, `flexray_load_cluster`, `flexray_read_log`, `flexray_analyze_log`, `flexray_decode` |
-| `--allow-diagnostics` / `diagnostics` | Safe diagnostic **reads** (they put a request on the bus) | `query_obd`, `obd_status`, `obd_dtcs`, `obd_vin`, `obd_supported`, `obd_read`, `uds_read_did`, `uds_read_dtcs`, `uds_dtc_details`, `uds_find_ecus` |
-| `--allow-control` / `control` | **Active** diagnostics (changes ECU state) | `obd_clear`, `uds_reset`, `uds_routine`, `uds_request` |
-| `--allow-send` / `send` | Arbitrary transmit | `send_frame`, `send_message` |
+| `--allow-diagnostics` / `diagnostics` | Safe diagnostic **reads** (they put a request on the bus) | `query_obd`, `obd_status`, `obd_dtcs`, `obd_vin`, `obd_supported`, `obd_read`, `uds_read_did`, `uds_read_dtcs`, `uds_dtc_details`, `uds_find_ecus`, `j1939_request` |
+| `--allow-control` / `control` | **Active** diagnostics (changes ECU state) | `obd_clear`, `uds_reset`, `uds_routine`, `uds_request`, `uds_secured_request` |
+| `--allow-send` / `send` | Arbitrary transmit | `send_frame`, `send_message`, `j1939_send` |
 
 A tool that is not enabled is not even offered to the agent, so it cannot be called.
 
@@ -214,7 +214,7 @@ A tool that is not enabled is not even offered to the agent, so it cannot be cal
 | `list_identifiers` | Every identifier seen, with direction, count, cycle time, last data and database name |
 | `get_frames` | Recent frames (optionally of one identifier), decoded into signals |
 | `decode_frame` | Decode a payload you supply with the loaded database (sends nothing) |
-| `decode_protocol` | Interpret a payload with a protocol decoder (J1939, J1939-22, NMEA 2000, CANopen, ISO-TP, UDS, KWP2000, K-Line, LIN, J1587, NM, SecOC) |
+| `decode_protocol` | Interpret a payload with a protocol decoder (J1939, J1939-22, NMEA 2000, CANopen, ISO-TP, UDS, KWP2000, their *(extended)* variants for extended or mixed addressing, K-Line, LIN, J1587, NM, SecOC) |
 | `timing` | Inter-frame timing per identifier: cycle time, jitter, periodic vs event-triggered (`series` for the Δt over time) |
 | `analyze_identifier` | Automatic field analysis (checksums, counters, multiplexers, physical values, states, flags, SecOC freshness values and MACs) |
 | `bit_activity` | Raw per-bit behaviour of one identifier (how often each bit is set and flips) and a per-byte summary |
@@ -242,11 +242,17 @@ A tool that is not enabled is not even offered to the agent, so it cannot be cal
 | `uds_read_did` / `uds_read_dtcs` | Read a UDS data identifier (0x22) or trouble codes (0x19) |
 | `uds_dtc_details` | A DTC's snapshot (freeze frame) and extended data records (0x19 0x04/0x06); records of unknown length are returned undecoded |
 | `uds_find_ecus` | The ECUs answering a functional TesterPresent (0x7DF, or 0x18DB33F1 with `extended`) |
+| `j1939_request` | Request a J1939 parameter group from one node or all (`destination` `FF`) and return the answers: the data, reassembled from BAM, RTS/CTS or ETP and decoded for address claims, DM1/DM2 and identification text, or a node's acknowledgment (e.g. NACK). Requesting DM3 or DM11 clears trouble codes and needs `--allow-control` |
 | `obd_clear` | Clear trouble codes and the MIL (service 04) — `--allow-control` |
 | `uds_reset` / `uds_routine` / `uds_request` | ECU reset, routine control, or a raw UDS request — `--allow-control` |
+| `uds_secured_request` | A UDS request inside a [SecuredDataTransmission](diagnostics.md#secured-data-transmission-0x84) (0x84) envelope, signed with a secured data key of the key store or a provider file; returns the unwrapped response, both envelopes, the anti-replay counters and whether the response signature verified — `--allow-control` |
 
-**Transmit** (`--allow-send`): `send_frame` (a raw frame) and `send_message` (a database message by name, from its
-signal values).
+**Transmit** (`--allow-send`): `send_frame` (a raw frame), `send_message` (a database message by name, from its
+signal values) and `j1939_send` (a J1939 parameter group: one frame, BAM, RTS/CTS, or ETP for more than 1785 bytes).
+
+The `request`/`response` identifiers of the `obd_*` and `uds_*` tools take the address byte of ISO-TP extended or
+mixed addressing after a colon, as in the [Diagnostics view](diagnostics.md#addressing): `request="6F1:12"`,
+`response="612:F1"`.
 
 Identifiers are hex strings such as `1A0`. The reverse-engineering tools are the same engine as the
 [Reverse engineering](reverse-engineering.md) view, so an agent can run a full loop over MCP: survey the bus with

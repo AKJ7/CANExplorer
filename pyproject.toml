@@ -66,6 +66,16 @@ can-mcp = "can_explorer.mcp.__main__:main"
 canexplorer_remote = "can_explorer.core.remote:RemoteBus"
 # GVRET devices (SavvyCAN protocol: ESP32RET, Macchina M2, CANDue), usable as python-can interface "gvret"
 gvret = "can_explorer.core.gvret:GvretBus"
+# comma.ai panda (original WiFi panda) CAN stream over UDP, receive only, usable as python-can interface "panda_udp"
+panda_udp = "can_explorer.core.panda_udp:PandaUdpBus"
+# comma.ai pandas on USB (red panda, comma three/3X/four), CAN and CAN FD, usable as python-can interface "panda"
+panda = "can_explorer.core.panda_usb:PandaBus"
+# PEAK PLIN-USB and PCAN-USB Pro LIN channels (PLIN-API, Windows), usable as python-can interface "plin"
+plin = "can_explorer.core.plin:PlinBus"
+# Kvaser LIN Leaf (LINlib, Windows and Linux), usable as python-can interface "kvaser_lin"
+kvaser_lin = "can_explorer.core.kvaser_lin:KvaserLinBus"
+# LIN channels of Vector interfaces (XL Driver Library, Windows), usable as python-can interface "vector_lin"
+vector_lin = "can_explorer.core.vector_lin:VectorLinBus"
 # ELM327 and OBDLink OBD adapters (USB, Bluetooth, WiFi), usable as python-can interface "elm327"
 elm327 = "can_explorer.core.elm327:Elm327Bus"
 # GM Class 2 / SAE J1850 VPW through an ELM327 adapter, usable as python-can interface "elm327_vpw"
@@ -97,9 +107,12 @@ io = [
     "pyusb>=1.3",
     "libusb-package>=1.0.26",
 ]
-# python-can interfaces that need packages of their own (neoVI, NI-XNET, CANalyst-II, CANtact, gs_usb, UDP multicast)
+# python-can interfaces that need packages of their own (neoVI, NI-XNET, CANalyst-II, CANtact, gs_usb, UDP multicast;
+# pyusb and libusb for comma.ai pandas)
 drivers = [
     "python-can[neovi,nixnet,canalystii,cantact,gs-usb,multicast]",
+    "pyusb>=1.3",
+    "libusb-package>=1.0.26",
 ]
 mqtt = [
     "aiomqtt>=2.3",

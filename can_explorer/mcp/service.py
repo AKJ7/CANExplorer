@@ -66,6 +66,36 @@ def _parse_id(value: Any) -> int:
         raise ValueError(f'Invalid identifier {value!r}; use hex like 1A0 or 0x1A0') from e
 
 
+def _parse_isotp_id(value: Any) -> Tuple[int, Optional[int]]:
+    """A CAN identifier with an optional ISO-TP address byte ('6F1:12', extended or mixed addressing)."""
+    if isinstance(value, int):
+        return value, None
+    can_id, colon, address = str(value).partition(':')
+    if not colon:
+        return _parse_id(can_id), None
+    try:
+        byte = int(address.strip(), 16)
+    except ValueError:
+        raise ValueError(f'Invalid address byte {address.strip()!r}; use hex like 6F1:12') from None
+    if not 0 <= byte <= 0xFF:
+        raise ValueError(f'Address byte out of range: 0x{byte:X}')
+    return _parse_id(can_id), byte
+
+
+def _parse_j1939_address(value: Any) -> int:
+    """A J1939 address from an int or hex ('F9'); FF is the global address."""
+    if isinstance(value, int):
+        address = value
+    else:
+        try:
+            address = int(str(value).strip().lower().removeprefix('0x'), 16)
+        except ValueError:
+            raise ValueError(f'Invalid J1939 address {value!r}; use hex like F9') from None
+    if not 0 <= address <= 0xFF:
+        raise ValueError(f'J1939 address out of range: {address:#x}')
+    return address
+
+
 def _id_text(arbitration_id: int, extended: bool) -> str:
     return f'{arbitration_id:08X}' if extended else f'{arbitration_id:03X}'
 
@@ -149,6 +179,7 @@ class CanService:
         self._manage = True  # False when attached to a session owned by someone else (the GUI)
         self._markers: List[Marker] = []  # Moments the agent marked, for reaction_at_markers
         self._flexray = None  # The FlexRay cluster description (a FlexRayDatabase), for the flexray_* tools
+        self._sdt_counters: Dict[int, int] = {}  # SecuredDataTransmission anti-replay counter per request id
 
     @classmethod
     def attach(
@@ -1117,9 +1148,18 @@ class CanService:
     # Diagnostics (OBD-II and UDS, over ISO-TP)
 
     def _isotp(self, request_id: Any, response_id: Any) -> IsoTpClient:
+        """Identifiers as int or hex; a hex identifier may carry the address byte of extended or mixed addressing
+        after a colon ('6F1:12')."""
         config = getattr(self.session.source, 'config', None)
+        tx_id, tx_address = _parse_isotp_id(request_id)
+        rx_id, rx_address = _parse_isotp_id(response_id)
         return IsoTpClient(
-            self.session, _parse_id(request_id), _parse_id(response_id), fd=bool(getattr(config, 'fd', False))
+            self.session,
+            tx_id,
+            rx_id,
+            fd=bool(getattr(config, 'fd', False)),
+            tx_address=tx_address,
+            rx_address=rx_address,
         )
 
     async def _with_uds(self, request_id, response_id, operation, control: bool = False) -> Dict[str, Any]:
@@ -1208,6 +1248,53 @@ class CanService:
         async def operation(uds):
             await ObdClient(uds).clear_dtcs()
             return {'cleared': True}
+
+        return await self._with_uds(request, response, operation, control=True)
+
+    async def uds_secured_request(
+        self,
+        payload: str,
+        key: str = '',
+        sign: bool = True,
+        encrypt: bool = False,
+        signed_response: bool = False,
+        algorithm: int = 0,
+        signature_length: int = 0,
+        counter: Optional[int] = None,
+        request: Any = DEFAULT_UDS_REQUEST,
+        response: Any = ECU_RESPONSE,
+    ) -> Dict[str, Any]:
+        """Send a UDS request (hex) inside a SecuredDataTransmission (0x84) envelope and return the unwrapped,
+        verified response. `key`: a secured data key of the key store (its name, or 'keystore:<name>'; the reference
+        scheme, a MAC over the message, truncated to `signature_length` when not 0) or a Python provider file with the
+        manufacturer's scheme; '' sends unsigned and unencrypted. The anti-replay counter continues per request id
+        unless `counter` is given. Active: requires --allow-control."""
+        from can_explorer.core import uds_secured
+
+        bytes_payload = parse_hex_bytes(payload)
+        source = str(key or '')
+        if source and not source.startswith(uds_secured.KEYSTORE_PREFIX) and not Path(source).is_file():
+            source = uds_secured.KEYSTORE_PREFIX + source
+        try:
+            provider = uds_secured.load_provider(source, length=int(signature_length) or None)
+            options = uds_secured.SecuredOptions(
+                sign=bool(sign) and provider is not None,
+                encrypt=bool(encrypt),
+                signature_on_response=bool(signed_response),
+                algorithm=int(algorithm),
+            )
+        except uds_secured.SecuredDataError as e:
+            return {'error': str(e)}
+        request_id = _parse_id(request)
+
+        async def operation(uds):
+            start = self._sdt_counters.get(request_id, 0) if counter is None else int(counter)
+            try:
+                result = await uds_secured.secured_request(uds.transport, bytes_payload, provider, options, start)
+            except uds_secured.SecuredDataError as e:
+                return {'error': str(e)}
+            self._sdt_counters[request_id] = (start + 1) % uds_secured.COUNTER_MODULO
+            return result.as_dict()
 
         return await self._with_uds(request, response, operation, control=True)
 
@@ -1300,6 +1387,65 @@ class CanService:
             transport.close()
         width = 8 if extended else 3
         return {'ecus': [f'{address:0{width}X}' for address in responders]}
+
+    # J1939
+
+    async def j1939_request(
+        self, pgn: Any, destination: Any = 'FF', source: Any = 'F9', timeout: float = 1.25
+    ) -> Dict[str, Any]:
+        """Request a J1939 parameter group (PGN 59904) and return the answers, reassembled and decoded where known.
+        The tool answers transport sessions to its address, so replies longer than 8 bytes arrive too."""
+        from can_explorer.core.j1939_tools import PGN_DM3, PGN_DM11, parse_pgn, pgn_label, request_pgn
+        from can_explorer.core.protocols.j1939 import J1939Decoder
+
+        number = pgn if isinstance(pgn, int) else parse_pgn(str(pgn))
+        # DM3 and DM11 requests clear trouble codes
+        (self._require_control if number in (PGN_DM3, PGN_DM11) else self._require_diagnostics)()
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        target, tool = _parse_j1939_address(destination), _parse_j1939_address(source)
+        answers = await request_pgn(self.session, number, target, tool, float(timeout))
+        decoder = J1939Decoder()
+        result = []
+        for answer in answers:
+            entry: Dict[str, Any] = {'source': f'{answer.source:02X}'}
+            if answer.payload is None:
+                entry['acknowledgment'] = answer.acknowledgment
+            else:
+                entry['data'] = answer.payload.hex(' ').upper()
+                entry['length'] = len(answer.payload)
+                decoded = decoder.describe_payload(number, answer.payload)
+                if decoded:
+                    entry['decoded'] = decoded
+            result.append(entry)
+        return {'pgn': f'0x{number:05X}', 'label': pgn_label(number), 'answers': result}
+
+    async def j1939_send(
+        self, pgn: Any, data: str, destination: Any = 'FF', priority: int = 6, source: Any = 'F9'
+    ) -> Dict[str, Any]:
+        """Send a J1939 parameter group: a single frame up to 8 bytes, BAM to all nodes, RTS/CTS or (over 1785
+        bytes) ETP to one node."""
+        from can_explorer.core.j1939_tools import TP_MAX, J1939Sender, is_pdu1, parse_pgn
+
+        self._require_send()
+        if self.session is None:
+            return {'sent': False, 'error': NOT_CONNECTED}
+        number = pgn if isinstance(pgn, int) else parse_pgn(str(pgn))
+        payload = parse_hex_bytes(data)
+        target, tool = _parse_j1939_address(destination), _parse_j1939_address(source)
+        if not is_pdu1(number):
+            target = 0xFF
+        try:
+            await J1939Sender(self.session).send(number, payload, tool, target, int(priority))
+        except (TimeoutError, ConnectionError, ValueError, SessionError) as e:
+            return {'sent': False, 'error': str(e)}
+        if len(payload) <= 8:
+            transport = 'single frame'
+        elif target == 0xFF:
+            transport = 'BAM'
+        else:
+            transport = 'ETP' if len(payload) > TP_MAX else 'RTS/CTS'
+        return {'sent': True, 'pgn': f'0x{number:05X}', 'bytes': len(payload), 'transport': transport}
 
     async def uds_reset(
         self, reset_type: int = 1, request: Any = DEFAULT_UDS_REQUEST, response: Any = ECU_RESPONSE

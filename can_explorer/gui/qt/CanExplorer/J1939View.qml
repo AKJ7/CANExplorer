@@ -54,6 +54,15 @@ ColumnLayout {
             ToolTip.text: qsTr("Source address of requests and sent parameter groups (hex, F9 = service tool)")
             onEditingFinished: root.report(root.j1939.set_tool_address(text))
         }
+        Button {
+            text: qsTr("Claim")
+            visible: root.connection.can_transmit
+            enabled: root.canSend && !root.j1939.busy
+            highlighted: root.j1939.claimed
+            ToolTip.visible: hovered
+            ToolTip.text: qsTr("Claim the tool address with an address claim (NAME of a service tool). The tool then defends it, answers requests for address claims and moves to a free address when a node with a higher priority holds it")
+            onClicked: root.report(root.j1939.claim_address())
+        }
         Item { Layout.fillWidth: true }
         Label {
             text: qsTr("%1 cannot claim an address").arg(root.j1939.cannot_claim.length)

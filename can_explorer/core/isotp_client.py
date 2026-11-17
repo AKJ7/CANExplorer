@@ -1,10 +1,11 @@
 import asyncio
 import time
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Optional, Tuple
 
 import can
 
+from can_explorer.core.frames import parse_can_id
 from can_explorer.core.session import BusSession, SessionError
 
 CLASSIC_FRAME = 8
@@ -17,6 +18,27 @@ SPIN_TIME = 0.002
 
 class IsoTpError(Exception):
     pass
+
+
+def parse_isotp_address(text: str, extended: bool = False) -> Tuple[int, Optional[int]]:
+    """A CAN identifier with an optional address byte, e.g. '7E0' (normal addressing) or '6F1:12' (extended or
+    mixed addressing: the byte after the colon is the first data byte of every frame, N_TA or N_AE)."""
+    can_id, colon, address = str(text).strip().partition(':')
+    identifier = parse_can_id(can_id.strip().lower().removeprefix('0x'), extended)
+    if not colon:
+        return identifier, None
+    try:
+        value = int(address.strip(), 16)
+    except ValueError:
+        raise ValueError(f'Invalid hex address byte: {address.strip()!r}') from None
+    if not 0 <= value <= 0xFF:
+        raise ValueError(f'Address byte out of range: 0x{value:X}')
+    return identifier, value
+
+
+def format_isotp_address(can_id: int, address: Optional[int], extended: bool = False) -> str:
+    text = f'{can_id:08X}' if extended else f'{can_id:03X}'
+    return text if address is None else f'{text}:{address:02X}'
 
 
 async def _wait_until(deadline: float) -> None:
@@ -44,10 +66,13 @@ class _Reception:
     data: bytearray
     next_sn: int = 1
     block_count: int = 0
+    last: float = field(default_factory=time.monotonic)  # Time of the last frame, for the N_Cr timeout
 
 
 class IsoTpClient:
-    """Active ISO 15765-2 endpoint (normal addressing) on top of a BusSession.
+    """Active ISO 15765-2 endpoint on top of a BusSession: normal (and normal fixed) addressing, or extended and
+    mixed addressing with `tx_address`/`rx_address`, the address byte that starts the data of every frame (N_TA of
+    extended addressing, N_AE of mixed addressing; it takes one byte of every frame).
 
     Sends single or segmented messages honouring the receiver's flow control, and receives
     segmented messages sending flow control itself.
@@ -66,6 +91,8 @@ class IsoTpClient:
         timeout: float = 1.0,
         listen: bool = True,
         on_payload=None,
+        tx_address: Optional[int] = None,
+        rx_address: Optional[int] = None,
     ):
         """`listen` False: frames are not taken from the session but passed to `feed` (e.g. by a functional
         transport serving several ECUs); `on_payload` receives the reassembled payloads instead of `receive`."""
@@ -75,6 +102,8 @@ class IsoTpClient:
         self.block_size, self.st_min = block_size, st_min
         self.timeout = timeout
         self._frame_size = FD_FRAME if fd else CLASSIC_FRAME
+        self.tx_address, self.rx_address = tx_address, rx_address
+        self._prefix = bytes([tx_address]) if tx_address is not None else b''
         self._received: asyncio.Queue[bytes] = asyncio.Queue()
         self._flow_control: asyncio.Queue[bytes] = asyncio.Queue()
         self._reception: Optional[_Reception] = None
@@ -107,6 +136,7 @@ class IsoTpClient:
     # Transmission
 
     def _send_frame(self, data: bytes) -> None:
+        data = self._prefix + data
         if self.padding is not None:
             target = CLASSIC_FRAME if len(data) <= CLASSIC_FRAME else next(n for n in FD_LENGTHS if n >= len(data))
             data = data + bytes([self.padding]) * (target - len(data))
@@ -121,21 +151,22 @@ class IsoTpClient:
         length = len(payload)
         if length == 0:
             raise IsoTpError('Cannot send an empty payload')
-        if length <= 7:
+        room = self._frame_size - len(self._prefix)  # Bytes of a frame after the address byte
+        if length <= CLASSIC_FRAME - 1 - len(self._prefix):
             self._send_frame(bytes([length]) + payload)
             return
-        if self.fd and length <= FD_FRAME - 2:
+        if self.fd and length <= room - 2:  # CAN FD single frame: escape sequence, length in the second byte
             self._send_frame(bytes([0x00, length]) + payload)
             return
         if length <= 0xFFF:
             header = bytes([0x10 | (length >> 8), length & 0xFF])
         else:
             header = bytes([0x10, 0x00]) + length.to_bytes(4, 'big')
-        first = self._frame_size - len(header)
+        first = room - len(header)
         self._drain(self._flow_control)
         self._send_frame(header + payload[:first])
         offset, sequence = first, 1
-        chunk = self._frame_size - 1
+        chunk = room - 1
         last_sent = time.perf_counter()
         while offset < length:
             block_size, separation = await self._wait_flow_control()
@@ -191,10 +222,14 @@ class IsoTpClient:
         if not msg.is_rx or msg.arbitration_id != self.rx_id or msg.is_extended_id != self.extended or not msg.data:
             return
         data = msg.data
+        if self.rx_address is not None:
+            if len(data) < 2 or data[0] != self.rx_address:
+                return  # Another node's address byte
+            data = data[1:]
         match data[0] >> 4:
             case 0:
                 length, offset = data[0] & 0x0F, 1
-                if length == 0 and len(data) > 2:
+                if length == 0 and len(msg.data) > CLASSIC_FRAME and len(data) > 2:  # CAN FD escape sequence
                     length, offset = data[1], 2
                 if 0 < length <= len(data) - offset:
                     self._reception = None
@@ -211,9 +246,14 @@ class IsoTpClient:
                 reception = self._reception
                 if reception is None:
                     return
+                now = time.monotonic()
+                if now - reception.last > self.timeout:
+                    self._reception = None  # N_Cr expired: the sender gave up on this transfer
+                    return
                 if data[0] & 0x0F != reception.next_sn:
                     self._reception = None  # Sequence error: drop the transfer
                     return
+                reception.last = now
                 reception.data.extend(data[1:])
                 reception.next_sn = (reception.next_sn + 1) & 0x0F
                 if len(reception.data) >= reception.length:

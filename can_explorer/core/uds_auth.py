@@ -421,10 +421,23 @@ class AuthenticationResult:
     steps: List[str] = field(default_factory=list)
     server_certificate: Optional[x509.Certificate] = None
     session_key_info: bytes = b''
+    # What session key handling needs (core/uds_secured.py SessionContext): how the tester authenticated, the
+    # communicationConfiguration asked for, both challenges and the algorithm the ECU used
+    method: str = ''  # 'certificate' or 'challenge-response'
+    communication_configuration: int = 0
+    server_challenge: bytes = b''
+    client_challenge: bytes = b''
+    algorithm_indicator: bytes = b''
+    client_certificate: Optional[x509.Certificate] = None
+    server_ephemeral_public_key: bytes = b''  # Certificate exchange: for a key agreement, if the ECU sends one
+    client_ephemeral_public_key: bytes = b''
 
     @property
     def description(self) -> str:
-        return '; '.join(self.steps)
+        text = '; '.join(self.steps)
+        if self.session_key_info:
+            text += f'; session key info {len(self.session_key_info)} bytes'
+        return text
 
 
 async def authenticate(
@@ -438,10 +451,13 @@ async def authenticate(
     challenge_length: int = 32,
     random: Callable[[int], bytes] = os.urandom,
     crls: Sequence = (),
+    ephemeral_public_key=b'',
 ) -> AuthenticationResult:
     """Authenticate on a UdsClient by certificate exchange: verifyCertificate(Uni|Bi)directional, then
     proofOfOwnership with the signature over the server challenge. With `bidirectional`, the server's certificate
     is checked against `trusted` (when given) and its proof of ownership over our challenge is verified.
+    `ephemeral_public_key` (bytes, or a function of the ECU's ephemeral public key returning ours) is sent with the
+    proof for a key agreement; how a session key follows from it is manufacturer specific (core/uds_secured.py).
     Raises UdsError/UdsNegativeResponse (e.g. NRC 0x51 for a certificate the ECU refuses) or UdsAuthenticationError."""
     task = VERIFY_CERTIFICATE_BIDIRECTIONAL if bidirectional else VERIFY_CERTIFICATE_UNIDIRECTIONAL
     our_challenge = random(challenge_length) if bidirectional else b''
@@ -450,6 +466,10 @@ async def authenticate(
         await client.call(request(task, communication_configuration, certificate=der, challenge=our_challenge))
     )
     result = AuthenticationResult(False, response.return_parameter, [f'{TASKS[task]}: {response.return_text}'])
+    result.method, result.communication_configuration = 'certificate', communication_configuration
+    result.client_challenge, result.server_challenge = our_challenge, response.challenge
+    result.client_certificate = certificate
+    result.server_ephemeral_public_key = response.ephemeral_public_key
     if response.return_parameter == AUTHENTICATION_COMPLETE:
         result.authenticated = True
         return result
@@ -475,7 +495,17 @@ async def authenticate(
         proof = bytes(proof)
     else:
         proof = sign(private_key, response.challenge, scheme)
-    final = parse_response(await client.call(request(PROOF_OF_OWNERSHIP, proof_of_ownership=proof)))
+    ephemeral = (
+        ephemeral_public_key(response.ephemeral_public_key) if callable(ephemeral_public_key) else ephemeral_public_key
+    )
+    result.client_ephemeral_public_key = bytes(ephemeral or b'')
+    final = parse_response(
+        await client.call(
+            request(
+                PROOF_OF_OWNERSHIP, proof_of_ownership=proof, ephemeral_public_key=result.client_ephemeral_public_key
+            )
+        )
+    )
     result.return_parameter, result.session_key_info = final.return_parameter, final.session_key_info
     result.steps.append(f'proofOfOwnership: {final.return_text}')
     result.authenticated = final.return_parameter == AUTHENTICATION_COMPLETE
@@ -605,6 +635,8 @@ async def authenticate_challenge_response(
     result = AuthenticationResult(
         False, response.return_parameter, [f'requestChallengeForAuthentication: {response.return_text}']
     )
+    result.method, result.communication_configuration = 'challenge-response', communication_configuration
+    result.server_challenge = response.challenge
     if response.return_parameter == GENERAL_REJECT:
         raise UdsAuthenticationError(f'The ECU answered {response.return_text}')
     if not response.challenge:
@@ -621,6 +653,7 @@ async def authenticate_challenge_response(
     if inspect.isawaitable(proof):
         proof = await proof
     our_challenge = random(challenge_length) if bidirectional else b''
+    result.client_challenge, result.algorithm_indicator = our_challenge, used
     task = VERIFY_PROOF_OF_OWNERSHIP_BIDIRECTIONAL if bidirectional else VERIFY_PROOF_OF_OWNERSHIP_UNIDIRECTIONAL
     final = parse_response(
         await client.call(
@@ -687,7 +720,13 @@ class AuthenticationServer:
         random: Callable[[int], bytes] = os.urandom,
         crls: Sequence = (),
         challenge_response: Optional[ChallengeResponseConfig] = None,
+        session_keys=None,
     ):
+        # Session keys (core/uds_secured.py SessionKeyIssuer): the communicationConfiguration values it accepts
+        # besides 0, and the session key it issues on success (`session_provider`, for SecuredDataTransmission)
+        self.session_keys = session_keys
+        self.session_provider = None
+        self._communication_configuration = 0
         self.trusted = list(trusted)
         self.challenge_response = challenge_response  # Offers the challenge-response sub-functions (0x05..0x07)
         self.crls = list(crls)  # Revocation lists: a revoked client certificate is refused with NRC 0x57
@@ -698,6 +737,7 @@ class AuthenticationServer:
         self.authenticated = False
         self.client_certificate: Optional[x509.Certificate] = None
         self._challenge: Optional[bytes] = None
+        self._client_challenge = b''
 
     @staticmethod
     def _negative(code: int) -> bytes:
@@ -713,6 +753,7 @@ class AuthenticationServer:
         task = payload[1] & 0x7F
         if task == DE_AUTHENTICATE:
             self.authenticated, self.client_certificate, self._challenge = False, None, None
+            self.session_provider = None
             return self._positive(task, DEAUTHENTICATED)
         if task == AUTHENTICATION_CONFIGURATION:
             acr = self.challenge_response
@@ -731,12 +772,29 @@ class AuthenticationServer:
             return self._verify_proof(task, payload)
         return self._negative(0x12)
 
+    def _accepts_configuration(self, value: int) -> bool:
+        """communicationConfiguration 0 (no session key), or one the session key issuer accepts."""
+        self._communication_configuration = value
+        return value == 0x00 or (self.session_keys is not None and value in self.session_keys.configurations)
+
+    def _session_key_info(self, method: str, challenge: bytes, client_challenge: bytes = b'', **context) -> bytes:
+        """Issue the session key asked for (if any): its sessionKeyInfo; the provider is kept for 0x84."""
+        if self._communication_configuration == 0x00 or self.session_keys is None:
+            return b''
+        from can_explorer.core.uds_secured import SessionContext
+
+        info, self.session_provider = self.session_keys.create(
+            SessionContext(method, self._communication_configuration, b'', challenge, client_challenge, **context)
+        )
+        return info
+
     def _request_challenge(self, payload: bytes) -> bytes:
         self.authenticated, self.client_certificate, self._challenge = False, None, None
+        self.session_provider = None
         if len(payload) != 2 + 1 + 16:
             return self._negative(0x13)
-        if payload[2] != 0x00:
-            return self._negative(0x31)  # Only communicationConfiguration 0 (no session key)
+        if not self._accepts_configuration(payload[2]):
+            return self._negative(0x31)  # Only communicationConfiguration 0 (no session key) without an issuer
         acr = self.challenge_response
         self._challenge = self.random(self.challenge_length)
         return self._positive(
@@ -771,13 +829,16 @@ class AuthenticationServer:
         parameters = [_algorithm_indicator(acr.indicator)]
         if task == VERIFY_PROOF_OF_OWNERSHIP_BIDIRECTIONAL:
             parameters.append(_length_prefixed(bytes(acr.prove(client_challenge, indicator))))
-        return self._positive(task, AUTHENTICATION_COMPLETE, *parameters, _length_prefixed(b''))
+        info = self._session_key_info(
+            'challenge-response', challenge, client_challenge, algorithm_indicator=_algorithm_indicator(acr.indicator)
+        )
+        return self._positive(task, AUTHENTICATION_COMPLETE, *parameters, _length_prefixed(info))
 
     def _verify_certificate(self, task: int, payload: bytes) -> bytes:
-        self.authenticated, self._challenge = False, None
+        self.authenticated, self._challenge, self.session_provider = False, None, None
         if len(payload) < 3:
             return self._negative(0x13)
-        if payload[2] != 0x00:
+        if not self._accepts_configuration(payload[2]):
             return self._negative(0x31)  # Only communicationConfiguration 0 (no session key), as in the AUTOSAR Dcm
         try:
             reader = _Reader(bytes(payload[3:]))
@@ -799,6 +860,7 @@ class AuthenticationServer:
             return self._negative(0x53)  # A key the configured signature scheme cannot use: invalid type
         self.client_certificate = certificate
         self._challenge = self.random(self.challenge_length)
+        self._client_challenge = client_challenge
         if task == VERIFY_CERTIFICATE_UNIDIRECTIONAL:
             return self._positive(
                 task, OWNERSHIP_VERIFICATION_NECESSARY, _length_prefixed(self._challenge), _length_prefixed(b'')
@@ -821,14 +883,22 @@ class AuthenticationServer:
             return self._negative(0x24)  # requestSequenceError: no verified certificate yet
         try:
             reader = _Reader(bytes(payload[2:]))
-            proof, _ephemeral = reader.prefixed('proof'), reader.prefixed('ephemeral public key')
+            proof, ephemeral = reader.prefixed('proof'), reader.prefixed('ephemeral public key')
         except UdsAuthenticationError:
             return self._negative(0x13)
         challenge, self._challenge = self._challenge, None  # One proof per challenge
         if not verify(self.client_certificate.public_key(), proof, challenge, self.scheme):
             return self._negative(OWNERSHIP_VERIFICATION_FAILED)
         self.authenticated = True
-        return self._positive(PROOF_OF_OWNERSHIP, AUTHENTICATION_COMPLETE, _length_prefixed(b''))
+        info = self._session_key_info(
+            'certificate',
+            challenge,
+            getattr(self, '_client_challenge', b''),
+            client_certificate=self.client_certificate,
+            server_certificate=self.certificate,
+            client_ephemeral_public_key=ephemeral,
+        )
+        return self._positive(PROOF_OF_OWNERSHIP, AUTHENTICATION_COMPLETE, _length_prefixed(info))
 
 
 def certificates_from_pem(pem: str) -> List[x509.Certificate]:

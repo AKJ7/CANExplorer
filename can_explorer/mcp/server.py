@@ -35,8 +35,10 @@ DBC/ARXML/KCD/SYM/DBF. FlexRay is read from files: flexray_load_cluster (FIBEX/A
 flexray_analyze_log and flexray_decode on pcap, BLF or ASC logs. The resources can://status, can://identifiers, can://frames and can://database mirror this
 as readable data; the prompts guide the common workflows. Identifiers are hex strings such as "1A0".
 
-Diagnostics (OBD-II obd_* and UDS uds_*) and transmitting (send_frame, send_message) are only available when the
-server was started with the matching permission; each tool's description says which tier it needs.
+Diagnostics (OBD-II obd_*, UDS uds_* and J1939 j1939_request) and transmitting (send_frame, send_message,
+j1939_send) are only available when the server was started with the matching permission; each tool's description
+says which tier it needs. The request/response identifiers of the obd_* and uds_* tools take an ISO-TP address byte
+after a colon for extended or mixed addressing, e.g. request "6F1:12", response "612:F1".
 """
 
 # Appended to the description of each gated tool, so the agent knows what a call does to the bus
@@ -110,7 +112,9 @@ def build_mcp(service: CanService) -> MCPServer:  # noqa: C901 - a flat list of 
         name='decode_protocol',
         title='Decode with a protocol',
         description='Interpret a payload with a protocol decoder (J1939, J1939-22, "NMEA 2000", CANopen, ISO-TP, '
-        'UDS, KWP2000, "K-Line", LIN, J1587, NM, SecOC), without a database. Sends nothing.',
+        'UDS, KWP2000, "ISO-TP (extended)", "UDS (extended)", "KWP2000 (extended)" (extended or mixed addressing: '
+        'the first data byte is an address byte), "K-Line", LIN, J1587, NM, SecOC), without a database. Sends '
+        'nothing.',
     )
     async def decode_protocol(protocol: str, identifier: str, data: str, extended: bool = False) -> Dict[str, Any]:
         return service.decode_protocol(protocol, identifier, data, extended)
@@ -435,6 +439,22 @@ def build_mcp(service: CanService) -> MCPServer:  # noqa: C901 - a flat list of 
         async def uds_find_ecus(extended: bool = False, timeout: float = 0.5) -> Dict[str, Any]:
             return await service.uds_find_ecus(extended, timeout)
 
+        @mcp.tool(
+            name='j1939_request',
+            title='Request a J1939 parameter group',
+            description='Request a J1939 parameter group (PGN 59904) from one node (destination, hex address) or all '
+            '(FF) and return the answers: the data, reassembled from BAM, RTS/CTS or ETP (the tool answers transport '
+            'sessions to its source address), decoded for address claims (NAMEs), DM1/DM2 and identification text; '
+            'or the acknowledgment (e.g. NACK) of a node that does not send the group. pgn: a number or a name such '
+            'as "Address Claimed", "DM2", "Software Identification". A request to all nodes collects answers for '
+            '`timeout` seconds. Requesting DM3 or DM11 clears trouble codes and needs the control tier.'
+            + DIAGNOSTICS_TIER,
+        )
+        async def j1939_request(
+            pgn: str, destination: str = 'FF', source: str = 'F9', timeout: float = 1.25
+        ) -> Dict[str, Any]:
+            return await service.j1939_request(pgn, destination, source, timeout)
+
     # Active control (control tier)
 
     if service.can_control:
@@ -475,6 +495,32 @@ def build_mcp(service: CanService) -> MCPServer:  # noqa: C901 - a flat list of 
         async def uds_request(payload: str, request: str = '7E0', response: str = '7E8') -> Dict[str, Any]:
             return await service.uds_request(payload, request, response)
 
+        @mcp.tool(
+            name='uds_secured_request',
+            title='Secured UDS request (0x84)',
+            description='Send a UDS request (hex, e.g. "22 F1 90") inside a SecuredDataTransmission (0x84) envelope '
+            '(ISO 14229-1:2020) and return the unwrapped response, with both envelopes, the anti-replay counters and '
+            "whether the response signature verified. key: a secured data key of the key store (CANExplorer's "
+            'reference scheme, a MAC over the message; signature_length truncates it) or a Python provider file with '
+            "the manufacturer's scheme; empty sends it unsigned. The counter continues per request id unless given. "
+            'The algorithms behind the algorithm byte are manufacturer specific.' + CONTROL_TIER,
+        )
+        async def uds_secured_request(
+            payload: str,
+            key: str = '',
+            sign: bool = True,
+            encrypt: bool = False,
+            signed_response: bool = False,
+            algorithm: int = 0,
+            signature_length: int = 0,
+            counter: Optional[int] = None,
+            request: str = '7E0',
+            response: str = '7E8',
+        ) -> Dict[str, Any]:
+            return await service.uds_secured_request(
+                payload, key, sign, encrypt, signed_response, algorithm, signature_length, counter, request, response
+            )
+
     # Transmitting (send tier)
 
     if service.allow_send:
@@ -486,6 +532,19 @@ def build_mcp(service: CanService) -> MCPServer:  # noqa: C901 - a flat list of 
         )
         async def send_frame(identifier: str, data: str, extended: bool = False, fd: bool = False) -> Dict[str, Any]:
             return service.send_frame(identifier, data, extended, fd)
+
+        @mcp.tool(
+            name='j1939_send',
+            title='Send a J1939 parameter group',
+            description='Send a J1939 parameter group (data in hex) from the source address: up to 8 bytes as one '
+            'frame, more with the transport protocol: BAM to all nodes (destination FF, at most 1785 bytes), RTS/CTS '
+            'to one node, or the extended transport protocol (ETP) to one node for more than 1785 bytes. Groups from '
+            'PGN 0xF000 (PDU2) always go to all nodes.' + SEND_TIER,
+        )
+        async def j1939_send(
+            pgn: str, data: str, destination: str = 'FF', priority: int = 6, source: str = 'F9'
+        ) -> Dict[str, Any]:
+            return await service.j1939_send(pgn, data, destination, priority, source)
 
         @mcp.tool(
             name='send_message',

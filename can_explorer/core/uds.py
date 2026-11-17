@@ -6,9 +6,10 @@ ISO-TP on CAN (IsoTpClient), the LIN transport layer (LinTpClient) or DoIP (Doip
 The services beyond the basic ones live in their own modules, reached through `UdsClient` methods:
 ReadDTCInformation sub-functions (core/uds_dtc.py), ReadDataByPeriodicIdentifier and
 DynamicallyDefineDataIdentifier (core/uds_periodic.py), RequestFileTransfer (core/uds_file_transfer.py),
-ResponseOnEvent (core/uds_events.py) and functional addressing (core/uds_functional.py). ISO 14229 is paywalled:
-their layouts were checked against the free AUTOSAR Dcm specification (R23-11), the udsoncan library and Wireshark's
-UDS dissector; parts none of them pins down are labelled and kept raw rather than guessed.
+ResponseOnEvent (core/uds_events.py), SecuredDataTransmission (core/uds_secured.py, through a wrapping transport)
+and functional addressing (core/uds_functional.py). ISO 14229 is paywalled: their layouts were checked against the
+free AUTOSAR Dcm specification (R23-11), the udsoncan library and Wireshark's UDS dissector; parts none of them pins
+down are labelled and kept raw rather than guessed.
 """
 
 import asyncio
@@ -20,7 +21,7 @@ from typing import Callable, List, Optional, Protocol, Tuple
 
 import can
 
-from can_explorer.core import uds_auth
+from can_explorer.core import uds_auth, uds_secured
 from can_explorer.core.frames import format_hex
 
 SERVICES = {
@@ -71,6 +72,7 @@ NEGATIVE_RESPONSE_CODES = {
     0x35: 'invalidKey',
     0x36: 'exceedNumberOfAttempts',
     0x37: 'requiredTimeDelayNotExpired',
+    **uds_secured.NEGATIVE_RESPONSE_CODES,  # SecuredDataTransmission (0x38..0x3A)
     **uds_auth.NEGATIVE_RESPONSE_CODES,  # authenticationRequired (0x34) and the Authentication NRCs (0x50..0x5D)
     0x70: 'uploadDownloadNotAccepted',
     0x71: 'transferDataSuspended',
@@ -355,13 +357,13 @@ def describe_request(payload: bytes, description=None) -> str:
         return ''
     if payload[0] == uds_auth.SID and len(payload) >= 2:
         return uds_auth.describe(payload)
+    if payload[0] == uds_secured.SID:
+        return uds_secured.describe(payload)
     text = service_name(payload[0]) + (f' {format_hex(payload[1:])}' if len(payload) > 1 else '')
     if payload[0] in _NAMED_SUBFUNCTIONS and len(payload) >= 2:
         name = subfunction_text(payload[0], payload[1])
         if name:
             text += f' ({name})'
-    if payload[0] == 0x84:
-        text += ' (secured: content not decoded)'  # SecuredDataTransmission: OEM-specific security layout
     if payload[0] in (0x22, 0x2E) and len(payload) >= 3 and description is not None:
         name = description.name(int.from_bytes(payload[1:3], 'big'))
         if name:
@@ -377,6 +379,8 @@ def describe_response(payload: bytes, description=None) -> str:
         return f'Negative response to {service_name(payload[1])}: {nrc_name(payload[2])}'
     if payload[0] == uds_auth.SID + 0x40 and len(payload) >= 3:
         return f'Positive response to {uds_auth.describe(payload)}'
+    if payload[0] == uds_secured.RESPONSE_SID:
+        return uds_secured.describe(payload)
     if payload[0] == 0x62 and len(payload) >= 3 and description is not None:
         decoded = description.describe(int.from_bytes(payload[1:3], 'big'), payload[3:])
         if decoded is not None:
@@ -791,10 +795,13 @@ class UdsClient:
         return await uds_events.response_on_event(self, *args, **kwargs)
 
     async def authenticate(
-        self, certificate, private_key, scheme: str, bidirectional: bool = False, trusted=(), crls=()
+        self, certificate, private_key, scheme: str, bidirectional: bool = False, trusted=(), crls=(), **kwargs
     ):
-        """Authentication (0x29) by certificate exchange: see `can_explorer.core.uds_auth.authenticate`."""
-        return await uds_auth.authenticate(self, certificate, private_key, scheme, bidirectional, trusted, crls=crls)
+        """Authentication (0x29) by certificate exchange: see `can_explorer.core.uds_auth.authenticate`
+        (`communication_configuration` asks for a session key, see core/uds_secured.py)."""
+        return await uds_auth.authenticate(
+            self, certificate, private_key, scheme, bidirectional, trusted, crls=crls, **kwargs
+        )
 
     async def authenticate_challenge_response(self, prove, bidirectional: bool = False, verify_server=None, **kwargs):
         """Authentication (0x29) by challenge-response: see `uds_auth.authenticate_challenge_response`."""
@@ -857,10 +864,10 @@ class UdsDecoder:
 
     name = 'UDS'
 
-    def __init__(self):
+    def __init__(self, address_byte: bool = False):
         from can_explorer.core.protocols.isotp import IsoTpDecoder
 
-        self._isotp = IsoTpDecoder()
+        self._isotp = IsoTpDecoder(address_byte=address_byte)
         # Optional DiagnosticDescription (CDD) naming data identifiers and decoding their data
         self.description = None
 
@@ -873,3 +880,12 @@ class UdsDecoder:
             return description
         uds = describe_payload(payload, self.description)
         return f'{description} | UDS {uds}' if uds else description
+
+
+class UdsExtendedDecoder(UdsDecoder):
+    """UDS on ISO-TP with extended or mixed addressing (an address byte starts every frame)."""
+
+    name = 'UDS (extended)'
+
+    def __init__(self):
+        super().__init__(address_byte=True)

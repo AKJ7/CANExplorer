@@ -55,8 +55,9 @@ KEY_SERVER = (
     'key-server'  # A key server (core/security_profiles.py): params url, trusted (a tls-ca entry); secrets token
 )
 AUTH_KEY = 'uds-auth-key'  # A shared key for UDS Authentication by challenge-response: params mac; secrets {'key'}
+SECURED_DATA_KEY = 'uds-sdt-key'  # A shared key for UDS SecuredDataTransmission (0x84): params mac; secrets {'key'}
 PKCS11 = 'pkcs11'  # A key on a PKCS#11 token (smart card, HSM): params module, token, key; secrets {'pin'}
-PURPOSES = (SECOC, TLS_CLIENT, TLS_CA, CRL, IPSEC, MACSEC, SEED_KEY, AUTH_KEY, PKCS11, KEY_SERVER)
+PURPOSES = (SECOC, TLS_CLIENT, TLS_CA, CRL, IPSEC, MACSEC, SEED_KEY, AUTH_KEY, SECURED_DATA_KEY, PKCS11, KEY_SERVER)
 KEY_SERVER_AUTH = ('token', 'client-credentials', 'device')  # Static bearer token, or OAuth 2.0 (core/oauth.py)
 EXPIRY_WARNING_DAYS = 30  # Certificates expiring within this many days are announced
 
@@ -653,6 +654,17 @@ class KeyStore:
         if mac == 'aes-cmac' and len(key) not in (16, 24, 32):
             raise KeyStoreError(f'An AES-CMAC key has 16, 24 or 32 bytes, not {len(key)}')
         return self.add(name, AUTH_KEY, {'mac': mac}, {'key': bytes(key)}, replace)
+
+    def add_secured_data_key(self, name: str, key: bytes, mac: str = 'hmac-sha256', replace: bool = False) -> KeyInfo:
+        """A key shared with ECUs for UDS SecuredDataTransmission (0x84) with CANExplorer's reference scheme: the
+        signature is a MAC over the message (core/uds_secured.py MacProvider)."""
+        if mac not in AUTH_KEY_MACS:
+            raise KeyStoreError(f'Unknown MAC {mac!r}; one of {", ".join(AUTH_KEY_MACS)}')
+        if not key:
+            raise KeyStoreError('The key is empty')
+        if mac == 'aes-cmac' and len(key) not in (16, 24, 32):
+            raise KeyStoreError(f'An AES-CMAC key has 16, 24 or 32 bytes, not {len(key)}')
+        return self.add(name, SECURED_DATA_KEY, {'mac': mac}, {'key': bytes(key)}, replace)
 
 
 _default_store: Optional[KeyStore] = None

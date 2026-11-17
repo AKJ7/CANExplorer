@@ -504,6 +504,38 @@ async def test_uds_diagnostics_against_simulated_ecu(channel):
         ecu.stop()
 
 
+async def test_uds_secured_request_against_simulated_ecu(channel, tmp_path):
+    from can_explorer.core.session import BusSession
+    from can_explorer.core.simulation import UdsEcuSimulator, UdsServer
+    from can_explorer.core.uds_secured import SecuredServerConfig, load_provider_file
+
+    provider_file = tmp_path / 'provider.py'
+    provider_file.write_text(
+        'import hashlib, hmac\n'
+        'def signature_length(header):\n    return 8\n'
+        'def sign(header, data):\n    return hmac.new(b"k" * 16, data, hashlib.sha256).digest()[:8]\n'
+    )
+    config = SecuredServerConfig(provider=load_provider_file(provider_file), secured_dids=(0xF190,))
+    ecu = BusSession(LiveSource(BusConfig('virtual', channel)))
+    ecu.start()
+    simulator = UdsEcuSimulator(ecu, server=UdsServer(secured=config))
+    simulator.start()
+    svc = service(channel, allow_control=True)
+    try:
+        assert (await svc.uds_request('22 F1 90'))['response'] == '7F 22 38'  # secureDataTransmissionRequired
+        result = await svc.uds_secured_request('22 F1 90', key=str(provider_file), signed_response=True)
+        assert result['error'] is None and result['response'].startswith('62 F1 90')
+        assert result['counter'] == 0 and result['response_signature_verified'] is True
+        assert (await svc.uds_secured_request('22 F1 90', key=str(provider_file)))['counter'] == 1  # Continues
+        replay = await svc.uds_secured_request('22 F1 90', key=str(provider_file), counter=1)
+        assert replay['response'] == '7F 22 3A'  # secureDataVerificationFailed, for the wrapped request
+        assert 'not a secured data key' in (await svc.uds_secured_request('3E 00', key='nothing'))['error']
+    finally:
+        svc.stop()
+        simulator.stop()
+        ecu.stop()
+
+
 async def test_permission_tiers_raise_when_disabled(channel):
     svc = service_unstarted(channel)  # Read-only
     with pytest.raises(SendNotAllowed):
@@ -622,3 +654,78 @@ def test_flexray_tools(channel, tmp_path):
         svc.flexray_read_log(str(data / 'example.dbc'))
     with pytest.raises(ValueError, match='no FlexRay cluster'):
         svc.flexray_load_cluster(str(data / 'example.arxml'))
+
+
+async def test_uds_with_extended_addressing(channel):
+    """Identifiers with an address byte ('6F1:12') select extended or mixed addressing for the ISO-TP transport."""
+    from can_explorer.core.session import BusSession
+    from can_explorer.core.simulation import UdsEcuSimulator, UdsServer
+    from can_explorer.mcp.service import _parse_isotp_id
+
+    assert _parse_isotp_id('6F1:12') == (0x6F1, 0x12) and _parse_isotp_id('7E0') == (0x7E0, None)
+    with pytest.raises(ValueError):
+        _parse_isotp_id('6F1:XY')
+    svc = service(channel, allow_diagnostics=True)
+    ecu = BusSession(LiveSource(BusConfig('virtual', channel, bitrate=500_000)))
+    ecu.start()
+    simulator = UdsEcuSimulator(
+        ecu, 0x6F1, 0x612, UdsServer(), functional_id=None, request_address=0x12, response_address=0xF1
+    )
+    simulator.start()
+    try:
+        assert 'WDB1234567890ABCD' in (await svc.uds_read_did('F190', '6F1:12', '612:F1'))['text']
+        assert 'error' in await svc.uds_read_did('F190', '6F1:40', '612:F1')  # No ECU at address 0x40
+    finally:
+        simulator.stop()
+        ecu.stop()
+        svc.stop()
+
+
+async def test_j1939_request_and_send(channel):
+    from can_explorer.core.j1939_tools import J1939Name, build_can_id
+
+    svc = service(channel, allow_send=True)
+    peer = can.Bus(interface='virtual', channel=channel, receive_own_messages=False)
+    engine = J1939Name((1 << 63) | (123 << 21) | 4567)
+
+    async def node():
+        """An engine at 0x00: claims its address on request, NACKs other requests, records other frames."""
+        while True:
+            frame = peer.recv(0)
+            if frame is None:
+                await asyncio.sleep(0.005)
+                continue
+            if (frame.arbitration_id >> 8) & 0x3FF00 == 0xEA00:
+                pgn = int.from_bytes(bytes(frame.data[:3]), 'little')
+                if pgn == 0xEE00:
+                    peer.send(can.Message(arbitration_id=build_can_id(0xEE00, 0x00), data=engine.to_bytes()))
+                else:
+                    nack = [1, 0xFF, 0xFF, 0xFF, frame.arbitration_id & 0xFF, *frame.data[:3]]
+                    peer.send(can.Message(arbitration_id=build_can_id(0xE800, 0x00), data=bytes(nack)))
+            else:
+                received.append(frame)
+
+    received = []
+    task = asyncio.ensure_future(node())
+    try:
+        claims = await svc.j1939_request('Address Claimed', timeout=0.3)
+        assert claims['pgn'] == '0x0EE00' and claims['answers'][0]['source'] == '00'
+        assert 'manufacturer 123, identity 4567' in claims['answers'][0]['decoded']
+        nack = await svc.j1939_request('0xFEDA', destination='00')
+        assert nack['answers'] == [{'source': '00', 'acknowledgment': 'NACK'}]
+        result = await svc.j1939_send('CCVS1', 'FF 00 50 FF FF FF FF FF')
+        assert result == {'sent': True, 'pgn': '0x0FEF1', 'bytes': 8, 'transport': 'single frame'}
+        assert (await svc.j1939_send(0xEF00, '00 ' * 2000))['error'].startswith('At most 1785 bytes to all nodes')
+    finally:
+        task.cancel()
+        peer.shutdown()
+        svc.stop()
+
+
+async def test_j1939_clearing_needs_the_control_tier(channel):
+    svc = service(channel, allow_diagnostics=True)
+    try:
+        with pytest.raises(SendNotAllowed):
+            await svc.j1939_request('DM11', destination='00')
+    finally:
+        svc.stop()

@@ -8,6 +8,91 @@ development stages are listed by date and commit, newest first.
 
 ## [Unreleased]
 
+### Added
+
+- **UDS SecuredDataTransmission (0x84 / 0xC4)**, the ISO 14229-1:2020 envelope that carries any diagnostic request
+  and its response signed, encrypted, or both, with an anti-replay counter.
+    - **Diagnostics**: a *Secured transmission (0x84)* section sends every request of the page in envelopes (reads,
+      writes, DTCs, routines, raw requests) and checks and unwraps the responses. Settings: the algorithm byte,
+      signing, encryption, signed responses (unsigned ones are refused) and the counter. The History notes the
+      counter and whether the response signature verified.
+    - **Keys**: a new *UDS secured data key* in the Security Manager uses CANExplorer's own reference scheme
+      (HMAC-SHA-256 or AES-CMAC over the message, optionally truncated; a documented choice, not from the standard).
+      A **Python provider file** (`signature_length`, `sign`, `verify`, `encrypt`, `decrypt`) implements a
+      manufacturer's scheme, encryption included.
+    - **Trace and decoding**: 0x84/0xC4 messages show their flags, counter, algorithm and signature length, and the
+      wrapped service unless it is encrypted. Messages in the ISO 14229-1:2013 format (an opaque record) are labelled
+      and kept raw. The NRCs 0x38 *secureDataTransmissionRequired*, 0x39 *secureDataTransmissionNotAllowed* and
+      0x3A *secureDataVerificationFailed* are named.
+    - **Scripts**: `uds_secured.SecuredTransport` runs any `UdsClient` service secured; `secured_request` sends a
+      single request.
+    - **Simulated ECU**: answers 0x84 with a `SecuredServerConfig`. It checks signatures and counters (replays are
+      refused), signs and encrypts its responses as asked, and has DIDs that only answer inside an envelope.
+    - **MCP**: a new `uds_secured_request` tool (control tier).
+    - **Session keys from Authentication (0x29)**: the Authentication section's *Session key* (the
+      communicationConfiguration) asks the ECU for one, and *Session key (Authentication)* protects the secured
+      requests with it (pre-established key bit) until de-authentication. The session key information is turned
+      into a key by a security profile's new `session_provider(context)`, or, for a shared authentication key, by
+      CANExplorer's reference derivation (HKDF-SHA-256 over the challenges; a documented choice, since the standard
+      leaves the contents to the manufacturer). The certificate exchange can send and keep ephemeral public keys for
+      key agreements. The simulated ECU issues session keys (`SessionKeyIssuer`).
+    - The layout follows Wireshark's UDS dissector and the py-uds knowledge base, which agree. Scapy mirrors the
+      administrative bits; that is noted in the docs. The standard leaves the cryptography to the vehicle manufacturer.
+- **ISO-TP extended and mixed addressing** (ISO 15765-2), where every frame starts with an address byte (N_TA or
+  N_AE), as used by BMW and many gateway-routed setups.
+    - **Diagnostics**: the Request ID and Response ID take the address byte after a colon (`6F1:12` / `612:F1`).
+      Requests, tester present, listening, flashing and UDS discovery all use it.
+    - **Trace**: new *ISO-TP (extended)*, *UDS (extended)* and *KWP2000 (extended)* decoders show the address byte
+      and reassemble the transfers of each address separately.
+    - **Scripts and simulation**: `IsoTpClient(…, tx_address=, rx_address=)`; `UdsEcuSimulator(…, request_address=,
+      response_address=)` simulates such an ECU.
+    - **MCP**: the `obd_*`/`uds_*` tools take the same `ID:AA` identifiers.
+- **J1939 transport and network management, completed** (J1939-21/-81; layouts checked against the Linux kernel's
+  J1939 stack and AgIsoStack++).
+    - **Extended transport protocol (ETP)** for messages over 1785 bytes: decoded and reassembled in the trace
+      (RTS, CTS, DPO, EndOfMsgAck) and sent from the J1939 view and scripts (`J1939Sender.send` to one node).
+    - **RTS/CTS retransmissions**: a CTS that asks for packets again is followed in the trace, and the sender
+      repeats them.
+    - **Answering transport sessions**: once the J1939 view has sent something, the tool answers RTS/CTS and ETP
+      sessions addressed to it (CTS, EndOfMsgAck, aborts on timeout). A node's long answer to a request (e.g. its
+      software identification) now arrives instead of timing out. Scripts: `TransportResponder`.
+    - **Address claiming**: **Claim** in the J1939 view claims the tool address with a service tool NAME. The tool
+      then defends the address, answers requests for address claims, follows commanded addresses, and moves to a
+      free self-configurable address when it loses. Scripts: `AddressClaimer`.
+    - **Decoding**: acknowledgments (ACK/NACK/access denied/cannot respond), the reasons of connection aborts,
+      commanded addresses, and the text of the identification groups (software, component, vehicle).
+    - **Scripts**: `request_pgn` requests a parameter group and returns the answers, reassembled, or the node's
+      acknowledgment.
+    - **MCP**: new `j1939_request` (diagnostics tier; DM3/DM11 need the control tier) and `j1939_send` (send tier)
+      tools.
+
+- **comma.ai pandas on USB** (interface `panda`, experimental): the red panda and the panda of comma three/3X/four,
+  CAN and CAN FD on all three buses or one (`@1`, or the serial number). Listen only uses the SILENT safety mode.
+  Otherwise CANExplorer asks for ALLOUTPUT; release firmware lacks it, so it falls back to ELM327, which sends
+  diagnostic frames only, and says so in the log. Needs pyusb/libusb (now part of the `drivers` extra). Written
+  from panda's open-source firmware and library; not tested on a real panda.
+- **LIN adapters on Windows** (and Kvaser on Linux), as LIN master or slave (`@slave`), with the existing LIN
+  trace, LDF decoding, schedule tables and LIN diagnostics:
+    - PEAK PLIN-USB and PCAN-USB Pro LIN channels (interface `plin`, PLIN-API);
+    - Kvaser LIN Leaf (interface `kvaser_lin`, LINlib);
+    - LIN channels of Vector interfaces (interface `vector_lin`, XL Driver Library).
+
+  All three are experimental: written from the vendors' published APIs and tested against simulated libraries.
+  LIN connections now pass their baud rate to these adapters. Lipowsky Baby-LIN is not supported, because its
+  library is only available to Lipowsky's customers.
+- **comma.ai panda over WiFi UDP** (interface `panda_udp`, experimental): receives the CAN stream that the
+  original WiFi panda sends to UDP port 1338, from all buses or one (`192.168.0.10@1`), and keeps the subscription
+  alive. Receive only, because the stream is one way. Classic CAN; timestamps are the host's arrival time. The
+  format comes from panda's open-source WiFi code and has not been tested against a real panda. **Detect** offers
+  the panda when the computer is in its network.
+
+### Fixed
+
+- ISO-TP: a classic CAN frame with a zero single-frame length is no longer read as the CAN FD escape sequence (only
+  valid in CAN FD frames over 8 bytes).
+- ISO-TP: a segmented message whose consecutive frames stop (N_Cr timeout) is dropped instead of being continued by
+  a later, unrelated frame.
+
 ## [1.9.0] – 2026-11-15
 
 ### Added

@@ -124,3 +124,91 @@ async def test_separation_time_is_kept_precisely(tester_and_ecu, st_min, separat
     assert gaps and min(gaps) >= separation * 0.95
     if st_min == 0xF1:
         assert elapsed < 1.0, f'{len(times)} frames took {elapsed:.2f} s'
+
+
+# Extended and mixed addressing: an address byte starts every frame
+
+
+def test_parse_isotp_address():
+    from can_explorer.core.isotp_client import format_isotp_address, parse_isotp_address
+
+    assert parse_isotp_address('7E0') == (0x7E0, None)
+    assert parse_isotp_address('6F1:12') == (0x6F1, 0x12)
+    assert parse_isotp_address(' 0x18DA00F1 : f1 ', extended=True) == (0x18DA00F1, 0xF1)
+    assert format_isotp_address(0x6F1, 0x12) == '6F1:12' and format_isotp_address(0x7E0, None) == '7E0'
+    with pytest.raises(ValueError):
+        parse_isotp_address('6F1:1G2')
+    with pytest.raises(ValueError):
+        parse_isotp_address('6F1:100')
+    with pytest.raises(ValueError):
+        parse_isotp_address('800')  # 11-bit identifier out of range
+
+
+@pytest.mark.parametrize('length', [1, 6, 7, 13, 300])
+async def test_extended_addressing_transfer(tester_and_ecu, length):
+    tester_session, ecu_session = tester_and_ecu
+    payload = bytes(i % 256 for i in range(length))
+    with (
+        IsoTpClient(tester_session, 0x6F1, 0x612, tx_address=0x12, rx_address=0xF1) as tester,
+        IsoTpClient(ecu_session, 0x612, 0x6F1, tx_address=0xF1, rx_address=0x12, block_size=3) as ecu,
+    ):
+        await asyncio.gather(tester.send(payload), received := asyncio.ensure_future(ecu.receive(5)))
+        assert received.result() == payload
+        await asyncio.gather(ecu.send(payload[::-1]), answer := asyncio.ensure_future(tester.receive(5)))
+        assert answer.result() == payload[::-1]
+    sent = [frame.message for frame in tester_session.trace if not frame.message.is_rx]
+    assert sent and all(msg.data[0] == 0x12 for msg in sent)  # Requests and flow control carry the address byte
+    if length <= 6:
+        assert sent[0].data[1] == length  # A single frame holds six bytes after the address byte
+
+
+async def test_extended_addressing_ignores_other_address_bytes(tester_and_ecu):
+    tester_session, ecu_session = tester_and_ecu
+    with (
+        IsoTpClient(tester_session, 0x6F1, 0x612, tx_address=0x40) as tester,  # Frames for node 0x40
+        IsoTpClient(ecu_session, 0x612, 0x6F1, rx_address=0x12) as ecu,
+    ):
+        await tester.send(b'\x10\x03')
+        with pytest.raises(IsoTpError):
+            await ecu.receive(0.2)
+
+
+async def test_extended_addressing_can_fd(tester_and_ecu):
+    tester_session, ecu_session = tester_and_ecu
+    payload = bytes(range(61))  # The largest CAN FD single frame with an address byte (64 - 3)
+    with (
+        IsoTpClient(tester_session, 0x6F1, 0x612, fd=True, tx_address=0x12) as tester,
+        IsoTpClient(ecu_session, 0x612, 0x6F1, fd=True, rx_address=0x12) as ecu,
+    ):
+        await asyncio.gather(tester.send(payload), received := asyncio.ensure_future(ecu.receive(5)))
+    assert received.result() == payload
+    sent = [frame.message for frame in tester_session.trace if not frame.message.is_rx]
+    assert len(sent) == 1 and bytes(sent[0].data[:3]) == bytes([0x12, 0x00, 61])
+
+
+async def test_classic_frame_with_zero_length_is_no_fd_escape(tester_and_ecu):
+    """The single-frame escape (length 0, length in byte 2) is only valid in CAN FD frames longer than 8 bytes."""
+    import can
+
+    tester_session, ecu_session = tester_and_ecu
+    with IsoTpClient(ecu_session, 0x7E8, 0x7E0) as ecu:
+        tester_session.send(can.Message(arbitration_id=0x7E0, is_extended_id=False, data=bytes([0x00, 2, 0x10, 3])))
+        with pytest.raises(IsoTpError):
+            await ecu.receive(0.2)
+
+
+async def test_stalled_reception_is_dropped(tester_and_ecu):
+    """N_Cr: consecutive frames that come later than the timeout do not continue an old transfer."""
+    import can
+
+    tester_session, ecu_session = tester_and_ecu
+    with IsoTpClient(ecu_session, 0x7E8, 0x7E0, timeout=0.05) as ecu:
+
+        def send(data):
+            tester_session.send(can.Message(arbitration_id=0x7E0, is_extended_id=False, data=bytes(data)))
+
+        send([0x10, 10, 1, 2, 3, 4, 5, 6])  # First frame of 10 bytes
+        await asyncio.sleep(0.2)  # Longer than N_Cr
+        send([0x21, 7, 8, 9, 10, 0xCC, 0xCC, 0xCC])
+        with pytest.raises(IsoTpError):
+            await ecu.receive(0.2)

@@ -13,6 +13,7 @@ that the secured parts of a vehicle network need, in one password-protected key 
 | MACsec association | Decrypting MACsec (IEEE 802.1AE) frames in an Ethernet capture |
 | Seed/key algorithm | UDS [security access](#seedkey-algorithms) in the Diagnostics, Flashing and GMLAN views |
 | UDS authentication key | UDS [Authentication by challenge-response](diagnostics.md#challenge-response) with a key shared with the ECUs |
+| UDS secured data key | UDS [SecuredDataTransmission (0x84)](diagnostics.md#secured-data-transmission-0x84) with a key shared with the ECUs ([reference scheme](diagnostics.md#the-reference-scheme): HMAC-SHA-256 or AES-CMAC) |
 | PKCS#11 token key | A [smart card, USB token or HSM](#pkcs11-tokens) holding the tester's certificate and key, for UDS Authentication |
 | Key server | A [remote provider](#key-servers) of SecOC keys, seed/key, certificates and signatures, with a token or [OAuth 2.0 sign-in](#signing-in-with-oauth-20) |
 
@@ -271,7 +272,8 @@ Where they are used:
 - **Seed/key**: **From Security Manager** in the Diagnostics and GMLAN views (and so flashing).
 - **UDS Authentication**: a profile with a certificate appears in the **Certificate** list, signing the proof of
   ownership itself; profiles that prove challenges, or sign, appear in the **Key** list of
-  [challenge-response](diagnostics.md#challenge-response).
+  [challenge-response](diagnostics.md#challenge-response). A profile with `session_provider` turns the session key
+  information of an authentication into the key protecting [secured transmission](diagnostics.md#session-keys).
 
 Using a profile's keys and signatures is recorded in the [audit log](#audit-log).
 
@@ -310,6 +312,10 @@ class Profile:
 
     def verify_challenge(self, challenge: bytes, proof: bytes, algorithm_indicator: bytes) -> bool | None:
         """Whether the ECU's proof over our challenge verifies (bidirectional challenge-response)."""
+
+    def session_provider(self, context):
+        """The SecuredDataTransmission provider for an authentication's session key (context: a SessionContext with
+        the session key info, challenges, certificates, ephemeral keys), e.g. MacProvider(unwrapped_key, 'aes-cmac')."""
 
 
 profile = Profile()

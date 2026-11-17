@@ -84,9 +84,10 @@
   the answers, for reverse engineering diagnostics; and fuzz it with mutated requests, detecting hangs and crashes
 - Bus gateway: forward frames between two connections with filtering, identifier rewriting and rate limiting
 - Security manager: a password-protected key store for SecOC keys, TLS certificates, IPsec/MACsec keys, seed/key
-  algorithms and UDS authentication keys — SecOC secured PDUs of an ARXML verified in the trace and secured when sent
-  (restbus, transmit, test scripts, with replay and forgery tests; AUTOSAR trip/reset freshness values), DoIP over
-  mutual TLS, UDS Authentication (0x29) by certificate exchange or challenge-response, IPsec ESP, MACsec and TLS
+  algorithms and UDS authentication and secured data keys — SecOC secured PDUs of an ARXML verified in the trace and
+  secured when sent (restbus, transmit, test scripts, with replay and forgery tests; AUTOSAR trip/reset freshness
+  values), DoIP over mutual TLS, UDS Authentication (0x29) by certificate exchange or challenge-response, UDS
+  SecuredDataTransmission (0x84) with signed/encrypted envelopes and anti-replay counters, IPsec ESP, MACsec and TLS
   (with a key log) in Ethernet captures decrypted and decoded, security events for buses and captures, security
   access tests (seed quality, lockout), revocation lists, an HMAC-chained audit log, key bundles, test certificates
   and the OS keychain; security profiles and key servers supply manufacturer keys, seed/key and signatures without
@@ -184,6 +185,11 @@ support and the Linux kernel drivers.
 | gs_usb (`gs_usb`) ¹ | candleLight/gs_usb firmware adapters through libusb | Windows, Linux, macOS |
 | slcan (`slcan`) | Lawicel CANUSB, CANable (slcan firmware), USBtin and other serial slcan adapters | Windows, Linux, macOS |
 | GVRET (`gvret`) | ESP32RET boards, Macchina M2 (M2RET), CANDue: SavvyCAN's GVRET protocol over USB serial or WiFi | Windows, Linux, macOS |
+| panda (`panda`) | comma.ai pandas on USB: red panda, comma three/3X/four; CAN and CAN FD (experimental) | Windows, Linux, macOS |
+| panda UDP (`panda_udp`) | comma.ai panda (original white panda) CAN stream over WiFi UDP, receive only (experimental) | Windows, Linux, macOS |
+| PEAK LIN (`plin`) | PLIN-USB and PCAN-USB Pro LIN channels, LIN master or slave (experimental) | Windows |
+| Kvaser LIN (`kvaser_lin`) | Kvaser LIN Leaf, LIN master or slave (experimental) | Windows, Linux |
+| Vector LIN (`vector_lin`) | LIN channels of Vector interfaces, LIN master or slave (experimental) | Windows |
 | J2534 (`j2534`) | J2534 pass-thru devices: Mongoose, CarDAQ, OpenPort 2.0, Bosch, Autel …; 32-bit drivers through a bridge process | Windows |
 | RP1210 (`rp1210`) | TMC RP1210 heavy-duty (truck/bus/off-highway) adapters: Nexiq USB-Link, DG DPA 5, Noregon DLA+, Cummins INLINE …; 32-bit Windows drivers | Windows |
 | ZLG (`zlg`) | ZLG USBCAN-II, USBCAN-E-U and USBCANFD series (experimental) | Windows |

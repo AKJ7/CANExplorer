@@ -154,6 +154,9 @@ sudo ip link set sllin0 up
 
 Then create a connection with bus type **LIN**, interface *SocketcanBus* and channel `sllin0`. See [LIN](../user-guide/lin.md).
 
+On Windows (and on Linux without sllin), PEAK, Kvaser and Vector LIN adapters work through their vendors'
+drivers instead; see [LIN adapters](../reference/interfaces.md#lin-adapters).
+
 ## If CANExplorer crashes
 
 When CANExplorer crashes (for example with a segmentation fault inside Qt), it leaves a crash report: the Python

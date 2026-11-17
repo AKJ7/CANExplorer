@@ -72,6 +72,10 @@ computer.
 | `core/canopen_tools.py` | EDS/DCF object dictionaries, SDO client, NMT, PDO mappings, network tracking, simulated node |
 | `core/physical_io.py` | Digital lines and analogue inputs: aio_usb (pyusb) and simulated devices, polled on a worker thread |
 | `core/gvret.py` | `GvretBus`, the python-can interface for GVRET devices (SavvyCAN protocol) |
+| `core/panda_usb.py` | `PandaBus`, the python-can interface for comma.ai pandas on USB (CAN and CAN FD) |
+| `core/lin_adapter.py` | `LinAdapterBus`, the base of the LIN adapter interfaces: master/slave, sllin-convention frames |
+| `core/plin.py`, `core/kvaser_lin.py`, `core/vector_lin.py` | The LIN adapter interfaces for PEAK (PLIN-API), Kvaser (LINlib) and Vector (XL Driver Library) |
+| `core/panda_udp.py` | `PandaUdpBus`, the receive-only python-can interface for the WiFi UDP stream of a comma.ai panda |
 | `core/j2534.py`, `core/j2534_driver.py`, `core/j2534_bridge.py` | `J2534Bus`, the python-can interface for J2534 pass-thru drivers: registry lookup and DLL architecture check; the ctypes driver calls (standard library only); the 32-bit bridge process that runs them for 32-bit drivers, over JSON lines on stdin/stdout |
 | `core/elm327.py` | `Elm327Bus`, the python-can interface for ELM327 and OBDLink OBD adapters (text commands, monitoring on a worker thread) |
 | `core/ethercat.py` | EtherCAT master for CoE: SOEM (pysoem) and simulated backends on a worker thread, states, SDO, SDO information, PDO assignment |

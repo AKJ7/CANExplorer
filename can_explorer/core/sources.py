@@ -34,6 +34,8 @@ GMLAN_SINGLE_WIRE_BITRATE = 33_333
 GMLAN_SINGLE_WIRE_HIGH_SPEED = 83_333
 # python-can backends whose can.Bus accepts a single_wire option to switch the transceiver
 SINGLE_WIRE_INTERFACES = frozenset({'kvaser'})
+# LIN adapters with a vendor API (core/lin_adapter.py): they take the LIN baud rate as their bitrate
+LIN_ADAPTER_INTERFACES = frozenset({'plin', 'kvaser_lin', 'vector_lin'})
 
 
 @dataclass(frozen=True, slots=True)
@@ -202,6 +204,8 @@ class LiveSource:
         )
         if not config.is_lin:  # The LIN baud rate is a setting of the LIN driver, not of the CAN socket
             options.update(bitrate=config.bitrate, fd=config.fd)
+        elif config.interface in LIN_ADAPTER_INTERFACES:  # … except for adapters that set it themselves
+            options['bitrate'] = config.lin_baudrate
         if config.fd and config.data_bitrate and not config.is_lin:
             options['data_bitrate'] = config.data_bitrate
         # Select the single-wire transceiver on interfaces whose python-can backend accepts the option; on others

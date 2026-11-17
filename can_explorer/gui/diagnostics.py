@@ -6,7 +6,7 @@ from PyQt6.QtCore import QObject, QTimer, QUrl, pyqtProperty, pyqtSignal, pyqtSl
 
 from can_explorer.core.diagnostic_description import DiagnosticDescription
 from can_explorer.core.frames import format_hex, parse_can_id, parse_hex_bytes
-from can_explorer.core.isotp_client import IsoTpClient
+from can_explorer.core.isotp_client import IsoTpClient, format_isotp_address, parse_isotp_address
 from can_explorer.core.lin_tp import LinTpClient
 from can_explorer.core.uds import (
     DATA_IDENTIFIERS,
@@ -23,7 +23,7 @@ from can_explorer.core.uds import (
     format_did_value,
     load_key_source,
 )
-from can_explorer.core import audit, keystore, uds_auth, uds_dtc, uds_functional, uds_periodic
+from can_explorer.core import audit, keystore, uds_auth, uds_dtc, uds_functional, uds_periodic, uds_secured
 from can_explorer.core.uds_shared import SharedIsoTp
 from can_explorer.core.uds_auth import UdsAuthenticationError
 from can_explorer.core.uds_security_test import SecurityTestError
@@ -49,6 +49,9 @@ DTC_REPORTS = {
 }
 
 
+SESSION_SOURCE = 'session'  # Secured requests with the session key of the last authentication
+
+
 def _parse_int(text: str, maximum: int, what: str) -> int:
     try:
         value = int(text.strip(), 16)
@@ -72,6 +75,9 @@ class DiagnosticsController(QObject):
         super().__init__(parent)
         self._connection = connection
         self._request_id, self._response_id, self._extended, self._nad = 0x7E0, 0x7E8, False, 0x01
+        # Extended/mixed addressing: the address byte starting every request / response frame, or None
+        self._tx_address: Optional[int] = None
+        self._rx_address: Optional[int] = None
         self._busy = False
         self._history: List[Dict[str, Any]] = []
         self._dtcs: List[Dict[str, str]] = []
@@ -93,6 +99,17 @@ class DiagnosticsController(QObject):
         self._periodic_timer = QTimer(self)
         self._periodic_timer.setInterval(PERIODIC_REFRESH_MS)
         self._periodic_timer.timeout.connect(self._refresh_periodic)
+        # SecuredDataTransmission (0x84): when on, the view's requests travel in envelopes (see set_secured)
+        self._secured = False
+        self._secured_provider = None
+        self._secured_options = uds_secured.SecuredOptions(sign=False)
+        self._secured_source = ''
+        self._secured_counter = 0
+        self._secured_length = 0
+        # The session key of the last authentication (communicationConfiguration asking for one): its context and the
+        # credential it was made with (the shared key entry or the profile that turns it into a key)
+        self._session: Optional[uds_secured.SessionContext] = None
+        self._session_source = ''
 
     @property
     def session(self):
@@ -207,7 +224,8 @@ class DiagnosticsController(QObject):
 
     @pyqtSlot(str, str, bool, str, result=str)
     def set_addressing(self, request_id: str, response_id: str, extended: bool, nad: str) -> str:
-        """CAN: request and response identifiers (hex). LIN: node address (hex). Returns an error or ''."""
+        """CAN: request and response identifiers (hex), each optionally with an address byte for extended or
+        mixed addressing ('6F1:12'). LIN: node address (hex). Returns an error or ''."""
         try:
             if self.is_lin:
                 value = _parse_int(nad, 0x7F, 'NAD')
@@ -215,9 +233,10 @@ class DiagnosticsController(QObject):
                     raise ValueError('NAD 0x00 is reserved for sleep commands')
                 self._nad = value
             else:
-                self._request_id = parse_can_id(request_id, extended)
-                self._response_id = parse_can_id(response_id, extended)
-                self._extended = extended
+                request, tx_address = parse_isotp_address(request_id, extended)
+                response, rx_address = parse_isotp_address(response_id, extended)
+                self._request_id, self._response_id, self._extended = request, response, extended
+                self._tx_address, self._rx_address = tx_address, rx_address
         except ValueError as e:
             return str(e)
         self.set_tester_present(False)
@@ -233,8 +252,9 @@ class DiagnosticsController(QObject):
     def _addressing_text(self) -> str:
         if self.is_lin:
             return f'NAD 0x{self._nad:02X}'
-        width = 8 if self._extended else 3
-        return f'request 0x{self._request_id:0{width}X}, response 0x{self._response_id:0{width}X}'
+        request = format_isotp_address(self._request_id, self._tx_address, self._extended)
+        response = format_isotp_address(self._response_id, self._rx_address, self._extended)
+        return f'request 0x{request}, response 0x{response}'
 
     def create_transport(self):
         """A transport with the current addressing, e.g. for flashing; the caller closes it. While listening it
@@ -259,10 +279,26 @@ class DiagnosticsController(QObject):
             return LinTpClient(self.session, self._nad)
         if self._listening:
             return self._shared_isotp().transport(receiving)
-        return IsoTpClient(self.session, self._request_id, self._response_id, self._extended, fd=self._connection.fd)
+        return IsoTpClient(
+            self.session,
+            self._request_id,
+            self._response_id,
+            self._extended,
+            fd=self._connection.fd,
+            tx_address=self._tx_address,
+            rx_address=self._rx_address,
+        )
 
     def _shared_isotp(self) -> SharedIsoTp:
-        key = (self.session, self._request_id, self._response_id, self._extended, self._connection.fd)
+        key = (
+            self.session,
+            self._request_id,
+            self._response_id,
+            self._extended,
+            self._connection.fd,
+            self._tx_address,
+            self._rx_address,
+        )
         if self._shared is None or not self._shared.matches(*key):
             if self._shared is not None:
                 self._shared.close()
@@ -354,13 +390,24 @@ class DiagnosticsController(QObject):
 
     async def _run(self, request: bytes, operation: Callable[[UdsClient], Awaitable[tuple]]):
         transport = self._transport()
+        secured = None
         try:
-            client = UdsClient(transport)
+            if self._secured:
+                secured = uds_secured.SecuredTransport(
+                    transport, self._secured_provider, self._secured_options, self._secured_counter
+                )
+            client = UdsClient(secured or transport)
             if not self.is_lin:
                 client.add_unsolicited_listener(self._on_unsolicited)  # Messages that answer no request
-            response, description, positive = await operation(client)
+            try:
+                response, description, positive = await operation(client)
+            finally:
+                if secured is not None:
+                    self._secured_counter = secured.next_counter
+            if secured is not None and secured.last is not None:
+                description = f'{description} ({secured.last.describe()})'
             self._record(request, response, description, positive, error=False)
-        except (UdsError, UdsAuthenticationError, SecurityTestError) as e:
+        except (UdsError, UdsAuthenticationError, SecurityTestError, uds_secured.SecuredDataError) as e:
             self._record(request, None, str(e), positive=False, error=True)
         except Exception as e:  # Transport errors
             logger.warning(f'Diagnostic request failed: {e}')
@@ -428,6 +475,67 @@ class DiagnosticsController(QObject):
         return self._service(
             bytes([0x2E, value >> 8, value & 0xFF]) + payload, lambda _: f'{self._did_name(value)} written'
         )
+
+    # SecuredDataTransmission (0x84)
+
+    @pyqtProperty(bool, notify=changed)
+    def secured(self) -> bool:
+        return self._secured
+
+    @pyqtProperty(int, notify=changed)
+    def secured_counter(self) -> int:
+        """The anti-replay counter of the next secured request."""
+        return self._secured_counter
+
+    @pyqtProperty(str, notify=changed)
+    def secured_source(self) -> str:
+        return self._secured_source
+
+    @pyqtSlot('QVariantMap', result=str)
+    def set_secured(self, options: Dict[str, Any]) -> str:
+        """Send this view's requests inside SecuredDataTransmission envelopes (or stop). Options: enabled, source
+        ('' unsigned, 'keystore:<entry>' a secured data key with the reference scheme, or a Python provider file),
+        sign, encrypt, signed_response, algorithm (hex byte), length (signature bytes of the reference scheme, 0: the
+        full MAC), counter (the next anti-replay counter, kept when absent). Returns an error, or ''."""
+        enabled = bool(options.get('enabled', False))
+        source = str(options.get('source') or '')
+        try:
+            algorithm = _parse_int(str(options.get('algorithm') or '0'), 0xFF, 'Algorithm')
+            length = int(options.get('length') or 0)
+            if 'counter' in options:
+                self._secured_counter = int(options['counter']) % uds_secured.COUNTER_MODULO
+            if enabled and source == SESSION_SOURCE:
+                if self._session is None:
+                    raise uds_secured.SecuredDataError(
+                        'No session key: authenticate with the communication configuration that asks the ECU for one'
+                    )
+                provider = uds_secured.session_provider(self._session, self._session_source, length=length or None)
+            else:
+                provider = uds_secured.load_provider(source, length=length or None) if enabled else None
+            secured_options = uds_secured.SecuredOptions(
+                sign=bool(options.get('sign', True)) and provider is not None,
+                encrypt=bool(options.get('encrypt', False)),
+                signature_on_response=bool(options.get('signed_response', False)),
+                algorithm=algorithm,
+                pre_established_key=source == SESSION_SOURCE,
+            )
+            if enabled and (secured_options.encrypt or secured_options.signature_on_response) and provider is None:
+                raise uds_secured.SecuredDataError('Encryption and signed responses need a key or provider file')
+        except (ValueError, uds_secured.SecuredDataError) as e:
+            self._secured = False
+            self.changed.emit()
+            return str(e)
+        self._secured, self._secured_provider, self._secured_options = enabled, provider, secured_options
+        self._secured_source, self._secured_length = source, length
+        if enabled and source:
+            audit.record('uds secured data transmission', source=source, encrypt=secured_options.encrypt)
+        self.changed.emit()
+        return ''
+
+    @pyqtSlot(QUrl, result=str)
+    def secured_provider_path(self, url: QUrl) -> str:
+        """The local path of a chosen provider file."""
+        return url.toLocalFile() if url.isLocalFile() else url.toString()
 
     @pyqtSlot(QUrl)
     def set_key_file(self, url: QUrl):
@@ -512,13 +620,25 @@ class DiagnosticsController(QObject):
         task = (
             uds_auth.VERIFY_CERTIFICATE_BIDIRECTIONAL if bidirectional else uds_auth.VERIFY_CERTIFICATE_UNIDIRECTIONAL
         )
+        try:
+            configuration = _parse_int(str(options.get('configuration') or '0'), 0xFF, 'communication configuration')
+        except ValueError as e:
+            return str(e)
 
         async def operation(client: UdsClient):
             self._authenticated = False  # The ECU ends an authentication when a new one starts
+            self._end_session()
             result = await client.authenticate(
-                certificate, private_key, scheme, bidirectional, trusted_certificates, store.revocation_lists()
+                certificate,
+                private_key,
+                scheme,
+                bidirectional,
+                trusted_certificates,
+                store.revocation_lists(),
+                communication_configuration=configuration,
             )
             self._authenticated = result.authenticated
+            self._start_session(result, str(options.get('certificate') or ''))
             audit.record(
                 'uds authentication', certificate=options.get('certificate'), authenticated=result.authenticated
             )
@@ -541,15 +661,23 @@ class DiagnosticsController(QObject):
             )
             indicator = uds_auth.algorithm_indicator(str(options.get('algorithm') or ''))
             additional = parse_hex_bytes(str(options.get('additional') or ''))
+            configuration = _parse_int(str(options.get('configuration') or '0'), 0xFF, 'communication configuration')
         except (uds_auth.UdsAuthenticationError, ValueError) as e:
             return str(e)
 
         async def operation(client: UdsClient):
             self._authenticated = False  # The ECU ends an authentication when a new one starts
+            self._end_session()
             result = await client.authenticate_challenge_response(
-                prove, bidirectional, verify_server, indicator=indicator, additional_parameter=additional
+                prove,
+                bidirectional,
+                verify_server,
+                indicator=indicator,
+                additional_parameter=additional,
+                communication_configuration=configuration,
             )
             self._authenticated = result.authenticated
+            self._start_session(result, source)
             audit.record(
                 'uds authentication', source=source, method='challenge-response', authenticated=result.authenticated
             )
@@ -562,6 +690,7 @@ class DiagnosticsController(QObject):
         async def operation(client: UdsClient):
             text = await client.deauthenticate()
             self._authenticated = False
+            self._end_session()
             return None, f'deAuthenticate: {text}', True
 
         return self._start(bytes([uds_auth.SID, uds_auth.DE_AUTHENTICATE]), operation)
@@ -572,6 +701,35 @@ class DiagnosticsController(QObject):
             return None, f'authenticationConfiguration: {await uds_auth.authentication_configuration(client)}', True
 
         return self._start(bytes([uds_auth.SID, uds_auth.AUTHENTICATION_CONFIGURATION]), operation)
+
+    # Session keys from Authentication, for SecuredDataTransmission
+
+    @pyqtProperty(str, notify=changed)
+    def session_key(self) -> str:
+        """The session key information of the last authentication, described, or ''."""
+        return self._session.describe() if self._session is not None else ''
+
+    def _start_session(self, result, source: str) -> None:
+        """Keep an authentication's session key information; secured requests using the session key switch to it."""
+        if not (result.authenticated and result.session_key_info):
+            return
+        self._session, self._session_source = uds_secured.SessionContext.from_result(result), source
+        if self._secured and self._secured_source == SESSION_SOURCE:
+            try:
+                self._secured_provider = uds_secured.session_provider(
+                    self._session, source, length=self._secured_length or None
+                )
+            except uds_secured.SecuredDataError as e:
+                self._secured = False
+                logger.warning(f'Session key not usable: {e}')
+        self.changed.emit()
+
+    def _end_session(self) -> None:
+        """An authentication ended (or a new one started): its session key is gone, and so are requests secured with it."""
+        self._session, self._session_source = None, ''
+        if self._secured and self._secured_source == SESSION_SOURCE:
+            self._secured, self._secured_provider = False, None
+        self.changed.emit()
 
     @pyqtProperty(bool, notify=changed)
     def authenticated(self) -> bool:

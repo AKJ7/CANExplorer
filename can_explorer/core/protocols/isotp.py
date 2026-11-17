@@ -16,13 +16,16 @@ class _Transfer:
 
 
 class IsoTpDecoder:
-    """Passive ISO 15765-2 decoder (normal addressing): labels frames and reassembles segmented payloads."""
+    """Passive ISO 15765-2 decoder: labels frames and reassembles segmented payloads. Normal (and normal fixed)
+    addressing; with `address_byte`, extended or mixed addressing, where the first data byte of every frame is the
+    target address (N_TA) or address extension (N_AE) and the ISO-TP header follows it."""
 
     name = 'ISO-TP'
 
-    def __init__(self, preview_bytes: int = 32):
+    def __init__(self, preview_bytes: int = 32, address_byte: bool = False):
         self._preview = preview_bytes
-        self._transfers: Dict[Tuple[int, bool], _Transfer] = {}
+        self._address_byte = address_byte
+        self._transfers: Dict[Tuple[int, bool, int], _Transfer] = {}
 
     def reset(self) -> None:
         self._transfers.clear()
@@ -35,17 +38,24 @@ class IsoTpDecoder:
         data = msg.data
         if not data:
             return None, None
-        key = (msg.arbitration_id, msg.is_extended_id)
+        frame_length = len(data)
+        label, address = 'ISO-TP', -1
+        if self._address_byte:
+            if len(data) < 2:
+                return None, None
+            address, data = data[0], data[1:]
+            label = f'ISO-TP [{address:02X}]'
+        key = (msg.arbitration_id, msg.is_extended_id, address)
         match data[0] >> 4:
             case 0:
                 length, offset = data[0] & 0x0F, 1
-                if length == 0 and len(data) > 8:  # CAN FD escape sequence
+                if length == 0 and frame_length > 8 and len(data) > 1:  # CAN FD escape sequence
                     length, offset = data[1], 2
                 if length == 0 or length > len(data) - offset:
                     return None, None
                 self._transfers.pop(key, None)
                 payload = bytes(data[offset : offset + length])
-                return f'ISO-TP SF ({length} B): {format_hex(payload, self._preview)}', payload
+                return f'{label} SF ({length} B): {format_hex(payload, self._preview)}', payload
             case 1:
                 if len(data) < 2:
                     return None, None
@@ -55,25 +65,34 @@ class IsoTpDecoder:
                         return None, None
                     length, offset = int.from_bytes(data[2:6], 'big'), 6
                 self._transfers[key] = _Transfer(length, bytearray(data[offset:]))
-                return f'ISO-TP FF (total {length} B)', None
+                return f'{label} FF (total {length} B)', None
             case 2:
                 sn = data[0] & 0x0F
                 transfer = self._transfers.get(key)
                 if transfer is None:
-                    return f'ISO-TP CF sn={sn} (no transfer in progress)', None
+                    return f'{label} CF sn={sn} (no transfer in progress)', None
                 if sn != transfer.next_sn:
                     del self._transfers[key]
-                    return f'ISO-TP CF sn={sn} (expected {transfer.next_sn}, transfer aborted)', None
+                    return f'{label} CF sn={sn} (expected {transfer.next_sn}, transfer aborted)', None
                 transfer.data.extend(data[1:])
                 transfer.next_sn = (sn + 1) & 0x0F
                 if len(transfer.data) >= transfer.length:
                     del self._transfers[key]
                     payload = bytes(transfer.data[: transfer.length])
-                    return f'ISO-TP complete ({transfer.length} B): {format_hex(payload, self._preview)}', payload
-                return f'ISO-TP CF sn={sn} ({len(transfer.data)}/{transfer.length} B)', None
+                    return f'{label} complete ({transfer.length} B): {format_hex(payload, self._preview)}', payload
+                return f'{label} CF sn={sn} ({len(transfer.data)}/{transfer.length} B)', None
             case 3:
                 status = FLOW_STATUS.get(data[0] & 0x0F)
                 if status is None or len(data) < 3:
                     return None, None
-                return f'ISO-TP FC {status} BS={data[1]} STmin={data[2]:#04x}', None
+                return f'{label} FC {status} BS={data[1]} STmin={data[2]:#04x}', None
         return None, None
+
+
+class IsoTpExtendedDecoder(IsoTpDecoder):
+    """ISO-TP with extended or mixed addressing: the first data byte of every frame is an address byte."""
+
+    name = 'ISO-TP (extended)'
+
+    def __init__(self, preview_bytes: int = 32):
+        super().__init__(preview_bytes, address_byte=True)

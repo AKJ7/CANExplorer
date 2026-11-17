@@ -58,6 +58,7 @@ CAPABILITIES = (
     'sign',
     'prove_challenge',
     'verify_challenge',
+    'session_provider',
 )
 PREFIX = 'profile:'  # Key sources and certificate choices naming a profile
 
