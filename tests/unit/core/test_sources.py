@@ -1,5 +1,6 @@
 import asyncio
 import threading
+from collections import deque
 
 import can
 import pytest
@@ -156,23 +157,48 @@ def test_livesource_socketcand_defaults(mocker):
         loop.close()
 
 
-def test_socketcand_patch_handles_frames_during_handshake(mocker):
+def _handshake_bus(mocker, *reads: bytes):
     from can.interfaces.socketcand import SocketCanDaemonBus
 
     sock = mocker.MagicMock()
-    sock.recv.side_effect = [
-        b'< hi >',
-        b'< ok >',
-        b'< ok > < frame 000 0.000000 >',
-    ]
+    sock.recv.side_effect = list(reads)
+    bus = object.__new__(SocketCanDaemonBus)
+    bus.channel = 'can0'
+    bus._SocketCanDaemonBus__socket = sock
+    bus._SocketCanDaemonBus__tcp_tune = False
+    bus._SocketCanDaemonBus__receive_buffer = ''
+    bus._SocketCanDaemonBus__message_buffer = deque()
+    return bus
 
-    bus_instance = object.__new__(SocketCanDaemonBus)
-    bus_instance._SocketCanDaemonBus__socket = sock
-    bus_instance._SocketCanDaemonBus__tcp_tune = False
-    bus_instance._SocketCanDaemonBus__receive_buffer = ''
 
-    bus_instance._expect_msg('< hi >')
-    bus_instance._expect_msg('< ok >')
-    bus_instance._expect_msg('< ok >')
+def test_socketcand_patch_queues_frames_received_with_handshake(mocker):
+    bus = _handshake_bus(mocker, b'< hi >', b'< ok >', b'< ok >< frame 123 1.000000 DEADBEEF >< frame 4')
 
-    assert bus_instance._SocketCanDaemonBus__receive_buffer == '< frame 000 0.000000 >'
+    bus._expect_msg('< hi >')
+    bus._expect_msg('< ok >')
+    bus._expect_msg('< ok >')
+
+    # The complete frame is delivered right away, without waiting for the next TCP read
+    (message,) = bus._SocketCanDaemonBus__message_buffer
+    assert message.arbitration_id == 0x123 and message.data == bytes.fromhex('DEADBEEF')
+    assert message.channel == 'can0'
+    # The incomplete one stays buffered for python-can to finish
+    assert bus._SocketCanDaemonBus__receive_buffer == '< frame 4'
+
+
+def test_socketcand_patch_waits_for_split_reply(mocker):
+    bus = _handshake_bus(mocker, b'< o', b'k >')
+    bus._expect_msg('< ok >')
+    assert bus._SocketCanDaemonBus__receive_buffer == ''
+
+
+def test_socketcand_patch_raises_on_error_reply(mocker):
+    bus = _handshake_bus(mocker, b'< error could not open bus >')
+    with pytest.raises(can.CanError, match='could not open bus'):
+        bus._expect_msg('< ok >')
+
+
+def test_socketcand_patch_raises_when_connection_closes(mocker):
+    bus = _handshake_bus(mocker, b'')
+    with pytest.raises(can.CanError, match='closed'):
+        bus._expect_msg('< hi >')

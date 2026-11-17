@@ -39,45 +39,59 @@ SINGLE_WIRE_INTERFACES = frozenset({'kvaser'})
 LIN_ADAPTER_INTERFACES = frozenset({'plin', 'kvaser_lin', 'vector_lin'})
 
 
+def _queue_socketcand_frames(bus, text: str, convert) -> str:
+    """Parse the complete '< ... >' messages in `text` into the bus's receive queue; return the incomplete rest.
+
+    python-can parses its receive buffer only after the next TCP read, so frames that arrive together with the
+    handshake reply would otherwise wait for the next packet (forever on a quiet bus).
+    """
+    while True:
+        start = text.find('<')
+        end = text.find('>', start)
+        if start == -1 or end == -1:
+            return text[start:] if start != -1 else ''
+        message = convert(text[start : end + 1])
+        if message is not None:
+            message.channel = bus.channel
+            bus._SocketCanDaemonBus__message_buffer.append(message)
+        text = text[end + 1 :]
+
+
 def _patch_socketcand() -> None:
-    """Work around python-can issue where SocketCanDaemonBus._expect_msg requires exact equality with '< ok >',
-    failing when traffic already on the CAN bus causes '< ok > < frame ... >' to arrive in a single TCP read."""
+    """Work around python-can's SocketCanDaemonBus._expect_msg, which requires one TCP read to be exactly '< ok >'.
+
+    With traffic on the bus, socketcand's reply to 'rawmode' and the first frames arrive in one read
+    ('< ok >< frame ... >') and opening fails. The replacement waits for the expected reply in the buffered data and
+    queues the frames that came with it.
+    """
     try:
-        from can.interfaces.socketcand import SocketCanDaemonBus
+        from can.interfaces.socketcand import socketcand as module
 
-        if getattr(SocketCanDaemonBus, '_canexplorer_patched', False):
-            return
-
-        def _patched_expect_msg(self, msg: str) -> None:
-            sock = self._SocketCanDaemonBus__socket
-            tcp_tune = getattr(self, '_SocketCanDaemonBus__tcp_tune', False)
-            while True:
-                buf = getattr(self, '_SocketCanDaemonBus__receive_buffer', '')
-                if msg in buf:
-                    idx = buf.find(msg)
-                    self._SocketCanDaemonBus__receive_buffer = (buf[:idx] + buf[idx + len(msg) :]).lstrip()
-                    return
-                chunk = sock.recv(1024).decode('ascii')
-                if not chunk:
-                    raise can.CanError(f"Socket closed while expecting '{msg}', buffer: {buf!r}")
-                if tcp_tune and hasattr(socket, 'TCP_QUICKACK'):
-                    try:
-                        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_QUICKACK, 1)
-                    except OSError:
-                        pass
-                new_buf = buf + chunk
-                if msg in new_buf:
-                    idx = new_buf.find(msg)
-                    self._SocketCanDaemonBus__receive_buffer = (new_buf[:idx] + new_buf[idx + len(msg) :]).lstrip()
-                    return
-                self._SocketCanDaemonBus__receive_buffer = new_buf
-                if '< error' in new_buf:
-                    raise can.CanError(f"Expected '{msg}' got error: {new_buf!r}")
-
-        SocketCanDaemonBus._expect_msg = _patched_expect_msg
-        SocketCanDaemonBus._canexplorer_patched = True
+        bus_class = module.SocketCanDaemonBus
+        convert = module.convert_ascii_message_to_can_message
     except (ImportError, AttributeError):
-        pass
+        return
+    if getattr(bus_class, '_canexplorer_patched', False):
+        return
+
+    def _expect_msg(self, msg: str) -> None:
+        sock = self._SocketCanDaemonBus__socket
+        buffer = self._SocketCanDaemonBus__receive_buffer
+        while msg not in buffer:
+            if '< error' in buffer:
+                raise can.CanError(f"Expected '{msg}' got: '{buffer}'")
+            chunk = sock.recv(1024).decode('ascii')
+            if not chunk:
+                raise can.CanError(f"Connection closed while expecting '{msg}', got: '{buffer}'")
+            if self._SocketCanDaemonBus__tcp_tune and hasattr(socket, 'TCP_QUICKACK'):
+                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_QUICKACK, 1)
+            buffer += chunk
+        index = buffer.find(msg)
+        rest = buffer[:index] + buffer[index + len(msg) :]
+        self._SocketCanDaemonBus__receive_buffer = _queue_socketcand_frames(self, rest, convert)
+
+    bus_class._expect_msg = _expect_msg
+    bus_class._canexplorer_patched = True
 
 
 _patch_socketcand()
@@ -249,8 +263,6 @@ class LiveSource:
     def open(self, loop: asyncio.AbstractEventLoop) -> None:
         config = self.config
         logger.info(f'Opening bus: {config=}')
-        if config.interface == 'socketcand':
-            _patch_socketcand()
         options = dict(
             interface=config.interface,
             channel=config.channel,

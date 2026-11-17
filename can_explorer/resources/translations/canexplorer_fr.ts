@@ -5371,92 +5371,102 @@ B : %3</translation>
             <translation>Ajouter une connexion</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="17" />
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="18" />
             <source>Connection %1</source>
             <translation>Connexion %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="42" />
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="45" />
             <source>Connection Name</source>
             <translation>Nom de la connexion</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="52" />
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="55" />
             <source>Device Configuration</source>
             <translation>Configuration du périphérique</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="59" />
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="62" />
             <source>Bus</source>
             <translation>Bus</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="66" />
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="69" />
             <source>LIN through a SocketCAN LIN driver such as sllin (e.g. channel sllin0), or the virtual interface</source>
             <translation>LIN via un pilote LIN SocketCAN tel que sllin (p. ex. canal sllin0), ou l'interface virtuelle</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="69" />
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="72" />
             <source>Interface</source>
             <translation>Interface</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="84" />
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="87" />
             <source>Channel</source>
             <translation>Canal</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="93" />
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="96" />
             <source>Detecting…</source>
             <translation>Détection…</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="93" />
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="96" />
             <source>Detect</source>
             <translation>Détecter</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="99" />
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="102" />
+            <source>Host / IP</source>
+            <translation>Hôte / IP</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="115" />
+            <source>Port</source>
+            <translation>Port</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="129" />
             <source>A bus shared by can-server on another machine: HOST:PORT/BUS, e.g. raspberrypi:8765/vehicle, with ?token=… when the server needs one</source>
             <translation>Un bus partagé par can-server sur une autre machine : HÔTE:PORT/BUS, p. ex. raspberrypi:8765/vehicle, avec ?token=… si le serveur en exige un</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="108" />
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="138" />
             <source>Protocol</source>
             <translation>Protocole</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="117" />
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="147" />
             <source>Baud rate</source>
             <translation>Débit en bauds</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="127" />
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="157" />
             <source>Bitrate</source>
             <translation>Débit binaire</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="141" />
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="171" />
             <source>Flexible Data (CAN FD)</source>
             <translation>Données flexibles (CAN FD)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="149" />
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="179" />
             <source>Single-wire CAN (GMLAN, 33.3 kbit/s)</source>
             <translation>CAN monofilaire (GMLAN, 33,3 kbit/s)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="152" />
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="182" />
             <source>GM single-wire low-speed bus (SWCAN). Sets the bitrate to 33333; needs an interface with a single-wire transceiver.</source>
             <translation>Bus GM monofilaire basse vitesse (SWCAN). Règle le débit à 33333 ; nécessite une interface avec transceiver monofilaire.</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="157" />
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="187" />
             <source>Data bitrate</source>
             <translation>Débit binaire des données</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="173" />
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="203" />
             <source>Self-Reception</source>
             <translation>Auto-réception</translation>
         </message>

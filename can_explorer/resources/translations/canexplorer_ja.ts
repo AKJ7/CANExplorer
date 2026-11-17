@@ -5371,92 +5371,102 @@ B：%3</translation>
             <translation>新しい接続を追加</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="17" />
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="18" />
             <source>Connection %1</source>
             <translation>接続 %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="42" />
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="45" />
             <source>Connection Name</source>
             <translation>接続名</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="52" />
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="55" />
             <source>Device Configuration</source>
             <translation>デバイス設定</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="59" />
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="62" />
             <source>Bus</source>
             <translation>バス</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="66" />
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="69" />
             <source>LIN through a SocketCAN LIN driver such as sllin (e.g. channel sllin0), or the virtual interface</source>
             <translation>sllin などの SocketCAN LIN ドライバー（例 チャンネル sllin0）、または仮想インターフェース経由の LIN</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="69" />
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="72" />
             <source>Interface</source>
             <translation>インターフェース</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="84" />
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="87" />
             <source>Channel</source>
             <translation>チャンネル</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="93" />
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="96" />
             <source>Detecting…</source>
             <translation>検出中…</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="93" />
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="96" />
             <source>Detect</source>
             <translation>検出</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="99" />
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="102" />
+            <source>Host / IP</source>
+            <translation>ホスト / IP</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="115" />
+            <source>Port</source>
+            <translation>ポート</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="129" />
             <source>A bus shared by can-server on another machine: HOST:PORT/BUS, e.g. raspberrypi:8765/vehicle, with ?token=… when the server needs one</source>
             <translation>別のマシンの can-server が共有するバス：HOST:PORT/BUS、例 raspberrypi:8765/vehicle、サーバーが必要とする場合は ?token=… を付加</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="108" />
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="138" />
             <source>Protocol</source>
             <translation>プロトコル</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="117" />
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="147" />
             <source>Baud rate</source>
             <translation>ボーレート</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="127" />
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="157" />
             <source>Bitrate</source>
             <translation>ビットレート</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="141" />
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="171" />
             <source>Flexible Data (CAN FD)</source>
             <translation>フレキシブルデータ（CAN FD）</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="149" />
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="179" />
             <source>Single-wire CAN (GMLAN, 33.3 kbit/s)</source>
             <translation>シングルワイヤ CAN（GMLAN、33.3 kbit/s）</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="152" />
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="182" />
             <source>GM single-wire low-speed bus (SWCAN). Sets the bitrate to 33333; needs an interface with a single-wire transceiver.</source>
             <translation>GM シングルワイヤ低速バス（SWCAN）。ビットレートを 33333 に設定します。シングルワイヤトランシーバーを備えたインターフェースが必要です。</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="157" />
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="187" />
             <source>Data bitrate</source>
             <translation>データビットレート</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="173" />
+            <location filename="../../gui/qt/CanExplorer/NewConnectionDialog.qml" line="203" />
             <source>Self-Reception</source>
             <translation>自己受信</translation>
         </message>
