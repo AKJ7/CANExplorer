@@ -5,7 +5,7 @@ import can
 import pytest
 
 from can_explorer.core.session import BusSession, SessionState
-from can_explorer.core.sources import MAX_BATCH, FileSource, ThreadBridge
+from can_explorer.core.sources import MAX_BATCH, BusConfig, FileSource, LiveSource, ThreadBridge
 
 
 async def test_thread_bridge_batches_and_preserves_order():
@@ -119,3 +119,38 @@ async def test_replay_restart(tmp_path, realtime):
         while session.state is not SessionState.FINISHED:
             await asyncio.sleep(0.01)
         assert session.trace.total == expected
+
+
+def test_livesource_socketcand_host_and_port(mocker):
+    config = BusConfig('socketcand', 'can0', host='192.168.1.10', port=29536)
+    source = LiveSource(config)
+    assert source.description == 'socketcand:192.168.1.10:29536/can0 @ 500000 bit/s'
+
+    mock_bus = mocker.patch('can.Bus')
+    mocker.patch('can.Notifier')
+    loop = asyncio.new_event_loop()
+    try:
+        source.open(loop)
+        mock_bus.assert_called_once()
+        _, kwargs = mock_bus.call_args
+        assert kwargs['host'] == '192.168.1.10'
+        assert kwargs['port'] == 29536
+        assert kwargs['channel'] == 'can0'
+    finally:
+        loop.close()
+
+
+def test_livesource_socketcand_defaults(mocker):
+    config = BusConfig('socketcand', 'can0')
+    source = LiveSource(config)
+    mock_bus = mocker.patch('can.Bus')
+    mocker.patch('can.Notifier')
+    loop = asyncio.new_event_loop()
+    try:
+        source.open(loop)
+        mock_bus.assert_called_once()
+        _, kwargs = mock_bus.call_args
+        assert kwargs['host'] == '127.0.0.1'
+        assert kwargs['port'] == 29536
+    finally:
+        loop.close()

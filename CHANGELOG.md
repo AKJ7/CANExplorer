@@ -243,6 +243,7 @@ development stages are listed by date and commit, newest first.
   While a bus is open, full collections now run only when traffic is low (below 500 frames/s over all buses, at most
   once a minute, and in any case after 30 minutes). Measured on SocketCAN: no frames lost up to 20 000 frames/s,
   and periodic transmit stays within 2 ms under load.
+- **socketcand host and port configuration**: specify host/IP and TCP port when connecting to a remote `socketcand` daemon in the New Connection dialog and `BusConfig`, with default fallback to `127.0.0.1:29536`.
 
 ## [1.9.0] – 2026-11-15
 
