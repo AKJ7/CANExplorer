@@ -154,3 +154,25 @@ def test_livesource_socketcand_defaults(mocker):
         assert kwargs['port'] == 29536
     finally:
         loop.close()
+
+
+def test_socketcand_patch_handles_frames_during_handshake(mocker):
+    from can.interfaces.socketcand import SocketCanDaemonBus
+
+    sock = mocker.MagicMock()
+    sock.recv.side_effect = [
+        b'< hi >',
+        b'< ok >',
+        b'< ok > < frame 000 0.000000 >',
+    ]
+
+    bus_instance = object.__new__(SocketCanDaemonBus)
+    bus_instance._SocketCanDaemonBus__socket = sock
+    bus_instance._SocketCanDaemonBus__tcp_tune = False
+    bus_instance._SocketCanDaemonBus__receive_buffer = ''
+
+    bus_instance._expect_msg('< hi >')
+    bus_instance._expect_msg('< ok >')
+    bus_instance._expect_msg('< ok >')
+
+    assert bus_instance._SocketCanDaemonBus__receive_buffer == '< frame 000 0.000000 >'

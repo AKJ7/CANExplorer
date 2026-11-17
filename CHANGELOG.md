@@ -245,6 +245,10 @@ development stages are listed by date and commit, newest first.
   and periodic transmit stays within 2 ms under load.
 - **socketcand host and port configuration**: specify host/IP and TCP port when connecting to a remote `socketcand` daemon in the New Connection dialog and `BusConfig`, with default fallback to `127.0.0.1:29536`.
 
+### Fixed
+
+- **socketcand connection with active bus traffic**: buffer incoming frames during the rawmode handshake instead of failing with `Expected '< ok >' got: '< ok > < frame ... >'`.
+
 ## [1.9.0] – 2026-11-15
 
 ### Added
