@@ -50,6 +50,8 @@ class BusConfig:
     # GMLAN single-wire CAN (SWCAN): one-wire physical layer at 33.3 kbit/s. The frames are ordinary CAN frames;
     # the flag selects the single-wire transceiver on interfaces that have one (e.g. Kvaser) and labels the bus.
     single_wire: bool = False
+    host: Optional[str] = None
+    port: Optional[int] = None
 
     @property
     def is_lin(self) -> bool:
@@ -162,6 +164,11 @@ class LiveSource:
             rate += f' (FD{f", data {config.data_bitrate} bit/s" if config.data_bitrate else ""})'
         elif config.single_wire:
             rate += ' (single-wire)'
+        if config.host:
+            endpoint = (
+                f'{config.host}:{config.port}/{config.channel}' if config.port else f'{config.host}/{config.channel}'
+            )
+            return f'{config.interface}:{endpoint} @ {rate}'
         return f'{config.interface}:{config.channel} @ {rate}'
 
     @property
@@ -200,6 +207,14 @@ class LiveSource:
             channel=config.channel,
             receive_own_messages=config.receive_own_messages,
         )
+        if config.host:
+            options['host'] = config.host
+        elif config.interface == 'socketcand':
+            options['host'] = '127.0.0.1'
+        if config.port is not None:
+            options['port'] = config.port
+        elif config.interface == 'socketcand':
+            options['port'] = 29536
         if not config.is_lin:  # The LIN baud rate is a setting of the LIN driver, not of the CAN socket
             options.update(bitrate=config.bitrate, fd=config.fd)
         if config.fd and config.data_bitrate and not config.is_lin:

@@ -8,6 +8,10 @@ development stages are listed by date and commit, newest first.
 
 ## [Unreleased]
 
+### Added
+
+- **socketcand host and port configuration**: specify host/IP and TCP port when connecting to a remote `socketcand` daemon in the New Connection dialog and `BusConfig`, with default fallback to `127.0.0.1:29536`.
+
 ## [1.9.0] – 2026-11-15
 
 ### Added
