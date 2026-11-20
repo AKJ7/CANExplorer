@@ -476,7 +476,10 @@ async def test_diagnostics_authenticate_with_a_key_store_certificate(manager, ce
     connection.open()
     ecu_session = BusSession(LiveSource(BusConfig('virtual', channel)))
     ecu_session.start()
-    server = UdsServer(authentication=AuthenticationServer([ca], 'ecdsa-sha256'), authentication_dids=(0xF198,))
+    server = UdsServer(
+        authentication=AuthenticationServer([ca], 'ecdsa-sha256', certificate_evaluation_ids=(0x0042,)),
+        authentication_dids=(0xF198,),
+    )
     simulator = UdsEcuSimulator(ecu_session, server=server)
     simulator.start()
     security = manager.security
@@ -508,6 +511,12 @@ async def test_diagnostics_authenticate_with_a_key_store_certificate(manager, ce
         assert not diagnostics.authenticated and diagnostics.history[-1]['description'] == (
             'deAuthenticate: de-authentication successful'
         )
+        # transmitCertificate: a certificate of the Security Manager for an evaluation id
+        assert 'Invalid hex certificate evaluation id' in diagnostics.transmit_certificate('Tester', 'xyz')
+        assert diagnostics.transmit_certificate('Tester', '42') == ''
+        await wait_until(lambda: not diagnostics.busy)
+        assert diagnostics.history[-1]['description'] == 'transmitCertificate 0x0042 (Tester): certificate verified'
+        assert server.authentication.received_certificates[0x42] == tester
         # An ECU that does not trust the tester's issuer refuses the certificate
         server.authentication.trusted = [certificates_ca(certificates)]
         assert diagnostics.authenticate({'certificate': 'Tester', 'scheme': 'ecdsa-sha256'}) == ''

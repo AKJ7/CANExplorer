@@ -810,6 +810,10 @@ class UdsClient:
     async def deauthenticate(self) -> str:
         return await uds_auth.deauthenticate(self)
 
+    async def transmit_certificate(self, certificate, evaluation_id: int) -> str:
+        """Authentication transmitCertificate (0x04): see `uds_auth.transmit_certificate`."""
+        return await uds_auth.transmit_certificate(self, certificate, evaluation_id)
+
     async def seed_analysis(self, level: int, count: int = 32, between: str = 'session', session: int = 0x03):
         """Request seeds and report weaknesses: see `can_explorer.core.uds_security_test.seed_analysis`."""
         from can_explorer.core import uds_security_test

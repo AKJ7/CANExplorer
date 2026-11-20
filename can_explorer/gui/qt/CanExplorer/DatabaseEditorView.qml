@@ -3,7 +3,7 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import CanExplorer 1.0
 
-// Editor of signal databases: CAN (DBC, DBF, KCD, SYM; ARXML saved as one of those) and LIN (LDF).
+// Editor of signal databases: CAN (DBC, DBF, KCD, SYM, ARXML; an opened ARXML is saved under a new name) and LIN (LDF).
 ColumnLayout {
     id: root
     readonly property var editor: connectionManager.database_editor
@@ -138,7 +138,7 @@ ColumnLayout {
                     }
                 }
                 Label {
-                    text: root.status || root.editor.file_path || qsTr("Signal databases: DBC, DBF, KCD and SYM; ARXML can be opened and saved as one of them")
+                    text: root.status || root.editor.file_path || qsTr("Signal databases: DBC, DBF, KCD, SYM and ARXML; an opened ARXML is saved under a new name")
                     color: root.status ? (root.statusIsError ? Theme.danger : Theme.success) : Theme.muted
                     font.pixelSize: 12
                     elide: Text.ElideMiddle

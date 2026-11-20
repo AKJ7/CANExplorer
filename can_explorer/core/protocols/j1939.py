@@ -4,6 +4,7 @@ from typing import Callable, Dict, List, NamedTuple, Optional, Tuple
 import can
 
 from can_explorer.core.frames import format_hex
+from can_explorer.core.j1939_assurance import AssuranceChecker, AssuredPayload, split_payload
 
 PGN_ACKNOWLEDGMENT = 0xE800
 PGN_REQUEST = 0xEA00
@@ -296,9 +297,9 @@ class J1939Decoder:
 #
 # SAE J1939-22 itself is not public. The layouts below are those of the open-source python-can-j1939 project
 # (j1939/j1939_22.py, MIT licence), which implements them; the C-PG header widths (TOS 3, TF 3, CPGN 18, payload
-# length 8 bits) agree with the escar USA 2025 J1939-91C presentation and the JCOM1939 J1939-22 guide. Only the
-# "no assurance data" form is interpreted: C-PGs and FD.TP messages carrying cybersecurity or functional safety
-# assurance data are recognised and labelled, their trailers are not decoded or checked.
+# length 8 bits) agree with the escar USA 2025 J1939-91C presentation and the JCOM1939 J1939-22 guide. The assurance
+# data trailers of C-PGs (type of service 1) are split off by their public sizes and checked where the user
+# configured how (core/j1939_assurance.py); FD.TP messages announcing assurance data are only labelled.
 PGN_MULTI_PG = 0x2500  # Multiplexed PG container: several parameter groups (C-PGs) in one CAN FD frame
 PGN_FD_TP_CM = 0x4D00  # FD transport protocol, connection management
 PGN_FD_TP_DT = 0x4E00  # FD transport protocol, data transfer
@@ -353,6 +354,10 @@ class CPg(NamedTuple):
     def plain(self) -> bool:
         """A J1939 PG without assurance data: `data` is exactly the PG's data."""
         return self.tos == TOS_NO_ASSURANCE and self.tf == TF_NO_ASSURANCE
+
+    def split(self) -> AssuredPayload:
+        """The PG data and the assurance data trailers of the payload."""
+        return split_payload(self.tos, self.tf, self.data)
 
 
 def split_multi_pg(data: bytes) -> List[CPg]:
@@ -479,18 +484,22 @@ class J1939_22Decoder(J1939Decoder):
     and FD transport protocol (FD.TP) messages are reassembled, both then decoded like single PGs.
 
     The layouts come from the open python-can-j1939 implementation (see the comment above), as SAE J1939-22 is not
-    public. C-PGs and FD.TP messages with assurance data are labelled; their trailers are shown raw, not checked.
+    public. The assurance data trailer of a C-PG is split off its PG data by the public trailer sizes and shown;
+    it is checked (E2E Profile 22 safety data, J1939-91C cybersecurity tags) for the parameter groups configured in
+    `assurance` — by default the user's j1939_assurance.json (core/j1939_assurance.py), if there is one.
     """
 
     name = 'J1939-22'
 
-    def __init__(self, preview_bytes: int = 32):
+    def __init__(self, preview_bytes: int = 32, assurance: Optional[AssuranceChecker] = None):
         super().__init__(preview_bytes)
         self._fd_transport = FdTransportTracker(self.pgn_label)
+        self.assurance = assurance if assurance is not None else default_assurance_checker()
 
     def reset(self) -> None:
         super().reset()
         self._fd_transport.reset()
+        self.assurance.reset()
 
     @staticmethod
     def pgn_label(pgn: int) -> str:
@@ -509,7 +518,7 @@ class J1939_22Decoder(J1939Decoder):
         )
         data = bytes(msg.data)
         if j1939_id.pgn == PGN_MULTI_PG:
-            return f'{header}: {self._describe_multi_pg(data)}'
+            return f'{header}: {self._describe_multi_pg(data, j1939_id.source_address)}'
         detail, complete = self._fd_transport.feed(j1939_id, data)
         if complete is not None:
             detail = f'{detail}: {format_hex(complete[3], self._preview)}'
@@ -518,22 +527,50 @@ class J1939_22Decoder(J1939Decoder):
                 detail = f'{detail} — {extra}'
         return f'{header}: {detail}'
 
-    def _describe_multi_pg(self, data: bytes) -> str:
+    def _describe_multi_pg(self, data: bytes, source: int = 0xFE) -> str:
         pgs = split_multi_pg(data)
         if not pgs:
             return 'no parameter groups (padding only)'
-        parts = []
-        for pg in pgs:
-            text = f'{self.pgn_label(pg.pgn)}'
-            if not pg.plain:
-                text += f' (type of service {pg.tos}, trailer format {pg.tf}: assurance data not decoded)'
-            text += f': {format_hex(pg.data, self._preview)}' if pg.data else ': no data'
-            if pg.truncated:
-                text += ' (truncated)'
-            elif pg.plain:
-                extra = self.describe_pg(pg.pgn, pg.data)
-                if extra:
-                    text += f' — {extra}'
-            parts.append(text)
+        parts = [self._describe_cpg(pg, source) for pg in pgs]
         count = f'{len(pgs)} PG' + ('s' if len(pgs) > 1 else '')
         return f'{count}: ' + ' | '.join(parts)
+
+    def _describe_cpg(self, pg: CPg, source: int) -> str:
+        text = self.pgn_label(pg.pgn)
+        if pg.truncated:
+            return f'{text}: {format_hex(pg.data, self._preview)} (truncated)' if pg.data else f'{text}: (truncated)'
+        split = pg.split()
+        if split.format is None:  # Reserved type of service / trailer format: nothing is known about the payload
+            text += f' ({split.error}: not interpreted)'
+            return text + (f': {format_hex(pg.data, self._preview)}' if pg.data else ': no data')
+        if split.error:
+            return f'{text} ({split.format.description}; {split.error}): {format_hex(pg.data, self._preview)}'
+        text += f': {format_hex(split.data, self._preview)}' if split.data else ': no data'
+        extra = self.describe_pg(pg.pgn, split.data)
+        if extra:
+            text += f' — {extra}'
+        if not pg.plain:
+            text += f' [{split.format.description}:'
+            if split.security:
+                text += f' cybersecurity {split.security.hex().upper()}'
+            if split.safety:
+                text += f' safety {split.safety.hex().upper()}'
+            check = self.assurance.check(pg.pgn, source, pg.tos, pg.tf, pg.data) if self.assurance else None
+            text += f'; {check.describe()}]' if check is not None else '; not checked]'
+        return text
+
+
+def default_assurance_checker() -> AssuranceChecker:
+    """The checks of the user's J1939-22 assurance configuration file, if there is one (else none)."""
+    from can_explorer.core import j1939_assurance
+
+    path = j1939_assurance.default_config_path()
+    if not path.is_file():
+        return AssuranceChecker()
+    try:
+        return AssuranceChecker(j1939_assurance.load_configs(path))
+    except j1939_assurance.AssuranceError as e:
+        import logging
+
+        logging.getLogger(__name__).warning(f'J1939-22 assurance configuration not used: {e}')
+        return AssuranceChecker()

@@ -7,11 +7,15 @@ from typing import List, Optional, Tuple
 import cantools
 from cantools.database.can import Database
 
-from can_explorer.core import dbf
+from can_explorer.core import arxml_writer, dbf
 
 READ_SUFFIXES = ('.dbc', '.dbf', '.kcd', '.sym', '.arxml')
-WRITE_SUFFIXES = ('.dbc', '.dbf', '.kcd', '.sym')
-DEFAULT_WRITE_SUFFIX = WRITE_SUFFIXES[0]  # '.dbc': the output format for read-only sources such as ARXML
+WRITE_SUFFIXES = ('.dbc', '.dbf', '.kcd', '.sym', '.arxml')
+# Formats a database opened from a file can be saved back to. Not ARXML: a system description holds much more than
+# the CAN signals (software components, other buses, transformer configurations, ...), which rewriting it from the
+# signal database would drop. ARXML files CANExplorer wrote itself are the exception (see can_write_back).
+IN_PLACE_SUFFIXES = ('.dbc', '.dbf', '.kcd', '.sym')
+DEFAULT_WRITE_SUFFIX = WRITE_SUFFIXES[0]  # '.dbc': the output format for sources that are not written back
 
 
 class DatabaseFormatError(ValueError):
@@ -21,9 +25,19 @@ class DatabaseFormatError(ValueError):
 def output_suffix(source_suffix: str) -> str:
     """A writable format for a database that was read from `source_suffix`: the same format when it can be written
     back, otherwise the default writable format. This guarantees that every readable (hence editable) format has an
-    output path — a read-only format such as ARXML is saved as DBC rather than being a dead end."""
+    output path — an ARXML system description is saved as DBC (or exported as a new ARXML) rather than overwritten."""
     suffix = source_suffix.lower()
-    return suffix if suffix in WRITE_SUFFIXES else DEFAULT_WRITE_SUFFIX
+    return suffix if suffix in IN_PLACE_SUFFIXES else DEFAULT_WRITE_SUFFIX
+
+
+def can_write_back(path: str | Path) -> bool:
+    """Whether a database opened from `path` may be saved over it: its format can be written back, or it is an ARXML
+    file CANExplorer wrote (which holds nothing the writer would drop)."""
+    path = Path(path)
+    suffix = path.suffix.lower()
+    if suffix in IN_PLACE_SUFFIXES:
+        return True
+    return suffix == '.arxml' and arxml_writer.written_by_canexplorer(path)
 
 
 def _suffix(path: Path, supported: Tuple[str, ...], action: str) -> str:
@@ -56,6 +70,8 @@ def select_bus(database: Database, bus: str) -> None:
 def _content_warnings(database: Database, suffix: str) -> List[str]:
     """Content that the output formats cannot represent."""
     warnings = []
+    if suffix == '.arxml':
+        return warnings  # ARXML keeps buses apart and holds container messages; the writer reports the rest
     if len(database.buses) > 1:
         seen, clashes = {}, set()
         for message in database.messages:
@@ -81,6 +97,8 @@ def save_database(database: Database, path: str | Path, protocol: Optional[str] 
     warnings = _content_warnings(database, suffix)
     if suffix == '.dbf':
         return warnings + dbf.save_dbf(database, path, protocol)
+    if suffix == '.arxml':
+        return warnings + arxml_writer.save_arxml(database, path)
     text = {'.dbc': database.as_dbc_string, '.kcd': database.as_kcd_string, '.sym': database.as_sym_string}[suffix]()
     path.write_text(text, encoding='cp1252' if suffix == '.dbc' else 'utf-8', errors='replace')
     return warnings

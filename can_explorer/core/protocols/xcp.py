@@ -50,7 +50,8 @@ class _PairDecoder:
         if msg.is_extended_id != extended:
             return None
         if msg.arbitration_id == command_id:
-            self._last_command = data
+            if self.is_command(data):  # Not a STIM DTO, which is not answered
+                self._last_command = data
             return f'{self.name} {self.command(data)}'
         if msg.arbitration_id == response_id:
             return f'{self.name} {self.response(data)}'
@@ -69,6 +70,10 @@ class _PairDecoder:
         return None
 
     # Protocol specific
+
+    def is_command(self, data: bytes) -> bool:
+        """Whether a packet from the master expects a response."""
+        return True
 
     def is_connect(self, data: bytes) -> bool:
         raise NotImplementedError
@@ -92,6 +97,9 @@ class XcpDecoder(_PairDecoder):
         super().reset()
         self.byte_order = 'little'
 
+    def is_command(self, data: bytes) -> bool:
+        return data[0] >= 0xC0  # Below are STIM DTOs (an ODT number)
+
     def is_connect(self, data: bytes) -> bool:
         return len(data) >= 2 and data[0] == x.CONNECT and data[1] in (0, 1)
 
@@ -104,9 +112,45 @@ class XcpDecoder(_PairDecoder):
 
     def command(self, data: bytes) -> str:
         code = data[0]
+        if not self.is_command(data):
+            return f'STIM PID {code}: {_hex(data[1:])}'
         name = x.COMMAND_NAMES.get(code)
         if name is None:
             return f'command 0x{code:02X} {_hex(data[1:])}'
+        if code in (x.PROGRAM, x.PROGRAM_NEXT) and len(data) >= 2:
+            if code == x.PROGRAM and data[1] == 0:
+                return 'PROGRAM end of sequence'
+            return f'{name} {data[1]}: {_hex(data[2 : 2 + data[1]])}'
+        if code == x.PROGRAM_CLEAR and len(data) >= 8:
+            value = int.from_bytes(data[4:8], self.byte_order)
+            if data[1] == x.CLEAR_FUNCTIONAL:
+                areas = [name for bit, name in x.CLEAR_AREAS.items() if value & bit]
+                user = [f'user 0x{value & ~0xFF:X}'] if value & ~0xFF else []
+                return f'PROGRAM_CLEAR functional: {", ".join(areas + user) or "none"}'
+            return f'PROGRAM_CLEAR {value} absolute'
+        if code == x.PROGRAM_PREPARE and len(data) >= 4:
+            return f'PROGRAM_PREPARE {int.from_bytes(data[2:4], self.byte_order)} elements'
+        if code == x.PROGRAM_FORMAT and len(data) >= 5:
+            return (
+                f'PROGRAM_FORMAT compression 0x{data[1]:02X} encryption 0x{data[2]:02X} '
+                f'programming 0x{data[3]:02X} access 0x{data[4]:02X}'
+            )
+        if code == x.PROGRAM_MAX:
+            return f'PROGRAM_MAX: {_hex(data[1:])}'
+        if code == x.PROGRAM_VERIFY and len(data) >= 8:
+            mode = {x.VERIFY_INTERNAL: 'internal', x.VERIFY_VALUE: 'value'}.get(data[1], f'mode {data[1]}')
+            kind = int.from_bytes(data[2:4], self.byte_order)
+            value = int.from_bytes(data[4:8], self.byte_order)
+            return f'PROGRAM_VERIFY {mode} type 0x{kind:04X}' + (f' value 0x{value:08X}' if data[1] else '')
+        if code == x.GET_SECTOR_INFO and len(data) >= 3:
+            what = {x.SECTOR_START: 'start', x.SECTOR_LENGTH: 'length', x.SECTOR_NAME_LENGTH: 'name'}
+            return f'GET_SECTOR_INFO sector {data[2]} {what.get(data[1], f"mode {data[1]}")}'
+        if code in (x.CLEAR_DAQ_LIST, x.GET_DAQ_LIST_INFO) and len(data) >= 4:
+            return f'{name} list {int.from_bytes(data[2:4], self.byte_order)}'
+        if code == x.SET_DAQ_LIST_MODE and len(data) >= 6:
+            direction = 'STIM' if data[1] & x.DAQ_MODE_DIRECTION_STIM else 'DAQ'
+            number, event = (int.from_bytes(data[i : i + 2], self.byte_order) for i in (2, 4))
+            return f'SET_DAQ_LIST_MODE list {number} {direction} event {event} mode 0x{data[1]:02X}'
         if code == x.CONNECT:
             return f'CONNECT mode {data[1] if len(data) > 1 else 0}'
         if code == x.SET_MTA and len(data) >= 8:

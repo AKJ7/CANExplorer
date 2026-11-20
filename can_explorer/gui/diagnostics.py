@@ -642,7 +642,11 @@ class DiagnosticsController(QObject):
             audit.record(
                 'uds authentication', certificate=options.get('certificate'), authenticated=result.authenticated
             )
-            return None, result.description, result.authenticated
+            text = result.description
+            extensions = uds_auth.private_extensions(certificate)
+            if extensions:  # Where the ECU may read the tester's role and white lists
+                text += '; certificate extensions ' + ', '.join(f'{oid} ({size} B)' for oid, size in extensions)
+            return None, text, result.authenticated
 
         return self._start(bytes([uds_auth.SID, task]), operation)
 
@@ -694,6 +698,23 @@ class DiagnosticsController(QObject):
             return None, f'deAuthenticate: {text}', True
 
         return self._start(bytes([uds_auth.SID, uds_auth.DE_AUTHENTICATE]), operation)
+
+    @pyqtSlot(str, str, result=str)
+    def transmit_certificate(self, certificate: str, evaluation_id: str) -> str:
+        """transmitCertificate (0x04): a certificate of the Security Manager for a certificateEvaluationId (hex).
+        Returns an error, or ''."""
+        try:
+            value = uds_auth.certificate_to_transmit(keystore.default_store(), certificate)
+            evaluation = _parse_int(evaluation_id, 0xFFFF, 'certificate evaluation id')
+        except (uds_auth.UdsAuthenticationError, ValueError) as e:
+            return str(e)
+
+        async def operation(client: UdsClient):
+            text = await client.transmit_certificate(value, evaluation)
+            audit.record('uds certificate transmitted', certificate=certificate, evaluation_id=f'0x{evaluation:04X}')
+            return None, f'transmitCertificate 0x{evaluation:04X} ({certificate}): {text}', True
+
+        return self._start(bytes([uds_auth.SID, uds_auth.TRANSMIT_CERTIFICATE]), operation)
 
     @pyqtSlot(result=str)
     def authentication_configuration(self) -> str:

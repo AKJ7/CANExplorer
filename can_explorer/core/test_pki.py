@@ -60,7 +60,10 @@ def issue(
     ca: bool = False,
     usages: Sequence = (),
     addresses: Sequence[str] = (),
+    extensions: Sequence = (),
 ) -> x509.Certificate:
+    """A certificate for `key` signed by `issuer_key` (self-signed without `issuer`); `extensions` are added as
+    non-critical extensions (e.g. a UDS role and white lists, `uds_auth.access_extensions`)."""
     now = datetime.datetime.now(datetime.timezone.utc)
     builder = (
         x509.CertificateBuilder()
@@ -91,6 +94,8 @@ def issue(
             except ValueError:
                 names.append(x509.DNSName(address))
         builder = builder.add_extension(x509.SubjectAlternativeName(names), critical=False)
+    for extension in extensions:
+        builder = builder.add_extension(extension, critical=False)
     if issuer is not None:
         builder = builder.add_extension(
             x509.AuthorityKeyIdentifier.from_issuer_public_key(issuer_key.public_key()), critical=False

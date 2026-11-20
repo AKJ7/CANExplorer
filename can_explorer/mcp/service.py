@@ -181,6 +181,8 @@ class CanService:
         self._markers: List[Marker] = []  # Moments the agent marked, for reaction_at_markers
         self._flexray = None  # The FlexRay cluster description (a FlexRayDatabase), for the flexray_* tools
         self._sdt_counters: Dict[int, int] = {}  # SecuredDataTransmission anti-replay counter per request id
+        # The session key context of the last Authentication (0x29) per request id, with its credentials source
+        self._auth_sessions: Dict[int, Tuple[Any, str]] = {}
         self._xcp = CalibrationSession()  # The XCP/CCP slave of the xcp_* tools, kept open between calls
 
     @classmethod
@@ -1276,19 +1278,29 @@ class CanService:
 
         bytes_payload = parse_hex_bytes(payload)
         source = str(key or '')
-        if source and not source.startswith(uds_secured.KEYSTORE_PREFIX) and not Path(source).is_file():
+        request_id = _parse_id(request)
+        if source == 'session':  # The session key of the last uds_authenticate on this request id
+            if request_id not in self._auth_sessions:
+                return {'error': 'No authentication with a session key on this request id; call uds_authenticate'}
+        elif source and not source.startswith(uds_secured.KEYSTORE_PREFIX) and not Path(source).is_file():
             source = uds_secured.KEYSTORE_PREFIX + source
         try:
-            provider = uds_secured.load_provider(source, length=int(signature_length) or None)
+            if source == 'session':
+                context, origin = self._auth_sessions[request_id]
+                provider = uds_secured.session_provider(
+                    context, origin, self._auth_store(), length=int(signature_length) or None
+                )
+            else:
+                provider = uds_secured.load_provider(source, length=int(signature_length) or None)
             options = uds_secured.SecuredOptions(
                 sign=bool(sign) and provider is not None,
                 encrypt=bool(encrypt),
                 signature_on_response=bool(signed_response),
                 algorithm=int(algorithm),
+                pre_established_key=source == 'session',
             )
         except uds_secured.SecuredDataError as e:
             return {'error': str(e)}
-        request_id = _parse_id(request)
 
         async def operation(uds):
             start = self._sdt_counters.get(request_id, 0) if counter is None else int(counter)
@@ -1298,6 +1310,159 @@ class CanService:
                 return {'error': str(e)}
             self._sdt_counters[request_id] = (start + 1) % uds_secured.COUNTER_MODULO
             return result.as_dict()
+
+        return await self._with_uds(request, response, operation, control=True)
+
+    @staticmethod
+    def _auth_store():
+        """The key store for authentication credentials: the application's (the GUI's, when attached), unlocked
+        from CANEXPLORER_KEYSTORE_PASSWORD if still locked."""
+        from can_explorer.core import keystore
+
+        store = keystore.default_store()
+        if not store.unlocked:
+            try:
+                store.unlock_from_environment()
+            except keystore.KeyStoreError as e:
+                logger.warning(f'Key store: {e}')
+        return store
+
+    async def uds_authenticate(
+        self,
+        method: str = 'certificate',
+        credentials: str = '',
+        scheme: str = '',
+        bidirectional: bool = False,
+        trusted: str = '',
+        algorithm: str = '',
+        additional: str = '',
+        communication_configuration: int = 0,
+        request: Any = DEFAULT_UDS_REQUEST,
+        response: Any = ECU_RESPONSE,
+    ) -> Dict[str, Any]:
+        """Authentication (0x29). `method`: 'certificate' (certificate exchange, `credentials` a client certificate
+        entry of the key store or 'profile:<name>'), 'challenge-response' (`credentials` a shared authentication
+        key, a client certificate entry or 'profile:<name>'; `algorithm` the algorithmIndicator, hex or a dotted
+        OID; `additional` hex) or 'configuration' (authenticationConfiguration only). `trusted`: a
+        trusted-certificates entry checking the ECU (bidirectional). A session key asked for with
+        `communication_configuration` is kept for uds_secured_request(key='session'). Active: --allow-control."""
+        from can_explorer.core import audit, uds_auth, uds_secured
+
+        method = str(method or 'certificate').lower()
+        store = self._auth_store()
+        request_id = _parse_id(request)
+        configuration = int(communication_configuration)
+        if not 0 <= configuration <= 0xFF:
+            return {'error': 'communication_configuration is one byte'}
+        try:
+            if method == 'configuration':
+                prepared = None
+            elif method == 'certificate':
+                certificate, private_key = uds_auth.credentials(store, str(credentials))
+                trusted_certificates = uds_auth.trusted_certificates(store, str(trusted)) if trusted else []
+                scheme = str(scheme or uds_auth.scheme_for(certificate.public_key()))
+                uds_auth.check_scheme(scheme, certificate.public_key())
+                prepared = (certificate, private_key, trusted_certificates)
+            elif method == 'challenge-response':
+                prove, verify_server, how = uds_auth.challenge_response_credentials(
+                    store, str(credentials), str(scheme), str(trusted)
+                )
+                prepared = (prove, verify_server, how, uds_auth.algorithm_indicator(str(algorithm)))
+            else:
+                return {'error': "method is 'certificate', 'challenge-response' or 'configuration'"}
+            extra = parse_hex_bytes(str(additional or ''))
+        except (uds_auth.UdsAuthenticationError, ValueError) as e:
+            return {'error': str(e)}
+
+        async def operation(uds):
+            if method == 'configuration':
+                return {'configuration': await uds_auth.authentication_configuration(uds)}
+            self._auth_sessions.pop(request_id, None)  # The ECU ends an authentication when a new one starts
+            try:
+                if method == 'certificate':
+                    certificate, private_key, trusted_certificates = prepared
+                    result = await uds.authenticate(
+                        certificate,
+                        private_key,
+                        scheme,
+                        bool(bidirectional),
+                        trusted_certificates,
+                        store.revocation_lists(),
+                        communication_configuration=configuration,
+                    )
+                else:
+                    prove, verify_server, how, indicator = prepared
+                    result = await uds.authenticate_challenge_response(
+                        prove,
+                        bool(bidirectional),
+                        verify_server,
+                        indicator=indicator,
+                        additional_parameter=extra,
+                        communication_configuration=configuration,
+                    )
+            except uds_auth.UdsAuthenticationError as e:
+                return {'authenticated': False, 'error': str(e)}
+            audit.record(
+                'uds authentication', source=str(credentials), method=method, authenticated=result.authenticated
+            )
+            answer: Dict[str, Any] = {
+                'authenticated': result.authenticated,
+                'method': method,
+                'steps': result.steps,
+                'return_parameter': f'0x{result.return_parameter:02X}',
+            }
+            if result.server_certificate is not None:
+                answer['ecu_certificate'] = result.server_certificate.subject.rfc4514_string()
+            if result.client_certificate is not None:
+                extensions = uds_auth.private_extensions(result.client_certificate)
+                if extensions:  # Where an ECU may read roles and white lists from
+                    answer['certificate_private_extensions'] = [f'{oid} ({size} B)' for oid, size in extensions]
+            if result.authenticated and result.session_key_info:
+                self._auth_sessions[request_id] = (
+                    uds_secured.SessionContext.from_result(result),
+                    str(credentials),
+                )
+                answer['session_key_info_bytes'] = len(result.session_key_info)
+                answer['session_key'] = "kept: uds_secured_request(key='session')"
+            return answer
+
+        return await self._with_uds(request, response, operation, control=True)
+
+    async def uds_deauthenticate(self, request: Any = DEFAULT_UDS_REQUEST, response: Any = ECU_RESPONSE):
+        """deAuthenticate (0x29 0x00): ends the authentication and forgets its session key. Active."""
+        from can_explorer.core import uds_auth
+
+        request_id = _parse_id(request)
+
+        async def operation(uds):
+            self._auth_sessions.pop(request_id, None)
+            return {'result': await uds_auth.deauthenticate(uds)}
+
+        return await self._with_uds(request, response, operation, control=True)
+
+    async def uds_transmit_certificate(
+        self, certificate: str, evaluation_id: Any, request: Any = DEFAULT_UDS_REQUEST, response: Any = ECU_RESPONSE
+    ) -> Dict[str, Any]:
+        """transmitCertificate (0x29 0x04): send a general-purpose certificate (a key store certificate entry or a
+        PEM/DER file) for a certificateEvaluationId (manufacturer specific). Active: --allow-control."""
+        from can_explorer.core import uds_auth
+
+        try:
+            certificate_value = uds_auth.certificate_to_transmit(self._auth_store(), str(certificate))
+            evaluation = evaluation_id if isinstance(evaluation_id, int) else int(str(evaluation_id), 0)
+        except (uds_auth.UdsAuthenticationError, ValueError) as e:
+            return {'error': str(e)}
+
+        async def operation(uds):
+            try:
+                text = await uds_auth.transmit_certificate(uds, certificate_value, evaluation)
+            except uds_auth.UdsAuthenticationError as e:
+                return {'error': str(e)}
+            return {
+                'result': text,
+                'evaluation_id': f'0x{evaluation:04X}',
+                'certificate': certificate_value.subject.rfc4514_string(),
+            }
 
         return await self._with_uds(request, response, operation, control=True)
 
@@ -1571,6 +1736,24 @@ class CanService:
 
     async def xcp_measure(self, names: List[str], duration: float = 1.0, event: Optional[int] = None) -> Dict[str, Any]:
         return await self._with_xcp(lambda xcp: xcp.measure(list(names), duration, event))
+
+    async def xcp_daq_info(self) -> Dict[str, Any]:
+        """The XCP slave's DAQ configuration: dynamic or static, its lists (and what predefined ones carry), events."""
+        return await self._with_xcp(lambda xcp: xcp.daq_info())
+
+    async def xcp_flash_info(self) -> Dict[str, Any]:
+        """What the XCP slave offers for programming: PGM properties and flash sectors."""
+        return await self._with_xcp(lambda xcp: xcp.flash_info())
+
+    async def xcp_stimulate(
+        self, values: Dict[str, Any], event: Optional[int] = None, duration: float = 1.0
+    ) -> Dict[str, Any]:
+        """Write scalar calibration values by XCP STIM on an event. Active: requires --allow-control."""
+        return await self._with_xcp(lambda xcp: xcp.stimulate(dict(values), event, duration), control=True)
+
+    async def xcp_program(self, path: str, **options: Any) -> Dict[str, Any]:
+        """Program a file into the ECU's flash over XCP. Active: requires --allow-control."""
+        return await self._with_xcp(lambda xcp: xcp.program(path, **options), control=True)
 
     async def xcp_write(self, name: str, value: Any, axes: Optional[List] = None) -> Dict[str, Any]:
         """Write a calibration value (checked against its A2L limits) and read it back. Active: --allow-control."""

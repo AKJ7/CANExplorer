@@ -1,4 +1,4 @@
-"""Editing CAN signal databases (DBC, DBF, KCD, SYM; ARXML is read and saved in one of the others).
+"""Editing CAN signal databases (DBC, DBF, KCD, SYM, ARXML; an opened ARXML is saved under a new name).
 
 The database is a cantools Database; the editor changes its messages, signals and nodes, checks the result and
 saves it in the format of the file extension.
@@ -18,7 +18,13 @@ from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
 
 from cantools.database.can import Database, Message, Node, Signal
 
-from can_explorer.core.database_io import WRITE_SUFFIXES, DatabaseFormatError, load_database, save_database
+from can_explorer.core.database_io import (
+    WRITE_SUFFIXES,
+    DatabaseFormatError,
+    can_write_back,
+    load_database,
+    save_database,
+)
 from can_explorer.core.edit_history import UndoableEditor
 
 MAX_STANDARD_ID = 0x7FF
@@ -27,6 +33,10 @@ CAN_LENGTHS = (0, 1, 2, 3, 4, 5, 6, 7, 8)
 CAN_FD_LENGTHS = CAN_LENGTHS + (12, 16, 20, 24, 32, 48, 64)
 BYTE_ORDERS = ('little_endian', 'big_endian')  # Intel, Motorola
 NAME_PATTERN = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')  # DBC identifiers
+
+
+def _same_file(first: Path, second: Path) -> bool:
+    return first.resolve() == second.resolve()
 
 
 class EditError(ValueError):
@@ -132,6 +142,7 @@ class DatabaseEditor(UndoableEditor):
     def __init__(self, path: Optional[str | Path] = None):
         self.path: Optional[Path] = None
         self.warnings: List[str] = []
+        self._writes_back = False  # Whether Save may write over self.path (see database_io.can_write_back)
         self._fresh: set = set()  # ids of the message copies private to the current edit step (changed in place)
         self._defer = 0  # >0 while a deferred() block batches changes and holds back validation
         self._deferred: set = set()  # Messages touched inside a deferred() block, to validate when it ends
@@ -140,6 +151,7 @@ class DatabaseEditor(UndoableEditor):
         else:
             self.path = Path(path)
             self.database, self.warnings = load_database(self.path)
+            self._writes_back = can_write_back(self.path)
         self._init_history()
 
     # Undo (see core/edit_history.py)
@@ -191,8 +203,9 @@ class DatabaseEditor(UndoableEditor):
 
     @property
     def writable(self) -> bool:
-        """Whether Save writes back to the opened file (ARXML can only be saved in another format)."""
-        return self.path is not None and self.path.suffix.lower() in WRITE_SUFFIXES
+        """Whether Save writes back to the opened file. An opened ARXML system description is not overwritten (it
+        holds more than the signal database); one CANExplorer wrote is."""
+        return self.path is not None and self._writes_back
 
     def save(self, path: Optional[str | Path] = None) -> List[str]:
         """Save to `path` (default: the opened file). Returns warnings about content the format cannot hold."""
@@ -203,8 +216,14 @@ class DatabaseEditor(UndoableEditor):
             raise DatabaseFormatError(
                 f'Cannot write {target.suffix or "files without extension"}; use {", ".join(WRITE_SUFFIXES)}'
             )
+        if self.path is not None and not self._writes_back and _same_file(target, self.path):
+            raise DatabaseFormatError(
+                f'{self.path.name} is an AUTOSAR system description with more than the signal database; '
+                'save the changes under another name'
+            )
         warnings = save_database(self.database, target)
         self.path = target
+        self._writes_back = True  # Written by this editor: holds exactly the database
         self._mark_saved()
         return warnings
 

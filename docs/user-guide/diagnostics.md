@@ -217,12 +217,39 @@ overlap. Limits:
 
 - Session keys: **Session key** (the communicationConfiguration) asks the ECU for one; turning its session key
   information into a key is manufacturer specific, see [Session keys](#session-keys).
-- transmitCertificate (0x04) is encoded and decoded (also in the trace) but not offered as a procedure.
 - Certificate formats other than X.509 (e.g. card-verifiable certificates) are not supported.
 
 The [revocation lists](security-manager.md#revocation-lists) of the key store are applied: in bidirectional mode, an
 ECU certificate they revoke is refused. The simulated ECU refuses revoked tester certificates with
 `certificateVerificationFailed-InvalidCertificate` (NRC 0x57), as the AUTOSAR Dcm does.
+
+### Roles and white lists
+
+After a certificate exchange, an AUTOSAR ECU grants services by the **role** and the **white lists** in the
+tester's certificate (Dcm §7.6.2.10.4–5): the role is a bit field, and a service runs when it shares a bit with the
+role the ECU assigns to that service, or when a white list allows it — services by their first 1–4 bytes, DIDs per
+operation (read, write, IO control), routines per sub-function (start, stop, results), fault memory selections.
+Otherwise the ECU answers `authenticationRequired` (NRC 0x34). Which certificate extensions (OIDs) hold the role and
+white lists is part of the ECU's configuration.
+
+After an authentication by certificate exchange, the log lists the certificate's private extensions with their
+size (e.g. `certificate extensions 1.3.6.1.4.1.55555.1.1 (3 B)`): where an ECU may read the tester's rights from.
+In scripts, `can_explorer.core.uds_auth.access_rights(certificate, AccessOids(role=..., dids=...))` reads them, and
+`AccessRights.allows(request, service_role)` tells whether the ECU would allow a request.
+
+The simulated ECU (`UdsServer(service_roles={b'\x11': 0x02, ...})` with `AuthenticationServer(access_oids=...,
+role_size=..., deauthenticated_role=...)`) enforces roles and white lists as the Dcm does, refuses a role of the
+wrong size with `certificateVerificationFailed-InvalidContent` (NRC 0x55), and ends an authentication after
+`authentication_timeout` seconds without a request in the default session or on an S3 timeout (`s3_timeout`) in
+another session, as SWS_Dcm_01482/01483 describe.
+
+### transmitCertificate
+
+**Transmit** sends a certificate of the security manager (a client certificate or the first of a trusted set) with
+transmitCertificate (0x04) under a **certificateEvaluationId**: a general-purpose certificate the ECU stores for an
+application — secure coding, SecOC, TLS, enhanced rights. The evaluation ids and what each is for are defined by the
+ECU's manufacturer; an ECU answers *certificate verified*, `requestOutOfRange` (NRC 0x31) for an id it does not
+know, or a `certificateVerificationFailed-…` code. Scripts: `await t.uds.transmit_certificate(certificate, 0x0001)`.
 
 ### Challenge-response
 

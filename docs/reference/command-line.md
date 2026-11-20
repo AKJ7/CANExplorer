@@ -107,7 +107,7 @@ can-db-convert [-h] [--protocol {CAN,J1939}] [--bus BUS] input output
 | Argument | Description |
 |---|---|
 | `input` | Database to read: `.dbc`, `.dbf`, `.kcd`, `.sym`, `.arxml` |
-| `output` | Database to write: `.dbc`, `.dbf`, `.kcd`, `.sym` |
+| `output` | Database to write: `.dbc`, `.dbf`, `.kcd`, `.sym`, `.arxml` ([what ARXML holds](../user-guide/signal-databases.md#writing-arxml)) |
 | `--protocol` | Protocol of a DBF output. Default: `J1939` if the DBC declares the attribute `ProtocolType "J1939"`, else `CAN` |
 | `--bus` | Convert only this bus of a database describing several (ARXML cluster, KCD bus) |
 
@@ -118,4 +118,5 @@ is 0 on success and 1 on errors.
 uv run can-db-convert vehicle.dbc vehicle.dbf
 uv run can-db-convert vehicle.dbf vehicle.dbc
 uv run can-db-convert system.arxml powertrain.kcd --bus Powertrain
+uv run can-db-convert vehicle.dbc vehicle.arxml
 ```

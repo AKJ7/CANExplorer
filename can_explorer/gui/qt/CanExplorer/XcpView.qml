@@ -17,9 +17,11 @@ ColumnLayout {
     readonly property string transport: protocol === "CCP" ? "CAN" : transportBox.currentText
     readonly property bool ethernet: transport === "UDP" || transport === "TCP"
     readonly property var eventNames: [qsTr("Poll")].concat(xcp.events.map(e => e.name))
+    readonly property var stimNames: [qsTr("Direct")].concat(xcp.events.map(e => qsTr("STIM %1").arg(e.name)))
     readonly property var kindFilters: [qsTr("All"), qsTr("Measurements"), qsTr("Characteristics"), qsTr("Plotted"), qsTr("By DAQ")]
     readonly property var shownVariables: xcp.variables.filter(row => matches(row))
-    readonly property int daqCount: xcp.variables.filter(row => row.acquisition > 0).length
+    readonly property int daqCount: xcp.variables.filter(row => row.daq && row.acquisition > 0).length
+    readonly property int stimCount: xcp.variables.filter(row => row.stim && row.acquisition > 0).length
     property string errorText: ""
 
     // Column widths of the variable table (the header and every row use the same)
@@ -470,15 +472,16 @@ ColumnLayout {
                         wrapMode: Text.WordWrap
                         color: Theme.muted
                         font.pixelSize: 12
-                        text: root.daqCount > 0
+                        text: root.daqCount > 0 || root.stimCount > 0
                             ? qsTr("%n measurement(s) set to a DAQ event.", "", root.daqCount)
-                            : qsTr("For synchronous measurement, set a measurement's Measure column to a DAQ event.")
+                              + (root.stimCount > 0 ? " " + qsTr("%n value(s) written by STIM.", "", root.stimCount) : "")
+                            : qsTr("For synchronous measurement, set a measurement's Measure column to a DAQ event; to write a value at an event, set it to STIM.")
                     }
                     Button {
                         Layout.fillWidth: true
                         text: root.xcp.daq_running ? qsTr("Stop DAQ") : qsTr("Start DAQ")
                         highlighted: root.xcp.daq_running
-                        enabled: root.ready && (root.xcp.daq_running || root.daqCount > 0)
+                        enabled: root.ready && (root.xcp.daq_running || root.daqCount > 0 || root.stimCount > 0)
                         onClicked: {
                             if (root.xcp.daq_running)
                                 root.xcp.stop_daq()
@@ -518,6 +521,230 @@ ColumnLayout {
                         ToolTip.visible: hovered
                         ToolTip.text: qsTr("COPY_CAL_PAGE 1 → 0: copy the reference page over the working page, undoing every change")
                         onClicked: root.report(root.xcp.copy_page(1, 0))
+                    }
+                }
+
+                Section {
+                    title: qsTr("Flash programming")
+                    visible: root.protocol === "XCP"
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Button {
+                            text: qsTr("File…")
+                            enabled: !root.xcp.flashing
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("Intel HEX, Motorola S-record or binary (at address 0) file to program")
+                            onClicked: imageDialog.open()
+                        }
+                        Label {
+                            Layout.fillWidth: true
+                            text: root.xcp.flash_file ? root.fileName(root.xcp.flash_file) : qsTr("No file")
+                            color: root.xcp.flash_file ? Theme.text : Theme.muted
+                            elide: Text.ElideMiddle
+                        }
+                    }
+                    Label {
+                        Layout.fillWidth: true
+                        visible: root.xcp.flash_image.length > 0
+                        text: root.xcp.flash_image
+                        wrapMode: Text.WrapAnywhere
+                        color: Theme.muted
+                        font.family: "monospace"
+                        font.pixelSize: 11
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        FieldLabel { text: qsTr("Erase") }
+                        ComboBox {
+                            id: eraseBox
+                            Layout.fillWidth: true
+                            readonly property var labels: ({
+                                "sectors": qsTr("Sectors touched"),
+                                "segments": qsTr("Image ranges only"),
+                                "functional": qsTr("Functional areas"),
+                                "none": qsTr("Nothing")
+                            })
+                            model: root.xcp.erase_modes.map(mode => labels[mode] || mode)
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("Flash is erased a sector at a time: by default every sector the image touches (from GET_SECTOR_INFO)")
+                        }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        visible: root.xcp.erase_modes[eraseBox.currentIndex] === "functional"
+                        CheckBox { id: calibrationAreaBox; text: qsTr("Calibration") }
+                        CheckBox { id: codeAreaBox; text: qsTr("Code"); checked: true }
+                        CheckBox { id: nvramAreaBox; text: qsTr("NVRAM") }
+                    }
+                    CheckBox {
+                        id: verifyBox
+                        text: qsTr("Verify by checksum")
+                        checked: true
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("BUILD_CHECKSUM over each programmed range, compared with the file")
+                    }
+                    CheckBox {
+                        id: resetBox
+                        text: qsTr("Reset the ECU afterwards")
+                        checked: true
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("PROGRAM_RESET starts the new software and ends the session")
+                    }
+                    CheckBox {
+                        id: advancedBox
+                        text: qsTr("More options")
+                    }
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        visible: advancedBox.checked
+                        spacing: 6
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            FieldLabel { text: qsTr("Flash kernel") }
+                            Label {
+                                Layout.fillWidth: true
+                                text: root.xcp.kernel_file ? root.fileName(root.xcp.kernel_file) : qsTr("None")
+                                color: root.xcp.kernel_file ? Theme.text : Theme.muted
+                                elide: Text.ElideMiddle
+                            }
+                            Button {
+                                text: root.xcp.kernel_file ? qsTr("Remove") : qsTr("File…")
+                                ToolTip.visible: hovered
+                                ToolTip.text: qsTr("Code the ECU needs in RAM to program its flash: announced with PROGRAM_PREPARE and downloaded first")
+                                onClicked: root.xcp.kernel_file ? root.report(root.xcp.load_kernel("")) : kernelDialog.open()
+                            }
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            FieldLabel { text: qsTr("Compression") }
+                            TextField {
+                                id: compressionField
+                                text: "00"
+                                font.family: "monospace"
+                                Layout.preferredWidth: 48
+                                ToolTip.visible: hovered
+                                ToolTip.text: qsTr("PROGRAM_FORMAT compression method (hex): 00 none, 80–FF the manufacturer's")
+                            }
+                            FieldLabel { text: qsTr("Encryption") }
+                            TextField {
+                                id: encryptionField
+                                text: "00"
+                                font.family: "monospace"
+                                Layout.preferredWidth: 48
+                                ToolTip.visible: hovered
+                                ToolTip.text: qsTr("PROGRAM_FORMAT encryption method (hex): 00 none, 80–FF the manufacturer's")
+                            }
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            FieldLabel { text: qsTr("Encoder") }
+                            Label {
+                                Layout.fillWidth: true
+                                text: root.xcp.encoder_file ? root.fileName(root.xcp.encoder_file) : qsTr("None: the file is sent as it is")
+                                color: root.xcp.encoder_file ? Theme.text : Theme.muted
+                                elide: Text.ElideMiddle
+                            }
+                            Button {
+                                text: root.xcp.encoder_file ? qsTr("Remove") : qsTr("Python file…")
+                                ToolTip.visible: hovered
+                                ToolTip.text: qsTr("A Python file defining encode(data, address) -> bytes that compresses or encrypts each range before it is sent")
+                                onClicked: root.xcp.encoder_file ? root.report(root.xcp.set_encoder("")) : encoderDialog.open()
+                            }
+                        }
+                        CheckBox {
+                            id: programMaxBox
+                            text: qsTr("Full packets as PROGRAM_MAX")
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            FieldLabel { text: qsTr("ECU check") }
+                            ComboBox {
+                                id: ecuCheckBox
+                                Layout.fillWidth: true
+                                readonly property var labels: ({
+                                    "none": qsTr("None"),
+                                    "internal": qsTr("The ECU's own"),
+                                    "value": qsTr("Send a value")
+                                })
+                                model: root.xcp.ecu_checks.map(check => labels[check] || check)
+                                ToolTip.visible: hovered
+                                ToolTip.text: qsTr("PROGRAM_VERIFY after programming: the ECU runs its own check, or compares a value you give")
+                            }
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            visible: ecuCheckBox.currentIndex > 0
+                            FieldLabel { text: qsTr("Type") }
+                            TextField {
+                                id: checkTypeField
+                                text: "0004"
+                                font.family: "monospace"
+                                Layout.preferredWidth: 56
+                                ToolTip.visible: hovered
+                                ToolTip.text: qsTr("Verification type (hex): 0001 calibration areas, 0002 code areas, 0004 complete flash")
+                            }
+                            FieldLabel { text: qsTr("Value"); visible: ecuCheckBox.currentIndex === 2 }
+                            TextField {
+                                id: checkValueField
+                                visible: ecuCheckBox.currentIndex === 2
+                                text: "00000000"
+                                font.family: "monospace"
+                                Layout.fillWidth: true
+                            }
+                        }
+                    }
+                    Button {
+                        Layout.fillWidth: true
+                        text: qsTr("Program")
+                        highlighted: true
+                        enabled: root.ready && root.xcp.can_program && root.xcp.flash_file.length > 0 && !root.xcp.daq_running
+                        ToolTip.visible: hovered
+                        ToolTip.text: root.xcp.can_program
+                            ? qsTr("Erase, program and check the file in the ECU's flash (PGM)")
+                            : qsTr("Connect to an ECU that offers programming (PGM)")
+                        onClicked: root.report(root.xcp.program({
+                            erase: root.xcp.erase_modes[eraseBox.currentIndex],
+                            verify: verifyBox.checked,
+                            reset: resetBox.checked,
+                            clear_areas: (calibrationAreaBox.checked ? 1 : 0) | (codeAreaBox.checked ? 2 : 0) | (nvramAreaBox.checked ? 4 : 0),
+                            compression: compressionField.text,
+                            encryption: encryptionField.text,
+                            program_max: programMaxBox.checked,
+                            ecu_check: root.xcp.ecu_checks[ecuCheckBox.currentIndex],
+                            check_type: checkTypeField.text,
+                            check_value: checkValueField.text,
+                        }))
+                    }
+                    ProgressBar {
+                        Layout.fillWidth: true
+                        visible: root.xcp.flash_steps.length > 0
+                        value: root.xcp.flash_progress
+                    }
+                    Repeater {
+                        model: root.xcp.flash_steps
+                        delegate: RowLayout {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            spacing: 6
+                            Label {
+                                text: modelData.status === "done" ? "✓" : modelData.status === "failed" ? "✕"
+                                    : modelData.status === "running" ? "▶" : modelData.status === "skipped" ? "–" : "○"
+                                color: modelData.status === "done" ? Theme.success : modelData.status === "failed" ? Theme.danger
+                                    : modelData.status === "running" ? Theme.accent : Theme.muted
+                                font.bold: true
+                                Layout.preferredWidth: 14
+                            }
+                            Label {
+                                Layout.fillWidth: true
+                                text: modelData.detail ? modelData.name + " · " + modelData.detail : modelData.name
+                                color: modelData.status === "failed" ? Theme.danger
+                                    : modelData.status === "pending" || modelData.status === "skipped" ? Theme.muted : Theme.text
+                                font.pixelSize: 12
+                                wrapMode: Text.WordWrap
+                            }
+                        }
                     }
                 }
 
@@ -820,19 +1047,21 @@ ColumnLayout {
                                         elide: Text.ElideRight
                                     }
                                 }
-                                // Measure: polled or by a DAQ event
+                                // Measure: polled or by a DAQ event; a scalar value: written directly or by STIM at an event
                                 Item {
                                     Layout.preferredWidth: root.measureWidth
                                     implicitHeight: measureBox.implicitHeight
                                     ComboBox {
                                         id: measureBox
                                         anchors.fill: parent
-                                        visible: row.modelData.daq
-                                        model: root.eventNames
+                                        visible: row.modelData.daq || row.modelData.stim
+                                        model: row.modelData.daq ? root.eventNames : root.stimNames
                                         currentIndex: row.modelData.acquisition
                                         enabled: !root.xcp.daq_running
                                         ToolTip.visible: hovered
-                                        ToolTip.text: qsTr("Poll, or measure by DAQ on an event of the ECU")
+                                        ToolTip.text: row.modelData.daq
+                                            ? qsTr("Poll, or measure by DAQ on an event of the ECU")
+                                            : qsTr("Write directly, or by STIM: while DAQ runs, Set sends the value and the ECU writes it at the event")
                                         onActivated: index => root.xcp.set_acquisition(row.modelData.name, index)
                                     }
                                 }
@@ -1260,6 +1489,33 @@ ColumnLayout {
         defaultSuffix: "json"
         nameFilters: [qsTr("Calibration datasets (*.json *.dcm)"), qsTr("All files (*)")]
         onAccepted: root.report(root.xcp.save_dataset(selectedFile))
+    }
+    FileChooser {
+        id: kernelDialog
+        title: qsTr("Flash kernel")
+        fileMode: FileChooser.OpenFile
+        nameFilters: [
+            qsTr("Firmware files (*.hex *.ihex *.ihx *.s19 *.s28 *.s37 *.srec *.mot *.bin)"),
+            qsTr("All files (*)"),
+        ]
+        onAccepted: root.report(root.xcp.load_kernel(selectedFile))
+    }
+    FileChooser {
+        id: encoderDialog
+        title: qsTr("Encoder")
+        fileMode: FileChooser.OpenFile
+        nameFilters: [qsTr("Python files (*.py)"), qsTr("All files (*)")]
+        onAccepted: root.report(root.xcp.set_encoder(selectedFile))
+    }
+    FileChooser {
+        id: imageDialog
+        title: qsTr("File to program")
+        fileMode: FileChooser.OpenFile
+        nameFilters: [
+            qsTr("Firmware files (*.hex *.ihex *.ihx *.s19 *.s28 *.s37 *.srec *.mot *.bin)"),
+            qsTr("All files (*)"),
+        ]
+        onAccepted: root.report(root.xcp.load_image(selectedFile))
     }
     FileChooser {
         id: loadDatasetDialog

@@ -53,7 +53,7 @@ async def ccp():
 async def test_xcp_connect_read_write(xcp):
     client, simulator = xcp
     response = await client.connect()
-    assert client.connected and response[0] == 0x05  # Resources: CAL/PAG and DAQ
+    assert client.connected and response[0] == 0x1D  # Resources: CAL/PAG, DAQ, STIM and PGM
     simulator.memory[0x1000:0x1002] = (2000).to_bytes(2, 'little')
     assert await client.read(0x1000, 0, 2) == (2000).to_bytes(2, 'little')
     await client.write(0x2000, 0, (1500).to_bytes(2, 'little'))

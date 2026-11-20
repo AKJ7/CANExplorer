@@ -126,7 +126,7 @@ async def test_read_and_write_raw_address(manager, channel, xcp_slave):
     assert any('DE AD BE EF' in entry['text'] for entry in xcp.log)
 
 
-async def test_xcp_page_renders_without_warnings(manager, channel, xcp_slave, qapp):
+async def test_xcp_page_renders_without_warnings(manager, channel, xcp_slave, qapp, tmp_path):
     warnings = []
     engine = create_qml_engine(
         {
@@ -171,8 +171,12 @@ async def test_xcp_page_renders_without_warnings(manager, channel, xcp_slave, qa
     xcp.close_editor()
     await settle()
     xcp.set_acquisition('EngineSpeed', 1)
+    xcp.set_acquisition('IdleTarget', 1)  # STIM
     xcp.set_plotted('EngineSpeed', True)
     await settle()
+    assert xcp.load_image(QUrl.fromLocalFile(str(_firmware(tmp_path)))) == ''
+    assert xcp.program({'erase': 'segments', 'reset': False}) == ''
+    await settle(lambda: xcp.flash_steps and not xcp.busy)
     xcp.disconnect_slave()
     await settle(lambda: not xcp.connected)
     view.setProperty('page', 'dashboard')
@@ -331,3 +335,92 @@ async def test_details_summaries_and_editor_labels(manager, channel, xcp_slave):
     editor = xcp.editor
     assert editor['limits'] == '0 … 100' and editor['description'] == 'Injection over engine speed and load'
     assert editor['x_name'] == 'EngineSpeed [rpm]' and editor['y_name'] == 'EngineLoad [%]'
+
+
+def _firmware(tmp_path) -> Path:
+    from can_explorer.core.flashing import FlashImage, Segment, intel_hex_text
+
+    path = tmp_path / 'firmware.hex'
+    path.write_text(intel_hex_text(FlashImage([Segment(0x8000, bytes(range(64))), Segment(0xC000, b'\xa5' * 10)])))
+    return path
+
+
+async def test_stim_writes_a_value_at_the_event(manager, channel, xcp_slave):
+    connection, xcp = await connect_with_a2l(manager, channel)
+    rows = {row['name']: row for row in xcp.variables}
+    assert rows['IdleTarget']['stim'] and not rows['IdleTarget']['daq']
+    assert not rows['FuelMap']['stim'] and not rows['EngineSpeed']['stim']  # A map; a measurement
+    xcp.set_acquisition('IdleTarget', 1)  # STIM on the 10ms event
+    assert {row['name']: row for row in xcp.variables}['IdleTarget']['acquisition'] == 1
+    assert xcp.start_daq() == ''
+    await wait_until(lambda: xcp.daq_running and not xcp.busy)
+    assert any(d.running and d.mode & 0x02 for d in xcp_slave.slave.daq_lists)
+    assert xcp.write_variable('IdleTarget', '900') == ''
+    await wait_until(lambda: xcp_slave.memory[0x2000:0x2002] == (3600).to_bytes(2, 'little'))  # At the event
+    assert 'sent by STIM' in xcp.log[-1]['text']
+    assert 'IdleTarget' in xcp.write_variable('IdleTarget', '9000')  # Beyond the A2L limit, not sent
+    xcp.stop_daq()
+    await wait_until(lambda: not xcp.daq_running and not xcp.busy)
+    xcp.disconnect_slave()
+    await wait_until(lambda: not xcp.connected)
+
+
+async def test_flash_programming(manager, channel, xcp_slave, tmp_path):
+    connection, xcp = await connect_with_a2l(manager, channel)
+    assert xcp.can_program and xcp.erase_modes == ['sectors', 'segments', 'functional', 'none']
+    assert xcp.program({}) == 'Choose the file to program'
+    assert 'Could not' in xcp.load_image(QUrl.fromLocalFile(str(tmp_path / 'missing.hex')))
+    assert xcp.load_image(QUrl.fromLocalFile(str(_firmware(tmp_path)))) == ''
+    assert xcp.flash_file.endswith('firmware.hex') and '74 bytes in 2 segments' in xcp.flash_image
+    assert xcp.program({'erase': 'sectors', 'verify': True, 'reset': True}) == ''
+    await wait_until(lambda: not xcp.busy and not xcp.connected)
+    assert [s['status'] for s in xcp.flash_steps] == ['done'] * len(xcp.flash_steps)
+    assert xcp.flash_progress == 1.0 and not xcp.flashing
+    assert xcp_slave.slave.flash[0x8000:0x8040] == bytes(range(64)) and xcp_slave.slave.resets == 1
+    assert xcp.log[-1]['text'] == 'The ECU was reset: connect again'
+
+
+async def test_flash_programming_options(manager, channel, xcp_slave, tmp_path):
+    connection, xcp = await connect_with_a2l(manager, channel)
+    encoder = tmp_path / 'encoder.py'
+    encoder.write_text('def encode(data, address):\n    return bytes(b ^ 0x5A for b in data)\n')
+    assert 'does not define' in xcp.set_encoder(QUrl.fromLocalFile(str(_empty_python(tmp_path))))
+    assert xcp.set_encoder(QUrl.fromLocalFile(str(encoder))) == '' and xcp.encoder_file == str(encoder)
+    assert xcp.load_image(QUrl.fromLocalFile(str(_firmware(tmp_path)))) == ''
+    assert 'Invalid hex' in xcp.program({'compression': 'zz'})
+    settings = {'erase': 'functional', 'clear_areas': 2, 'encryption': '80', 'ecu_check': 'internal', 'reset': False}
+    assert xcp.program(settings) == ''
+    await wait_until(lambda: not xcp.busy and not xcp.flashing and xcp.flash_steps)
+    steps = {s['name']: s for s in xcp.flash_steps}
+    assert all(s['status'] == 'done' for s in steps.values()), steps
+    assert 'Set the data format' in steps and 'ECU check (PROGRAM_VERIFY)' in steps
+    assert xcp_slave.slave.flash[0x8000:0x8040] == bytes(range(64))  # Decrypted by the ECU
+    assert xcp.set_encoder(QUrl()) == '' and xcp.encoder_file == ''
+    assert xcp.ecu_checks == ['none', 'internal', 'value']
+    xcp.disconnect_slave()
+    await wait_until(lambda: not xcp.connected)
+
+
+def _empty_python(tmp_path) -> Path:
+    path = tmp_path / 'nothing.py'
+    path.write_text('x = 1\n')
+    return path
+
+
+async def test_stim_timeouts_are_reported(manager, channel):
+    session = BusSession(LiveSource(BusConfig('virtual', channel)))
+    session.start()
+    slave = XcpSlaveSimulator(session, request_id=0x7E0, response_id=0x7E1, memory=example_memory(), stim_timeout=True)
+    try:
+        connection, xcp = await connect_with_a2l(manager, channel)
+        xcp.set_acquisition('IdleTarget', 1)  # STIM on the 10ms event; nothing new is sent between events
+        assert xcp.start_daq() == ''
+        await wait_until(lambda: int(xcp.info.get('STIM timeouts', '0')) >= 2)
+        assert any('STIM timeout' in entry['text'] for entry in xcp.log)
+        xcp.stop_daq()
+        await wait_until(lambda: not xcp.daq_running and not xcp.busy)
+        xcp.disconnect_slave()
+        await wait_until(lambda: not xcp.connected)
+    finally:
+        slave.stop()
+        session.stop()

@@ -540,6 +540,26 @@ def build_mcp(service: CanService) -> MCPServer:  # noqa: C901 - a flat list of 
         async def xcp_measure(names: List[str], duration: float = 1.0, event: Optional[int] = None) -> Dict[str, Any]:
             return await service.xcp_measure(names, duration, event)
 
+        @mcp.tool(
+            name='xcp_daq_info',
+            title='XCP DAQ configuration',
+            description="The XCP slave's DAQ configuration: dynamic or static, its DAQ lists (direction, size, fixed "
+            'event) and what its predefined lists carry (from the A2L, or read with READ_DAQ), its events, and '
+            'whether it offers STIM. Reads only.' + DIAGNOSTICS_TIER,
+        )
+        async def xcp_daq_info() -> Dict[str, Any]:
+            return await service.xcp_daq_info()
+
+        @mcp.tool(
+            name='xcp_flash_info',
+            title='XCP programming capabilities',
+            description='Whether the XCP slave offers flash programming (PGM), whether it is locked, its PGM '
+            'properties (absolute/functional erasing, compression and encryption supported or required) and its '
+            'flash sectors. Reads only.' + DIAGNOSTICS_TIER,
+        )
+        async def xcp_flash_info() -> Dict[str, Any]:
+            return await service.xcp_flash_info()
+
     # Active control (control tier)
 
     if service.can_control:
@@ -563,6 +583,55 @@ def build_mcp(service: CanService) -> MCPServer:  # noqa: C901 - a flat list of 
         )
         async def xcp_write_memory(address: str, data: str, extension: int = 0) -> Dict[str, Any]:
             return await service.xcp_write_memory(address, data, extension)
+
+        @mcp.tool(
+            name='xcp_stimulate',
+            title='Stimulate calibration values (XCP STIM)',
+            description='Write scalar A2L calibration values by XCP STIM: the ECU writes them at an event channel '
+            '(default the first A2L event) for duration seconds (at most 30), then STIM stops and the values are '
+            'read back. values maps names to numbers or verbal values; values outside the A2L limits are refused. '
+            'Reports STIM timeouts the ECU signalled. Changes the running ECU immediately.' + CONTROL_TIER,
+        )
+        async def xcp_stimulate(
+            values: Dict[str, Any], event: Optional[int] = None, duration: float = 1.0
+        ) -> Dict[str, Any]:
+            return await service.xcp_stimulate(values, event, duration)
+
+        @mcp.tool(
+            name='xcp_program',
+            title='Program the ECU flash over XCP',
+            description='Replace software in the ECU: program an Intel HEX, S-record or binary file (path; '
+            'base_address hex for a binary) into its flash over XCP PGM, then check it and reset the ECU. erase: '
+            '"sectors" (every sector the file touches, default), "segments" (the file ranges), "functional" '
+            '(clear_areas bit mask: 1 calibration, 2 code, 4 NVRAM) or "none". verify compares BUILD_CHECKSUM '
+            'with the file; ecu_check "internal" or "value" (check_type, check_value hex) sends PROGRAM_VERIFY. '
+            'kernel: a flash kernel file downloaded first. compression/encryption: the manufacturer method codes '
+            '(PROGRAM_FORMAT) the file was prepared with, or that encoder (a Python file defining encode(data, '
+            'address)) applies. program_max sends full packets as PROGRAM_MAX. reset ends the session. A wrong '
+            'file can leave the ECU unable to start: only program a file meant for this ECU, and only when the user '
+            'asked for it.' + CONTROL_TIER,
+        )
+        async def xcp_program(
+            path: str,
+            erase: str = 'sectors',
+            verify: bool = True,
+            reset: bool = True,
+            base_address: str = '0',
+            clear_areas: int = 2,
+            kernel: str = '',
+            compression: int = 0,
+            encryption: int = 0,
+            encoder: str = '',
+            program_max: bool = False,
+            ecu_check: str = 'none',
+            check_type: int = 4,
+            check_value: str = '0',
+        ) -> Dict[str, Any]:
+            return await service.xcp_program(
+                path, erase=erase, verify=verify, reset=reset, base_address=base_address, clear_areas=clear_areas,
+                kernel=kernel, compression=compression, encryption=encryption, encoder=encoder,
+                program_max=program_max, ecu_check=ecu_check, check_type=check_type, check_value=check_value,
+            )  # fmt: skip
 
         @mcp.tool(
             name='obd_clear',
@@ -607,7 +676,8 @@ def build_mcp(service: CanService) -> MCPServer:  # noqa: C901 - a flat list of 
             '(ISO 14229-1:2020) and return the unwrapped response, with both envelopes, the anti-replay counters and '
             "whether the response signature verified. key: a secured data key of the key store (CANExplorer's "
             'reference scheme, a MAC over the message; signature_length truncates it) or a Python provider file with '
-            "the manufacturer's scheme; empty sends it unsigned. The counter continues per request id unless given. "
+            "the manufacturer's scheme; 'session' uses the session key of the last uds_authenticate on this "
+            'request id; empty sends it unsigned. The counter continues per request id unless given. '
             'The algorithms behind the algorithm byte are manufacturer specific.' + CONTROL_TIER,
         )
         async def uds_secured_request(
@@ -625,6 +695,65 @@ def build_mcp(service: CanService) -> MCPServer:  # noqa: C901 - a flat list of 
             return await service.uds_secured_request(
                 payload, key, sign, encrypt, signed_response, algorithm, signature_length, counter, request, response
             )
+
+        @mcp.tool(
+            name='uds_authenticate',
+            title='UDS Authentication (0x29)',
+            description='Authenticate on an ECU with service 0x29 (ISO 14229-1:2020). method: "certificate" '
+            '(certificate exchange; credentials = a client certificate entry of the key store or "profile:<name>"), '
+            '"challenge-response" (credentials = a shared authentication key, a client certificate entry or '
+            '"profile:<name>"; algorithm = the algorithmIndicator in hex or as a dotted OID; additional = hex) or '
+            '"configuration" (only asks which authentication the ECU offers). bidirectional also checks the ECU, '
+            'against the trusted-certificates entry `trusted` if given. A session key asked for with '
+            'communication_configuration is kept for uds_secured_request(key="session"). Returns the steps, '
+            "and the certificate's private extensions (where an ECU may read the tester's role and white lists). "
+            'The key store is unlocked with CANEXPLORER_KEYSTORE_PASSWORD.' + CONTROL_TIER,
+        )
+        async def uds_authenticate(
+            method: str = 'certificate',
+            credentials: str = '',
+            scheme: str = '',
+            bidirectional: bool = False,
+            trusted: str = '',
+            algorithm: str = '',
+            additional: str = '',
+            communication_configuration: int = 0,
+            request: str = '7E0',
+            response: str = '7E8',
+        ) -> Dict[str, Any]:
+            return await service.uds_authenticate(
+                method,
+                credentials,
+                scheme,
+                bidirectional,
+                trusted,
+                algorithm,
+                additional,
+                communication_configuration,
+                request,
+                response,
+            )
+
+        @mcp.tool(
+            name='uds_deauthenticate',
+            title='UDS deAuthenticate',
+            description='End the authentication on an ECU (0x29 deAuthenticate) and forget its session key.'
+            + CONTROL_TIER,
+        )
+        async def uds_deauthenticate(request: str = '7E0', response: str = '7E8') -> Dict[str, Any]:
+            return await service.uds_deauthenticate(request, response)
+
+        @mcp.tool(
+            name='uds_transmit_certificate',
+            title='UDS transmitCertificate',
+            description='Send a general-purpose certificate to an ECU (0x29 transmitCertificate): a certificate entry '
+            'of the key store or a PEM/DER file, for a 16-bit certificate evaluation id (manufacturer specific: what '
+            'the certificate is for, e.g. secure coding, SecOC or TLS).' + CONTROL_TIER,
+        )
+        async def uds_transmit_certificate(
+            certificate: str, evaluation_id: str, request: str = '7E0', response: str = '7E8'
+        ) -> Dict[str, Any]:
+            return await service.uds_transmit_certificate(certificate, evaluation_id, request, response)
 
     # Transmitting (send tier)
 

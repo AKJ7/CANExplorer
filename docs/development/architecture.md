@@ -71,7 +71,8 @@ computer. `tools/benchmark_socketcan.py` measures the whole path through SocketC
 | `core/uds_scan.py` | Interactive UDS discovery: service, DID, subfunction and routine scans and a one-byte sweep over a UDS transport, with the answers classified |
 | `core/uds_fuzz.py` | UDS mutation fuzzing: mutated requests from seeds or random ones, with a periodic liveness check that detects the ECU hanging or crashing |
 | `core/can_command.py` | Request/response over a CAN session for command protocols (XCP, CCP) |
-| `core/xcp.py`, `core/ccp.py` | XCP and CCP masters (memory access, seed & key, pages, checksum, DAQ); `core/ccp.py` also its simulated slave |
+| `core/xcp.py`, `core/ccp.py` | XCP and CCP masters (memory access, seed & key, pages, checksum, DAQ; XCP also static DAQ, STIM and programming); `core/ccp.py` also its simulated slave |
+| `core/xcp_flash.py` | Flash programming over XCP: the erase, program, verify and reset sequence for an image |
 | `core/xcp_protocol.py`, `core/xcp_slave.py`, `core/xcp_ethernet.py` | XCP packet codes and checksums, the simulated XCP slave, XCP on UDP/TCP |
 | `core/a2l.py`, `core/calibration.py`, `core/calibration_session.py` | A2L reader (variables, layouts, conversions, IF_DATA), reading/writing values by name and datasets (JSON, DCM), the session of the MCP `xcp_*` tools |
 | `core/a2l.py` | A minimal A2L (ASAM MCD-2 MC) reader: measurements and scalar characteristics with address, data type and linear conversion |

@@ -10,6 +10,22 @@ development stages are listed by date and commit, newest first.
 
 ### Added
 
+- **ARXML export of signal databases**: the converter (dialog and `can-db-convert`), the database editor's *Save
+  as…* and scripts (`save_database`, `core.arxml_writer`) write AUTOSAR R20-11 system descriptions of the CAN part
+  of a database, valid against the official `AUTOSAR_00049.xsd` schema.
+    - One `CAN-CLUSTER` per bus, so a multi-bus database keeps its buses apart, unlike DBC. Frames, signal PDUs
+      with their cycle times, multiplexed PDUs (one selector), container frames (short headers), signals with base
+      types, initial and invalid values, conversions (linear, value tables or both, with limits), units, comments,
+      and ECUs with what they send and receive.
+    - E2E protections (profile, Data IDs) and SecOC secured PDUs (Data ID, algorithm names, lengths) of an ARXML
+      are written back, so the E2E and SecOC checks keep working on the exported file.
+    - Signal start bits are written unchanged: AUTOSAR counts them like DBC (checked against the schema's
+      documentation of `START-POSITION`).
+    - Reported, not silently dropped: nested multiplexing (ARXML has one selector field), renamed names (ARXML
+      allows only letters, digits and `_`), and per-signal receivers, which become per-message.
+    - **An opened ARXML is never overwritten**, as it usually holds more than the signal database: the editor saves
+      it under a new name. ARXML files CANExplorer wrote are marked and saved over directly.
+
 - **UDS SecuredDataTransmission (0x84 / 0xC4)**, the ISO 14229-1:2020 envelope that carries any diagnostic request
   and its response signed, encrypted, or both, with an anti-replay counter.
     - **Diagnostics**: a *Secured transmission (0x84)* section sends every request of the page in envelopes (reads,
@@ -94,9 +110,23 @@ development stages are listed by date and commit, newest first.
         - XCP address granularity (word and dword ECUs) and slave/master block modes.
         - *Command busy* answers are repeated.
         - After a timeout, SYNCH, then SET_MTA, then the command again, so uploads and downloads are never shifted.
-    - **DAQ**: dynamic DAQ lists per event channel, for XCP (all identification field types, DAQ timestamps, ODTs
+    - **DAQ**: DAQ lists per event channel, for XCP (all identification field types, DAQ timestamps, ODTs
       split to the packet size) and for CCP. Start and stop from the page; DAQ samples go into the table and the
-      plot.
+      plot. XCP ECUs with static DAQ have their fixed lists configured (GET_DAQ_LIST_INFO, CLEAR_DAQ_LIST): each
+      event takes the first free list that can run on it and is large enough. Predefined lists (dynamic or static
+      ECUs) measure what they carry: their content comes from the A2L's `DAQ_LIST … PREDEFINED`, now read, or from
+      the ECU (READ_DAQ). `xcp_measure` uses them too.
+    - **STIM**: set a scalar calibration value's Measure column to *STIM* on an event, and while DAQ runs, **Set**
+      sends the value for the ECU to write at that event. In scripts, `start_stimulation` / `stimulate`, alone or
+      with a measurement, optionally repeated each period. A STIM timeout from the ECU sends the data again and is
+      counted in the slave details.
+    - **Flash programming over XCP** (PGM, `core/xcp_flash.py`): the new **Flash programming** section programs an
+      Intel HEX, S-record or binary file: PROGRAM_START, PROGRAM_CLEAR of the sectors the image touches (from
+      GET_SECTOR_INFO; or the image's ranges), PROGRAM in master blocks when the ECU takes them, PROGRAM with no
+      data to end, a BUILD_CHECKSUM check of each range, and PROGRAM_RESET. Each step shows its state. More
+      options: functional erasing (calibration, code, NVRAM areas), a flash kernel (PROGRAM_PREPARE), compressed or
+      encrypted images (PROGRAM_FORMAT, with an optional Python encoder), PROGRAM_MAX, and an ECU check
+      (PROGRAM_VERIFY, internal or with a value).
     - **Plot**: any measurement or value can be plotted next to the bus signals.
     - **Polling**: neighbouring measurements are read with one upload.
     - **A2L**:
@@ -122,19 +152,25 @@ development stages are listed by date and commit, newest first.
           axis names, and can revert.
     - **Datasets**: save the characteristics to JSON or DCM, compare a dataset with the ECU, and write it.
     - **More commands**: GET_ID, GET_COMM_MODE_INFO, CCP EXCHANGE_ID, DNLOAD_6, GET/SET_S_STATUS.
-    - **Trace**: new **XCP** and **CCP** protocol decoders label commands, responses, errors, events and DAQ data.
-      They learn the identifiers from a CONNECT, or from the page when it connects.
+    - **Trace**: new **XCP** and **CCP** protocol decoders label commands, responses, errors, events and DAQ data,
+      and for XCP the master's STIM data and the programming commands. They learn the identifiers from a CONNECT,
+      or from the page when it connects.
     - **MCP**:
         - `xcp_list_variables` (always available).
-        - `xcp_connect`, `xcp_disconnect`, `xcp_status`, `xcp_read`, `xcp_read_memory` and `xcp_measure`
-          (diagnostics tier).
-        - `xcp_write` and `xcp_write_memory` (control tier).
+        - `xcp_connect`, `xcp_disconnect`, `xcp_status`, `xcp_read`, `xcp_read_memory`, `xcp_measure`,
+          `xcp_daq_info` and `xcp_flash_info` (diagnostics tier).
+        - `xcp_write`, `xcp_write_memory`, `xcp_stimulate` and `xcp_program` (control tier).
     - **Simulators**: the XCP slave (`core/xcp_slave.py`, also on UDP/TCP) and the CCP slave answer seed & key,
-      pages, checksums, identification and DAQ with cyclic events, and inject busy answers and lost responses.
+      pages, checksums, identification and DAQ with cyclic events, and inject busy answers and lost responses. The
+      XCP slave also has static and predefined DAQ lists, READ_DAQ, STIM with optional timeouts, and a flash in
+      sectors that must be erased before it is programmed, with a demonstration cipher, PROGRAM_VERIFY and an
+      optional flash kernel.
       `example_memory()` matches the extended `examples/calibration/example.a2l`.
-    - **Limits**: XCP STIM, static DAQ lists and programming are not implemented. Some CCP details the public
-      sources leave open are documented as assumptions: the byte order of multi-byte parameters, ODT element
-      positions, and the TP_BLOB byte-order code.
+    - **Limits**: XCP programming follows public implementations (OpenBLT, pyxcp) and a public command
+      reference, and is not yet tried on a production bootloader. The data of the STIM timeout event is not
+      interpreted (its layout is not public). Some CCP details the public sources leave open are
+      documented as assumptions: the byte order of multi-byte parameters, ODT element positions, and the TP_BLOB
+      byte-order code.
 - **J1939-22 Multi-PG and FD transport decoding**. The J1939-22 decoder used to label these frames only.
     - **Multi-PG** frames are split into their parameter groups. Each is decoded like a single frame: requests,
       acknowledgments, DM1 and the other known PGs.
@@ -143,9 +179,32 @@ development stages are listed by date and commit, newest first.
     - **Sources**: SAE J1939-22 is not public. The layouts follow the open-source python-can-j1939 implementation
       (MIT), and the header widths agree with public J1939-22 presentations. The tests replay frames generated by
       that library (`tests/data/j1939_22_frames.txt`).
-    - **Limits**: parameter groups and transfers with cybersecurity or functional safety assurance data are
-      labelled with their type, but their trailers are not decoded or checked. Not yet checked against a J1939-22
-      ECU.
+    - **Limits**: FD.TP transfers announcing assurance data are labelled with its type and size only (where its
+      bytes travel is not public). Not yet checked against a J1939-22 ECU.
+- **J1939-22 assurance data trailers** (cybersecurity and functional safety). The trailer of a parameter group
+  is split off by its type of service and trailer format (32/64-bit cybersecurity, functional safety, or both;
+  reserved formats stay raw), so its data now decodes like any parameter group, and the trailer is shown after it.
+    - **Checks**, for the parameter groups configured in `j1939_assurance.json` (or `CANEXPLORER_J1939_ASSURANCE`):
+      functional safety data with AUTOSAR E2E Profile 22 (CRC, counter sequence: lost, repeated, wrong
+      sequence), and J1939-91C cybersecurity data (the truncated AES-CMAC tag with a key of the Security Manager,
+      and a freshness value that must increase). Encrypted payloads are labelled, not decrypted.
+    - **E2E Profile 22 at any offset** (`Profile22(data_ids, offset)`), tested against the AUTOSAR offset example.
+    - **Sources and choices**: the TOS/TF table, Profile 22 for safety data and the J1939-91C tag construction
+      come from a public J1939-91C presentation (New Eagle, 2025). The field widths, the nonce encoding and what
+      Profile 22 covers are not public, so they are configuration or documented choices, never assumed: a wrong
+      layout shows "does not verify with this configuration".
+- **UDS Authentication (0x29), extended** (Diagnostics view, scripts, MCP):
+    - **transmitCertificate (0x04)** as a procedure: **Transmit** sends a certificate of the Security Manager
+      under a certificateEvaluationId (`UdsClient.transmit_certificate`).
+    - **Roles and white lists** from the tester's certificate, as the AUTOSAR Dcm reads them (role bit field,
+      services, DIDs, routines, fault memory selections; the extension OIDs are given): `uds_auth.access_rights`.
+      After a certificate exchange the log lists the certificate's private extensions.
+    - **Simulated ECU**: role checks per service with NRC 0x34, role size checks (NRC 0x55), transmitCertificate
+      (NRC 0x31 for unknown evaluation ids), and de-authentication when idle in the default session or on an S3
+      timeout, after the AUTOSAR Dcm specification (R23-11, §7.6.2.10).
+    - **MCP**: `uds_authenticate` (certificate exchange, challenge-response or the ECU's configuration),
+      `uds_deauthenticate` and `uds_transmit_certificate` (control tier); `uds_secured_request(key="session")`
+      protects requests with the session key of the authentication.
 - **End-to-end SocketCAN benchmark** (`tools/benchmark_socketcan.py`, for developers): receive throughput, lost
   frames, CPU use and garbage collection pauses at increasing rates, and periodic transmit timing (software and
   kernel-timed, idle and under load), through the Linux SocketCAN stack on `vcan` interfaces. See *Building and

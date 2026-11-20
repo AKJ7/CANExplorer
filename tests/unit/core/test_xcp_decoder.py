@@ -47,3 +47,39 @@ def test_ccp():
     assert decoder.describe(frame(0x7E1, [0xFF, 0x35, 7])) == 'CCP CRM #7 access locked (seed & key required)'
     assert decoder.describe(frame(0x7E1, [0xFE, 0x20])) == 'CCP event cold start request'
     assert decoder.describe(frame(0x7E1, [0x08, 1, 2])) == 'CCP DAQ PID 8: 01 02'
+
+
+def test_xcp_stim_and_programming():
+    decoder = XcpDecoder()
+    decoder.configure(0x7E0, 0x7E1)
+    assert decoder.describe(frame(0x7E0, [0xE0, 0x02, 3, 0, 1, 0, 1, 0])) == (
+        'XCP SET_DAQ_LIST_MODE list 3 STIM event 1 mode 0x02'
+    )
+    assert decoder.describe(frame(0x7E0, [0xD2])) == 'XCP PROGRAM_START'
+    # A STIM DTO between a command and its response does not take the response's name
+    assert decoder.describe(frame(0x7E0, [0x04, 0xAA, 0xBB])) == 'XCP STIM PID 4: AA BB'
+    assert decoder.describe(frame(0x7E1, [0xFF, 0, 0, 8])) == 'XCP RES PROGRAM_START: 00 00 08'
+    assert decoder.describe(frame(0x7E0, [0xD1, 0, 0, 0, 0, 0x20, 0, 0])) == 'XCP PROGRAM_CLEAR 8192 absolute'
+    assert decoder.describe(frame(0x7E0, [0xD0, 2, 0x12, 0x34])) == 'XCP PROGRAM 2: 12 34'
+    assert decoder.describe(frame(0x7E0, [0xD0, 0])) == 'XCP PROGRAM end of sequence'
+    assert decoder.describe(frame(0x7E0, [0xCD, 1, 2])) == 'XCP GET_SECTOR_INFO sector 2 length'
+    assert decoder.describe(frame(0x7E0, [0xE3, 0, 1, 0])) == 'XCP CLEAR_DAQ_LIST list 1'
+
+
+def test_xcp_programming_options():
+    decoder = XcpDecoder()
+    decoder.configure(0x7E0, 0x7E1)
+    assert (
+        decoder.describe(frame(0x7E0, [0xD1, 1, 0, 0, 0x03, 0, 0, 0]))
+        == 'XCP PROGRAM_CLEAR functional: calibration, code'
+    )
+    assert decoder.describe(frame(0x7E0, [0xCC, 0, 0x00, 0x01])) == 'XCP PROGRAM_PREPARE 256 elements'
+    assert decoder.describe(frame(0x7E0, [0xCB, 0, 0x80, 0, 0])) == (
+        'XCP PROGRAM_FORMAT compression 0x00 encryption 0x80 programming 0x00 access 0x00'
+    )
+    assert decoder.describe(frame(0x7E0, [0xC9, 1, 2, 3, 4, 5, 6, 7])) == 'XCP PROGRAM_MAX: 01 02 03 04 05 06 07'
+    assert decoder.describe(frame(0x7E0, [0xC8, 1, 4, 0, 0x78, 0x56, 0x34, 0x12])) == (
+        'XCP PROGRAM_VERIFY value type 0x0004 value 0x12345678'
+    )
+    assert decoder.describe(frame(0x7E0, [0xC8, 0, 4, 0, 0, 0, 0, 0])) == 'XCP PROGRAM_VERIFY internal type 0x0004'
+    assert decoder.describe(frame(0x7E1, [0xFD, 0x09, 1, 0])) == 'XCP EV STIM timeout'

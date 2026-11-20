@@ -252,7 +252,7 @@ async def test_database_editor_saves_and_reloads_connections(manager, data_dir, 
     assert editor.revert() == '' and not editor.dirty
     assert 'Could not open' in editor.open_path(str(tmp_path / 'missing.dbc'))
     assert editor.open_path(str(data_dir / 'example.arxml')) == '' and not editor.writable
-    assert 'Save as' in editor.save() and any('cannot be written' in note for note in editor.notes)
+    assert 'Save as' in editor.save() and any('not overwritten' in note for note in editor.notes)
     editor.new_database()
     assert editor.file_name == 'Untitled' and editor.messages == []
 

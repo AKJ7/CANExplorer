@@ -127,7 +127,7 @@ def test_j1939_22_multi_pg_labels_what_it_does_not_decode():
     decoder = J1939_22Decoder()
     secured = [(3 << 5) | (1 << 2), 0xF0, 0x04, 3, 1, 2, 3]
     text = decoder.describe(_fd(0x18250000 | 0xFF00, secured + [0x40, 0xFE, 0xF1, 4, 1]))
-    assert 'PGN 0x0F004 EEC1 (type of service 3, trailer format 1: assurance data not decoded): 01 02 03' in text
+    assert 'PGN 0x0F004 EEC1 (reserved type of service 3 / trailer format 1: not interpreted): 01 02 03' in text
     assert 'PGN 0x0FEF1 CCVS1: 01 (truncated)' in text
     assert decoder.describe(_fd(0x1825FF00, [0, 0, 0, 0xAA])).endswith(': no parameter groups (padding only)')
 

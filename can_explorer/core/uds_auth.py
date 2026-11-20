@@ -19,6 +19,11 @@ The certificate exchange (as in the AUTOSAR Dcm):
    verified, authentication complete"). The session is then authenticated with the roles of the certificate.
 3. deAuthenticate (0x00) ends it.
 
+Also after the AUTOSAR Dcm (§7.6.2.10.4-7): the tester's **role and white lists** taken from its certificate
+(`AccessRights`; the extensions holding them are configured by OID, `AccessOids`), **transmitCertificate** (0x04,
+general-purpose certificates stored per certificateEvaluationId; NRC 0x31 for an unknown id), and, in the simulated
+ECU (core/simulation.py), role checks per service and de-authentication on idle or an S3server timeout.
+
 Authentication by challenge-response (ACR, without certificates):
 
 1. requestChallengeForAuthentication (0x05): the client names an algorithm (algorithmIndicator); the server
@@ -98,6 +103,7 @@ APCE, ACR_ASYMMETRIC, ACR_SYMMETRIC = 0x02, 0x03, 0x04  # authenticationConfigur
 DEAUTHENTICATED = 0x10
 OWNERSHIP_VERIFICATION_NECESSARY = 0x11
 AUTHENTICATION_COMPLETE = 0x12
+CERTIFICATE_VERIFIED = 0x13  # transmitCertificate
 
 # Negative response codes of the service (and authenticationRequired for services needing it)
 NEGATIVE_RESPONSE_CODES = {
@@ -118,6 +124,7 @@ NEGATIVE_RESPONSE_CODES = {
     0x5D: 'deAuthenticationFailed',
 }
 INVALID_TIME_PERIOD, INVALID_SIGNATURE, INVALID_CHAIN_OF_TRUST, INVALID_FORMAT = 0x50, 0x51, 0x52, 0x54
+INVALID_CONTENT = 0x55  # Also for a role of the wrong size (SWS_Dcm_01515)
 INVALID_CERTIFICATE = 0x57  # Also for a revoked certificate (as the AUTOSAR Dcm answers a revoked one)
 OWNERSHIP_VERIFICATION_FAILED = 0x58
 
@@ -522,6 +529,242 @@ async def authentication_configuration(client) -> str:
     return response.return_text
 
 
+async def transmit_certificate(client, certificate, evaluation_id: int) -> str:
+    """transmitCertificate (0x04): give the ECU a general-purpose certificate (e.g. for secure coding, SecOC or TLS)
+    under `evaluation_id`, which tells the ECU what it is for (manufacturer specific). `certificate` is an
+    x509.Certificate (sent DER encoded) or bytes. Returns the authenticationReturnParameter text ("certificate
+    verified"); an ECU refusing it answers a negative response (e.g. NRC 0x31 for an unknown evaluation id)."""
+    if not 0 <= int(evaluation_id) <= 0xFFFF:
+        raise UdsAuthenticationError('The certificate evaluation id is a 16-bit number')
+    der = certificate.public_bytes(serialization.Encoding.DER) if hasattr(certificate, 'public_bytes') else certificate
+    if not der:
+        raise UdsAuthenticationError('No certificate to transmit')
+    response = parse_response(
+        await client.call(
+            request(TRANSMIT_CERTIFICATE, certificate=bytes(der), certificate_evaluation_id=evaluation_id)
+        )
+    )
+    return response.return_text
+
+
+# --- Access rights from the certificate: roles and white lists (AUTOSAR Dcm §7.6.2.10.4-5) ---
+#
+# After a certificate exchange the AUTOSAR Dcm takes the tester's role and white lists from the certificate:
+# - the role, a bit field of DcmDspAuthenticationRoleSize bytes read as a little-endian integer (SWS_Dcm_01521); a
+#   service runs when the role AND the service's configured role is not 0, else NRC 0x34 authenticationRequired
+#   (SWS_Dcm_01522/01523); a role of another size is refused with NRC 0x55 InvalidContent (SWS_Dcm_01515);
+# - white lists: services (values of 1..4 bytes, a request is allowed when it starts with one, SWS_Dcm_01524), DIDs
+#   (2-byte DID big endian + an access byte: bit 0 read, bit 1 write, bit 2 IO control, SWS_Dcm_01525), RIDs (2-byte
+#   RID + bit 0 start, bit 1 stop, bit 2 request results, SWS_Dcm_01526) and fault memory selections (1 byte,
+#   SWS_Dcm_01527).
+# Where in the certificate these are is a configuration of the ECU (KeyM certificate elements, by OID), so the OIDs
+# are given (`AccessOids`); nothing is assumed. Each element's content is read as the Dcm example shows it: the
+# extension value an OCTET STRING, or a SEQUENCE/SET of OCTET STRINGs (one per white list entry).
+
+DID_READ, DID_WRITE, DID_CONTROL = 0x01, 0x02, 0x04
+RID_START, RID_STOP, RID_RESULTS = 0x01, 0x02, 0x04
+
+
+@dataclass(frozen=True)
+class AccessOids:
+    """The certificate extensions (dotted OIDs) holding the role and the white lists; '' when not used."""
+
+    role: str = ''
+    services: str = ''
+    dids: str = ''
+    rids: str = ''
+    memory_selections: str = ''
+
+    def __bool__(self) -> bool:
+        return any((self.role, self.services, self.dids, self.rids, self.memory_selections))
+
+
+def _der_items(data: bytes) -> List[Tuple[int, bytes]]:
+    """The (tag, content) items of DER `data` at one level (definite lengths only)."""
+    items, position = [], 0
+    while position < len(data):
+        if position + 2 > len(data):
+            raise UdsAuthenticationError('Truncated DER in a certificate extension')
+        tag, length = data[position], data[position + 1]
+        position += 2
+        if length & 0x80:
+            count = length & 0x7F
+            if not 1 <= count <= 4 or position + count > len(data):
+                raise UdsAuthenticationError('Unsupported DER length in a certificate extension')
+            length = int.from_bytes(data[position : position + count], 'big')
+            position += count
+        if position + length > len(data):
+            raise UdsAuthenticationError('Truncated DER in a certificate extension')
+        items.append((tag, bytes(data[position : position + length])))
+        position += length
+    return items
+
+
+def _extension_elements(certificate: x509.Certificate, oid: str) -> Optional[List[bytes]]:
+    """The element values of a private extension: [content] for an OCTET STRING (or INTEGER), the contents of each
+    OCTET STRING of a SEQUENCE/SET; None when the certificate has no such extension."""
+    try:
+        extension = certificate.extensions.get_extension_for_oid(x509.ObjectIdentifier(oid))
+    except x509.ExtensionNotFound:
+        return None
+    except ValueError as e:
+        raise UdsAuthenticationError(f'Invalid OID {oid!r}: {e}') from e
+    raw = getattr(extension.value, 'value', None)
+    if not isinstance(raw, bytes):
+        raise UdsAuthenticationError(f'The extension {oid} is a standard extension, not access rights')
+    items = _der_items(raw)
+    if len(items) != 1:
+        raise UdsAuthenticationError(f'The extension {oid} is not a single DER value')
+    tag, content = items[0]
+    if tag in (0x04, 0x02):  # OCTET STRING, INTEGER
+        return [content]
+    if tag in (0x30, 0x31):  # SEQUENCE, SET
+        elements = []
+        for inner_tag, inner in _der_items(content):
+            if inner_tag != 0x04:
+                raise UdsAuthenticationError(f'The extension {oid} holds a non-OCTET STRING element')
+            elements.append(inner)
+        return elements
+    raise UdsAuthenticationError(f'The extension {oid} is neither an OCTET STRING nor a list of them')
+
+
+@dataclass
+class AccessRights:
+    """A tester's role and white lists, from its certificate."""
+
+    role: Optional[int] = None  # None: the certificate has no role
+    role_size: int = 0
+    services: List[bytes] = field(default_factory=list)
+    dids: dict = field(default_factory=dict)  # DID -> access bits
+    rids: dict = field(default_factory=dict)  # RID -> sub-function bits
+    memory_selections: List[int] = field(default_factory=list)
+
+    def white_listed(self, request: bytes) -> bool:
+        """Whether a white list allows the request (services by prefix, DIDs per operation, RIDs per
+        sub-function, fault memory selections of 0x19 0x17..0x19)."""
+        request = bytes(request)
+        if any(request.startswith(entry) for entry in self.services if entry):
+            return True
+        if not request:
+            return False
+        sid = request[0]
+        if sid in (0x22, 0x2E, 0x2F) and len(request) >= 3:
+            bit = {0x22: DID_READ, 0x2E: DID_WRITE, 0x2F: DID_CONTROL}[sid]
+            if sid == 0x22:  # Every DID of a multi-DID read must be allowed
+                dids = [int.from_bytes(request[i : i + 2], 'big') for i in range(1, len(request) - 1, 2)]
+            else:
+                dids = [int.from_bytes(request[1:3], 'big')]
+            return bool(dids) and all(self.dids.get(did, 0) & bit for did in dids)
+        if sid == 0x31 and len(request) >= 4:
+            bit = {1: RID_START, 2: RID_STOP, 3: RID_RESULTS}.get(request[1] & 0x7F, 0)
+            return bool(self.rids.get(int.from_bytes(request[2:4], 'big'), 0) & bit)
+        if sid == 0x19 and len(request) >= 3 and request[1] & 0x7F in (0x17, 0x18, 0x19):
+            return request[-1] in self.memory_selections
+        return False
+
+    def allows(self, request: bytes, service_role: Optional[int]) -> bool:
+        """A request needing `service_role` (None: no role configured, always allowed): allowed by the role
+        (bitwise AND not 0) or a white list."""
+        if service_role is None:
+            return True
+        return bool((self.role or 0) & service_role) or self.white_listed(request)
+
+    def describe(self) -> str:
+        parts = []
+        if self.role is not None:
+            parts.append(f'role 0x{self.role:0{2 * max(self.role_size, 1)}X}')
+        if self.services:
+            parts.append('services ' + ', '.join(entry.hex().upper() for entry in self.services))
+        if self.dids:
+            parts.append('DIDs ' + ', '.join(f'{did:04X}:{bits:X}' for did, bits in self.dids.items()))
+        if self.rids:
+            parts.append('RIDs ' + ', '.join(f'{rid:04X}:{bits:X}' for rid, bits in self.rids.items()))
+        if self.memory_selections:
+            parts.append('memory selections ' + ', '.join(f'0x{m:02X}' for m in self.memory_selections))
+        return '; '.join(parts) or 'no role or white list'
+
+
+def access_rights(certificate: x509.Certificate, oids: AccessOids, role_size: int = 0) -> AccessRights:
+    """The role and white lists a certificate carries at `oids`. With `role_size`, a role of another size is
+    invalid content (NRC 0x55 at an ECU). Raises UdsAuthenticationError for malformed content."""
+    rights = AccessRights()
+    if oids.role:
+        elements = _extension_elements(certificate, oids.role)
+        if elements is not None:
+            if len(elements) != 1:
+                raise UdsAuthenticationError('The role extension holds more than one value')
+            value = elements[0]
+            if role_size and len(value) != role_size:
+                raise UdsAuthenticationError(f'The role is {len(value)} bytes, the ECU expects {role_size}')
+            rights.role, rights.role_size = int.from_bytes(value, 'little'), len(value)
+    for oid, sizes, what in (
+        (oids.services, (1, 2, 3, 4), 'service white list'),
+        (oids.dids, (3,), 'DID white list'),
+        (oids.rids, (3,), 'RID white list'),
+        (oids.memory_selections, (1,), 'memory selection white list'),
+    ):
+        if not oid:
+            continue
+        for element in _extension_elements(certificate, oid) or []:
+            if len(element) not in sizes:
+                raise UdsAuthenticationError(f'A {what} entry of {len(element)} bytes')
+            if what.startswith('service'):
+                rights.services.append(element)
+            elif what.startswith('DID'):
+                rights.dids[int.from_bytes(element[:2], 'big')] = element[2]
+            elif what.startswith('RID'):
+                rights.rids[int.from_bytes(element[:2], 'big')] = element[2]
+            else:
+                rights.memory_selections.append(element[0])
+    return rights
+
+
+def _der(tag: int, content: bytes) -> bytes:
+    length = len(content)
+    if length < 0x80:
+        return bytes([tag, length]) + content
+    size = (length.bit_length() + 7) // 8
+    return bytes([tag, 0x80 | size]) + length.to_bytes(size, 'big') + content
+
+
+def access_extensions(
+    oids: AccessOids,
+    role: Optional[bytes] = None,
+    services: Sequence[bytes] = (),
+    dids: Sequence[Tuple[int, int]] = (),
+    rids: Sequence[Tuple[int, int]] = (),
+    memory_selections: Sequence[int] = (),
+) -> List[x509.UnrecognizedExtension]:
+    """Certificate extensions carrying a role and white lists at `oids`, in the layout `access_rights` reads (for
+    test certificates and simulated testers). `role` is the role bit field as it is sent (little endian)."""
+
+    def listing(oid: str, elements: Sequence[bytes]) -> x509.UnrecognizedExtension:
+        content = b''.join(_der(0x04, bytes(element)) for element in elements)
+        return x509.UnrecognizedExtension(x509.ObjectIdentifier(oid), _der(0x31, content))
+
+    extensions = []
+    if role is not None and oids.role:
+        extensions.append(x509.UnrecognizedExtension(x509.ObjectIdentifier(oids.role), _der(0x04, bytes(role))))
+    if services and oids.services:
+        extensions.append(listing(oids.services, services))
+    if dids and oids.dids:
+        extensions.append(listing(oids.dids, [did.to_bytes(2, 'big') + bytes([bits]) for did, bits in dids]))
+    if rids and oids.rids:
+        extensions.append(listing(oids.rids, [rid.to_bytes(2, 'big') + bytes([bits]) for rid, bits in rids]))
+    if memory_selections and oids.memory_selections:
+        extensions.append(listing(oids.memory_selections, [bytes([m]) for m in memory_selections]))
+    return extensions
+
+
+def private_extensions(certificate: x509.Certificate) -> List[Tuple[str, int]]:
+    """The (OID, size) of a certificate's non-standard extensions: where an ECU may find roles and white lists."""
+    return [
+        (extension.oid.dotted_string, len(extension.value.value))
+        for extension in certificate.extensions
+        if isinstance(extension.value, x509.UnrecognizedExtension)
+    ]
+
+
 # --- Authentication by challenge-response (ACR) ---
 
 PROOF_MACS = {
@@ -721,6 +964,10 @@ class AuthenticationServer:
         crls: Sequence = (),
         challenge_response: Optional[ChallengeResponseConfig] = None,
         session_keys=None,
+        access_oids: Optional[AccessOids] = None,
+        role_size: int = 0,
+        deauthenticated_role: int = 0,
+        certificate_evaluation_ids: Sequence[int] = (),
     ):
         # Session keys (core/uds_secured.py SessionKeyIssuer): the communicationConfiguration values it accepts
         # besides 0, and the session key it issues on success (`session_provider`, for SecuredDataTransmission)
@@ -738,6 +985,31 @@ class AuthenticationServer:
         self.client_certificate: Optional[x509.Certificate] = None
         self._challenge: Optional[bytes] = None
         self._client_challenge = b''
+        # Access control (AUTOSAR Dcm): where client certificates carry the role and white lists, the role size
+        # (0: any), the role used while not authenticated, and the rights of the authenticated tester
+        self.access_oids = access_oids or AccessOids()
+        self.role_size = role_size
+        self.deauthenticated_role = deauthenticated_role
+        self.access: Optional[AccessRights] = None
+        # transmitCertificate (0x04): the certificate evaluation ids the ECU knows, and what it received for them
+        self.certificate_evaluation_ids = set(certificate_evaluation_ids)
+        self.received_certificates: dict = {}
+
+    def deauthenticate(self) -> None:
+        """Back to the deauthenticated state (deAuthenticate, a new authentication, a timeout): role, white list
+        and session key are discarded (SWS_Dcm_01485)."""
+        self.authenticated, self.client_certificate, self._challenge = False, None, None
+        self.session_provider, self.access = None, None
+
+    def permits(self, request: bytes, service_role: Optional[int]) -> bool:
+        """Whether a request needing `service_role` (None: none configured) may run: with the authenticated
+        tester's role or white lists (SWS_Dcm_01522), or the deauthenticated role (SWS_Dcm_01538). A tester
+        authenticated without access rights (no OIDs configured, or challenge-response) may run everything."""
+        if service_role is None:
+            return True
+        if self.authenticated:
+            return self.access.allows(request, service_role) if self.access is not None else True
+        return bool(self.deauthenticated_role & service_role)
 
     @staticmethod
     def _negative(code: int) -> bytes:
@@ -752,9 +1024,10 @@ class AuthenticationServer:
             return self._negative(0x13)
         task = payload[1] & 0x7F
         if task == DE_AUTHENTICATE:
-            self.authenticated, self.client_certificate, self._challenge = False, None, None
-            self.session_provider = None
+            self.deauthenticate()
             return self._positive(task, DEAUTHENTICATED)
+        if task == TRANSMIT_CERTIFICATE:
+            return self._transmit_certificate(payload)
         if task == AUTHENTICATION_CONFIGURATION:
             acr = self.challenge_response
             if acr is not None and not self.trusted:
@@ -788,9 +1061,30 @@ class AuthenticationServer:
         )
         return info
 
+    def _transmit_certificate(self, payload: bytes) -> bytes:
+        """Store a general-purpose certificate for its evaluation id after verifying it (SWS_Dcm_01681..01683)."""
+        try:
+            reader = _Reader(bytes(payload[2:]))
+            evaluation_id = int.from_bytes(reader.take(2, 'certificate evaluation id'), 'big')
+            raw = reader.prefixed('certificate')
+        except UdsAuthenticationError:
+            return self._negative(0x13)
+        if reader.position != len(reader.data) or not raw:
+            return self._negative(0x13)
+        if evaluation_id not in self.certificate_evaluation_ids:
+            return self._negative(0x31)  # requestOutOfRange: no such certificate evaluation id (SWS_Dcm_01682)
+        try:
+            certificate = load_certificate(raw)
+        except UdsAuthenticationError:
+            return self._negative(INVALID_FORMAT)
+        problem = certificate_problem(certificate, self.trusted, crls=self.crls)
+        if problem is not None:
+            return self._negative(problem)
+        self.received_certificates[evaluation_id] = certificate
+        return self._positive(TRANSMIT_CERTIFICATE, CERTIFICATE_VERIFIED)
+
     def _request_challenge(self, payload: bytes) -> bytes:
-        self.authenticated, self.client_certificate, self._challenge = False, None, None
-        self.session_provider = None
+        self.deauthenticate()
         if len(payload) != 2 + 1 + 16:
             return self._negative(0x13)
         if not self._accepts_configuration(payload[2]):
@@ -835,7 +1129,7 @@ class AuthenticationServer:
         return self._positive(task, AUTHENTICATION_COMPLETE, *parameters, _length_prefixed(info))
 
     def _verify_certificate(self, task: int, payload: bytes) -> bytes:
-        self.authenticated, self._challenge, self.session_provider = False, None, None
+        self.deauthenticate()
         if len(payload) < 3:
             return self._negative(0x13)
         if not self._accepts_configuration(payload[2]):
@@ -889,6 +1183,12 @@ class AuthenticationServer:
         challenge, self._challenge = self._challenge, None  # One proof per challenge
         if not verify(self.client_certificate.public_key(), proof, challenge, self.scheme):
             return self._negative(OWNERSHIP_VERIFICATION_FAILED)
+        if self.access_oids:  # Role and white lists from the certificate (SWS_Dcm_01514..01516)
+            try:
+                self.access = access_rights(self.client_certificate, self.access_oids, self.role_size)
+            except UdsAuthenticationError:
+                self.client_certificate = None
+                return self._negative(INVALID_CONTENT)
         self.authenticated = True
         info = self._session_key_info(
             'certificate',
@@ -987,6 +1287,24 @@ def trusted_certificates(store, name: str) -> List[x509.Certificate]:
     if info is None or info.purpose != keystore.TLS_CA:
         raise UdsAuthenticationError(f'No trusted certificates named {name!r} in the Security Manager')
     return certificates_from_pem(info.params['certificate'])
+
+
+def certificate_to_transmit(store, source: str) -> x509.Certificate:
+    """The certificate for transmitCertificate: of a key store entry (a client certificate, or the first of a
+    trusted-certificates entry; readable while the store is locked) or of a PEM/DER file."""
+    from pathlib import Path
+
+    from can_explorer.core import keystore
+
+    info = store.entries_by_name().get(source)
+    if info is not None:
+        if info.purpose not in (keystore.TLS_CLIENT, keystore.TLS_CA):
+            raise UdsAuthenticationError(f'The Security Manager entry {source!r} holds no certificate')
+        return certificates_from_pem(info.params['certificate'])[0]
+    path = Path(source)
+    if not path.is_file():
+        raise UdsAuthenticationError(f'No certificate entry or file named {source!r}')
+    return load_certificate(path.read_bytes())
 
 
 def challenge_response_credentials(

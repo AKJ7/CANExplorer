@@ -49,6 +49,9 @@ class UdsServer(ExtendedServices):
         lockout_survives_reset: bool = True,
         clock: Callable[[], float] = time.monotonic,
         secured=None,
+        service_roles: Optional[Dict[bytes, int]] = None,
+        authentication_timeout: Optional[float] = None,
+        s3_timeout: Optional[float] = None,
     ):
         # SecuredDataTransmission (0x84): a core/uds_secured.SecuredServerConfig (serviceNotSupported without one)
         self.secured = secured
@@ -57,6 +60,16 @@ class UdsServer(ExtendedServices):
         # tester (NRC 0x34 authenticationRequired otherwise)
         self.authentication = authentication
         self.authentication_dids = authentication_dids
+        # Role-based access (AUTOSAR Dcm): request prefix -> the role bits it needs (the longest matching prefix
+        # counts; requests matching none need no role). Checked against the authenticated tester's role and white
+        # lists, else the deauthenticated role; refused with NRC 0x34 authenticationRequired
+        self.service_roles = dict(service_roles or {})
+        # De-authentication on idle (SWS_Dcm_01482: `authentication_timeout` seconds without a request in the
+        # default session) and on an S3server timeout in another session (SWS_Dcm_01483, which also falls back to
+        # the default session); None: never
+        self.authentication_timeout = authentication_timeout
+        self.s3_timeout = s3_timeout
+        self._last_activity: Optional[float] = None
         self.dtcs = list(dtcs if dtcs is not None else [(0x012345, 0x09), (0xC10000, 0x08)])
         self.seed = seed
         self.key_function = key_function
@@ -101,11 +114,35 @@ class UdsServer(ExtendedServices):
             ]
         return responses
 
+    def _service_role(self, request: bytes) -> Optional[int]:
+        matches = [prefix for prefix in self.service_roles if request.startswith(prefix)]
+        return self.service_roles[max(matches, key=len)] if matches else None
+
+    def _check_timeouts(self) -> None:
+        now, last = self.clock(), self._last_activity
+        self._last_activity = now
+        if last is None:
+            return
+        idle = now - last
+        if self.session != 0x01 and self.s3_timeout is not None and idle > self.s3_timeout:
+            self.session, self.unlocked_level = 0x01, None
+            self._reset_extended_state()
+            self._end_transfers()
+            if self.authentication is not None:
+                self.authentication.deauthenticate()
+        elif self.session == 0x01 and self.authentication_timeout is not None and idle > self.authentication_timeout:
+            if self.authentication is not None:
+                self.authentication.deauthenticate()
+
     def _handle(self, request: bytes) -> List[bytes]:
         self.requests.append(request)
         if not request:
             return []
         sid = request[0]
+        self._check_timeouts()
+        if self.authentication is not None and sid != 0x29 and self.service_roles:
+            if not self.authentication.permits(request, self._service_role(request)):
+                return self._negative(sid, 0x34)
         handler = {
             **self._extended_handlers(),
             0x10: self._session_control,

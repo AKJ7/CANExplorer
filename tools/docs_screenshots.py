@@ -464,6 +464,7 @@ async def xcp_scenario():
         await asyncio.sleep(0.05)
     await xcp._poll_once()
     await shot('xcp', 0.5)
+    await xcp_flash_shot(xcp)
     xcp.disconnect_slave()
     await asyncio.sleep(0.1)
     slave.stop()
@@ -783,6 +784,34 @@ async def security_manager_scenario():
     dialog.close()
     window.resize(1440, 900)
     await asyncio.sleep(0.5)
+
+
+async def xcp_flash_shot(xcp):
+    """The XCP page's Flash programming section after programming an image into the simulated slave's flash."""
+    from can_explorer.core.flashing import FlashImage, Segment, intel_hex_text
+
+    with tempfile.TemporaryDirectory() as directory:
+        firmware = Path(directory) / 'application.hex'
+        image = FlashImage([Segment(0x8000, bytes(range(256)) * 16), Segment(0xC000, b'\xa5' * 1024)])
+        firmware.write_text(intel_hex_text(image))
+        assert xcp.load_image(QUrl.fromLocalFile(str(firmware))) == ''
+    assert xcp.program({'erase': 'sectors', 'verify': True, 'reset': False}) == ''
+    while xcp.busy or xcp.flashing:
+        await asyncio.sleep(0.05)
+    view = [view for view in items('XcpView') if view.isVisible()][0]
+    section = _section(view, 'Flash programming')
+    for child in section.findChildren(QObject):
+        if 'CheckBox' in child.metaObject().className() and child.property('text') == 'Reset the ECU afterwards':
+            child.setProperty('checked', False)  # As programmed: the page stays connected for the picture
+    flickable = section.parentItem()
+    while flickable is not None and 'Flickable' not in flickable.metaObject().className():
+        flickable = flickable.parentItem()
+    if flickable is not None:
+        content = flickable.property('contentItem')
+        flickable.setProperty('contentY', max(0.0, section.mapToItem(content, QPointF(0, 0)).y() - 8))
+    await shot('xcp-flash', 0.6)
+    if flickable is not None:
+        flickable.setProperty('contentY', 0.0)
 
 
 def _section(view, title: str):

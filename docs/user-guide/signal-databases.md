@@ -10,7 +10,7 @@ receive by name.
 |---|---|:---:|:---:|
 | `.dbc` | Vector CANdb++ DBC | ✓ | ✓ |
 | `.dbf` | BUSMASTER database | ✓ | ✓ |
-| `.arxml` | AUTOSAR system description (3.x and 4.x) | ✓ | |
+| `.arxml` | AUTOSAR system description (3.x and 4.x; written as R20-11) | ✓ | ✓ |
 | `.kcd` | Kayak KCD | ✓ | ✓ |
 | `.sym` | PEAK PCAN Symbol | ✓ | ✓ |
 | `.ldf` | LIN description file | ✓ | |
@@ -18,7 +18,8 @@ receive by name.
 | `.odx`, `.odx-d`, `.pdx` | ASAM ODX / packaged ODX diagnostic description | ✓ ([Diagnostics](diagnostics.md#diagnostic-descriptions-cdd-odxpdx)) | |
 
 DBC, ARXML, KCD and SYM are read with [cantools](https://cantools.readthedocs.io/), DBF, CDD and ODX/PDX with
-readers of CANExplorer, LDF with [ldfparser](https://pypi.org/project/ldfparser/).
+readers of CANExplorer, LDF with [ldfparser](https://pypi.org/project/ldfparser/). DBC, KCD and SYM are written with
+cantools, DBF and ARXML with writers of CANExplorer (see [Writing ARXML](#writing-arxml)).
 
 ## Loading a database
 
@@ -81,8 +82,8 @@ of m checked*.
 
 ## Editing databases
 
-The [database editor](database-editor.md) changes the messages, signals and nodes of DBC, DBF, KCD and SYM files
-(and of ARXML files, saved in one of those formats). **Edit database** in the toolbar opens the database of the
+The [database editor](database-editor.md) changes the messages, signals and nodes of DBC, DBF, KCD, SYM and ARXML
+files (an opened ARXML is saved under a new name, see [Writing ARXML](#writing-arxml)). **Edit database** in the toolbar opens the database of the
 connection; saving it updates the decoding.
 
 ## Converting databases
@@ -94,9 +95,48 @@ and the destination file; the format follows the extension.
 
 The summary lists what the target format cannot hold, for example:
 
-- several buses merged into one, with identifiers that clash,
-- container frames written without their contained PDUs,
-- cycle times and attributes that BUSMASTER DBF does not store.
+- several buses merged into one, with identifiers that clash (not in ARXML, which keeps the buses apart),
+- container frames written without their contained PDUs (not in ARXML),
+- cycle times and attributes that BUSMASTER DBF does not store,
+- names ARXML does not allow, and nested multiplexing (see below).
+
+## Writing ARXML
+
+CANExplorer writes an AUTOSAR R20-11 system description (schema `AUTOSAR_00049.xsd`) of the CAN part of a database,
+for tools that only import ARXML. It holds:
+
+| Database | ARXML |
+|---|---|
+| Bus (or one bus named `CAN` for a DBC) | `CAN-CLUSTER` with its baud rates and a physical channel |
+| Message | `CAN-FRAME`, its `CAN-FRAME-TRIGGERING` (identifier, standard/extended, CAN 2.0/CAN FD) and a PDU |
+| Signals of a message | `I-SIGNAL-I-PDU` with the cycle time; `MULTIPLEXED-I-PDU` for a multiplexed message |
+| Signal | `I-SIGNAL` (length, base type, initial and invalid value) and `SYSTEM-SIGNAL` (comment, unit, conversion) |
+| Factor, offset, minimum, maximum, value table | `COMPU-METHOD` (`LINEAR`, `TEXTTABLE` or `SCALE_LINEAR_AND_TEXTTABLE`) |
+| Node | `ECU-INSTANCE` with `I-SIGNAL-I-PDU-GROUP`s for what it sends and receives |
+| Container frame, secured PDU, E2E protection (from an ARXML) | `CONTAINER-I-PDU` (short headers), `SECURED-I-PDU`, `END-TO-END-PROTECTION` |
+
+Signal positions are written as they are: AUTOSAR counts a signal's start bit like DBC (the least significant bit
+of a little-endian signal, the most significant bit of a big-endian one).
+
+What ARXML or the database model cannot carry is left out, and the summary or the editor's *Notes* say so:
+
+- **Nested multiplexing** (a multiplexed signal that is itself a multiplexer): a `MULTIPLEXED-I-PDU` has one
+  selector field, so the signals of the deeper levels are left out.
+- **Names** with characters other than letters, digits and `_`, or not starting with a letter, are changed (`_x`
+  becomes `N_x`); names used twice get a number.
+- **Receivers** belong to whole messages in ARXML: an ECU that receives one signal of a message receives the message.
+- DBC attributes other than the cycle time, and signal groups.
+- E2E protections and secured PDUs keep what CANExplorer reads from an ARXML (profile and Data IDs; Data ID,
+  algorithm names and lengths), not a full E2E or SecOC configuration.
+
+When CANExplorer reads such a file back, the multiplexer signal is named after the message (`Muxed_selector1`), as
+the ARXML stores no name for it, and its minimum and maximum are not read.
+
+**An opened ARXML is never overwritten.** A system description usually holds much more than the signal database —
+software components, other buses, transformer configurations — which rewriting it would drop. The editor's **Save**
+therefore asks for a new name for an opened ARXML. Files CANExplorer wrote itself start with the comment
+`<!-- Written by CANExplorer: the CAN signal database only. -->` and are saved over directly; a file changed by
+another ARXML tool loses the comment and is protected again.
 
 The same is available on the command line, including converting a single bus; see
 [can-db-convert](../reference/command-line.md#can-db-convert).

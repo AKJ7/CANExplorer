@@ -15,7 +15,7 @@ What is read:
   COMPU_VTAB_RANGE) and FORM (FORMULA / FORMULA_INV, evaluated without running arbitrary code).
 - MOD_COMMON BYTE_ORDER and ALIGNMENT_*, MOD_PAR EPK / ADDR_EPK, `/include` files.
 - IF_DATA XCP / XCPplus: PROTOCOL_LAYER (timeouts, MAX_CTO/DTO, byte order, address granularity), DAQ (type,
-  events, timestamps) and the XCP_ON_CAN (identifiers, bit rate, CAN FD), XCP_ON_UDP_IP and XCP_ON_TCP_IP
+  events, timestamps, DAQ_LIST with the content of predefined lists) and the XCP_ON_CAN (identifiers, bit rate, CAN FD), XCP_ON_UDP_IP and XCP_ON_TCP_IP
   transport layers. IF_DATA ASAP1B_CCP: the TP_BLOB identifiers and station address, rasters and DAQ lists.
 
 Not read: pointer addressing (PBYTE/PWORD/PLONG), ALTERNATE_* index modes, AXIS_RESCALE, CUBOID and higher
@@ -635,6 +635,25 @@ class A2lEvent:
 
 
 @dataclass(frozen=True)
+class XcpDaqList:
+    """A DAQ_LIST of IF_DATA XCP: a static or predefined list. `odts` is the content of a predefined list:
+    per ODT, its ODT_ENTRY (address, extension, size in address elements, bit offset; 0xFF: whole elements), in
+    entry order."""
+
+    number: int
+    kind: str = 'DAQ'  # DAQ, STIM or DAQ_STIM
+    max_odt: Optional[int] = None
+    max_odt_entries: Optional[int] = None
+    first_pid: Optional[int] = None
+    event_fixed: Optional[int] = None
+    odts: Tuple[Tuple[Tuple[int, int, int, int], ...], ...] = ()
+
+    @property
+    def predefined(self) -> bool:
+        return bool(self.odts)
+
+
+@dataclass(frozen=True)
 class XcpTransportLayer:
     kind: str  # CAN, UDP, TCP
     master_id: Optional[int] = None  # CAN: the command identifier
@@ -659,6 +678,7 @@ class XcpSettings:
     daq_dynamic: Optional[bool] = None
     max_daq: Optional[int] = None
     events: Tuple[A2lEvent, ...] = ()
+    daq_lists: Tuple[XcpDaqList, ...] = ()
     timestamp_size: int = 0
     timestamp_resolution: float = 0.0
     transports: Tuple[XcpTransportLayer, ...] = ()
@@ -707,6 +727,19 @@ class A2lDocument:
     def events(self) -> Tuple[A2lEvent, ...]:
         return self.xcp.events if self.xcp is not None else ()
 
+    @property
+    def predefined_daq_lists(self) -> Dict[int, List[List[Tuple[int, int, int, int]]]]:
+        """The content of the predefined DAQ lists, as `XcpClient.start_measurement(predefined=…)` takes it: list
+        number -> ODTs of (address, extension, size in bytes, bit offset)."""
+        if self.xcp is None:
+            return {}
+        granularity = self.xcp.address_granularity or 1
+        return {
+            daq.number: [[(a, e, size * granularity, bit) for a, e, size, bit in odt] for odt in daq.odts]
+            for daq in self.xcp.daq_lists
+            if daq.predefined
+        }
+
 
 def _can_id(token: str) -> Tuple[int, bool]:
     value = _integer(token)
@@ -747,6 +780,7 @@ def _parse_xcp(node: Node) -> XcpSettings:
             except ValueError:
                 continue
         settings['events'] = tuple(events)
+        settings['daq_lists'] = tuple(filter(None, (_parse_daq_list(block) for block in daq.all('DAQ_LIST'))))
         timestamp = daq.find('TIMESTAMP_SUPPORTED')
         if timestamp is not None and timestamp.tokens:
             ticks = _integer(timestamp.tokens[0]) if _is_number(timestamp.tokens[0]) else 1
@@ -787,6 +821,46 @@ def _parse_xcp(node: Node) -> XcpSettings:
             transports.append(XcpTransportLayer(kind, host=_value(host[0]) if host else '', port=port))
     settings['transports'] = tuple(transports)
     return XcpSettings(**settings)
+
+
+def _parse_daq_list(block: Node) -> Optional[XcpDaqList]:
+    """DAQ_LIST <number> DAQ_LIST_TYPE … MAX_ODT … MAX_ODT_ENTRIES … FIRST_PID … EVENT_FIXED … and, for a
+    predefined list, PREDEFINED with ODT <number> blocks of ODT_ENTRY <entry> <address> <extension> <size>
+    <bit offset> (the field order of the XCP A2ML's ODT_ENTRY struct: uchar, ulong, uchar, uchar, uchar)."""
+    if not block.tokens or not _is_number(block.tokens[0]):
+        return None
+
+    def number(keyword: str) -> Optional[int]:
+        value = block.keyword(keyword)
+        return _integer(value[0]) if value and _is_number(value[0]) else None
+
+    kind = block.keyword('DAQ_LIST_TYPE')
+    odts = []
+    predefined = block.find('PREDEFINED')
+    for odt in sorted(predefined.all('ODT') if predefined is not None else [], key=lambda o: _odt_number(o)):
+        tokens = odt.tokens
+        entries = []
+        for index, token in enumerate(tokens):
+            if token == 'ODT_ENTRY' and index + 5 < len(tokens):
+                try:
+                    entry, address, extension, size, bit = (_integer(tokens[index + i]) for i in range(1, 6))
+                except ValueError:
+                    continue
+                entries.append((entry, (address, extension, size, bit)))
+        odts.append(tuple(value for _entry, value in sorted(entries)))
+    return XcpDaqList(
+        _integer(block.tokens[0]),
+        kind[0] if kind else 'DAQ',
+        number('MAX_ODT'),
+        number('MAX_ODT_ENTRIES'),
+        number('FIRST_PID'),
+        number('EVENT_FIXED'),
+        tuple(odts),
+    )
+
+
+def _odt_number(odt: Node) -> int:
+    return _integer(odt.tokens[0]) if odt.tokens and _is_number(odt.tokens[0]) else 0
 
 
 def _parse_ccp(node: Node) -> CcpSettings:

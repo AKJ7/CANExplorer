@@ -265,7 +265,13 @@ async def test_promote_to_dbc(channel, data_dir, tmp_path):
         # Promoting again extends the same file (all identifiers now)
         after = svc.promote_to_dbc(str(out))
         assert after['signals'] >= result['signals']
-        assert svc.promote_to_dbc(str(tmp_path / 'x.arxml'))['error'].startswith('Cannot write')
+        assert svc.promote_to_dbc(str(tmp_path / 'x.txt'))['error'].startswith('Cannot write')
+        # A new ARXML is written; an existing system description is not overwritten
+        assert svc.promote_to_dbc(str(tmp_path / 'new.arxml'))['signals'] > 0 and (tmp_path / 'new.arxml').is_file()
+        system = tmp_path / 'system.arxml'
+        system.write_bytes((data_dir / 'example.arxml').read_bytes())
+        assert 'more than the signal database' in svc.promote_to_dbc(str(system))['error']
+        assert system.read_bytes() == (data_dir / 'example.arxml').read_bytes()
         peer.shutdown()
     finally:
         svc.stop()
@@ -536,6 +542,62 @@ async def test_uds_secured_request_against_simulated_ecu(channel, tmp_path):
         ecu.stop()
 
 
+async def test_uds_authentication_tools_against_simulated_ecu(channel, tmp_path):
+    from can_explorer.core import keystore, uds_auth, uds_secured
+    from can_explorer.core.session import BusSession
+    from can_explorer.core.simulation import UdsEcuSimulator, UdsServer
+    from can_explorer.core.test_pki import create_test_pki
+
+    store = keystore.KeyStore(tmp_path / 'keys.json', scrypt_cost=16)
+    store.create('pw')
+    pki = create_test_pki(store, 'Mcp')
+    shared = bytes(range(16))
+    store.add_auth_key('Shared', shared, 'aes-cmac')
+    previous = keystore.default_store()
+    keystore.set_default_store(store)
+    authentication = uds_auth.AuthenticationServer(
+        [pki.ca],
+        challenge_response=uds_auth.symmetric_challenge_response(shared, 'aes-cmac'),
+        session_keys=uds_secured.SessionKeyIssuer(shared, 'aes-cmac'),
+        certificate_evaluation_ids=(0x0101,),
+    )
+    secured = uds_secured.SecuredServerConfig(require_session_key=True, secured_dids=(0xF190,))
+    ecu = BusSession(LiveSource(BusConfig('virtual', channel)))
+    ecu.start()
+    simulator = UdsEcuSimulator(
+        ecu, server=UdsServer(authentication=authentication, authentication_dids=(0xF18C,), secured=secured)
+    )
+    simulator.start()
+    svc = service(channel, allow_control=True)
+    try:
+        assert 'APCE' in (await svc.uds_authenticate('configuration'))['configuration']
+        result = await svc.uds_authenticate('certificate', pki.entries['tester'])
+        assert result['authenticated'] and result['steps'][-1].startswith('proofOfOwnership')
+        assert (await svc.uds_request('22 F1 8C'))['response'].startswith('62 F1 8C')
+        assert (await svc.uds_deauthenticate())['result'] == 'de-authentication successful'
+        assert (await svc.uds_request('22 F1 8C'))['response'] == '7F 22 34'
+        assert (
+            'No authentication with a session key'
+            in (await svc.uds_secured_request('22 F1 90', key='session'))['error']
+        )
+        # Challenge-response asking for a session key, then a secured request with it
+        result = await svc.uds_authenticate('challenge-response', 'Shared', communication_configuration=1)
+        assert result['authenticated'] and result['session_key_info_bytes'] == 16
+        secured_result = await svc.uds_secured_request('22 F1 90', key='session')
+        assert secured_result['error'] is None and secured_result['response'].startswith('62 F1 90')
+        transmitted = await svc.uds_transmit_certificate(pki.entries['ecu'], '0x0101')
+        assert transmitted['result'] == 'certificate verified' and transmitted['evaluation_id'] == '0x0101'
+        assert authentication.received_certificates[0x0101] == pki.ecu
+        assert 'No certificate entry or file' in (await svc.uds_transmit_certificate('nothing', 1))['error']
+        assert "method is 'certificate'" in (await svc.uds_authenticate('magic'))['error']
+        assert 'client certificate' in (await svc.uds_authenticate('certificate', 'Shared'))['error']
+    finally:
+        svc.stop()
+        simulator.stop()
+        ecu.stop()
+        keystore.set_default_store(previous)
+
+
 async def test_permission_tiers_raise_when_disabled(channel):
     svc = service_unstarted(channel)  # Read-only
     with pytest.raises(SendNotAllowed):
@@ -731,7 +793,8 @@ async def test_j1939_clearing_needs_the_control_tier(channel):
         svc.stop()
 
 
-async def test_xcp_tools(channel, data_dir):
+async def test_xcp_tools(channel, data_dir, tmp_path):
+    from can_explorer.core.flashing import FlashImage, Segment, intel_hex_text
     from can_explorer.core.xcp_slave import XcpSlaveSimulator, example_memory
     from can_explorer.core.session import BusSession
 
@@ -763,11 +826,28 @@ async def test_xcp_tools(channel, data_dir):
         assert measured['values']['CoolantTemp']['samples'] > 3
         with pytest.raises(SendNotAllowed):
             await svc.xcp_write('IdleTarget', 900)
+        with pytest.raises(SendNotAllowed):
+            await svc.xcp_program('firmware.hex')
+        with pytest.raises(SendNotAllowed):
+            await svc.xcp_stimulate({'IdleTarget': 900})
         svc.allow_control = True
         written = await svc.xcp_write('IdleTarget', 900)
         assert written['now']['value'] == 900.0
         assert 'above its maximum' in (await svc.xcp_write('IdleTarget', 1e6))['error']
         assert (await svc.xcp_write_memory('2002', '01'))['written'] == 1 and simulator.memory[0x2002] == 1
+        daq = await svc.xcp_daq_info()
+        assert daq['configuration'] == 'dynamic' and daq['stim'] and daq['events'][0]['name'] == '10ms'
+        flash = await svc.xcp_flash_info()
+        assert flash['programming'] and flash['functional_mode'] and len(flash['sectors']) == 3
+        stimulated = await svc.xcp_stimulate({'IdleTarget': 950}, duration=0.1)
+        assert stimulated['now']['IdleTarget']['value'] == 950.0 and stimulated['sent'] >= 1
+        assert 'above its maximum' in (await svc.xcp_stimulate({'IdleTarget': 1e6}))['error']
+        firmware = tmp_path / 'firmware.hex'
+        firmware.write_text(intel_hex_text(FlashImage([Segment(0x8000, bytes(range(32)))])))
+        assert 'No such file' in (await svc.xcp_program(str(tmp_path / 'missing.hex')))['error']
+        programmed = await svc.xcp_program(str(firmware), erase='functional', reset=False)
+        assert programmed['ok'] and simulator.slave.flash[0x8000:0x8020] == bytes(range(32))
+        assert [s['status'] for s in programmed['steps']] == ['done'] * len(programmed['steps'])
         assert (await svc.xcp_disconnect()) == {'connected': False}
         assert 'Not connected' in (await svc.xcp_read(['EngineSpeed']))['error']
     finally:

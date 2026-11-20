@@ -172,3 +172,36 @@ def test_include_and_layout_alignment(tmp_path):
     )
     (tmp_path / 'main.a2l').write_text(_module('/include "part.a2l"'))
     assert load_a2l(tmp_path / 'main.a2l').variable('Inc').address == 0x40
+
+
+def test_xcp_daq_lists_and_predefined_content(tmp_path):
+    from can_explorer.core.a2l import load_a2l
+
+    path = tmp_path / 'predefined.a2l'
+    path.write_text(
+        """/begin PROJECT P "" /begin MODULE M ""
+        /begin IF_DATA XCP
+          /begin PROTOCOL_LAYER 0x0100 2000 2000 2000 2000 2000 2000 2000 8 8 BYTE_ORDER_MSB_LAST
+            ADDRESS_GRANULARITY_BYTE /end PROTOCOL_LAYER
+          /begin DAQ STATIC 0x03 0x10 0x01 OPTIMISATION_TYPE_DEFAULT ADDRESS_EXTENSION_FREE IDENTIFICATION_FIELD_TYPE_ABSOLUTE
+            GRANULARITY_ODT_ENTRY_SIZE_DAQ_BYTE 0x08 NO_OVERLOAD_INDICATION
+            /begin DAQ_LIST 0x0 DAQ_LIST_TYPE DAQ MAX_ODT 0x2 MAX_ODT_ENTRIES 0x3 FIRST_PID 0x0 EVENT_FIXED 0x1
+              /begin PREDEFINED
+                /begin ODT 0x1 ODT_ENTRY 0x0 0x2000 0x0 0x4 0xFF /end ODT
+                /begin ODT 0x0 ODT_ENTRY 0x1 0x1004 0x0 0x2 0xFF ODT_ENTRY 0x0 0x1000 0x0 0x2 0xFF /end ODT
+              /end PREDEFINED
+            /end DAQ_LIST
+            /begin DAQ_LIST 0x1 DAQ_LIST_TYPE DAQ_STIM MAX_ODT 0x4 MAX_ODT_ENTRIES 0x7 /end DAQ_LIST
+          /end DAQ
+        /end IF_DATA
+        /end MODULE /end PROJECT"""
+    )
+    document = load_a2l(str(path))
+    lists = document.xcp.daq_lists
+    assert [(d.number, d.kind, d.max_odt, d.max_odt_entries, d.event_fixed, d.predefined) for d in lists] == [
+        (0, 'DAQ', 2, 3, 1, True),
+        (1, 'DAQ_STIM', 4, 7, None, False),
+    ]
+    assert lists[0].first_pid == 0
+    # ODTs and entries in number order
+    assert document.predefined_daq_lists == {0: [[(0x1000, 0, 2, 0xFF), (0x1004, 0, 2, 0xFF)], [(0x2000, 0, 4, 0xFF)]]}

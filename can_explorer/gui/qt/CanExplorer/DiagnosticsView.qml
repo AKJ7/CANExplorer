@@ -573,6 +573,9 @@ ColumnLayout {
                     readonly property var credential: authCredentialBox.currentIndex >= 0 && credentials.length > 0
                         ? credentials[authCredentialBox.currentIndex] : null
                     readonly property var trustedSets: entries.filter(entry => entry.purpose === "tls-ca").map(entry => entry.name)
+                    // transmitCertificate: any certificate of the Security Manager (client certificates, trusted sets)
+                    readonly property var anyCertificates: entries.filter(entry => entry.purpose === "tls-client" || entry.purpose === "tls-ca")
+                        .map(entry => entry.name)
 
                     RowLayout {
                         Layout.fillWidth: true
@@ -681,6 +684,31 @@ ColumnLayout {
                         text: qsTr("Authenticated")
                         color: Theme.success
                         Layout.fillWidth: true
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        FieldLabel { text: qsTr("Transmit") }
+                        ComboBox {
+                            id: transmitCertificateBox
+                            model: authSection.anyCertificates.length > 0 ? authSection.anyCertificates : [qsTr("none in the Security Manager")]
+                            enabled: authSection.anyCertificates.length > 0
+                            Layout.fillWidth: true
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("A general-purpose certificate to give the ECU with transmitCertificate (0x04), e.g. for secure coding, SecOC or TLS")
+                        }
+                        TextField {
+                            id: evaluationIdField
+                            placeholderText: qsTr("evaluation id")
+                            font.family: "monospace"
+                            Layout.preferredWidth: 110
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("The certificateEvaluationId (hex, 16 bits): tells the ECU what the certificate is for; the values are defined by its manufacturer")
+                        }
+                        Button {
+                            text: qsTr("Transmit")
+                            enabled: root.ready && authSection.anyCertificates.length > 0 && evaluationIdField.text.length > 0
+                            onClicked: root.report(root.diagnostics.transmit_certificate(transmitCertificateBox.currentText, evaluationIdField.text))
+                        }
                     }
                     RowLayout {
                         Layout.fillWidth: true

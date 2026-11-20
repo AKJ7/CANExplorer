@@ -520,6 +520,8 @@ extended or mixed addressing, put the address byte after a colon, as in the
 | `xcp_connect` / `xcp_disconnect` / `xcp_status` | `protocol`, `transport`, `request`, `response`, `a2l`, `key` | Open an [XCP](xcp.md) (CAN, CAN FD, UDP, TCP) or CCP session for the other `xcp_*` tools |
 | `xcp_read` / `xcp_read_memory` | `names` / `address`, `size` | A2L variables in physical units, or raw memory |
 | `xcp_measure` | `names`, `duration` | Measure for up to 30 s (DAQ, or polling): samples, min, max, mean, last |
+| `xcp_daq_info` | — | The XCP slave's DAQ configuration (dynamic or static), its lists and what its predefined ones carry, its events, and whether it offers STIM |
+| `xcp_flash_info` | — | Whether the XCP slave offers flash programming, whether it is locked, its erase/compression/encryption properties and its flash sectors |
 
 ### Control *(control tier)*
 
@@ -529,8 +531,13 @@ extended or mixed addressing, put the address byte after a colon, as in the
 | `uds_reset` | `reset_type` | ECU reset (0x11) |
 | `uds_routine` | `control_type`, `routine`, `data` | Routine control (0x31) |
 | `uds_request` | `payload` | Any raw UDS request |
-| `uds_secured_request` | `payload`, `key`, `sign`, `encrypt` | A request inside a [SecuredDataTransmission](diagnostics.md#secured-data-transmission-0x84) (0x84) envelope; returns the unwrapped response and whether its signature verified |
+| `uds_secured_request` | `payload`, `key`, `sign`, `encrypt` | A request inside a [SecuredDataTransmission](diagnostics.md#secured-data-transmission-0x84) (0x84) envelope; returns the unwrapped response and whether its signature verified. `key="session"` uses the session key of the last `uds_authenticate` |
+| `uds_authenticate` | `method`, `credentials`, `bidirectional`, `trusted`, `algorithm`, `communication_configuration` | [Authentication](diagnostics.md#authentication-0x29) (0x29) by certificate exchange or challenge-response with key store entries or a security profile (`method="configuration"` only asks which one the ECU offers); keeps a session key for `uds_secured_request` |
+| `uds_deauthenticate` | — | End the authentication (deAuthenticate) and forget its session key |
+| `uds_transmit_certificate` | `certificate`, `evaluation_id` | Send a certificate of the key store (or a PEM/DER file) with [transmitCertificate](diagnostics.md#transmitcertificate) (0x04) |
 | `xcp_write` / `xcp_write_memory` | `name`, `value` / `address`, `data` | Write a calibration value (checked against its A2L limits and read back), or raw memory |
+| `xcp_stimulate` | `values`, `event`, `duration` | Write scalar calibration values by [XCP STIM](xcp.md#stimulation-stim) at an event for up to 30 s, then read them back |
+| `xcp_program` | `path`, `erase`, `verify`, `reset`, `kernel`, `compression`, `encryption`, `encoder`, `ecu_check` | [Program the ECU's flash](xcp.md#flash-programming) over XCP and return each step's result. Replaces the ECU's software |
 
 ### Transmit *(send tier)*
 

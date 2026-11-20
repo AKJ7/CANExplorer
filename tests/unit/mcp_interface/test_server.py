@@ -38,6 +38,8 @@ DIAGNOSTIC_READS = {
     'xcp_read',
     'xcp_read_memory',
     'xcp_measure',
+    'xcp_daq_info',
+    'xcp_flash_info',
 }
 CONTROL_TOOLS = {
     'obd_clear',
@@ -45,8 +47,13 @@ CONTROL_TOOLS = {
     'uds_routine',
     'uds_request',
     'uds_secured_request',
+    'uds_authenticate',
+    'uds_deauthenticate',
+    'uds_transmit_certificate',
     'xcp_write',
     'xcp_write_memory',
+    'xcp_stimulate',
+    'xcp_program',
 }
 SEND_TOOLS = {'send_frame', 'send_message', 'j1939_send'}
 

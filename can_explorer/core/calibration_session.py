@@ -12,11 +12,14 @@ from can_explorer.core import calibration
 from can_explorer.core.a2l import A2lDocument, A2lVariable, load_a2l
 from can_explorer.core.can_command import CanCommandClient
 from can_explorer.core.ccp import CcpClient
+from can_explorer.core.flashing import load_encoder, load_image
 from can_explorer.core.frames import parse_hex_bytes
-from can_explorer.core.xcp import DaqSignal, XcpClient, resource_names
+from can_explorer.core.xcp import RESOURCE_PGM, RESOURCE_STIM, DaqSignal, XcpClient, XcpError, resource_names
 from can_explorer.core.xcp_ethernet import DEFAULT_PORT, XcpEthernetTransport
+from can_explorer.core.xcp_flash import XcpFlashJob, XcpFlashOptions
 
 MAX_MEASURE_SECONDS = 30.0
+MAX_STIMULATE_SECONDS = 30.0
 
 
 class CalibrationSessionError(Exception):
@@ -234,8 +237,13 @@ class CalibrationSession:
 
             try:
                 signals = [DaqSignal(v.name, v.address, v.size, v.extension, event or 0) for v in daq_variables]
-                measurement = await self.client.start_measurement(signals, on_sample)
-                method = f'DAQ (event {event or 0})'
+                if isinstance(self.client, XcpClient) and self.document is not None:
+                    predefined = self.document.predefined_daq_lists
+                    measurement = await self.client.start_measurement(signals, on_sample, predefined=predefined)
+                else:
+                    measurement = await self.client.start_measurement(signals, on_sample)
+                static = ", the ECU's static DAQ lists" if getattr(measurement, 'static', False) else ''
+                method = f'DAQ (event {event or 0}{static})'
             except Exception:
                 measurement = None
         deadline = time.monotonic() + duration
@@ -270,6 +278,169 @@ class CalibrationSession:
             }
         return {'method': method, 'duration_s': duration, 'values': summary}
 
+    def _xcp(self) -> XcpClient:
+        self._require()
+        if not isinstance(self.client, XcpClient):
+            raise CalibrationSessionError('This needs an XCP slave (not CCP)')
+        return self.client
+
+    async def daq_info(self) -> Dict[str, Any]:
+        """The slave's DAQ configuration: dynamic or static, its lists (with the content of predefined ones, from
+        the A2L or READ_DAQ), its events and its resolution."""
+        client = self._xcp()
+        info = await client.get_daq_processor_info()
+        resolution = await client.get_daq_resolution_info()
+        known = self.document.predefined_daq_lists if self.document is not None else {}
+        lists = []
+        count = info['max_daq'] if not info['dynamic'] else info['min_daq']
+        for number in range(count):
+            try:
+                list_info = await client.get_daq_list_info(number)
+            except XcpError:
+                break
+            entry: Dict[str, Any] = {
+                key: list_info[key] for key in ('number', 'predefined', 'daq', 'stim', 'max_odt', 'max_odt_entries')
+            }
+            entry['fixed_event'] = list_info['fixed_event'] if list_info['event_fixed'] else None
+            if list_info['predefined']:
+                content = known.get(number)
+                source = 'A2L'
+                if not content:
+                    try:
+                        content = await client.read_daq_list(number, list_info['max_odt'], list_info['max_odt_entries'])
+                    except XcpError:
+                        content = []
+                    source = 'READ_DAQ' if content else 'unknown'
+                entry['content_source'] = source
+                entry['odts'] = [
+                    [{'address': f'0x{e[0]:X}', 'extension': e[1], 'bytes': e[2], 'bit': e[3]} for e in odt]
+                    for odt in content or []
+                ]
+            lists.append(entry)
+        try:
+            events = await client.daq_events()
+        except XcpError:
+            events = []
+        return {
+            'configuration': 'dynamic' if info['dynamic'] else 'static',
+            'max_daq': info['max_daq'],
+            'predefined_lists': info['min_daq'],
+            'identification_field': info['identification_field'],
+            'timestamp_bytes': resolution['timestamp_size'] if info['timestamp_supported'] else 0,
+            'stim': bool(client.resources & RESOURCE_STIM),
+            'lists': lists,
+            'events': [{k: e[k] for k in ('channel', 'name', 'cycle', 'daq', 'stim')} for e in events],
+        }
+
+    async def flash_info(self) -> Dict[str, Any]:
+        """What the slave offers for programming: PGM properties and flash sectors."""
+        client = self._xcp()
+        if not client.resources & RESOURCE_PGM:
+            return {'programming': False}
+        result: Dict[str, Any] = {'programming': True, 'locked': bool(client.protection & RESOURCE_PGM)}
+        try:
+            info = await client.get_pgm_processor_info()
+        except XcpError as e:
+            result['info'] = f'not available: {e}'
+            return result
+        result.update({k: v for k, v in info.items() if k not in ('properties', 'max_sector')})
+        try:
+            sectors = await client.sectors()
+        except XcpError as e:
+            sectors, result['sectors_error'] = [], str(e)
+        result['sectors'] = [
+            {'sector': s['sector'], 'name': s['name'], 'start': f'0x{s["start"]:X}', 'length': s['length']}
+            for s in sectors
+        ]
+        return result
+
+    async def stimulate(
+        self, values: Dict[str, Any], event: Optional[int] = None, duration: float = 1.0
+    ) -> Dict[str, Any]:
+        """Write scalar calibration values by STIM on an event for `duration` seconds (resent each event cycle,
+        at least every 100 ms), then stop and read them back."""
+        client = self._xcp()
+        duration = max(0.05, min(float(duration), MAX_STIMULATE_SECONDS))
+        if event is None:
+            event = self.document.events[0].channel if self.document is not None and self.document.events else 0
+        variables = {name: self._variable(name) for name in values}
+        raw = {}
+        for name, variable in variables.items():
+            if variable.kind != 'VALUE' or not variable.is_scalar or not variable.writable:
+                raise CalibrationSessionError(f'{name}: STIM writes scalar calibration values only')
+            value = values[name]
+            if isinstance(value, str):
+                value = calibration.parse_value(variable, value)
+            variable.check_limits(value)
+            raw[name] = variable.encode(value, self._order(variable))
+        cycle = next((e.cycle for e in self.document.events if e.channel == event), 0) if self.document else 0
+        stimuli = [DaqSignal(n, v.address, v.size, v.extension, event) for n, v in variables.items()]
+        measurement = await client.start_stimulation(stimuli, period=min(cycle or 0.1, 0.1))
+        try:
+            measurement.stimulate(raw)
+            await asyncio.sleep(duration)
+        finally:
+            await measurement.stop()
+        read = await self.read(list(values))
+        return {
+            'event': event,
+            'duration_s': duration,
+            'sent': measurement.stimulations,
+            'stim_timeouts': measurement.stim_timeouts,
+            'now': read['values'],
+        }
+
+    async def program(
+        self,
+        path: str,
+        erase: str = 'sectors',
+        verify: bool = True,
+        reset: bool = True,
+        base_address: Any = '0',
+        clear_areas: int = 0x02,
+        kernel: str = '',
+        compression: int = 0,
+        encryption: int = 0,
+        encoder: str = '',
+        program_max: bool = False,
+        ecu_check: str = 'none',
+        check_type: int = 0x0004,
+        check_value: Any = '0',
+    ) -> Dict[str, Any]:
+        """Program an Intel HEX, S-record or binary (at `base_address`) file into the ECU's flash (XCP PGM)."""
+        client = self._xcp()
+        image = load_image(_existing(path, 'file'), base_address=_hex_int(base_address, 'base address'))
+        options = XcpFlashOptions(
+            erase=erase,
+            verify=verify,
+            reset=reset,
+            clear_areas=int(clear_areas),
+            kernel=load_image(_existing(kernel, 'flash kernel')) if kernel else None,
+            compression=int(compression),
+            encryption=int(encryption),
+            encode=load_encoder(_existing(encoder, 'encoder')) if encoder else None,
+            program_max=program_max,
+            ecu_check=ecu_check,
+            check_type=int(check_type),
+            check_value=_hex_int(check_value, 'check value'),
+        )
+        job = XcpFlashJob(image, options)
+        error = ''
+        try:
+            await job.run(client)
+        except Exception as e:
+            error = job.error or str(e)
+        result: Dict[str, Any] = {
+            'image': image.describe(),
+            'ok': not error,
+            'steps': [{'name': s.name, 'status': s.status, 'detail': s.detail} for s in job.steps],
+            'seconds': round(job.finished - job.started, 2),
+            'connected': client.connected,
+        }
+        if error:
+            result['error'] = error
+        return result
+
     def _order(self, variable: A2lVariable) -> str:
         if variable.byte_order:
             return variable.byte_order
@@ -290,6 +461,13 @@ class CalibrationSession:
             self.transport.close()
         self.transport = None
         self.client = None
+
+
+def _existing(path: str, what: str) -> str:
+    resolved = Path(path).expanduser()
+    if not resolved.is_file():
+        raise CalibrationSessionError(f'No such {what}: {path}')
+    return str(resolved)
 
 
 def a2l_path(path: str) -> str:

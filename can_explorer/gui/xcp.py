@@ -10,11 +10,14 @@ from can_explorer.core import calibration
 from can_explorer.core.a2l import DATA_TYPES, A2lDocument, A2lVariable, load_a2l
 from can_explorer.core.can_command import CanCommandClient, CanCommandError
 from can_explorer.core.ccp import CcpClient
+from can_explorer.core.flashing import FlashImage, ImageError, load_encoder, load_image
 from can_explorer.core.frames import format_hex, parse_can_id, parse_hex_bytes
 from can_explorer.core.protocols.xcp import CcpDecoder, XcpDecoder
 from can_explorer.core.uds import load_key_source
-from can_explorer.core.xcp import DaqSignal, XcpClient, resource_names
+from can_explorer.core.xcp import RESOURCE_PGM, RESOURCE_STIM, DaqSignal, XcpClient, resource_names
 from can_explorer.core.xcp_ethernet import DEFAULT_PORT, XcpEthernetTransport
+from can_explorer.core.xcp_flash import ECU_CHECKS, ERASE_MODES, XcpFlashJob, XcpFlashOptions
+from can_explorer.core.xcp_protocol import CLEAR_CODE_AREAS, VERIFY_COMPLETE_FLASH
 from can_explorer.sys.log_handler import get_logger
 
 logger = get_logger(__name__)
@@ -67,6 +70,11 @@ class XcpController(QObject):
         self._info: Dict[str, str] = {}
         self._events: List[Dict[str, Any]] = []
         self._acquisition: Dict[str, int] = {}  # name -> DAQ event channel (absent: polled)
+        self._stimulation: Dict[str, int] = {}  # name -> STIM event channel (absent: written directly)
+        self._image: Optional[FlashImage] = None
+        self._kernel: Optional[FlashImage] = None
+        self._encoder_file = ''
+        self._flash_job: Optional[XcpFlashJob] = None
         self._plotted: Set[str] = set()
         self._measurement = None
         self._key_source = ''
@@ -190,7 +198,10 @@ class XcpController(QObject):
         variables = self._document.variables if self._document is not None else []
         for variable in variables:
             value = self._values.get(variable.name, {})
-            event = self._acquisition.get(variable.name)
+            if variable.kind == 'MEASUREMENT':
+                event = self._acquisition.get(variable.name)
+            else:
+                event = self._stimulation.get(variable.name)
             rows.append(
                 {
                     'name': variable.name,
@@ -203,6 +214,7 @@ class XcpController(QObject):
                     'structured': variable.kind != 'ASCII'
                     and (variable.kind not in ('MEASUREMENT', 'VALUE') or bool(variable.shape)),
                     'daq': variable.kind == 'MEASUREMENT',
+                    'stim': self._stimulable(variable),
                     'acquisition': 0 if event is None else 1 + self._event_index(event),
                     'plotted': variable.name in self._plotted,
                     'value': value.get('value', ''),
@@ -211,6 +223,16 @@ class XcpController(QObject):
                 }
             )
         return rows
+
+    def _stimulable(self, variable: A2lVariable) -> bool:
+        """A scalar calibration value that XCP STIM can write at an event."""
+        return (
+            self._protocol == 'XCP'
+            and variable.kind == 'VALUE'
+            and variable.is_scalar
+            and variable.writable
+            and calibration.daq_size(variable) > 0
+        )
 
     def _event_index(self, channel: int) -> int:
         return next((i for i, e in enumerate(self._events) if e['channel'] == channel), 0)
@@ -495,6 +517,7 @@ class XcpController(QObject):
         self._document = document
         self._values = {}
         self._acquisition = {}
+        self._stimulation = {}
         variables = document.variables
         measurements = sum(1 for v in variables if v.kind == 'MEASUREMENT')
         unsupported = sum(1 for v in variables if v.unsupported)
@@ -514,6 +537,7 @@ class XcpController(QObject):
         self._document = None
         self._values = {}
         self._acquisition = {}
+        self._stimulation = {}
         self.changed.emit()
         self.variables_changed.emit()
 
@@ -665,7 +689,22 @@ class XcpController(QObject):
             return f'{name}: {e}'
         if value == '' and variable.kind != 'ASCII':
             return f'Enter a value to write to {name}'
+        measurement = self._measurement
+        if measurement is not None and name in getattr(measurement, 'stimuli_keys', ()):
+            return self._stimulate(measurement, variable, value)
         self._start(self._write(variable, value, axes))
+        return ''
+
+    def _stimulate(self, measurement, variable: A2lVariable, value: Any) -> str:
+        """Send a value by STIM: the ECU writes it at the event, so it shows once read back (polled)."""
+        try:
+            variable.check_limits(value)  # As for a direct write
+            order = self._byte_order(variable)
+            raw = variable.encode(value, order, measurement.stimulus(variable.name))
+            measurement.stimulate({variable.name: raw})
+        except Exception as e:
+            return f'{variable.name}: {e}'
+        self._note(f'{variable.name} = {calibration.format_value(value, variable.unit)} sent by STIM')
         return ''
 
     async def _write(self, variable: A2lVariable, value: Any, axes=None):
@@ -780,11 +819,14 @@ class XcpController(QObject):
 
     @pyqtSlot(str, int)
     def set_acquisition(self, name: str, index: int):
-        """0: poll the measurement; n: measure it by DAQ on the n-th event."""
+        """A measurement — 0: poll it; n: measure it by DAQ on the n-th event. A scalar calibration value — 0:
+        write it directly; n: write it by STIM on the n-th event while DAQ runs."""
+        variable = self._variable(name)
+        target = self._acquisition if variable is None or variable.kind == 'MEASUREMENT' else self._stimulation
         if index <= 0 or index > len(self._events):
-            self._acquisition.pop(name, None)
+            target.pop(name, None)
         else:
-            self._acquisition[name] = self._events[index - 1]['channel']
+            target[name] = self._events[index - 1]['channel']
         self.variables_changed.emit()
 
     @pyqtSlot(result=str)
@@ -793,18 +835,38 @@ class XcpController(QObject):
             return 'Connect first'
         if self._measurement is not None:
             return 'DAQ is running'
-        signals = []
+        signals, stimuli = [], []
         for name, event in self._acquisition.items():
             variable = self._variable(name)
             if variable is not None and variable.kind == 'MEASUREMENT':
                 signals.append(DaqSignal(name, variable.address, variable.size, variable.extension, event))
-        if not signals:
+        for name, event in self._stimulation.items():
+            variable = self._variable(name)
+            if variable is not None and self._stimulable(variable):
+                stimuli.append(DaqSignal(name, variable.address, variable.size, variable.extension, event))
+        if not signals and not stimuli:
             return 'Choose an event instead of "Poll" for the measurements to measure by DAQ'
+        if stimuli and not self._client.resources & RESOURCE_STIM:
+            return 'The ECU does not offer STIM: set the calibration values back to "Direct"'
 
         async def run():
             try:
-                self._measurement = await self._client.start_measurement(signals, self._on_sample)
-                self._note(f'DAQ started: {len(signals)} measurements')
+                if isinstance(self._client, XcpClient):
+                    self._info.pop('STIM timeouts', None)
+                    self._measurement = await self._client.start_measurement(
+                        signals,
+                        self._on_sample,
+                        stimuli=stimuli,
+                        predefined=self._document.predefined_daq_lists if self._document is not None else None,
+                        on_stim_timeout=self._on_stim_timeout,
+                    )
+                    predefined = [d.number for d in self._measurement.lists if d.predefined]
+                    if predefined:
+                        self._note(f'Predefined DAQ lists used: {", ".join(map(str, predefined))}')
+                else:
+                    self._measurement = await self._client.start_measurement(signals, self._on_sample)
+                parts = [f'{len(signals)} measurements'] + ([f'{len(stimuli)} by STIM'] if stimuli else [])
+                self._note(f'DAQ started: {", ".join(parts)}')
             except Exception as e:
                 self._measurement = None
                 self._note(f'DAQ: {e}', error=True)
@@ -812,6 +874,15 @@ class XcpController(QObject):
 
         self._start(run())
         return ''
+
+    def _on_stim_timeout(self, event) -> None:
+        """The ECU missed STIM data at an event: the measurement sent them again; count it in the details."""
+        measurement = self._measurement
+        count = measurement.stim_timeouts if measurement is not None else 1
+        if count == 1:
+            self._note('The ECU reported a STIM timeout: the STIM data were sent again', error=True)
+        self._info['STIM timeouts'] = str(count)
+        self.changed.emit()
 
     def _on_sample(self, sample) -> None:
         for name, raw in sample.values.items():
@@ -1063,6 +1134,153 @@ class XcpController(QObject):
                 self._note(f'Wrote {format_hex(payload)} to 0x{value:X}')
             except Exception as e:
                 self._note(f'Write 0x{value:X}: {e}', error=True)
+
+        self._start(run())
+        return ''
+
+    # Flash programming (XCP PGM)
+
+    @pyqtProperty(bool, notify=changed)
+    def can_program(self) -> bool:
+        """Connected over XCP to a slave that offers programming."""
+        return self.connected and isinstance(self._client, XcpClient) and bool(self._client.resources & RESOURCE_PGM)
+
+    @pyqtProperty('QVariantList', constant=True)
+    def erase_modes(self) -> List[str]:
+        return list(ERASE_MODES)
+
+    @pyqtProperty('QVariantList', constant=True)
+    def ecu_checks(self) -> List[str]:
+        return list(ECU_CHECKS)
+
+    @pyqtProperty(str, notify=changed)
+    def kernel_file(self) -> str:
+        return str(self._kernel.path) if self._kernel is not None and self._kernel.path else ''
+
+    @pyqtProperty(str, notify=changed)
+    def encoder_file(self) -> str:
+        return self._encoder_file
+
+    @pyqtProperty(str, notify=changed)
+    def flash_file(self) -> str:
+        return str(self._image.path) if self._image is not None and self._image.path else ''
+
+    @pyqtProperty(str, notify=changed)
+    def flash_image(self) -> str:
+        return self._image.describe() if self._image is not None else ''
+
+    @pyqtProperty(bool, notify=changed)
+    def flashing(self) -> bool:
+        job = self._flash_job
+        return job is not None and bool(job.started) and not job.finished
+
+    @pyqtProperty(float, notify=changed)
+    def flash_progress(self) -> float:
+        return self._flash_job.progress if self._flash_job is not None else 0.0
+
+    @pyqtProperty('QVariantList', notify=changed)
+    def flash_steps(self) -> List[Dict[str, str]]:
+        job = self._flash_job
+        if job is None:
+            return []
+        return [{'name': s.name, 'status': s.status, 'detail': s.detail} for s in job.steps]
+
+    @pyqtSlot(QUrl, result=str)
+    def load_image(self, url: QUrl) -> str:
+        """Load the Intel HEX, S-record or binary (at address 0) file to program."""
+        if self.flashing:
+            return 'Programming is in progress'
+        path = url.toLocalFile() if url.isLocalFile() else url.toString()
+        try:
+            self._image = load_image(path)
+        except ImageError as e:
+            return f'Could not load {Path(path).name}: {e}'
+        except OSError as e:
+            return f'Could not read {Path(path).name}: {e.strerror or e}'
+        self._flash_job = None
+        self.changed.emit()
+        return ''
+
+    @pyqtSlot(QUrl, result=str)
+    def load_kernel(self, url: QUrl) -> str:
+        """The flash kernel to download before programming (an empty URL: none)."""
+        if url.isEmpty():
+            self._kernel = None
+            self.changed.emit()
+            return ''
+        path = url.toLocalFile() if url.isLocalFile() else url.toString()
+        try:
+            self._kernel = load_image(path)
+        except (ImageError, OSError) as e:
+            return f'Could not load {Path(path).name}: {getattr(e, "strerror", None) or e}'
+        self.changed.emit()
+        return ''
+
+    @pyqtSlot(QUrl, result=str)
+    def set_encoder(self, url: QUrl) -> str:
+        """A Python file defining encode(data, address) that compresses or encrypts each segment (empty: none)."""
+        path = '' if url.isEmpty() else url.toLocalFile() if url.isLocalFile() else url.toString()
+        if path:
+            try:
+                load_encoder(path)
+            except Exception as e:
+                return str(e)
+        self._encoder_file = path
+        self.changed.emit()
+        return ''
+
+    @pyqtSlot('QVariantMap', result=str)
+    def program(self, settings: Dict[str, Any]) -> str:
+        """Program the loaded image. `settings`: erase (one of ERASE_MODES), verify, reset, and the advanced
+        clear_areas, compression, encryption, program_max, ecu_check, check_type and check_value (numbers as hex
+        text or numbers)."""
+        if not self.can_program:
+            return 'Connect over XCP to an ECU that offers programming (PGM)'
+        if self._image is None:
+            return 'Choose the file to program'
+        if self._measurement is not None:
+            return 'Stop DAQ first'
+
+        def number(key: str, default: int, maximum: int) -> int:
+            value = settings.get(key, default)
+            return (
+                value if isinstance(value, int) else _hex(str(value) or f'{default:X}', maximum, key.replace('_', ' '))
+            )
+
+        try:
+            options = XcpFlashOptions(
+                erase=str(settings.get('erase', 'sectors')),
+                verify=bool(settings.get('verify', True)),
+                reset=bool(settings.get('reset', True)),
+                clear_areas=number('clear_areas', CLEAR_CODE_AREAS, 0xFFFFFFFF),
+                kernel=self._kernel,
+                compression=number('compression', 0, 0xFF),
+                encryption=number('encryption', 0, 0xFF),
+                encode=load_encoder(self._encoder_file) if self._encoder_file else None,
+                program_max=bool(settings.get('program_max', False)),
+                ecu_check=str(settings.get('ecu_check', 'none')),
+                check_type=number('check_type', VERIFY_COMPLETE_FLASH, 0xFFFF),
+                check_value=number('check_value', 0, 0xFFFFFFFF),
+            )
+            job = XcpFlashJob(self._image, options)
+        except Exception as e:
+            return str(e)
+        job.on_change = lambda _job: self.changed.emit()
+        self._flash_job = job
+        client = self._client
+
+        async def run():
+            self._note(f'Programming {self._image.describe()}')
+            try:
+                await job.run(client)
+                self._note(f'Programmed {job.total} bytes in {job.finished - job.started:.1f} s')
+            except Exception as e:
+                self._note(f'Programming: {job.error or e}', error=True)
+            if not client.connected:  # PROGRAM_RESET ended the session
+                self._timer.stop()
+                self._polling = False
+                self._close_transport()
+                self._note('The ECU was reset: connect again')
 
         self._start(run())
         return ''
