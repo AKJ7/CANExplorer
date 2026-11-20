@@ -10,6 +10,7 @@ from can_explorer.core.busstats import BusSnapshot, BusStatistics
 from can_explorer.core.decoding import FrameDecoder
 from can_explorer.core.conditions import ConditionError
 from can_explorer.core.frames import Frame, clone_message
+from can_explorer.core.gc_control import capture_gc
 from can_explorer.core.recording import Recorder, Trigger, TriggeredRecorder
 from can_explorer.core.signals import SignalTracker
 from can_explorer.core.log_formats import is_log_file, unsupported_message
@@ -216,6 +217,7 @@ class BusSession:
             self._set_state(SessionState.ERROR, str(e))
             raise SessionError(str(e)) from e
         self._task = loop.create_task(self._pump(), name=f'BusSession {self.source.description}')
+        capture_gc.session_started(self)  # Full garbage collections wait for quiet moments while capturing
         self._set_state(SessionState.OPEN)
 
     async def _pump(self) -> None:
@@ -287,6 +289,7 @@ class BusSession:
         self.stop_periodic()
         self.stop_recording()
         self.source.close()
+        capture_gc.session_stopped(self)
 
     def clear(self) -> None:
         self.trace.clear()

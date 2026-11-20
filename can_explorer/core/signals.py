@@ -75,6 +75,7 @@ class SignalTracker:
         self._fields_by_id: Dict[Tuple[int, bool], List[Tuple[str, BitField, Optional[BitField], Optional[int]]]] = {}
         self._intervals_by_id: Dict[Tuple[int, bool], List[str]] = {}
         self._interval_last: Dict[str, float] = {}  # Last frame timestamp seen, per interval key
+        self.external: Set[str] = set()  # Series fed from outside the frames, e.g. XCP measurements
         self._changed = False
 
     @staticmethod
@@ -170,8 +171,25 @@ class SignalTracker:
             self._interval_last[key] = last
         self._changed = True
 
+    def track_external(self, key: str, unit: str = '') -> str:
+        """Track values that do not come from frames (e.g. 'XCP.EngineSpeed'); `append_external` adds them."""
+        if key not in self.series:
+            self.series[key] = SignalSeries(self.max_points, unit)
+        self.external.add(key)
+        return key
+
+    def append_external(self, key: str, timestamp: float, value: float) -> None:
+        series = self.series.get(key)
+        if series is not None and key in self.external:
+            series.append(timestamp, value)
+            self._changed = True
+
     def untrack_key(self, key: str) -> None:
         """Stop tracking a field, signal or interval by its key."""
+        if key in self.external:
+            self.external.discard(key)
+            self.series.pop(key, None)
+            return
         if key in self.intervals:
             self.series.pop(key, None)
             self._interval_last.pop(key, None)
@@ -202,6 +220,7 @@ class SignalTracker:
         """Stop tracking the database signals, and the bit fields and intervals unless `fields` is false."""
         if fields:
             self.series.clear()
+            self.external.clear()
             self.fields.clear()
             self.multiplexers.clear()
             self._fields_by_id.clear()
@@ -209,7 +228,8 @@ class SignalTracker:
             self._intervals_by_id.clear()
             self._interval_last.clear()
         else:
-            for key in [key for key in self.series if key not in self.fields and key not in self.intervals]:
+            kept = set(self.fields) | set(self.intervals) | self.external
+            for key in [key for key in self.series if key not in kept]:
                 del self.series[key]
         self._by_message.clear()
 

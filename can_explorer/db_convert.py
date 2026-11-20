@@ -2,7 +2,8 @@
 
 Usage: can-db-convert INPUT OUTPUT [--protocol CAN|J1939] [--bus NAME]
 
-The formats follow the file extensions: .dbc, .dbf (BUSMASTER), .kcd, .sym and, as input only, .arxml.
+The formats follow the file extensions: .dbc, .dbf (BUSMASTER), .kcd, .sym and .arxml (AUTOSAR R20-11; each bus of
+a multi-bus database becomes its own CAN cluster).
 """
 
 import argparse

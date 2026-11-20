@@ -8,6 +8,7 @@ stay as they are.
 """
 
 import asyncio
+import datetime
 import math
 import os
 import sys
@@ -45,6 +46,7 @@ if '--only' in sys.argv:
     ONLY = set(sys.argv[sys.argv.index('--only') + 1].split(','))
 
 from can_explorer.core.bushealth import ERR_BUSOFF, ERR_CNT, ERR_CRTL, ERR_PROT, ERR_RESTARTED  # noqa: E402
+from can_explorer.__version__ import __version__  # noqa: E402
 from can_explorer.core import updates  # noqa: E402
 from can_explorer.core.canopen_tools import CanOpenNodeSimulator, ObjectDictionary  # noqa: E402
 from can_explorer.core.j1939_tools import (  # noqa: E402
@@ -61,7 +63,9 @@ from can_explorer.core.session import BusSession  # noqa: E402
 from can_explorer.core.simulation import LinSlaveSimulator, UdsEcuSimulator, UdsServer  # noqa: E402
 from can_explorer.core.sources import BusConfig, LiveSource  # noqa: E402
 from can_explorer.main_application import MainApplication  # noqa: E402
+from can_explorer.sys.environment import sanitize_snap_environment  # noqa: E402
 
+sanitize_snap_environment()  # As canexplorer does: GLib aborts in a snap's terminal (e.g. VS Code) otherwise
 app = MainApplication()
 loop = qasync.QEventLoop(app)
 asyncio.set_event_loop(loop)
@@ -444,10 +448,9 @@ async def reverse_engineering_scenario():
 
 async def xcp_scenario():
     """The XCP/CCP page reading an ECU's measurements and calibration values from its A2L (simulated XCP slave)."""
-    import struct
     import uuid as _uuid
 
-    from can_explorer.core.xcp import XcpSlaveSimulator
+    from can_explorer.core.xcp_slave import XcpSlaveSimulator, example_memory
 
     channel = f'xcp-{_uuid.uuid4().hex}'
     manager.add_connection({'name': 'Powertrain ECU', 'interface': 'VirtualBus', 'channel': channel})
@@ -456,21 +459,16 @@ async def xcp_scenario():
     window.setProperty('selectedIndex', len(manager.connections) - 1)
     slave_session = BusSession(LiveSource(BusConfig('virtual', channel)))
     slave_session.start()
-    slave = XcpSlaveSimulator(slave_session, request_id=0x7E0, response_id=0x7E1)
-    slave.memory[0x1000:0x1002] = (6000).to_bytes(2, 'little')  # 1500 rpm
-    slave.memory[0x1002:0x1003] = bytes([90])  # 50 degC
-    slave.memory[0x1004:0x1006] = (13800).to_bytes(2, 'little')  # 13.8 V
-    slave.memory[0x2000:0x2002] = (3200).to_bytes(2, 'little')  # idle 800 rpm
-    slave.memory[0x2002:0x2003] = bytes([1])
-    slave.memory[0x2004:0x2008] = struct.pack('<f', 1.0)
+    slave = XcpSlaveSimulator(slave_session, request_id=0x7E0, response_id=0x7E1, memory=example_memory())
     xcp = connection.xcp
     show_page('xcp')
-    xcp.connect_slave({'protocol': 'XCP', 'request_id': '7E0', 'response_id': '7E1'})
-    while xcp.busy:
-        await asyncio.sleep(0.05)
     xcp.load_a2l(QUrl.fromLocalFile(str(ROOT / 'examples' / 'calibration' / 'example.a2l')))
+    xcp.connect_slave({'protocol': 'XCP', 'request_id': '7E0', 'response_id': '7E1'})
+    while xcp.busy or not xcp.connected:
+        await asyncio.sleep(0.05)
     await xcp._poll_once()
     await shot('xcp', 0.5)
+    await xcp_flash_shot(xcp)
     xcp.disconnect_slave()
     await asyncio.sleep(0.1)
     slave.stop()
@@ -790,6 +788,34 @@ async def security_manager_scenario():
     dialog.close()
     window.resize(1440, 900)
     await asyncio.sleep(0.5)
+
+
+async def xcp_flash_shot(xcp):
+    """The XCP page's Flash programming section after programming an image into the simulated slave's flash."""
+    from can_explorer.core.flashing import FlashImage, Segment, intel_hex_text
+
+    with tempfile.TemporaryDirectory() as directory:
+        firmware = Path(directory) / 'application.hex'
+        image = FlashImage([Segment(0x8000, bytes(range(256)) * 16), Segment(0xC000, b'\xa5' * 1024)])
+        firmware.write_text(intel_hex_text(image))
+        assert xcp.load_image(QUrl.fromLocalFile(str(firmware))) == ''
+    assert xcp.program({'erase': 'sectors', 'verify': True, 'reset': False}) == ''
+    while xcp.busy or xcp.flashing:
+        await asyncio.sleep(0.05)
+    view = [view for view in items('XcpView') if view.isVisible()][0]
+    section = _section(view, 'Flash programming')
+    for child in section.findChildren(QObject):
+        if 'CheckBox' in child.metaObject().className() and child.property('text') == 'Reset the ECU afterwards':
+            child.setProperty('checked', False)  # As programmed: the page stays connected for the picture
+    flickable = section.parentItem()
+    while flickable is not None and 'Flickable' not in flickable.metaObject().className():
+        flickable = flickable.parentItem()
+    if flickable is not None:
+        content = flickable.property('contentItem')
+        flickable.setProperty('contentY', max(0.0, section.mapToItem(content, QPointF(0, 0)).y() - 8))
+    await shot('xcp-flash', 0.6)
+    if flickable is not None:
+        flickable.setProperty('contentY', 0.0)
 
 
 def _section(view, title: str):
@@ -1326,18 +1352,21 @@ async def scenario():
     await shot('command-palette', 0.5)
     QMetaObject.invokeMethod(palette, 'close')
 
-    # The update dialog, with a sample release (the screenshots cannot wait for a real one)
+    # The update dialog, with a sample release (the screenshots cannot wait for a real one): the next minor version
+    # after this one, so it is newer whatever the version
+    major, minor = (int(part) for part in __version__.split('.')[:2])
+    sample = f'{major}.{minor + 1}.0'
     update_controller = manager.updates
     update_controller._release = updates.Release(
-        '1.1.0',
-        'v1.1.0',
-        'CANExplorer 1.1.0',
+        sample,
+        f'v{sample}',
+        f'CANExplorer {sample}',
         '## Added\n\n- **Signal plots**: markers for trace bookmarks\n- **J1939**: DM4 freeze frames\n\n'
         '## Fixed\n\n- Replays of BLF files with CAN FD frames on Windows',
-        'https://github.com/AKJ7/CANExplorer/releases/tag/v1.1.0',
+        f'https://github.com/AKJ7/CANExplorer/releases/tag/v{sample}',
         False,
-        '2026-11-02',
-        {f'CANExplorer-1.1.0-linux-{updates.machine()}.AppImage': '', 'SHA256SUMS.txt': ''},
+        datetime.date.today().isoformat(),
+        {f'CANExplorer-{sample}-linux-{updates.machine()}.AppImage': '', 'SHA256SUMS.txt': ''},
     )
     update_controller._kind = updates.APPIMAGE  # As installed from the AppImage, which can update itself
     update_controller._set_state('available')

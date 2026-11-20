@@ -110,10 +110,10 @@ class Kwp2000Decoder:
 
     name = 'KWP2000'
 
-    def __init__(self):
+    def __init__(self, address_byte: bool = False):
         from can_explorer.core.protocols.isotp import IsoTpDecoder
 
-        self._isotp = IsoTpDecoder()
+        self._isotp = IsoTpDecoder(address_byte=address_byte)
 
     def reset(self) -> None:
         self._isotp.reset()
@@ -124,3 +124,12 @@ class Kwp2000Decoder:
             return description
         kwp = describe_payload(payload)
         return f'{description} | KWP {kwp}' if kwp else description
+
+
+class Kwp2000ExtendedDecoder(Kwp2000Decoder):
+    """KWP2000 on ISO-TP with extended or mixed addressing (an address byte starts every frame)."""
+
+    name = 'KWP2000 (extended)'
+
+    def __init__(self):
+        super().__init__(address_byte=True)

@@ -256,6 +256,9 @@ async def test_diagnostics_against_simulated_ecu(manager, channel, tmp_path):
     assert not diagnostics.tester_present
     assert diagnostics.set_addressing('7E1', '7E9', False, '') == ''
     assert 'out of range' in diagnostics.set_addressing('800', '7E9', False, '')
+    assert diagnostics.set_addressing('6F1:12', '612:F1', False, '') == ''  # Extended addressing
+    assert diagnostics.addressing_text == 'request 0x6F1:12, response 0x612:F1'
+    assert 'address byte' in diagnostics.set_addressing('6F1:XY', '612', False, '')
     diagnostics.clear_history()
     assert diagnostics.history == []
     simulator.stop()
@@ -629,6 +632,20 @@ async def test_j1939_page(manager, channel, data_dir):
     assert j1939.send_pgn('0xEF00', 6, '42', '00 ' * 20) == ''  # RTS/CTS to a node that does not answer
     await wait_until(lambda: not j1939.busy, timeout=5)
     assert j1939.log[-1]['error'] and 'did not answer' in j1939.log[-1]['text']
+
+    # Having sent, the tool answers a transport session to its address with clear to send
+    received()
+    send(build_can_id(0xEC00, 0x00, 0xF9, 7), [16, 20, 0, 3, 0xFF, 0xDA, 0xFE, 0x00])
+    await wait_until(lambda: any(frame.arbitration_id == 0x1CEC00F9 for frame in received()), timeout=5)
+
+    # Claiming the tool address
+    assert j1939.claim_address() == ''
+    await wait_until(lambda: not j1939.busy, timeout=5)
+    assert j1939.claimed and j1939.log[-1]['text'] == 'Claimed address 0xF9'
+    claim = [frame for frame in received() if frame.arbitration_id == 0x18EEFFF9]
+    assert claim and J1939Name.from_bytes(claim[0].data).function == 129  # Off-board service tool
+    assert j1939.set_tool_address('FE') == 'The tool address is 00 to FD'
+    assert j1939.set_tool_address('F1') == '' and not j1939.claimed and j1939.tool_address == 'F1'
     j1939.clear()
     assert j1939.nodes == [] or all(node['address'] == 0xF9 for node in j1939.nodes)
     peer.shutdown()

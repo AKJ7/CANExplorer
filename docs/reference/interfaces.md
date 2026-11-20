@@ -26,10 +26,15 @@ the first column. Install the vendor's driver or library for your adapter first;
 | *GsUsbBus* | `gs_usb` | Adapters with gs_usb / candleLight firmware (CANable, candleLight, CANtact …) without a kernel driver | Windows, macOS, Linux | libusb (WinUSB on Windows) and the Python package `gs_usb` ¹; on Linux the kernel driver and *SocketcanBus* are simpler | – |
 | *slcanBus* | `slcan` | Lawicel CANUSB, CANable with slcan firmware, USBtin, … (serial adapters with the slcan protocol) | Windows, Linux, macOS | None: a serial port (`COM3`, `/dev/ttyACM0`); FD-capable slcan firmware also takes a data bitrate | ✓ |
 | *GvretBus* | `gvret` | Devices with SavvyCAN's GVRET protocol: ESP32RET boards, Macchina M2 (M2RET), CANDue (GVRET firmware) | Windows, Linux, macOS | None: a serial port, with `@1` for the device's second bus (`COM5@1`), or `socket://IP:23` for ESP32RET on WiFi (see [below](#gvret-devices)) | – |
+| *PandaBus* | `panda` | comma.ai pandas on USB: red panda, and the panda of comma three/3X and comma four (see [below](#commaai-panda-on-usb)); **experimental** | Windows, Linux, macOS | pyusb and libusb ¹ (WinUSB on Windows) | ✓ |
+| *PandaUdpBus* | `panda_udp` | comma.ai panda (original white panda) on WiFi: its UDP CAN stream, **receive only** (see [below](#commaai-panda-on-wifi)) | Windows, Linux, macOS | None: the panda's address (`192.168.0.10`), with `@1` for a single bus | – |
 | *J2534Bus* | `j2534` | J2534 pass-thru devices: Drew Technologies Mongoose and CarDAQ, Tactrix OpenPort 2.0, J2534 drivers of Bosch, Autel, Kvaser, PEAK, Intrepid … (see [below](#j2534-pass-thru-devices)) | Windows | The device's J2534 (04.04) driver; 32-bit drivers run in the J2534 bridge ([below](#32-bit-drivers)) | – |
 | *Rp1210Bus* | `rp1210` | TMC RP1210 heavy-duty (truck, bus, off-highway) adapters: Nexiq USB-Link, DG Technologies DPA 5, Noregon DLA+, Cummins INLINE … (see [below](#rp1210-heavy-duty-adapters)) | Windows | The adapter's RP1210 driver; the driver is 32-bit, so run CANExplorer as 32-bit Python ([below](#rp1210-heavy-duty-adapters)) | – |
 | *ZlgBus* | `zlg` | ZLG (周立功) USBCAN-II, USBCAN-E-U series and USBCANFD-100U/200U/400U/800U/MINI (see [below](#zlg-interfaces)); **experimental** | Windows | ZLG's driver and its development library (`zlgcan.dll` with `kerneldlls`) | ✓ |
 | *ToomossBus* | `toomoss` | Toomoss (图莫斯) USB2CAN and USB2CANFD adapters (see [below](#toomoss-adapters)); **experimental** | Windows, Linux, macOS | Toomoss's USB2XXX library (`USB2XXX.dll`, `libUSB2XXX.so`, `libUSB2XXX.dylib`) with its libusb | ✓ |
+| *PlinBus* | `plin` | **LIN**: PEAK PLIN-USB and the LIN channels of the PCAN-USB Pro (FD), as master or slave (see [below](#lin-adapters)); **experimental** | Windows | PEAK's LIN driver setup (PLIN-API, `PLinApi.dll`) | – |
+| *KvaserLinBus* | `kvaser_lin` | **LIN**: Kvaser LIN Leaf, as master or slave (see [below](#lin-adapters)); **experimental** | Windows, Linux | Kvaser's drivers with LINlib (`linlib.dll`; `liblinlib.so` of the Linux SDK) | – |
+| *VectorLinBus* | `vector_lin` | **LIN**: LIN channels of Vector interfaces (VN1611, VN1630/VN1640 with LINpiggy, VN7640 …), as master or slave (see [below](#lin-adapters)); **experimental** | Windows | Vector XL Driver Library (`vxlapi64.dll`) and the device driver | – |
 | *Elm327Bus* | `elm327` | OBD adapters with the ELM327 command set: OBDLink MX+, LX, SX, EX and ELM327 compatibles, over USB, Bluetooth or WiFi; made for diagnostics, with limits (see [below](#elm327-and-obdlink-adapters)) | Windows, Linux, macOS | None: a serial port (`COM7`, `/dev/rfcomm0`), or `socket://IP:35000` for WiFi adapters | – |
 | *Elm327VpwBus* | `elm327_vpw` | **SAE J1850 VPW / GM Class 2** (not CAN): the 10.4 kbit/s bus of 1996–2007 GM vehicles, through an ELM327/OBDLink adapter (see [below](#gm-class-2-sae-j1850-vpw)) | Windows, Linux, macOS | None: the adapter's serial port, as for `elm327` | – |
 | *Elm327KLineBus* | `elm327_kline` | **K-Line** (ISO 9141-2 / ISO 14230 KWP, not CAN): the 10.4 kbit/s diagnostic bus of non-CAN OBD-II vehicles (~1996–2008), through an ELM327/OBDLink adapter (see [below](#k-line-iso-9141-2-iso-14230)) | Windows, Linux, macOS | None: the adapter's serial port, as for `elm327`, with an optional `@3`/`@4`/`@5` protocol suffix | – |
@@ -46,9 +51,11 @@ the first column. Install the vendor's driver or library for your adapter first;
 [from source](../getting-started/installation.md#from-source) with the `drivers` extra, which installs all of them:
 
 ```bash
-uv sync --extra drivers     # neoVI, NI-XNET, CANalyst-II, CANtact, gs_usb and UDP multicast
+uv sync --extra drivers     # neoVI, NI-XNET, CANalyst-II, CANtact, gs_usb, UDP multicast and pyusb (panda)
 uv run canexplorer
 ```
+
+The `drivers` extra needs Python 3.13 or older: the `cantact` package has no build for Python 3.14 yet.
 
 CAN FD (✓) means the interface can send and receive CAN FD frames with python-can, if the adapter supports them;
 enable **Flexible Data (CAN FD)** and the data bitrate in the connection dialog. *VirtualBus* and *RemoteBus*
@@ -58,7 +65,10 @@ carry FD frames as they are.
 field. The drivers of *CANalystIIBus*, *GsUsbBus*, *slcanBus*, *robotellBus*, *SeeedBus*, *IscanBus* and
 *NicanBus* cannot list their channels: type the channel (e.g. the serial port) instead. *GvretBus* lists the USB
 serial ports, and *Elm327Bus* the USB and Bluetooth serial ports; whether a port has such a device is only known
-when it is opened. *J2534Bus* lists the registered J2534 drivers with CAN that CANExplorer can load, itself or
+when it is opened. *PandaBus* lists the pandas on USB by serial number. *PlinBus* lists the LIN channels of the PLIN-API by hardware
+handle, and *VectorLinBus* the channels of the Vector driver configuration that have LIN. *KvaserLinBus* cannot list
+its channels: type the CANlib channel number. *PandaUdpBus* offers the panda's address `192.168.0.10` when this computer is in the panda's
+WiFi network (192.168.0.x). *J2534Bus* lists the registered J2534 drivers with CAN that CANExplorer can load, itself or
 through the J2534 bridge. *Rp1210Bus* lists the installed RP1210 drivers that offer the CAN protocol, read from
 `RP121032.INI`. LIN buses use *SocketcanBus* with a LIN driver; see [LIN](../user-guide/lin.md).
 
@@ -82,6 +92,102 @@ classic CAN frames: CAN FD and remote frames are not supported. The device does 
 
 CANExplorer sends a keepalive to the device once a second, as SavvyCAN does; some GVRET firmware stops streaming
 frames when the host goes quiet, so without it capturing would stop after a while.
+
+## comma.ai panda on USB
+
+*PandaBus* opens a comma.ai panda on USB: the red panda, and the panda inside a comma three, 3X or four. It
+needs pyusb and libusb (run [from source](../getting-started/installation.md#from-source) with
+`uv sync --extra drivers`); on Windows the panda needs the WinUSB driver (e.g. installed with Zadig).
+
+| Channel | Buses |
+|---|---|
+| *(empty)* | The first panda found, all three buses; each frame's bus number is its channel in the trace |
+| `@1` | Bus 1 only |
+| `0123456789abcdef01234567@2` | Bus 2 of the panda with that serial number (Detect lists them) |
+
+The connection's bitrate is set on the chosen bus, or on all three. The panda takes 10, 20, 50, 100, 125, 250, 500
+and 1000 kbit/s, and CAN FD data bitrates up to 5 Mbit/s. Without a bus in the channel, a frame is sent on the bus
+of its channel field (bus 0 when it has none).
+
+**Safety modes.** A panda sends only what its safety mode allows:
+
+- **Listen only** puts it in *SILENT*: its CAN controllers do not acknowledge frames.
+- Otherwise CANExplorer asks for *ALLOUTPUT*, which sends anything. Only debug builds of the panda firmware
+  have it. Release firmware stays silent, so CANExplorer then uses *ELM327*. That mode sends only OBD/UDS
+  diagnostic frames: 8 bytes, to 0x7DF, 0x6xx, 0x7xx, 0x18DB33F1 or 0x18DAxxF1. The log says which mode is
+  used, and frames the panda refused are reported there.
+
+The panda's heartbeat check is turned off, as panda's own Python library does outside openpilot; without it the
+panda would fall silent after a few seconds. On closing, the panda is put back into SILENT.
+
+Limits: timestamps are this computer's time of arrival. The CAN packet format must match the panda firmware. If
+the firmware reports a packet version other than the one CANExplorer was written for, the log warns: update the
+panda firmware. Older black and grey pandas (STM32F4) are not supported, since current panda firmware no
+longer supports them. Written from panda's open-source firmware and library; not yet tested on a real panda.
+
+## comma.ai panda on WiFi
+
+*PandaUdpBus* receives the CAN stream that the original comma.ai panda (the white panda, with an ESP8266 WiFi
+chip) sends over UDP. Join the panda's WiFi access point and connect to its address:
+
+| Channel | Buses |
+|---|---|
+| `192.168.0.10` | All buses of the panda; each frame's bus number is its channel in the trace |
+| `192.168.0.10@1` | Bus 1 only |
+| `192.168.0.10:1338` | An explicit port (1338 is the default) |
+
+CANExplorer subscribes to the stream by sending a datagram to port 1338 once a second; the panda stops streaming
+five seconds after the last one. The stream is one way, so this interface is **receive only**: sending frames
+fails, and the bitrate and silent mode are not set through it (the panda keeps its own). To send, connect the
+panda over USB. Frames the panda transmitted itself (bus number 128 + bus) are only shown with
+**Receive own messages**.
+
+Limits: classic CAN only. Timestamps are this computer's time of arrival, so they carry WiFi jitter: the panda's
+16-bit time value in each frame is not used, because its unit is not documented. WiFi streaming exists only in
+older panda firmware (comma.ai removed it in August 2020), and the UDP server runs only when the panda's WiFi is
+in its secure (not pairing) mode. The format was taken from panda's open source; it has not been tested against a
+real panda, so treat this interface as **experimental**.
+
+## LIN adapters
+
+*PlinBus* (PEAK), *KvaserLinBus* (Kvaser) and *VectorLinBus* (Vector) open the LIN channel of an adapter through
+the vendor's API, so LIN works on Windows (and with Kvaser on Linux) without sllin. Create a connection with bus
+type **LIN**, one of these interfaces, and the **Baud rate** of the bus (1000 to 20000; 19200 by default): the
+adapter is set to it. Everything else works as described in [LIN](../user-guide/lin.md).
+
+| Interface | Channel |
+|---|---|
+| `plin` | The PLIN-API hardware handle: `1`, `2`, … (Detect lists them; a PCAN-USB Pro has two LIN channels) |
+| `kvaser_lin` | The CANlib channel number of the LIN Leaf: `0`, `1`, … (as Kvaser Device Guide numbers them) |
+| `vector_lin` | The channel's index in the Vector driver configuration (Detect lists the channels with LIN) |
+
+The adapter is the LIN **master** by default. Add `@slave` to the channel (`1@slave`) to make it a slave:
+
+- **Master**: a sent data frame is a header with its response; a sent remote frame is a header only, which a slave
+  answers. The LIN Schedule view runs schedule tables this way.
+- **Slave**: a sent data frame sets the response the adapter gives from then on when the master sends that
+  frame's header. A slave whose responses have not been set only listens. **Listen only** opens the adapter as
+  such a silent slave.
+
+Received frames are data frames; a header that no slave answered is a remote frame, and a frame with a checksum,
+parity or sync error is an error frame. The adapter's own responses are shown with **Receive own messages**.
+Checksums are the enhanced (LIN 2.x) model, with the classic one for the diagnostic frames 0x3C and 0x3D.
+
+Details per adapter:
+
+- **PEAK** (Windows only; PEAK has no PLIN-API for Linux or macOS): when PLIN-View Pro or another program already
+  runs the adapter in the same mode and baud rate, CANExplorer joins it without re-initialising it.
+- **Kvaser** needs the LIN transceiver powered from the LIN side. LIN 2.x checksums need firmware 2.5.1 or later.
+  With older firmware the stored settings apply.
+- **Vector** needs init access to the channel, so close CANoe and other programs that configure it. The XL
+  Driver Library wants each frame's response length before the channel starts. CANExplorer leaves lengths
+  undefined and expects the device to take them from the bus. If the device reports errors instead, the lengths
+  can be fixed from a script: `can.Bus(interface='vector_lin', channel='1', dlc={0x10: 4})`. A master's own
+  response stays set for its identifier, so later headers for that identifier are answered with it again.
+
+All three were written from the vendors' published APIs: PEAK's PLIN-API, Kvaser's open-source LINlib wrapper
+and Vector's `vxlapi.h`. They have been tested against simulated libraries, not yet on real adapters. Lipowsky
+Baby-LIN adapters are not supported: their library is only available to Lipowsky's customers.
 
 ## J2534 pass-thru devices
 
@@ -131,6 +237,13 @@ The channel is the driver's API name and a device id, `API:DeviceID`:
 each vendor's own `<API>.INI`. The bus runs at the connection's bitrate and receives 11 and 29 bit identifiers;
 **Receive own messages** adds sent frames locally. RP1210 (04.00) here is classic CAN only — no CAN FD, no
 listen-only mode.
+
+The RP1210 specification is sold by the TMC and not public. CANExplorer's message layout (a type byte, then the
+identifier in 2 bytes for 11-bit and 4 bytes for 29-bit identifiers) follows open RP1210 code: the University of
+Tulsa's [PyRP1210](https://github.com/Heavy-Vehicle-Networking-At-U-Tulsa/PyRP1210) and
+[dfieschko/RP1210](https://github.com/dfieschko/RP1210). It has not been checked against an adapter here: if 11-bit
+frames show wrong identifiers or lose data bytes, please [report it](https://github.com/AKJ7/CANExplorer/issues/new/choose).
+J1939 uses 29-bit identifiers only.
 
 RP1210 drivers are **32-bit** Windows DLLs. A 64-bit program cannot load them, so to use an RP1210 adapter run
 CANExplorer as 32-bit Python (from [python.org](https://www.python.org/downloads/windows/), *Windows installer

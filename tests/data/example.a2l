@@ -2,6 +2,49 @@ ASAP2_VERSION 1 60
 /begin PROJECT Example "CANExplorer example"
   /begin MODULE CoreModule "Example ECU"
 
+    /begin MOD_COMMON "Byte order and alignment of the ECU"
+      BYTE_ORDER MSB_LAST
+      ALIGNMENT_BYTE 1
+      ALIGNMENT_WORD 2
+      ALIGNMENT_LONG 4
+      ALIGNMENT_FLOAT32_IEEE 4
+    /end MOD_COMMON
+
+    /begin MOD_PAR "Build identification"
+      EPK "EX-1.0"
+      ADDR_EPK 0x3000
+    /end MOD_PAR
+
+    /begin IF_DATA XCP
+      /begin PROTOCOL_LAYER 0x0100 1000 2000 0 0 0 0 0 8 8 BYTE_ORDER_MSB_LAST ADDRESS_GRANULARITY_BYTE
+      /end PROTOCOL_LAYER
+      /begin DAQ DYNAMIC 16 2 0 OPTIMISATION_TYPE_DEFAULT ADDRESS_EXTENSION_FREE IDENTIFICATION_FIELD_TYPE_ABSOLUTE
+        GRANULARITY_ODT_ENTRY_SIZE_DAQ_BYTE 0xFF NO_OVERLOAD_INDICATION
+        /begin TIMESTAMP_SUPPORTED 1 SIZE_DWORD UNIT_1US
+        /end TIMESTAMP_SUPPORTED
+        /begin EVENT "10ms" "10ms" 0 DAQ 0xFF 10 6 0
+        /end EVENT
+        /begin EVENT "100ms" "100ms" 1 DAQ 0xFF 100 6 0
+        /end EVENT
+      /end DAQ
+      /begin XCP_ON_CAN 0x0100
+        CAN_ID_MASTER 0x7E0
+        CAN_ID_SLAVE 0x7E1
+        BAUDRATE 500000
+      /end XCP_ON_CAN
+      /begin XCP_ON_UDP_IP 0x0100 5555
+        ADDRESS "127.0.0.1"
+      /end XCP_ON_UDP_IP
+    /end IF_DATA
+
+    /begin IF_DATA ASAP1B_CCP
+      /begin RASTER "10ms" "10ms" 0 3 10
+      /end RASTER
+      /begin TP_BLOB 0x0201 0x0204 0x7E0 0x7E1 0x0001 1
+        BAUDRATE 500000
+      /end TP_BLOB
+    /end IF_DATA
+
     /begin COMPU_METHOD RPM "Engine speed" LINEAR "%6.2" "rpm"
       COEFFS_LINEAR 0.25 0
     /end COMPU_METHOD
@@ -13,6 +56,26 @@ ASAP2_VERSION 1 60
     /end COMPU_METHOD
     /begin COMPU_METHOD IDENT "Identity" IDENTICAL "%6.0" ""
     /end COMPU_METHOD
+    /begin COMPU_METHOD DEG "Crank angle" LINEAR "%5.1" "deg"
+      COEFFS_LINEAR 0.1 0
+    /end COMPU_METHOD
+    /begin COMPU_METHOD PERCENT "Percent" LINEAR "%5.1" "%"
+      COEFFS_LINEAR 0.5 0
+    /end COMPU_METHOD
+    /begin COMPU_METHOD LOAD "Engine load" IDENTICAL "%3.0" "%"
+    /end COMPU_METHOD
+    /begin COMPU_METHOD KMH "Wheel speed" LINEAR "%6.2" "km/h"
+      COEFFS_LINEAR 0.01 0
+    /end COMPU_METHOD
+    /begin COMPU_METHOD FANMODE "Fan mode" TAB_VERB "%3.0" ""
+      COMPU_TAB_REF FANMODE_TAB
+    /end COMPU_METHOD
+    /begin COMPU_VTAB FANMODE_TAB "Fan modes" TAB_VERB 3
+      0 "Off"
+      1 "Auto"
+      2 "On"
+      DEFAULT_VALUE "Invalid"
+    /end COMPU_VTAB
 
     /begin RECORD_LAYOUT RL_UWORD
       FNC_VALUES 1 UWORD ROW_DIR DIRECT
@@ -22,6 +85,20 @@ ASAP2_VERSION 1 60
     /end RECORD_LAYOUT
     /begin RECORD_LAYOUT RL_FLOAT
       FNC_VALUES 1 FLOAT32_IEEE ROW_DIR DIRECT
+    /end RECORD_LAYOUT
+    /begin RECORD_LAYOUT RL_CURVE
+      NO_AXIS_PTS_X 1 UBYTE
+      AXIS_PTS_X 2 UWORD INDEX_INCR DIRECT
+      FNC_VALUES 3 SWORD ROW_DIR DIRECT
+    /end RECORD_LAYOUT
+    /begin RECORD_LAYOUT RL_MAP
+      NO_AXIS_PTS_X 1 UBYTE
+      AXIS_PTS_X 2 UWORD INDEX_INCR DIRECT
+      FNC_VALUES 3 UBYTE ROW_DIR DIRECT
+    /end RECORD_LAYOUT
+    /begin RECORD_LAYOUT RL_AXIS
+      NO_AXIS_PTS_X 1 UBYTE
+      AXIS_PTS_X 2 UBYTE INDEX_INCR DIRECT
     /end RECORD_LAYOUT
 
     /begin MEASUREMENT EngineSpeed "Engine speed"
@@ -36,12 +113,48 @@ ASAP2_VERSION 1 60
       UWORD VOLT 0 0 0 20
       ECU_ADDRESS 0x1004
     /end MEASUREMENT
+    /begin MEASUREMENT BrakePressed "Brake pedal pressed"
+      UBYTE IDENT 0 0 0 1
+      ECU_ADDRESS 0x1006
+      BIT_MASK 0x01
+    /end MEASUREMENT
+    /begin MEASUREMENT ClutchPressed "Clutch pedal pressed"
+      UBYTE IDENT 0 0 0 1
+      ECU_ADDRESS 0x1006
+      BIT_MASK 0x02
+    /end MEASUREMENT
+    /begin MEASUREMENT WheelSpeeds "Wheel speeds FL, FR, RL, RR"
+      UWORD KMH 0 0 0 300
+      ECU_ADDRESS 0x1010
+      ARRAY_SIZE 4
+    /end MEASUREMENT
 
     /begin CHARACTERISTIC IdleTarget "Idle speed target" VALUE 0x2000 RL_UWORD 0 RPM 0 8000
     /end CHARACTERISTIC
     /begin CHARACTERISTIC FanOn "Cooling fan on" VALUE 0x2002 RL_UBYTE 0 IDENT 0 1
     /end CHARACTERISTIC
     /begin CHARACTERISTIC InjectorScale "Injector scaling" VALUE 0x2004 RL_FLOAT 0 IDENT 0 2
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC FanMode "Cooling fan mode" VALUE 0x2008 RL_UBYTE 0 FANMODE 0 2
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC IgnitionCurve "Ignition advance over engine speed" CURVE 0x2100 RL_CURVE 0 DEG 0 60
+      /begin AXIS_DESCR STD_AXIS EngineSpeed RPM 8 0 8000
+      /end AXIS_DESCR
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC FuelMap "Injection over engine speed and load" MAP 0x2200 RL_MAP 0 PERCENT 0 100
+      /begin AXIS_DESCR STD_AXIS EngineSpeed RPM 6 0 8000
+      /end AXIS_DESCR
+      /begin AXIS_DESCR COM_AXIS EngineLoad LOAD 4 0 100
+        AXIS_PTS_REF LoadAxis
+      /end AXIS_DESCR
+    /end CHARACTERISTIC
+    /begin AXIS_PTS LoadAxis "Engine load breakpoints" 0x2300 EngineLoad RL_AXIS 0 LOAD 4 0 100
+    /end AXIS_PTS
+    /begin CHARACTERISTIC GearRatios "Gear ratios" VAL_BLK 0x2400 RL_FLOAT 0 IDENT 0 10
+      NUMBER 6
+    /end CHARACTERISTIC
+    /begin CHARACTERISTIC VariantCode "Variant code" ASCII 0x2500 RL_UBYTE 0 IDENT 0 255
+      NUMBER 8
     /end CHARACTERISTIC
 
   /end MODULE

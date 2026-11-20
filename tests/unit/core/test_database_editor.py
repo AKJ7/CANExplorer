@@ -198,9 +198,9 @@ def test_new_and_read_only_formats(data_dir, tmp_path):
 
     arxml = DatabaseEditor(data_dir / 'example.arxml')
     assert not arxml.writable
-    with pytest.raises(DatabaseFormatError, match='Cannot write .arxml'):
-        arxml.save()
-    # ...but a read-only database can always be output in a writable format (Save as).
+    with pytest.raises(DatabaseFormatError, match='more than the signal database'):
+        arxml.save()  # An opened system description is not overwritten (see test_arxml_writer)
+    # ...but it can always be output under another name (Save as).
     output = tmp_path / 'from_arxml.dbc'
     arxml.save(output)
     assert arxml.writable and arxml.path == output and DatabaseEditor(output).messages

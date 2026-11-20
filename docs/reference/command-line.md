@@ -62,7 +62,8 @@ Shares CAN interfaces of this computer with CANExplorer on other computers, see 
 
 ```text
 can-server --bus NAME=INTERFACE:CHANNEL[:BITRATE[:DATA_BITRATE]] [--bus ...] [--host HOST] [--port PORT]
-           [--token TOKEN] [-v]
+           [--token TOKEN] [--database NAME=FILE ...] [--mqtt URL] [--mqtt-frames] [--mqtt-retain]
+           [--mqtt-interval SECONDS] [--mqtt-send MESSAGE|ID|* ...] [-v]
 ```
 
 | Argument | Description |
@@ -71,12 +72,12 @@ can-server --bus NAME=INTERFACE:CHANNEL[:BITRATE[:DATA_BITRATE]] [--bus ...] [--
 | `--host` | Address to listen on; default `0.0.0.0` |
 | `--port` | TCP port; default 8765 |
 | `--token` | Token clients must present; also from `CAN_SERVER_TOKEN` |
+| `--database`, `--mqtt`, `--mqtt-frames`, `--mqtt-retain`, `--mqtt-interval`, `--mqtt-send` | Publish the buses to an MQTT broker, see [MQTT from can-server](../user-guide/remote-buses.md#mqtt) |
 | `-v`, `--verbose` | Log every client connection and bus event |
 
 ## can-mcp
 
-Exposes one bus to an AI agent over the [Model Context Protocol](../user-guide/mcp.md) (stdio). Needs the `mcp`
-extra. Read-only unless a permission flag is given. With `--interface` and `--channel` it opens that bus at start;
+Exposes one bus to an AI agent over the [Model Context Protocol](../user-guide/mcp.md) (stdio). Read-only unless a permission flag is given. With `--interface` and `--channel` it opens that bus at start;
 without them it starts unconnected and the agent opens a bus with the `connect` tool.
 
 ```text
@@ -107,7 +108,7 @@ can-db-convert [-h] [--protocol {CAN,J1939}] [--bus BUS] input output
 | Argument | Description |
 |---|---|
 | `input` | Database to read: `.dbc`, `.dbf`, `.kcd`, `.sym`, `.arxml` |
-| `output` | Database to write: `.dbc`, `.dbf`, `.kcd`, `.sym` |
+| `output` | Database to write: `.dbc`, `.dbf`, `.kcd`, `.sym`, `.arxml` ([what ARXML holds](../user-guide/signal-databases.md#writing-arxml)) |
 | `--protocol` | Protocol of a DBF output. Default: `J1939` if the DBC declares the attribute `ProtocolType "J1939"`, else `CAN` |
 | `--bus` | Convert only this bus of a database describing several (ARXML cluster, KCD bus) |
 
@@ -118,4 +119,5 @@ is 0 on success and 1 on errors.
 uv run can-db-convert vehicle.dbc vehicle.dbf
 uv run can-db-convert vehicle.dbf vehicle.dbc
 uv run can-db-convert system.arxml powertrain.kcd --bus Powertrain
+uv run can-db-convert vehicle.dbc vehicle.arxml
 ```

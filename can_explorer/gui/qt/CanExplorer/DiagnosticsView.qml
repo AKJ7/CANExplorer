@@ -200,6 +200,8 @@ ColumnLayout {
                             text: "7E0"
                             font.family: "monospace"
                             Layout.fillWidth: true
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("CAN identifier in hex. For extended or mixed addressing add the address byte that starts every frame after a colon, e.g. 6F1:12")
                             onEditingFinished: root.applyAddressing()
                         }
                         TextField {
@@ -207,6 +209,8 @@ ColumnLayout {
                             text: "7E8"
                             font.family: "monospace"
                             Layout.fillWidth: true
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("CAN identifier in hex. For extended or mixed addressing add the address byte that starts every frame after a colon, e.g. 6F1:12")
                             onEditingFinished: root.applyAddressing()
                         }
                     }
@@ -569,6 +573,9 @@ ColumnLayout {
                     readonly property var credential: authCredentialBox.currentIndex >= 0 && credentials.length > 0
                         ? credentials[authCredentialBox.currentIndex] : null
                     readonly property var trustedSets: entries.filter(entry => entry.purpose === "tls-ca").map(entry => entry.name)
+                    // transmitCertificate: any certificate of the Security Manager (client certificates, trusted sets)
+                    readonly property var anyCertificates: entries.filter(entry => entry.purpose === "tls-client" || entry.purpose === "tls-ca")
+                        .map(entry => entry.name)
 
                     RowLayout {
                         Layout.fillWidth: true
@@ -654,11 +661,54 @@ ColumnLayout {
                             Layout.fillWidth: true
                         }
                     }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        FieldLabel { text: qsTr("Session key") }
+                        TextField {
+                            id: authConfigurationField
+                            text: "00"
+                            font.family: "monospace"
+                            Layout.preferredWidth: 60
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("The communicationConfiguration (hex): 00 asks for no session key; the values asking an ECU for one are defined by its manufacturer. The session key can then protect secured transmission (0x84)")
+                        }
+                        Label {
+                            text: root.diagnostics.session_key || qsTr("none")
+                            color: root.diagnostics.session_key ? Theme.success : Theme.muted
+                            elide: Text.ElideRight
+                            Layout.fillWidth: true
+                        }
+                    }
                     Label {
                         visible: root.diagnostics.authenticated
                         text: qsTr("Authenticated")
                         color: Theme.success
                         Layout.fillWidth: true
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        FieldLabel { text: qsTr("Transmit") }
+                        ComboBox {
+                            id: transmitCertificateBox
+                            model: authSection.anyCertificates.length > 0 ? authSection.anyCertificates : [qsTr("none in the Security Manager")]
+                            enabled: authSection.anyCertificates.length > 0
+                            Layout.fillWidth: true
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("A general-purpose certificate to give the ECU with transmitCertificate (0x04), e.g. for secure coding, SecOC or TLS")
+                        }
+                        TextField {
+                            id: evaluationIdField
+                            placeholderText: qsTr("evaluation id")
+                            font.family: "monospace"
+                            Layout.preferredWidth: 110
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("The certificateEvaluationId (hex, 16 bits): tells the ECU what the certificate is for; the values are defined by its manufacturer")
+                        }
+                        Button {
+                            text: qsTr("Transmit")
+                            enabled: root.ready && authSection.anyCertificates.length > 0 && evaluationIdField.text.length > 0
+                            onClicked: root.report(root.diagnostics.transmit_certificate(transmitCertificateBox.currentText, evaluationIdField.text))
+                        }
                     }
                     RowLayout {
                         Layout.fillWidth: true
@@ -689,6 +739,7 @@ ColumnLayout {
                                         trusted: trusted,
                                         algorithm: authAlgorithmField.text,
                                         additional: authAdditionalField.text,
+                                        configuration: authConfigurationField.text,
                                     }))
                                 else
                                     root.report(root.diagnostics.authenticate({
@@ -696,9 +747,146 @@ ColumnLayout {
                                         scheme: authSchemeBox.currentValue,
                                         bidirectional: authBidirectionalBox.checked,
                                         trusted: trusted,
+                                        configuration: authConfigurationField.text,
                                     }))
                             }
                         }
+                    }
+                }
+
+                // SecuredDataTransmission (0x84): the requests of this view in signed and/or encrypted envelopes, with a
+                // secured data key of the Security Manager (CANExplorer's reference scheme) or a provider file with the
+                // manufacturer's scheme
+                Section {
+                    id: securedSection
+                    title: qsTr("Secured transmission (0x84)")
+                    property string providerFile: ""
+                    readonly property var keys: authSection.entries.filter(entry => entry.purpose === "uds-sdt-key")
+                        .map(entry => ({ value: "keystore:" + entry.name, text: entry.name }))
+                    readonly property var sources: [{ value: "", text: qsTr("None (unsigned)") }]
+                        .concat([{ value: "session", text: qsTr("Session key (Authentication)") }]).concat(keys)
+                        .concat([{ value: "file", text: providerFile ? qsTr("Provider: %1").arg(root.fileName(providerFile)) : qsTr("Provider file…") }])
+                    readonly property string source: securedSourceBox.currentValue === "file" ? providerFile : (securedSourceBox.currentValue || "")
+                    readonly property bool keyStoreKey: source.startsWith("keystore:")
+                    readonly property bool sessionKey: source === "session"
+
+                    function apply(counter) {
+                        const options = {
+                            enabled: securedEnabledBox.checked,
+                            source: source,
+                            sign: securedSignBox.checked,
+                            encrypt: securedEncryptBox.checked,
+                            signed_response: securedResponseBox.checked,
+                            algorithm: securedAlgorithmField.text,
+                            length: keyStoreKey || sessionKey ? securedLengthBox.value : 0,
+                        }
+                        if (counter !== undefined)
+                            options.counter = counter
+                        const error = root.diagnostics.set_secured(options)
+                        if (error)
+                            securedEnabledBox.checked = false
+                        root.report(error)
+                    }
+
+                    CheckBox {
+                        id: securedEnabledBox
+                        text: qsTr("Send requests secured")
+                        checked: root.diagnostics.secured
+                        onToggled: securedSection.apply()
+                        // Clicking replaces the binding: follow the controller, which ends requests secured with a
+                        // session key when the authentication ends
+                        Connections {
+                            target: root.diagnostics
+                            function onChanged() { securedEnabledBox.checked = root.diagnostics.secured }
+                        }
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Wrap every request of this page in a SecuredDataTransmission envelope (ISO 14229-1:2020) and check and unwrap the responses. Tester present and flashing stay plain")
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        FieldLabel { text: qsTr("Key") }
+                        ComboBox {
+                            id: securedSourceBox
+                            model: securedSection.sources
+                            textRole: "text"
+                            valueRole: "value"
+                            Layout.fillWidth: true
+                            onActivated: {
+                                if (currentValue === "file")
+                                    securedProviderDialog.open()
+                                else
+                                    securedSection.apply()
+                            }
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("The session key of the last authentication (from the shared key with CANExplorer's reference derivation, or from the security profile's session_provider), a secured data key of the Security Manager (CANExplorer's reference scheme: a MAC over the message, no encryption), or a Python provider file implementing the manufacturer's scheme (signature_length, sign, verify, encrypt, decrypt)")
+                        }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        FieldLabel { text: qsTr("Algorithm") }
+                        TextField {
+                            id: securedAlgorithmField
+                            text: "00"
+                            font.family: "monospace"
+                            Layout.preferredWidth: 60
+                            onEditingFinished: securedSection.apply()
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("The Signature/Encryption Calculation byte (hex): 00–7F vehicle manufacturer, 80–8F system supplier specific; it tells the ECU which algorithm protects the message")
+                        }
+                        FieldLabel { text: qsTr("MAC bytes"); visible: securedSection.keyStoreKey || securedSection.sessionKey }
+                        SpinBox {
+                            id: securedLengthBox
+                            visible: securedSection.keyStoreKey || securedSection.sessionKey
+                            from: 0
+                            to: 32
+                            value: 0
+                            onValueModified: securedSection.apply()
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("Truncate the MAC to this many bytes (0: the full MAC, 32 bytes for HMAC-SHA-256, 16 for AES-CMAC)")
+                        }
+                        Item { Layout.fillWidth: true }
+                    }
+                    Flow {
+                        Layout.fillWidth: true
+                        spacing: 8
+                        CheckBox {
+                            id: securedSignBox
+                            text: qsTr("Sign")
+                            checked: true
+                            enabled: securedSection.source !== ""
+                            onToggled: securedSection.apply()
+                        }
+                        CheckBox {
+                            id: securedEncryptBox
+                            text: qsTr("Encrypt")
+                            enabled: securedSection.source !== "" && !securedSection.keyStoreKey
+                            onToggled: securedSection.apply()
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("Encrypt the internal message; needs a provider file with encrypt and decrypt (the reference scheme does not encrypt)")
+                        }
+                        CheckBox {
+                            id: securedResponseBox
+                            text: qsTr("Signed response")
+                            enabled: securedSection.source !== ""
+                            onToggled: securedSection.apply()
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("Ask the ECU to sign its response, and refuse unsigned ones")
+                        }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        FieldLabel { text: qsTr("Counter") }
+                        SpinBox {
+                            id: securedCounterBox
+                            from: 0
+                            to: 65535
+                            editable: true
+                            value: root.diagnostics.secured_counter
+                            onValueModified: securedSection.apply(value)
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("The anti-replay counter of the next request; it increases by one per request. ECUs refuse counters they have already seen")
+                        }
+                        Item { Layout.fillWidth: true }
                     }
                 }
 
@@ -1088,6 +1276,17 @@ ColumnLayout {
         fileMode: FileChooser.OpenFile
         nameFilters: [qsTr("CANdelaStudio descriptions (*.cdd)"), qsTr("All files (*)")]
         onAccepted: root.report(root.diagnostics.load_description(selectedFile))
+    }
+
+    FileChooser {
+        id: securedProviderDialog
+        title: qsTr("Secured transmission provider")
+        fileMode: FileChooser.OpenFile
+        nameFilters: [qsTr("Python files (*.py)")]
+        onAccepted: {
+            securedSection.providerFile = root.diagnostics.secured_provider_path(selectedFile)
+            securedSection.apply()
+        }
     }
 
     FileChooser {

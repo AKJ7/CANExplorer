@@ -433,3 +433,135 @@ async def test_challenge_response_credentials_from_the_key_store(pki, tmp_path):
     store.lock()
     with pytest.raises(UdsAuthenticationError, match='locked'):
         uds_auth.challenge_response_credentials(store, 'Shared')
+
+
+# transmitCertificate (0x04)
+
+
+async def test_transmit_certificate(pki):
+    server = ecu(pki, certificate_evaluation_ids=(0x0001,))
+    client = UdsClient(Loopback(server))
+    assert uds_auth.request(uds_auth.TRANSMIT_CERTIFICATE, certificate=b'\xaa', certificate_evaluation_id=1) == (
+        bytes([0x29, 0x04, 0x00, 0x01, 0x00, 0x01, 0xAA])
+    )
+    assert await client.transmit_certificate(pki['tester'], 0x0001) == 'certificate verified'
+    assert server.authentication.received_certificates[1] == pki['tester']
+    assert not server.authentication.authenticated  # A general-purpose certificate does not authenticate
+    with pytest.raises(UdsNegativeResponse) as unknown:
+        await client.transmit_certificate(pki['tester'], 0x0002)
+    assert unknown.value.code == 0x31  # No such certificateEvaluationId (SWS_Dcm_01682)
+    stranger_key = ec.generate_private_key(ec.SECP256R1())
+    with pytest.raises(UdsNegativeResponse) as untrusted:
+        await client.transmit_certificate(issue('Stranger', stranger_key), 0x0001)
+    assert untrusted.value.code == uds_auth.INVALID_CHAIN_OF_TRUST
+    with pytest.raises(UdsNegativeResponse) as garbage:
+        await client.transmit_certificate(b'\x30\x00', 0x0001)
+    assert garbage.value.code == uds_auth.INVALID_FORMAT
+    with pytest.raises(UdsAuthenticationError):
+        await client.transmit_certificate(pki['tester'], 0x10000)
+    assert server.handle(bytes([0x29, 0x04, 0x00]))[0] == bytes([0x7F, 0x29, 0x13])
+    assert uds_auth.describe(bytes([0x69, 0x04, 0x13])) == 'Authentication transmitCertificate: certificate verified'
+
+
+# Roles and white lists (AUTOSAR Dcm §7.6.2.10.4-5)
+
+OIDS = uds_auth.AccessOids(
+    role='1.3.6.1.4.1.55555.1.1',
+    services='1.3.6.1.4.1.55555.1.2',
+    dids='1.3.6.1.4.1.55555.1.3',
+    rids='1.3.6.1.4.1.55555.1.4',
+    memory_selections='1.3.6.1.4.1.55555.1.5',
+)
+
+
+def tester_with(pki, **rights):
+    from can_explorer.core.test_pki import issue as pki_issue
+
+    key = ec.generate_private_key(ec.SECP256R1())
+    extensions = uds_auth.access_extensions(OIDS, **rights)
+    return pki_issue(name('Workshop tester'), key, pki['ca'], pki['ca_key'], 30, extensions=extensions), key
+
+
+def test_access_rights_from_a_certificate(pki):
+    certificate, _key = tester_with(
+        pki,
+        role=bytes([0x05, 0x01]),  # Little endian: 0x0105
+        services=[b'\x85', b'\x11\x01', b'\x22\x12\x3a', b'\x31\x01\x13\xf4'],
+        dids=[(0x1A90, 0x01), (0x314F, 0x05)],
+        rids=[(0x0240, 0x01), (0x028A, 0x07)],
+        memory_selections=[0x02],
+    )
+    rights = uds_auth.access_rights(certificate, OIDS)
+    assert rights.role == 0x0105 and rights.role_size == 2
+    assert uds_auth.private_extensions(certificate)[0][0] == OIDS.role
+    # The examples of SWS_Dcm_01524..01526
+    allowed = [
+        b'\x85\x02',  # Service 0x85 with any sub-function
+        b'\x11\x01',
+        b'\x22\x12\x3a',
+        b'\x31\x01\x13\xf4',
+        b'\x22\x1a\x90',  # DID 0x1A90: read
+        b'\x2f\x31\x4f\x03',  # DID 0x314F: IO control
+        b'\x31\x01\x02\x40',  # RID 0x0240: start
+        b'\x31\x03\x02\x8a',  # RID 0x028A: all sub-functions
+        b'\x19\x17\xff\xff\xff\x02',  # Fault memory selection 2
+    ]
+    refused = [b'\x11\x02', b'\x2e\x1a\x90\x00', b'\x22\x1a\x90\x31\x4f\x00\x01', b'\x31\x02\x02\x40', b'\x19\x17\x01']
+    assert all(rights.white_listed(request) for request in allowed)
+    assert not any(rights.white_listed(request) for request in refused)
+    assert rights.allows(b'\x10\x03', 0x0004)  # Role bit 2 set
+    assert not rights.allows(b'\x10\x03', 0x0002)
+    assert rights.allows(b'\x10\x03', None)
+    assert 'role 0x0105' in rights.describe() and 'DIDs 1A90:1, 314F:5' in rights.describe()
+    with pytest.raises(UdsAuthenticationError, match='expects 1'):
+        uds_auth.access_rights(certificate, OIDS, role_size=1)
+    assert uds_auth.access_rights(pki['tester'], OIDS).describe() == 'no role or white list'
+
+
+async def test_ecu_grants_services_by_role_and_white_list(pki):
+    certificate, key = tester_with(pki, role=b'\x02', dids=[(0xF198, 0x01)])
+    authentication = AuthenticationServer(
+        [pki['ca']], 'ecdsa-sha256', access_oids=OIDS, role_size=1, deauthenticated_role=0x01
+    )
+    roles = {b'\x11': 0x02, b'\x31\x01\x56\x78': 0x04, b'\x22\xf1\x98': 0x08, b'\x10': 0x01}
+    server = UdsServer(authentication=authentication, service_roles=roles)
+    client = UdsClient(Loopback(server))
+    assert server.handle(b'\x10\x01')[0][0] == 0x50  # The deauthenticated role allows session control
+    assert server.handle(b'\x11\x01') == [bytes([0x7F, 0x11, 0x34])]
+    result = await client.authenticate(certificate, key, 'ecdsa-sha256')
+    assert result.authenticated and authentication.access.role == 0x02
+    assert server.handle(b'\x11\x01')[0][0] == 0x51  # Role 'after sales' (bit 1)
+    assert server.handle(b'\x31\x01\x56\x78') == [bytes([0x7F, 0x31, 0x34])]  # Production only (bit 2)
+    server.dids[0xF198] = b'X'
+    assert server.handle(b'\x22\xf1\x98')[0][0] == 0x62  # Not in the role, but white-listed for reading
+    assert server.handle(b'\x10\x01') == [bytes([0x7F, 0x10, 0x34])]  # Authenticated: the certificate's role only
+    await client.deauthenticate()
+    assert authentication.access is None and server.handle(b'\x11\x01') == [bytes([0x7F, 0x11, 0x34])]
+    # A role of the wrong size is invalid content
+    wide, wide_key = tester_with(pki, role=b'\x02\x00')
+    with pytest.raises(UdsNegativeResponse) as invalid:
+        await client.authenticate(wide, wide_key, 'ecdsa-sha256')
+    assert invalid.value.code == uds_auth.INVALID_CONTENT and not authentication.authenticated
+
+
+async def test_ecu_deauthenticates_on_idle_and_s3_timeout(pki):
+    now = [0.0]
+    server = UdsServer(
+        authentication=AuthenticationServer([pki['ca']], 'ecdsa-sha256'),
+        authentication_dids=(0xF198,),
+        authentication_timeout=10.0,
+        s3_timeout=5.0,
+        clock=lambda: now[0],
+    )
+    server.dids[0xF198] = b'X'
+    client = UdsClient(Loopback(server))
+    await client.authenticate(pki['tester'], pki['tester_key'], 'ecdsa-sha256')
+    now[0] += 9.0
+    assert server.handle(b'\x22\xf1\x98')[0][0] == 0x62
+    now[0] += 11.0  # Idle in the default session (SWS_Dcm_01482)
+    assert server.handle(b'\x22\xf1\x98') == [bytes([0x7F, 0x22, 0x34])]
+    await client.authenticate(pki['tester'], pki['tester_key'], 'ecdsa-sha256')
+    server.handle(b'\x10\x03')
+    now[0] += 6.0  # S3server timeout in the extended session (SWS_Dcm_01483): default session, deauthenticated
+    assert server.handle(b'\x22\xf1\x98') == [bytes([0x7F, 0x22, 0x34])]
+    assert server.session == 0x01

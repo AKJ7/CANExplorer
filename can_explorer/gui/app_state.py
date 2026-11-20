@@ -133,8 +133,13 @@ class AppState(QObject):
 
     def add_recent_connection(self, connection: Dict[str, Any]) -> None:
         entry = dict(connection)
-        entry['label'] = f'{entry["name"]} ({entry["interface"]}:{entry["channel"]})'
-        entry['identity'] = f'{entry["name"]}|{entry["interface"]}|{entry["channel"]}'
+        endpoint = entry['channel']
+        if entry.get('host'):
+            endpoint = (
+                f'{entry["host"]}:{entry["port"]}/{endpoint}' if entry.get('port') else f'{entry["host"]}/{endpoint}'
+            )
+        entry['label'] = f'{entry["name"]} ({entry["interface"]}:{endpoint})'
+        entry['identity'] = f'{entry["name"]}|{entry["interface"]}|{endpoint}'
         self._store_list('recent/connections', self._push(self.recent_connections, entry, 'identity'))
         self.recent_connections_changed.emit()
 

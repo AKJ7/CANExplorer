@@ -1,285 +1,609 @@
 # MCP interface
 
-CANExplorer speaks the [Model Context Protocol](https://modelcontextprotocol.io), so an AI agent (for example Claude
-Desktop, or an agent you build) can inspect a CAN bus — and, when you allow it, run diagnostics or transmit —
-through a small set of tools. There are two ways to expose a bus:
+CANExplorer speaks the [Model Context Protocol](https://modelcontextprotocol.io) (MCP), so an AI agent such as
+Claude Desktop, Claude Code or an agent you build can work on a CAN bus through a set of **tools**. You ask in plain
+language, for example *"which identifiers are on the bus, and what is in 0x123?"*, and the agent calls the tools it
+needs and explains the answers.
 
-- the **in-app server**, hosted by the GUI for a connection it already has open, so the agent sees the same live
-  bus you do — described first below, and
-- the **`can-mcp` command**, a standalone process that opens its own bus over stdio.
+What an agent can do through it:
 
-Both expose the same tools, [resources](#resources-and-prompts) and [prompts](#resources-and-prompts), and both are
-**read-only** until you grant more with a [permission tier](#permission-tiers).
+- **Look at the bus**: connection state, bus load, every identifier with its cycle time, recent frames.
+- **Decode**: frames into signals with a database, or payloads with a protocol decoder (UDS, J1939, CANopen…).
+- **Reverse-engineer**: find checksums, counters and physical values, test a guess, and write the result to a DBC.
+- **Diagnose** *(when you allow it)*: read OBD-II and UDS trouble codes and live values, XCP measurements.
+- **Act** *(when you allow it)*: clear codes, reset ECUs, write calibrations, transmit frames.
 
-## In-app server (attach an agent to the live bus)
+Everything is **read-only by default**. Diagnostics, ECU control and transmitting each need a
+[permission tier](#permission-tiers) that you grant.
+
+## Quick start
+
+There are two ways to give an agent a bus. Both offer the same tools.
+
+=== "Live bus in the GUI (in-app server)"
+
+    Use this when the GUI already has the bus open: the agent sees the same live trace you do.
+
+    1. Open the connection and go to its **Trace** page.
+    2. Press **Agent…** in the toolbar, keep the tier on **read-only**, and press **Start**.
+    3. Copy the **URL** and **token** the dialog shows into your client
+       ([Claude Code](#claude-code), [Claude Desktop and others](#claude-desktop-and-other-json-configs)).
+    4. Ask the agent: *"What is on the bus?"*
+
+=== "Standalone (`can-mcp` command)"
+
+    Use this without the GUI, for example on a test bench or a headless machine.
+
+    1. Register the command with your client, for example in Claude Code:
+
+        ```bash
+        claude mcp add canexplorer -- can-mcp
+        ```
+
+    2. Ask the agent: *"List the CAN interfaces and connect to can0 at 500 kbit/s."*
+
+    The client starts `can-mcp` itself. Without arguments the agent picks and opens the bus; see
+    [the `can-mcp` command](#the-can-mcp-command) to open one up front.
+
+### Which one should I use?
+
+| | In-app server | `can-mcp` |
+|---|---|---|
+| Runs | Inside the GUI, for one open connection | As its own process, started by the MCP client |
+| Bus | The connection the GUI already has open | Opened by `can-mcp` (at start, or by the agent with `connect`) |
+| Transport | Streamable HTTP on `127.0.0.1`, with a token | stdio |
+| Opening/closing the bus | You, in the GUI | The agent (`connect`, `disconnect`) |
+| Best for | Working on a bus together with the agent while you watch | Scripts, benches, machines without a display |
+
+Most USB and serial adapters can only be opened by one program at a time. To share a bus the GUI already has open,
+use the in-app server.
+
+## In-app server
 
 ![The AI agent (MCP) dialog started read-only, with the server URL and token](../assets/screenshots/mcp.png)
 
-The GUI can host the MCP server for a **connection it already has open**, so the agent works on the same live trace
-you are watching. This is the way to attach an agent to a bus the GUI is using: most USB/serial adapters are
-single-access, so a separate `can-mcp` process cannot open the same channel at the same time.
+The **Agent…** button on a connection's **Trace** toolbar opens this dialog. Choose the tier and press **Start**.
+The server then:
 
-**Start it** from a connection's **Trace** toolbar: the **Agent…** button opens the dialog above. Choose the
-access tier (read-only by default), press **Start**, and the server binds to `127.0.0.1` on a free port and shows
-a **URL** and a **token**. The button turns into **● Agent** while it is running; press it again to stop. The agent
-cannot open or close the bus — you manage that from the GUI — but the [permission tiers](#permission-tiers) apply
-exactly as for the command.
+- listens on `127.0.0.1` only, on a free port, at a URL like `http://127.0.0.1:57205/mcp`;
+- requires the **token** on every request, either as an `Authorization: Bearer <token>` header or as `?token=<token>`
+  at the end of the URL. A request without it is refused (HTTP 401);
+- shows **● Agent** on the toolbar while it runs. Press it again to stop the server.
 
-**Communicate with it** over the **streamable-HTTP** transport, passing the token on every request as either an
-`Authorization: Bearer <token>` header or a `?token=<token>` query parameter. A request without the right token is
-rejected. See [connecting a client](#connecting-a-client) for a config entry and [scripting](#scripting) for a
-runnable example.
+The port and token change every time you start it, so copy them again after a restart. The agent cannot open or
+close the bus: you do that in the GUI.
 
-!!! warning "A listening server is a bigger surface"
-    The in-app server is off by default and loopback-only, and the token gates it — but an agent on a `control` or
-    `send` tier can reset ECUs, clear codes or transmit on your live bus. Start it deliberately, and prefer
-    read-only unless you need more.
-
-## The `can-mcp` command (standalone)
-
-`can-mcp` runs the same server as its own process, talking to one bus with python-can and answering the client's
-tool calls over **stdio**. It is installed with CANExplorer (the `mcp` package is a core dependency), so the
-`can-mcp` command and the in-app server are available out of the box.
-
-The simplest form takes no arguments — the agent lists the interfaces and connects to one itself, and loads a
-database if it needs one:
+To attach Claude Code, put the port and token from the dialog into this command:
 
 ```bash
-can-mcp
+claude mcp add --transport http canexplorer-live http://127.0.0.1:PORT/mcp \
+  --header "Authorization: Bearer YOUR_TOKEN"
 ```
 
-Everything else is optional. Give a bus up front if you prefer it opened at start:
+After a restart of the server, remove the old entry first (`claude mcp remove canexplorer-live`) and add it again
+with the new port and token. For other clients, see [connecting a client](#connecting-a-client).
+
+!!! warning "Start it deliberately"
+    The server is off until you start it, and loopback-only. On the `control` or `send` tier, though, the agent can
+    reset ECUs, clear codes or transmit on your live bus. Prefer read-only unless you need more.
+
+## The `can-mcp` command
+
+`can-mcp` runs the same server as a separate process and talks to the client over stdio. It is installed with
+CANExplorer. All its arguments are optional:
 
 ```bash
-can-mcp -i socketcan -c can0                 # open this bus immediately (read-only)
-can-mcp -i socketcan -c can0 -d vehicle.dbc  # …and decode frames into named signals
+can-mcp                                                   # the agent lists interfaces and connects itself
+can-mcp -i socketcan -c can0                              # open can0 at start (read-only)
+can-mcp -i socketcan -c can0 -d vehicle.dbc               # ...and decode frames into named signals
+can-mcp -i pcan -c PCAN_USBBUS1 -b 250000                 # another adapter and bitrate
+can-mcp -i socketcan -c can0 --fd --data-bitrate 2000000  # CAN FD
+can-mcp -i socketcan -c can0 --allow-diagnostics          # also allow OBD-II/UDS/XCP reads
+can-mcp -d vehicle.dbc                                    # a database, no bus: decode payloads offline
 ```
 
-Either way the `connect(interface, channel)` and `disconnect` tools are always available, so the agent can open or
-switch buses at any time, and `load_database` / `unload_database` load or clear a database at runtime. (Omitting
-`--interface` and `--channel` just means the server starts unconnected; give both, or neither.)
+Give both `--interface` and `--channel`, or neither. Even with a bus given, the agent can switch buses with
+`connect` and `disconnect`, and load or forget a database with `load_database` and `unload_database`. All options
+are in the [command-line reference](../reference/command-line.md#can-mcp).
 
-Add a permission flag to allow more — for example `--allow-diagnostics` for OBD-II and UDS reads, or `--allow-send`
-for full transmit. See [`can-mcp`](../reference/command-line.md#can-mcp) for all options.
-
-!!! warning "Reads are the default; grant the rest deliberately"
-    Without a permission flag the agent can only read the bus. Grant `--allow-diagnostics`, `--allow-control` or
-    `--allow-send` only on a bus you are allowed to use that way, and remember the agent then decides what is sent
-    — a `--allow-control` or `--allow-send` server can reset ECUs, clear trouble codes or transmit arbitrary
-    frames.
+!!! warning "Grant more only where you may"
+    Grant `--allow-diagnostics`, `--allow-control` or `--allow-send` only on a bus you are allowed to use that way.
+    The agent then decides what is sent: with `--allow-control` or `--allow-send` it can reset ECUs, clear trouble
+    codes or transmit arbitrary frames.
 
 ## Connecting a client
 
-**A stdio client** (the common case) launches `can-mcp` itself from a config file. The simplest entry is just the
-command; the agent connects and picks a bus:
+### Claude Code
 
-```json
-{
-  "mcpServers": {
-    "canexplorer": { "command": "can-mcp" }
-  }
-}
+```bash
+# can-mcp over stdio, read-only, the agent picks the bus
+claude mcp add canexplorer -- can-mcp
+
+# can-mcp with a bus, a database and diagnostics
+claude mcp add canexplorer -- can-mcp -i socketcan -c can0 -d /path/vehicle.dbc --allow-diagnostics
+
+# the in-app server (URL and token from the Agent… dialog)
+claude mcp add --transport http canexplorer-live http://127.0.0.1:57205/mcp \
+  --header "Authorization: Bearer WWPkEFJO7GXuAQJR1tCarQ"
 ```
 
-To pin a bus (and a database, and permissions), add them as `args`:
+### Claude Desktop and other JSON configs
 
-```json
-{
-  "mcpServers": {
-    "canexplorer": {
-      "command": "can-mcp",
-      "args": ["-i", "socketcan", "-c", "can0", "-d", "/path/vehicle.dbc", "--allow-diagnostics"]
+Most clients read a JSON file with an `mcpServers` section (for Claude Desktop, `claude_desktop_config.json`).
+
+=== "can-mcp"
+
+    ```json
+    {
+      "mcpServers": {
+        "canexplorer": { "command": "can-mcp" }
+      }
     }
-  }
-}
-```
+    ```
 
-**The in-app server** is already running, so a client attaches to its URL over streamable-HTTP instead of launching
-anything. For a client that reads an HTTP MCP server from config, point it at the URL from the **Agent…** dialog and
-send the token as a Bearer header:
+=== "can-mcp with a bus"
+
+    ```json
+    {
+      "mcpServers": {
+        "canexplorer": {
+          "command": "can-mcp",
+          "args": ["-i", "socketcan", "-c", "can0", "-d", "/path/vehicle.dbc", "--allow-diagnostics"]
+        }
+      }
+    }
+    ```
+
+=== "In-app server"
+
+    ```json
+    {
+      "mcpServers": {
+        "canexplorer-live": {
+          "url": "http://127.0.0.1:57205/mcp",
+          "headers": { "Authorization": "Bearer WWPkEFJO7GXuAQJR1tCarQ" }
+        }
+      }
+    }
+    ```
+
+    A client that cannot set headers can use the URL with the token appended instead:
+    `http://127.0.0.1:57205/mcp?token=WWPkEFJO7GXuAQJR1tCarQ`.
+
+If the client reports that it cannot find `can-mcp`, give the full path to the command (`which can-mcp` on Linux and
+macOS, `where can-mcp` on Windows). This is common when CANExplorer is installed in a virtual environment.
+
+## Example sessions
+
+What an agent typically does for a request: the tools it calls, with their arguments, and the answers it gets back.
+The outputs below are real, captured from 40 seconds of a simulated vehicle bus and a simulated OBD-II ECU (shortened
+where marked `…`).
+
+### Survey an unknown bus
+
+> *"What is on this bus?"*
+
+`bus_status` gives the overview (shortened: it also reports `rx_per_s`, `tx_per_s` and `bus_load_percent`):
 
 ```json
 {
-  "mcpServers": {
-    "canexplorer-live": {
-      "url": "http://127.0.0.1:57205/mcp",
-      "headers": { "Authorization": "Bearer WWPkEFJO7GXuAQJR1tCarQ" }
-    }
-  }
+  "connected": true,
+  "database": null,
+  "capabilities": { "diagnostics": true, "control": false, "send": false },
+  "description": "virtual:bench @ 500000 bit/s",
+  "frames": 6800,
+  "identifiers": 3,
+  "error_frames": 0
 }
 ```
 
-(The port and token change each time you start the server — copy them from the dialog. A client that cannot set
-headers can instead use the URL with `?token=WWPkEFJO7GXuAQJR1tCarQ` appended.)
+`list_identifiers` gives one row per identifier, with its cycle time and latest data:
+
+```json
+[
+  { "id": "123", "direction": "rx", "count": 4000, "cycle_ms": 10.0, "dlc": 8, "data": "C9 FF C4 37 4B A0 7B 00" },
+  { "id": "500", "direction": "rx", "count": 2000, "cycle_ms": 20.0, "dlc": 8, "data": "0D 4F 1F 05 01 00 00 00" },
+  { "id": "600", "direction": "rx", "count": 800,  "cycle_ms": 50.0, "dlc": 8, "data": "01 78 3D EE DA 65 00 00" }
+]
+```
+
+`timing` with `{"identifier": "123"}` tells periodic from event-triggered traffic:
+
+```json
+{ "id": "123", "count": 4000, "cycle_ms": 10.0, "min_ms": 10.0, "max_ms": 10.0, "jitter_ms": 0.0, "pattern": "periodic" }
+```
+
+### Reverse-engineer an identifier
+
+> *"Work out what is in 0x123 and save it as a DBC."*
+
+1. **`analyze_identifier`** `{"identifier": "123"}` finds the fields:
+
+    ```json
+    {
+      "id": "123",
+      "frames": 4000,
+      "fields": [
+        { "field": "123[0|8@1+]",   "kind": "checksum", "confidence": 1.0,  "details": "CRC-8 SAE J1850 (AUTOSAR), constant 0x0A" },
+        { "field": "123[8|4@1+]",   "kind": "counter",  "confidence": 1.0,  "details": "counter, step +1, 0–15" },
+        { "field": "123[12|4@1+]",  "kind": "enum",     "confidence": 0.5,  "details": "3 values, rarely changing" },
+        { "field": "123[16|16@1+]", "kind": "physical", "confidence": 0.99, "details": "changes smoothly, 1629…63903" },
+        { "field": "123[39|12@0-]", "kind": "physical", "confidence": 0.99, "details": "changes smoothly, -1948…1947 (signed)" },
+        { "field": "123[56|1@1+]",  "kind": "flag",     "confidence": 0.6,  "details": "changes in 0.5% of the frames" }
+      ]
+    }
+    ```
+
+    A field is written `ID[start|length@order sign]`, as in a DBC: `@1` is little-endian (Intel), `@0` big-endian
+    (Motorola), `+` unsigned and `-` signed.
+
+2. **`extract_field`** tests a guess, here that bits 16–31 are an engine speed at 0.25 rpm per bit:
+
+    ```json
+    // extract_field {"identifier": "123", "start": 16, "length": 16, "scale": 0.25, "max_samples": 5}
+    {
+      "field": "123[16|16@1+]",
+      "min": 407.25,
+      "max": 15975.75,
+      "changes": 3986,
+      "series": [
+        { "t": 0.0, "value": 3588.25 },
+        { "t": 10.0, "value": 12796.5 },
+        { "t": 20.0, "value": 3587.25 },
+        { "t": 29.99, "value": 12815.75 },
+        { "t": 39.99, "value": 3569.0 }
+      ]
+    }
+    ```
+
+3. **`promote_to_dbc`** writes the confirmed field. An existing file is extended, not overwritten:
+
+    ```json
+    // promote_to_dbc {"path": "found.dbc", "fields": [{"identifier": "123", "start": 16, "length": 16,
+    //                 "scale": 0.25, "name": "EngineSpeed", "unit": "rpm"}]}
+    { "path": "found.dbc", "signals": 1, "messages": 1, "skipped": 0, "warnings": [] }
+    ```
+
+    Without `fields`, it writes everything `analyze_identifier` found (use `min_confidence` to leave out weak
+    guesses).
+
+4. **`load_database`** `{"path": "found.dbc"}`. From then on, `get_frames` returns the new signal by name.
+
+The `reverse_engineer_identifier` [prompt](#prompts) walks an agent through these steps.
+
+### Find what reacts to an action
+
+> *"I'll press the brake pedal a few times. Find the signal."*
+
+1. The agent calls `mark` `{"label": "brake"}` each time you press the pedal (it asks you to tell it when).
+2. `reaction_at_markers` lists the fields that change around the marks, most specific first, with how many marks
+   each one hits compared with how often it changes anyway.
+
+For a single action, use `capture_reaction` instead: keep still for a few seconds, act, wait, then call it. It
+compares the action window with the quiet one before it. If you have a reference (a logged speed, a CSV column),
+`correlate` ranks the fields that follow it and fits their factor and offset.
+
+### Read trouble codes *(diagnostics tier)*
+
+> *"Is the check-engine light on? Why?"*
+
+```json
+// obd_status {}
+{ "mil_on": true, "dtc_count": 2 }
+
+// obd_dtcs {}
+{ "pending": false, "dtcs": ["P0133", "P0420"] }
+
+// obd_read {"pids": [12, 13]}
+{
+  "values": [
+    { "pid": 12, "name": "Engine speed", "value": 2500.0, "unit": "rpm" },
+    { "pid": 13, "name": "Vehicle speed", "value": 60.0, "unit": "km/h" }
+  ]
+}
+```
+
+The agent explains the codes from its own knowledge and the live values. Clearing them (`obd_clear`) needs the
+`control` tier.
+
+### Decode without a bus
+
+`decode_frame` and `decode_protocol` send nothing, so they also work offline (for example `can-mcp -d vehicle.dbc`
+with no bus):
+
+```json
+// decode_frame {"identifier": "100", "data": "A0 0F 5A 01 00 00 00 00"}
+{
+  "id": "100",
+  "name": "EngineData",
+  "description": "EngineData: EngineSpeed=1000 rpm, CoolantTemp=50 degC, GearPosition=First",
+  "signals": { "EngineSpeed": 1000.0, "CoolantTemp": 50, "GearPosition": "First" }
+}
+
+// decode_protocol {"protocol": "UDS", "identifier": "7E8", "data": "03 7F 22 31"}
+{ "id": "7E8", "protocol": "UDS",
+  "description": "ISO-TP SF (3 B): 7F 22 31 | UDS Negative response to ReadDataByIdentifier: requestOutOfRange" }
+
+// decode_protocol {"protocol": "J1939", "identifier": "18FEF100", "data": "FF 00 3C 00 00 00 00 FF", "extended": true}
+{ "id": "18FEF100", "protocol": "J1939", "description": "PGN 0x0FEF1 CCVS1 SA=0x00 DA=0xFF P6" }
+```
 
 ## Scripting
 
-Any MCP client library works; the examples below use the official [`mcp`](https://pypi.org/project/mcp/) Python SDK,
-which CANExplorer already depends on.
+You can call the tools from your own code with any MCP client library. These examples use the official
+[`mcp`](https://pypi.org/project/mcp/) Python SDK (version 2), which CANExplorer already depends on.
 
-**Against the in-app server** (streamable-HTTP + token). Copy the URL and token from the **Agent…** dialog:
-
-```python
-import asyncio
-
-from mcp import ClientSession
-from mcp.client.streamable_http import streamablehttp_client
-
-URL = 'http://127.0.0.1:57205/mcp'  # from the Agent… dialog
-TOKEN = 'WWPkEFJO7GXuAQJR1tCarQ'  # from the Agent… dialog
-
-
-async def main():
-    headers = {'Authorization': f'Bearer {TOKEN}'}
-    async with streamablehttp_client(URL, headers=headers) as (read, write, _):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-
-            tools = await session.list_tools()
-            print('tools:', [tool.name for tool in tools.tools])
-
-            status = await session.call_tool('bus_status', {})
-            print(status.content[0].text)
-
-            # Every identifier seen, with direction, count and cycle time
-            identifiers = await session.call_tool('list_identifiers', {})
-            print(identifiers.content[0].text)
-
-            # Reverse-engineer one identifier's fields
-            analysis = await session.call_tool('analyze_identifier', {'identifier': '1A0'})
-            print(analysis.content[0].text)
-
-            # Resources can be read directly, like documents
-            resource = await session.read_resource('can://status')
-            print(resource.contents[0].text)
-
-
-asyncio.run(main())
-```
-
-**Against `can-mcp` over stdio** — the client launches the process (here on a virtual bus, with diagnostics
-allowed):
+Every tool answers with JSON. With this SDK, `result.structured_content['result']` holds the whole answer as Python
+data (a dict, or a list for tools such as `list_identifiers`). `result.content` is the same answer as text parts,
+one part per list item. This small helper is used in the examples below:
 
 ```python
-import asyncio
-
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
-
-
-async def main():
-    params = StdioServerParameters(
-        command='can-mcp',
-        args=['-i', 'virtual', '-c', 'test', '--allow-diagnostics'],
-    )
-    async with stdio_client(params) as (read, write):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-
-            # Read the vehicle's stored trouble codes over OBD-II (needs --allow-diagnostics)
-            dtcs = await session.call_tool('obd_dtcs', {})
-            print(dtcs.content[0].text)
-
-
-asyncio.run(main())
+def answer(result):
+    """A tool's answer as Python data; raises if the call failed (e.g. a tool the tier does not allow)."""
+    if result.is_error:
+        raise RuntimeError(result.content[0].text)
+    return result.structured_content['result']
 ```
 
-A tool call returns a result whose `content` is a list of parts; the tools here answer with text (often JSON), read
-from `result.content[0].text`. A tool that is not enabled by the current tier is not offered, so calling it fails —
-grant the tier it needs first.
+=== "In-app server (HTTP)"
+
+    ```python
+    import asyncio
+
+    from mcp import Client
+
+    URL = 'http://127.0.0.1:57205/mcp'  # from the Agent… dialog
+    TOKEN = 'WWPkEFJO7GXuAQJR1tCarQ'  # from the Agent… dialog
+
+
+    def answer(result):
+        if result.is_error:
+            raise RuntimeError(result.content[0].text)
+        return result.structured_content['result']
+
+
+    async def main():
+        async with Client(f'{URL}?token={TOKEN}') as client:
+            status = answer(await client.call_tool('bus_status', {}))
+            print(f'{status["description"]}: {status["identifiers"]} identifiers, {status["bus_load_percent"]} % load')
+
+            for row in answer(await client.call_tool('list_identifiers', {})):
+                print(f'{row["id"]:>8}  every {row["cycle_ms"]} ms  {row["data"]}')
+
+            analysis = answer(await client.call_tool('analyze_identifier', {'identifier': '123'}))
+            for field in analysis['fields']:
+                print(f'{field["field"]:<16} {field["kind"]:<9} {field["details"]}')
+
+
+    asyncio.run(main())
+    ```
+
+    To send the token as a header instead of in the URL, pass the SDK an HTTP client that carries it:
+
+    ```python
+    import httpx2
+    from mcp import Client
+    from mcp.client.streamable_http import streamable_http_client
+
+    http = httpx2.AsyncClient(headers={'Authorization': f'Bearer {TOKEN}'})
+    async with Client(streamable_http_client(URL, http_client=http)) as client:
+        ...
+    ```
+
+=== "can-mcp (stdio)"
+
+    The client starts `can-mcp` itself, here with a database and diagnostics allowed:
+
+    ```python
+    import asyncio
+
+    from mcp import Client, StdioServerParameters
+
+
+    def answer(result):
+        if result.is_error:
+            raise RuntimeError(result.content[0].text)
+        return result.structured_content['result']
+
+
+    async def main():
+        server = StdioServerParameters(command='can-mcp', args=['-d', 'vehicle.dbc', '--allow-diagnostics'])
+        async with Client(server) as client:
+            answer(await client.call_tool('connect', {'interface': 'socketcan', 'channel': 'can0'}))
+
+            codes = answer(await client.call_tool('obd_dtcs', {}))
+            print('Stored trouble codes:', ', '.join(codes['dtcs']) or 'none')
+
+            frames = answer(await client.call_tool('get_frames', {'identifier': '100', 'limit': 5}))
+            for frame in frames:
+                print(frame['t'], frame['data'], frame['info'])
+
+
+    asyncio.run(main())
+    ```
+
+Resources and prompts are read the same way:
+
+```python
+status = await client.read_resource('can://status')
+print(status.contents[0].text)  # JSON text
+
+prompts = await client.list_prompts()
+print(
+    [prompt.name for prompt in prompts.prompts]
+)  # ['reverse_engineer_identifier', 'diagnose_trouble_codes', 'find_signal']
+```
 
 ## Permission tiers
 
-The server is read-only by default. Each flag (or each dialog tier) grants the one below it as well, so
-`--allow-send` / the `send` tier enables everything:
+Each tier includes the ones above it, so `send` allows everything.
 
-| Flag / tier | Adds | Tools |
+| `can-mcp` flag | Dialog tier | Adds | Examples |
+|---|---|---|---|
+| *(none)* | `read-only` | Looking, decoding, reverse engineering, reading files. Sends nothing. | `bus_status`, `analyze_identifier`, `promote_to_dbc` |
+| `--allow-diagnostics` | `diagnostics` | Diagnostic **reads**. These put requests on the bus but change nothing. | `obd_dtcs`, `uds_read_did`, `xcp_measure` |
+| `--allow-control` | `control` | **Active** diagnostics that change ECU state. | `obd_clear`, `uds_reset`, `xcp_write` |
+| `--allow-send` | `send` | Arbitrary transmit. | `send_frame`, `send_message`, `j1939_send` |
+
+The agent is only offered the tools its tier allows. Calling another tool fails with `Unknown tool: <name>`. Each
+tool's tier is listed in the [tool reference](#tool-reference) below.
+
+## Tool reference
+
+Identifiers are hex strings such as `"1A0"` or `"18FEF100"`; add `"extended": true` for a 29-bit identifier. Payloads
+are hex bytes such as `"A0 0F 5A 03"`. Arguments in the tables are the required ones and the most useful optional
+ones; the agent sees the full list.
+
+### Bus and traffic *(read-only)*
+
+| Tool | Main arguments | What it does |
 |---|---|---|
-| *(none)* / `read-only` | Connecting, inspection and reverse engineering (reads files, sends nothing) | `bus_status`, `list_interfaces`, `connect`, `disconnect`, `list_identifiers`, `get_frames`, `decode_frame`, `decode_protocol`, `timing`, `analyze_identifier`, `bit_activity`, `extract_field`, `related_signals`, `capture_reaction`, `mark`, `clear_markers`, `reaction_at_markers`, `correlate`, `promote_to_dbc`, `load_database`, `unload_database`, `secoc_status`, `flexray_load_cluster`, `flexray_read_log`, `flexray_analyze_log`, `flexray_decode` |
-| `--allow-diagnostics` / `diagnostics` | Safe diagnostic **reads** (they put a request on the bus) | `query_obd`, `obd_status`, `obd_dtcs`, `obd_vin`, `obd_supported`, `obd_read`, `uds_read_did`, `uds_read_dtcs`, `uds_dtc_details`, `uds_find_ecus` |
-| `--allow-control` / `control` | **Active** diagnostics (changes ECU state) | `obd_clear`, `uds_reset`, `uds_routine`, `uds_request` |
-| `--allow-send` / `send` | Arbitrary transmit | `send_frame`, `send_message` |
+| `bus_status` | — | Connection state, database, tier, frame counts, rates and bus load |
+| `list_interfaces` | — | The CAN interfaces python-can detects on this machine |
+| `connect` / `disconnect` | `interface`, `channel`, `bitrate`, `fd`, `data_bitrate` | Open a bus (closing the current one), or close it. `can-mcp` only |
+| `list_identifiers` | `limit` | Every identifier seen: direction, count, cycle time, latest data, database name |
+| `get_frames` | `identifier`, `limit` (50), `decode` | Recent frames, newest last, decoded into signals |
+| `timing` | `identifier`, `series` | Cycle time, jitter, and periodic vs event-triggered; `series` adds the gaps over time |
 
-A tool that is not enabled is not even offered to the agent, so it cannot be called.
+### Decoding and databases *(read-only)*
 
-## Tools
+| Tool | Main arguments | What it does |
+|---|---|---|
+| `decode_frame` | `identifier`, `data` | Decode a payload with the loaded database |
+| `decode_protocol` | `protocol`, `identifier`, `data` | Decode with a protocol decoder, no database: J1939, J1939-22, NMEA 2000, CANopen, ISO-TP, UDS, KWP2000, their *(extended)* variants, K-Line, LIN, J1587, NM, SecOC, XCP, CCP |
+| `load_database` / `unload_database` | `path` | Load a DBC, ARXML, KCD, SYM or DBF, or go back to raw bytes |
+| `secoc_status` | — | SecOC secured PDUs of the loaded ARXML and their live checks (MAC, freshness). Never shows a key. `can-mcp` unlocks the key store with `CANEXPLORER_KEYSTORE_PASSWORD` |
 
-**Inspection and reverse engineering** (always available):
+### Reverse engineering *(read-only)*
 
-| Tool | Purpose |
-|---|---|
-| `bus_status` | Connection state, loaded database, enabled capabilities, frame counts, rates and bus load |
-| `list_interfaces` | The CAN interfaces python-can can detect on this machine |
-| `connect` / `disconnect` | Open a bus (interface, channel) and start receiving, or close it |
-| `list_identifiers` | Every identifier seen, with direction, count, cycle time, last data and database name |
-| `get_frames` | Recent frames (optionally of one identifier), decoded into signals |
-| `decode_frame` | Decode a payload you supply with the loaded database (sends nothing) |
-| `decode_protocol` | Interpret a payload with a protocol decoder (J1939, J1939-22, NMEA 2000, CANopen, ISO-TP, UDS, KWP2000, K-Line, LIN, J1587, NM, SecOC) |
-| `timing` | Inter-frame timing per identifier: cycle time, jitter, periodic vs event-triggered (`series` for the Δt over time) |
-| `analyze_identifier` | Automatic field analysis (checksums, counters, multiplexers, physical values, states, flags, SecOC freshness values and MACs) |
-| `bit_activity` | Raw per-bit behaviour of one identifier (how often each bit is set and flips) and a per-byte summary |
-| `extract_field` | Decode a candidate bit range (byte order, sign, scaling) over time without a database, to test a hypothesis |
-| `related_signals` | Groups of fields that carry the same signal across the bus |
-| `capture_reaction` | Diff a recent action window against the baseline before it to find what changed (a single action) |
-| `mark` / `clear_markers` / `reaction_at_markers` | Mark the moments of a repeated action, then find the fields that react at them |
-| `correlate` | Rank fields by how well they follow a reference (a database signal, a CSV column, or an inline series) |
-| `promote_to_dbc` | Write the found fields — or field specs you supply (`fields=[…]`) — as signals to a DBC, creating their messages |
-| `load_database` / `unload_database` | Load a DBC/ARXML/KCD/SYM/DBF for decoding, or forget it (back to raw bytes) |
-| `secoc_status` | The SecOC secured PDUs of an ARXML and the outcome of their live checks (ok, MAC and freshness errors) and the key store entry used — never a key. `can-mcp` uses the key store unlocked with `CANEXPLORER_KEYSTORE_PASSWORD` |
-| `flexray_load_cluster` | Load a [FlexRay](flexray.md) cluster description (FIBEX or ARXML, `cluster` to pick one of several): its timing, frames and PDUs |
-| `flexray_read_log` | The FlexRay frames and events of a pcap/pcapng, BLF or ASC file (optionally of one slot or channel), decoded into PDUs and signals |
-| `flexray_analyze_log` | Check a FlexRay log against the cluster's schedule (missing, undescribed, wrong-length and mistimed frames, channel A/B mismatches) and report the bus health |
-| `flexray_decode` | Decode a FlexRay payload of a slot, cycle and channel with the loaded cluster (sends nothing) |
+These use the same engine as the [Reverse engineering](reverse-engineering.md) view.
 
-**Diagnostics** (`--allow-diagnostics`; the control tools need `--allow-control`):
+| Tool | Main arguments | What it does |
+|---|---|---|
+| `analyze_identifier` | `identifier`, `include_constant` | Find checksums, counters, multiplexers, physical values, states, flags, SecOC freshness and MACs |
+| `bit_activity` | `identifier` | How often each bit is set and flips, and a per-byte summary |
+| `extract_field` | `identifier`, `start`, `length`, `byte_order`, `signed`, `scale`, `offset` | Decode a guessed bit range over time, without a database |
+| `related_signals` | `top`, `min_correlation` | Groups of fields carrying the same signal across the bus |
+| `capture_reaction` | `baseline_seconds`, `action_seconds` | What changed during one action, compared with the quiet time before it |
+| `mark` / `clear_markers` | `label` | Mark the moments of a repeated action |
+| `reaction_at_markers` | `before`, `after`, `top` | The fields that react at the marks |
+| `correlate` | `signal` *or* `csv_path` + `column` *or* `times` + `values` | Rank fields by how well they follow a reference, with fitted factor, offset and lag |
+| `promote_to_dbc` | `path`, `identifier` *or* `fields`, `min_confidence` | Write found fields, or the specs you give, to a DBC |
 
-| Tool | Purpose |
-|---|---|
-| `query_obd` | One OBD-II value (service 01) via a single-frame request |
-| `obd_status` / `obd_vin` | MIL state and DTC count; the VIN |
-| `obd_dtcs` | Stored (service 03) or pending (service 07) trouble codes, decoded to P/C/B/U |
-| `obd_supported` / `obd_read` | The supported PIDs; read and decode live values |
-| `uds_read_did` / `uds_read_dtcs` | Read a UDS data identifier (0x22) or trouble codes (0x19) |
-| `uds_dtc_details` | A DTC's snapshot (freeze frame) and extended data records (0x19 0x04/0x06); records of unknown length are returned undecoded |
-| `uds_find_ecus` | The ECUs answering a functional TesterPresent (0x7DF, or 0x18DB33F1 with `extended`) |
-| `obd_clear` | Clear trouble codes and the MIL (service 04) — `--allow-control` |
-| `uds_reset` / `uds_routine` / `uds_request` | ECU reset, routine control, or a raw UDS request — `--allow-control` |
+### FlexRay and XCP files *(read-only)*
 
-**Transmit** (`--allow-send`): `send_frame` (a raw frame) and `send_message` (a database message by name, from its
-signal values).
+| Tool | Main arguments | What it does |
+|---|---|---|
+| `flexray_load_cluster` | `path`, `cluster` | Load a [FlexRay](flexray.md) cluster (FIBEX or ARXML) |
+| `flexray_read_log` | `path`, `slot`, `channel`, `limit` | Frames and events of a pcap/pcapng, BLF or ASC file, decoded into PDUs and signals |
+| `flexray_analyze_log` | `path` | Check a log against the cluster's schedule, and the bus health |
+| `flexray_decode` | `slot`, `cycle`, `data`, `channel` | Decode one FlexRay payload with the cluster |
+| `xcp_list_variables` | `a2l`, `pattern`, `kind` | Measurements, characteristics and axes of an [A2L file](xcp.md#a2l-files) |
 
-Identifiers are hex strings such as `1A0`. The reverse-engineering tools are the same engine as the
-[Reverse engineering](reverse-engineering.md) view, so an agent can run a full loop over MCP: survey the bus with
-`timing` and `list_identifiers`, `analyze_identifier`, match a field to a reference with `correlate` or group them
-with `related_signals`, and `promote_to_dbc` — then `load_database` and read the signals back decoded. The
-diagnostics tools let it read and explain a vehicle's trouble codes over OBD-II or UDS.
+### Diagnostics *(diagnostics tier)*
+
+OBD-II tools default to `request="7DF"` (functional) and `response="7E8"`; UDS tools to `7E0`/`7E8`. For ISO-TP
+extended or mixed addressing, put the address byte after a colon, as in the
+[Diagnostics view](diagnostics.md#addressing): `"request": "6F1:12", "response": "612:F1"`.
+
+| Tool | Main arguments | What it does |
+|---|---|---|
+| `obd_status` / `obd_vin` | — | Check-engine light (MIL) and DTC count; the VIN |
+| `obd_dtcs` | `pending` | Stored (service 03) or pending (07) trouble codes |
+| `obd_supported` / `obd_read` | `pids` | The supported PIDs; read and decode live values |
+| `query_obd` | `pid` | One OBD-II value with a single-frame request |
+| `uds_read_did` | `did` | Read a data identifier (0x22) |
+| `uds_read_dtcs` | `status_mask` | Read trouble codes (0x19) |
+| `uds_dtc_details` | `dtc` | A DTC's snapshot (freeze frame) and extended data. Records of unknown length are returned raw |
+| `uds_find_ecus` | `extended` | The ECUs answering a functional TesterPresent |
+| `j1939_request` | `pgn`, `destination` (`FF` = all) | Request a parameter group and decode the answers (address claims, DM1/DM2, identification text, acknowledgments). Requesting DM3 or DM11 clears codes and needs `control` |
+| `xcp_connect` / `xcp_disconnect` / `xcp_status` | `protocol`, `transport`, `request`, `response`, `a2l`, `key` | Open an [XCP](xcp.md) (CAN, CAN FD, UDP, TCP) or CCP session for the other `xcp_*` tools |
+| `xcp_read` / `xcp_read_memory` | `names` / `address`, `size` | A2L variables in physical units, or raw memory |
+| `xcp_measure` | `names`, `duration` | Measure for up to 30 s (DAQ, or polling): samples, min, max, mean, last |
+| `xcp_daq_info` | — | The XCP slave's DAQ configuration (dynamic or static), its lists and what its predefined ones carry, its events, and whether it offers STIM |
+| `xcp_flash_info` | — | Whether the XCP slave offers flash programming, whether it is locked, its erase/compression/encryption properties and its flash sectors |
+
+### Control *(control tier)*
+
+| Tool | Main arguments | What it does |
+|---|---|---|
+| `obd_clear` | — | Clear trouble codes and the MIL (service 04) |
+| `uds_reset` | `reset_type` | ECU reset (0x11) |
+| `uds_routine` | `control_type`, `routine`, `data` | Routine control (0x31) |
+| `uds_request` | `payload` | Any raw UDS request |
+| `uds_secured_request` | `payload`, `key`, `sign`, `encrypt` | A request inside a [SecuredDataTransmission](diagnostics.md#secured-data-transmission-0x84) (0x84) envelope; returns the unwrapped response and whether its signature verified. `key="session"` uses the session key of the last `uds_authenticate` |
+| `uds_authenticate` | `method`, `credentials`, `bidirectional`, `trusted`, `algorithm`, `communication_configuration` | [Authentication](diagnostics.md#authentication-0x29) (0x29) by certificate exchange or challenge-response with key store entries or a security profile (`method="configuration"` only asks which one the ECU offers); keeps a session key for `uds_secured_request` |
+| `uds_deauthenticate` | — | End the authentication (deAuthenticate) and forget its session key |
+| `uds_transmit_certificate` | `certificate`, `evaluation_id` | Send a certificate of the key store (or a PEM/DER file) with [transmitCertificate](diagnostics.md#transmitcertificate) (0x04) |
+| `xcp_write` / `xcp_write_memory` | `name`, `value` / `address`, `data` | Write a calibration value (checked against its A2L limits and read back), or raw memory |
+| `xcp_stimulate` | `values`, `event`, `duration` | Write scalar calibration values by [XCP STIM](xcp.md#stimulation-stim) at an event for up to 30 s, then read them back |
+| `xcp_program` | `path`, `erase`, `verify`, `reset`, `kernel`, `compression`, `encryption`, `encoder`, `ecu_check` | [Program the ECU's flash](xcp.md#flash-programming) over XCP and return each step's result. Replaces the ECU's software |
+
+### Transmit *(send tier)*
+
+| Tool | Main arguments | What it does |
+|---|---|---|
+| `send_frame` | `identifier`, `data`, `extended`, `fd` | Send one raw frame |
+| `send_message` | `name`, `signals` | Send a database message from signal values, e.g. `{"name": "EngineData", "signals": {"EngineSpeed": 1000}}` |
+| `j1939_send` | `pgn`, `data`, `destination`, `priority` | Send a J1939 parameter group (one frame, BAM, RTS/CTS, or ETP above 1785 bytes) |
 
 ## Resources and prompts
 
-The server also exposes the bus as read-only MCP **resources**, so a client can browse (or `read_resource`) them
-like documents (JSON):
+### Resources
 
-| URI | Name | Holds |
+Read-only JSON documents a client can browse or read directly:
+
+| URI | Holds |
+|---|---|
+| `can://status` | The same as `bus_status` |
+| `can://identifiers` | The same as `list_identifiers` |
+| `can://frames` | The 100 most recent frames, decoded |
+| `can://database` | The loaded database's path, messages, identifiers and signal names |
+
+### Prompts
+
+Ready-made instructions for common jobs. In Claude Code they appear as slash commands, for example
+`/mcp__canexplorer__find_signal`.
+
+| Prompt | Argument | Walks the agent through |
 |---|---|---|
-| `can://status` | `status` | Connection state, loaded database, enabled capabilities, frame counts, rates and bus load |
-| `can://identifiers` | `identifiers` | Every identifier seen, with direction, count, cycle time, last data and database name |
-| `can://frames` | `frames` | The 100 most recent frames, decoded into signals |
-| `can://database` | `database` | The loaded database's path and its messages with their identifiers and signal names |
+| `reverse_engineer_identifier` | `identifier` | Timing, automatic analysis, testing the meaning, writing a DBC |
+| `diagnose_trouble_codes` | — | Reading and explaining the OBD-II trouble codes with live values (needs `diagnostics`) |
+| `find_signal` | `description` | Finding the field that carries a described signal, e.g. *"the steering angle"* |
 
-And it ships guided **prompts** for the common workflows:
+Every tool, resource and prompt also has a readable **title** and a **description** the agent uses to choose it. The
+descriptions of the diagnostics, control and send tools state the tier they need and what they do to the bus or ECU.
 
-| Prompt | Argument | Guides the agent through |
-|---|---|---|
-| `reverse_engineer_identifier` | `identifier` | Timing, automatic analysis, pinning down meaning, writing a DBC |
-| `diagnose_trouble_codes` | — | Reading and explaining the OBD-II trouble codes with supporting live values (diagnostics tier) |
-| `find_signal` | `description` | Finding the field that carries a described signal, with or without a reference |
+## Troubleshooting
 
-Every tool, resource and prompt carries a **title** (a readable name a client can show, such as *Analyse an
-identifier*) and a **description** the agent reads to choose it. The description of each diagnostics, control and
-send tool also states the tier it needs and what it does to the bus or the ECU.
+`Unknown tool: obd_dtcs` (or another tool)
+:   The tier does not allow that tool. Restart `can-mcp` with the flag it needs, or stop the in-app server and start
+    it on a higher tier. See [permission tiers](#permission-tiers).
+
+HTTP 401, *Unauthorized: missing or wrong token*
+:   The token is missing or out of date. It changes every time the server starts; copy it again from the
+    **Agent…** dialog.
+
+The client rejects the `Authorization` header
+:   Check the header name in your config is exactly `Authorization`, with no spaces around it, and its value is
+    `Bearer <token>`.
+
+The client cannot connect to the in-app server
+:   The server only runs while **● Agent** shows on the Trace toolbar, and only accepts connections from the same
+    computer. The port changes on every start.
+
+`can-mcp` cannot open the adapter
+:   Another program (often the GUI) has it open. Use the in-app server instead, or close the other program.
+
+The client cannot find `can-mcp`
+:   Use the command's full path in the client config (`which can-mcp`, or `where can-mcp` on Windows).
 
 ## How it relates to the rest of CANExplorer
 
-The `can-mcp` command is separate, like [`can-server`](remote-buses.md); it does not need the GUI. It works with any
-python-can interface, so it can also sit on top of a [remote bus](remote-buses.md) (`--interface canexplorer_remote`)
-shared by `can-server` on another machine — another way to share one bus between the GUI and an agent.
+`can-mcp` does not need the GUI, much like [`can-server`](remote-buses.md). It works with any python-can interface,
+including a [remote bus](remote-buses.md) shared by `can-server` on another machine. That is another way for the GUI
+and an agent to share one bus:
+
+```bash
+can-mcp -i canexplorer_remote -c "raspberrypi.local:8765/vehicle?token=change-me"
+```

@@ -41,8 +41,17 @@ flowchart LR
   from the session on a timer (33 ms by default) and appends them to the Qt models in one batch; the overview only
   refreshes the rows that changed.
 
+- **Garbage collection** (`core/gc_control.py`): while a session is open, Python's automatic full collections are
+  suspended. A full collection walks every frame of every trace and stops all threads for 35 to 150 ms, long enough
+  for the kernel's socket buffer (a few hundred frames) to overflow. Frames are freed by reference counting, so
+  nothing builds up; `CaptureGc` runs the full collection itself when all buses together are below 500 frames/s, at
+  most once a minute, or after 30 minutes regardless. Python 3.14's incremental collector scans old objects a slice
+  at a time and ignores the generation 2 threshold, so there `CaptureGc` stays inactive.
+
 `tools/benchmark.py` measures the pipeline: about 300 000 frames per second with J1939 and DBC decoding on a desktop
-computer.
+computer. `tools/benchmark_socketcan.py` measures the whole path through SocketCAN: on a laptop (Intel Core Ultra 5
+226V) no frames are lost up to 20 000 frames/s, more than two fully loaded 1 Mbit/s buses
+([Building and testing](building.md#end-to-end-on-socketcan)).
 
 ## Modules
 
@@ -63,7 +72,10 @@ computer.
 | `core/uds_scan.py` | Interactive UDS discovery: service, DID, subfunction and routine scans and a one-byte sweep over a UDS transport, with the answers classified |
 | `core/uds_fuzz.py` | UDS mutation fuzzing: mutated requests from seeds or random ones, with a periodic liveness check that detects the ECU hanging or crashing |
 | `core/can_command.py` | Request/response over a CAN session for command protocols (XCP, CCP) |
-| `core/xcp.py`, `core/ccp.py` | XCP and CCP masters (connect, read/write memory by address) and simulated slaves |
+| `core/xcp.py`, `core/ccp.py` | XCP and CCP masters (memory access, seed & key, pages, checksum, DAQ; XCP also static DAQ, STIM and programming); `core/ccp.py` also its simulated slave |
+| `core/xcp_flash.py` | Flash programming over XCP: the erase, program, verify and reset sequence for an image |
+| `core/xcp_protocol.py`, `core/xcp_slave.py`, `core/xcp_ethernet.py` | XCP packet codes and checksums, the simulated XCP slave, XCP on UDP/TCP |
+| `core/a2l.py`, `core/calibration.py`, `core/calibration_session.py` | A2L reader (variables, layouts, conversions, IF_DATA), reading/writing values by name and datasets (JSON, DCM), the session of the MCP `xcp_*` tools |
 | `core/a2l.py` | A minimal A2L (ASAM MCD-2 MC) reader: measurements and scalar characteristics with address, data type and linear conversion |
 | `core/someip.py` | SOME/IP and SOME/IP-SD parsing, and a UDP monitor tracking discovered services |
 | `core/someip_serialization.py`, `core/someip_fibex.py` | SOME/IP payload serialization (type model and deserializer) and a FIBEX reader that builds it |
@@ -72,6 +84,10 @@ computer.
 | `core/canopen_tools.py` | EDS/DCF object dictionaries, SDO client, NMT, PDO mappings, network tracking, simulated node |
 | `core/physical_io.py` | Digital lines and analogue inputs: aio_usb (pyusb) and simulated devices, polled on a worker thread |
 | `core/gvret.py` | `GvretBus`, the python-can interface for GVRET devices (SavvyCAN protocol) |
+| `core/panda_usb.py` | `PandaBus`, the python-can interface for comma.ai pandas on USB (CAN and CAN FD) |
+| `core/lin_adapter.py` | `LinAdapterBus`, the base of the LIN adapter interfaces: master/slave, sllin-convention frames |
+| `core/plin.py`, `core/kvaser_lin.py`, `core/vector_lin.py` | The LIN adapter interfaces for PEAK (PLIN-API), Kvaser (LINlib) and Vector (XL Driver Library) |
+| `core/panda_udp.py` | `PandaUdpBus`, the receive-only python-can interface for the WiFi UDP stream of a comma.ai panda |
 | `core/j2534.py`, `core/j2534_driver.py`, `core/j2534_bridge.py` | `J2534Bus`, the python-can interface for J2534 pass-thru drivers: registry lookup and DLL architecture check; the ctypes driver calls (standard library only); the 32-bit bridge process that runs them for 32-bit drivers, over JSON lines on stdin/stdout |
 | `core/elm327.py` | `Elm327Bus`, the python-can interface for ELM327 and OBDLink OBD adapters (text commands, monitoring on a worker thread) |
 | `core/ethercat.py` | EtherCAT master for CoE: SOEM (pysoem) and simulated backends on a worker thread, states, SDO, SDO information, PDO assignment |

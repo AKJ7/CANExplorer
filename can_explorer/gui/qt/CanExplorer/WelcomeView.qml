@@ -103,7 +103,7 @@ ScrollView {
             ActionCard {
                 icon: "⇆"
                 heading: qsTr("Convert a database")
-                description: qsTr("Convert between DBC, DBF, KCD and SYM, or from ARXML.")
+                description: qsTr("Convert between DBC, DBF, KCD, SYM and ARXML.")
                 accentColor: Theme.chart[2]
                 onActivated: Actions.convertDatabase.trigger()
             }

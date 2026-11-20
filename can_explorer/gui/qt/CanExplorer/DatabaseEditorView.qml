@@ -3,7 +3,7 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import CanExplorer 1.0
 
-// Editor of signal databases: CAN (DBC, DBF, KCD, SYM; ARXML saved as one of those) and LIN (LDF).
+// Editor of signal databases: CAN (DBC, DBF, KCD, SYM, ARXML; an opened ARXML is saved under a new name) and LIN (LDF).
 ColumnLayout {
     id: root
     readonly property var editor: connectionManager.database_editor
@@ -138,7 +138,7 @@ ColumnLayout {
                     }
                 }
                 Label {
-                    text: root.status || root.editor.file_path || qsTr("Signal databases: DBC, DBF, KCD and SYM; ARXML can be opened and saved as one of them")
+                    text: root.status || root.editor.file_path || qsTr("Signal databases: DBC, DBF, KCD, SYM and ARXML; an opened ARXML is saved under a new name")
                     color: root.status ? (root.statusIsError ? Theme.danger : Theme.success) : Theme.muted
                     font.pixelSize: 12
                     elide: Text.ElideMiddle
@@ -164,7 +164,22 @@ ColumnLayout {
             }
             Button {
                 id: newButton
-                text: qsTr("New ▾")
+                text: qsTr("New")
+                rightPadding: 12
+                // The combo boxes' arrow after the text, pointing up while the menu is open
+                contentItem: RowLayout {
+                    spacing: 6
+                    Label {
+                        text: newButton.text
+                        font: newButton.font
+                        color: newButton.contentColor
+                    }
+                    Chevron {
+                        color: newMenu.visible || newButton.down ? Theme.accent
+                            : newButton.hovered ? Theme.text : Theme.muted
+                        rotation: newMenu.visible ? 180 : 0
+                    }
+                }
                 onClicked: newMenu.popup(newButton, 0, newButton.height)
                 Menu {
                     id: newMenu
@@ -453,16 +468,22 @@ ColumnLayout {
                         Keys.onRightPressed: if (folds && !expanded) root.editor.sender_model.toggle(index)
                         contentItem: RowLayout {
                             spacing: 6
-                            Label {
-                                text: treeRow.folds ? (treeRow.expanded ? "▾" : "▸") : ""
-                                color: Theme.muted
-                                horizontalAlignment: Text.AlignHCenter
+                            Item {
+                                implicitHeight: 14
                                 Layout.preferredWidth: 14
                                 Layout.topMargin: treeRow.kind === "node" ? 6 : 0
                                 // A node row already folds when clicked; a message row is selected, and folds here
                                 TapHandler {
                                     enabled: treeRow.kind === "message"
                                     onTapped: root.editor.sender_model.toggle(treeRow.index)
+                                }
+                                // The combo boxes' arrow: down when expanded, right when folded
+                                Chevron {
+                                    anchors.centerIn: parent
+                                    visible: treeRow.folds
+                                    width: 12
+                                    height: 12
+                                    rotation: treeRow.expanded ? 0 : -90
                                 }
                             }
                             Label {

@@ -106,7 +106,9 @@ async def test_scaling_communication_dtc_setting_and_link_control():
         await client.link_control(0x02)
     assert describe_request(bytes([0x28, 0x83, 0x01])) == 'CommunicationControl 83 01 (disableRxAndTx)'
     assert describe_request(bytes([0x85, 0x02])) == 'ControlDTCSetting 02 (off)'
-    assert describe_request(bytes([0x84, 0x00])).endswith('(secured: content not decoded)')
+    assert describe_request(bytes([0x84, 0x00])).endswith(
+        '(securityDataRequestRecord, not decoded: ISO 14229-1:2013 or malformed)'
+    )
 
 
 # ReadDTCInformation

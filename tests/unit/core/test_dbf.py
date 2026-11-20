@@ -232,7 +232,7 @@ def test_unsupported_formats(tmp_path):
     with pytest.raises(DatabaseFormatError):
         load_database(tmp_path / 'file.txt')
     with pytest.raises(DatabaseFormatError):
-        convert_database(tmp_path / 'a.dbc', tmp_path / 'b.arxml')
+        convert_database(tmp_path / 'a.dbc', tmp_path / 'b.txt')
 
 
 def test_command_line(complex_db, tmp_path, capsys):

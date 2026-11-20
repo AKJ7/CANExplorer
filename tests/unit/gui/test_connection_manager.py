@@ -252,7 +252,7 @@ async def test_database_editor_saves_and_reloads_connections(manager, data_dir, 
     assert editor.revert() == '' and not editor.dirty
     assert 'Could not open' in editor.open_path(str(tmp_path / 'missing.dbc'))
     assert editor.open_path(str(data_dir / 'example.arxml')) == '' and not editor.writable
-    assert 'Save as' in editor.save() and any('cannot be written' in note for note in editor.notes)
+    assert 'Save as' in editor.save() and any('not overwritten' in note for note in editor.notes)
     editor.new_database()
     assert editor.file_name == 'Untitled' and editor.messages == []
 
@@ -556,3 +556,46 @@ def test_trace_time_format_applies_to_all_traces(qapp, tmp_path):
         assert connection.trace.time_format == 'absolute' and manager.multi_bus.trace.time_format == 'absolute'
     finally:
         manager.close_all()
+
+
+def test_add_connection_with_host_and_port(manager):
+    manager.add_connection(
+        {
+            'name': 'RemoteCAN',
+            'interface': 'SocketCanDaemonBus',
+            'channel': 'can0',
+            'host': '192.168.1.100',
+            'port': '29536',
+        }
+    )
+    assert len(manager.connections) == 1
+    connection = manager.connections[0]
+    config = connection.session.source.config
+    assert config.interface == 'socketcand'
+    assert config.channel == 'can0'
+    assert config.host == '192.168.1.100'
+    assert config.port == 29536
+    assert connection.origin['settings']['host'] == '192.168.1.100'
+    assert connection.origin['settings']['port'] == 29536
+
+    recent = manager.app_state.recent_connections
+    assert recent[0]['host'] == '192.168.1.100'
+    assert recent[0]['port'] == 29536
+    assert recent[0]['label'] == 'RemoteCAN (SocketCanDaemonBus:192.168.1.100:29536/can0)'
+
+
+def test_add_connection_invalid_port(manager):
+    errors = []
+    manager.error_occurred.connect(errors.append)
+    manager.add_connection(
+        {
+            'name': 'BadPort',
+            'interface': 'SocketCanDaemonBus',
+            'channel': 'can0',
+            'host': '127.0.0.1',
+            'port': '999999',
+        }
+    )
+    assert len(manager.connections) == 0
+    assert len(errors) == 1
+    assert 'Invalid connection settings' in errors[0]

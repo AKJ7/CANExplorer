@@ -96,6 +96,18 @@ def test_profile22_matches_autosar_example():
         assert profile.check(protected).ok
 
 
+def test_profile22_with_offset_matches_autosar_example():
+    # AUTOSAR PRS_E2EProtocol R23-11 §6.13.5.1, Table 6.102: offset 64 bits, 16 bytes of zeros, counter 1 -> CRC 0x14
+    profile = e2e.Profile22(list(range(0x01, 0x11)), offset=8)
+    protected = profile.protect(bytes(16), counter=1)
+    assert protected == bytes(8) + bytes([0x14, 0x01]) + bytes(6)
+    assert profile.check(protected).ok
+    tampered = bytearray(protected)
+    tampered[0] ^= 0x01  # Bytes before the header are protected too
+    assert not profile.check(bytes(tampered)).ok
+    assert profile.check(bytes(9)).error  # Too short for the header
+
+
 def test_profile22_round_trip_and_tamper():
     profile = e2e.Profile22(list(range(0x20, 0x30)))
     protected = profile.protect(bytes([0x00, 0x00, 0x11, 0x22, 0x33]), counter=7)

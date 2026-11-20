@@ -28,12 +28,34 @@ DIAGNOSTIC_READS = {
     'obd_supported',
     'obd_read',
     'uds_read_did',
+    'j1939_request',
     'uds_read_dtcs',
     'uds_dtc_details',
     'uds_find_ecus',
+    'xcp_connect',
+    'xcp_disconnect',
+    'xcp_status',
+    'xcp_read',
+    'xcp_read_memory',
+    'xcp_measure',
+    'xcp_daq_info',
+    'xcp_flash_info',
 }
-CONTROL_TOOLS = {'obd_clear', 'uds_reset', 'uds_routine', 'uds_request'}
-SEND_TOOLS = {'send_frame', 'send_message'}
+CONTROL_TOOLS = {
+    'obd_clear',
+    'uds_reset',
+    'uds_routine',
+    'uds_request',
+    'uds_secured_request',
+    'uds_authenticate',
+    'uds_deauthenticate',
+    'uds_transmit_certificate',
+    'xcp_write',
+    'xcp_write_memory',
+    'xcp_stimulate',
+    'xcp_program',
+}
+SEND_TOOLS = {'send_frame', 'send_message', 'j1939_send'}
 
 
 async def test_tools_registered_read_only():
@@ -66,6 +88,7 @@ async def test_tools_registered_read_only():
         'flexray_read_log',
         'flexray_analyze_log',
         'flexray_decode',
+        'xcp_list_variables',
     }
     # No diagnostics, control or send tools in read-only mode
     assert not (names & (DIAGNOSTIC_READS | CONTROL_TOOLS | SEND_TOOLS))

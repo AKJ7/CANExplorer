@@ -331,8 +331,9 @@ class DatabaseEditorController(QObject):
         if not editor.writable:
             formats = ', '.join(suffix.upper()[1:] for suffix in WRITE_SUFFIXES)
             notes.append(
-                f'{path.suffix.upper()[1:]} files cannot be written; use "Save as" to save the changes as '
-                f'{formats} (a {DEFAULT_WRITE_SUFFIX.upper()[1:]} name is suggested)'
+                f'{path.name} is not overwritten: an AUTOSAR system description holds more than the signal '
+                f'database. Use "Save as" to save the changes as {formats} (a {DEFAULT_WRITE_SUFFIX.upper()[1:]} '
+                'name is suggested; a new ARXML holds the CAN signal database only)'
             )
         self._set_editor(editor, notes)
         return ''
