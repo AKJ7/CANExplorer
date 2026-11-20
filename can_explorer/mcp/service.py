@@ -37,8 +37,9 @@ from can_explorer.core.reverse.reference import (
 from can_explorer.core.reverse.related import signal_groups
 from can_explorer.core.secoc_check import KeyStoreSecOcKeys, SecOcVerifier
 from can_explorer.core.session import BusSession, SessionError
+from can_explorer.core.calibration_session import CalibrationSession, a2l_path
 from can_explorer.core.sources import BusConfig, LiveSource, MessageSource
-from can_explorer.core.uds import UdsClient, UdsError
+from can_explorer.core.uds import UdsClient, UdsError, load_key_source
 from can_explorer.sys.log_handler import get_logger
 
 DEFAULT_UDS_REQUEST = 0x7E0  # Physical request to the first ECU; OBD uses the functional 0x7DF
@@ -64,6 +65,36 @@ def _parse_id(value: Any) -> int:
         return int(text, 16)
     except ValueError as e:
         raise ValueError(f'Invalid identifier {value!r}; use hex like 1A0 or 0x1A0') from e
+
+
+def _parse_isotp_id(value: Any) -> Tuple[int, Optional[int]]:
+    """A CAN identifier with an optional ISO-TP address byte ('6F1:12', extended or mixed addressing)."""
+    if isinstance(value, int):
+        return value, None
+    can_id, colon, address = str(value).partition(':')
+    if not colon:
+        return _parse_id(can_id), None
+    try:
+        byte = int(address.strip(), 16)
+    except ValueError:
+        raise ValueError(f'Invalid address byte {address.strip()!r}; use hex like 6F1:12') from None
+    if not 0 <= byte <= 0xFF:
+        raise ValueError(f'Address byte out of range: 0x{byte:X}')
+    return _parse_id(can_id), byte
+
+
+def _parse_j1939_address(value: Any) -> int:
+    """A J1939 address from an int or hex ('F9'); FF is the global address."""
+    if isinstance(value, int):
+        address = value
+    else:
+        try:
+            address = int(str(value).strip().lower().removeprefix('0x'), 16)
+        except ValueError:
+            raise ValueError(f'Invalid J1939 address {value!r}; use hex like F9') from None
+    if not 0 <= address <= 0xFF:
+        raise ValueError(f'J1939 address out of range: {address:#x}')
+    return address
 
 
 def _id_text(arbitration_id: int, extended: bool) -> str:
@@ -149,6 +180,10 @@ class CanService:
         self._manage = True  # False when attached to a session owned by someone else (the GUI)
         self._markers: List[Marker] = []  # Moments the agent marked, for reaction_at_markers
         self._flexray = None  # The FlexRay cluster description (a FlexRayDatabase), for the flexray_* tools
+        self._sdt_counters: Dict[int, int] = {}  # SecuredDataTransmission anti-replay counter per request id
+        # The session key context of the last Authentication (0x29) per request id, with its credentials source
+        self._auth_sessions: Dict[int, Tuple[Any, str]] = {}
+        self._xcp = CalibrationSession()  # The XCP/CCP slave of the xcp_* tools, kept open between calls
 
     @classmethod
     def attach(
@@ -266,6 +301,7 @@ class CanService:
 
     def disconnect(self) -> Dict[str, Any]:
         """Close the current bus, if any."""
+        self._xcp.close()
         if self.session is not None:
             self.session.stop()
             self.session = None
@@ -1117,9 +1153,18 @@ class CanService:
     # Diagnostics (OBD-II and UDS, over ISO-TP)
 
     def _isotp(self, request_id: Any, response_id: Any) -> IsoTpClient:
+        """Identifiers as int or hex; a hex identifier may carry the address byte of extended or mixed addressing
+        after a colon ('6F1:12')."""
         config = getattr(self.session.source, 'config', None)
+        tx_id, tx_address = _parse_isotp_id(request_id)
+        rx_id, rx_address = _parse_isotp_id(response_id)
         return IsoTpClient(
-            self.session, _parse_id(request_id), _parse_id(response_id), fd=bool(getattr(config, 'fd', False))
+            self.session,
+            tx_id,
+            rx_id,
+            fd=bool(getattr(config, 'fd', False)),
+            tx_address=tx_address,
+            rx_address=rx_address,
         )
 
     async def _with_uds(self, request_id, response_id, operation, control: bool = False) -> Dict[str, Any]:
@@ -1208,6 +1253,216 @@ class CanService:
         async def operation(uds):
             await ObdClient(uds).clear_dtcs()
             return {'cleared': True}
+
+        return await self._with_uds(request, response, operation, control=True)
+
+    async def uds_secured_request(
+        self,
+        payload: str,
+        key: str = '',
+        sign: bool = True,
+        encrypt: bool = False,
+        signed_response: bool = False,
+        algorithm: int = 0,
+        signature_length: int = 0,
+        counter: Optional[int] = None,
+        request: Any = DEFAULT_UDS_REQUEST,
+        response: Any = ECU_RESPONSE,
+    ) -> Dict[str, Any]:
+        """Send a UDS request (hex) inside a SecuredDataTransmission (0x84) envelope and return the unwrapped,
+        verified response. `key`: a secured data key of the key store (its name, or 'keystore:<name>'; the reference
+        scheme, a MAC over the message, truncated to `signature_length` when not 0) or a Python provider file with the
+        manufacturer's scheme; '' sends unsigned and unencrypted. The anti-replay counter continues per request id
+        unless `counter` is given. Active: requires --allow-control."""
+        from can_explorer.core import uds_secured
+
+        bytes_payload = parse_hex_bytes(payload)
+        source = str(key or '')
+        request_id = _parse_id(request)
+        if source == 'session':  # The session key of the last uds_authenticate on this request id
+            if request_id not in self._auth_sessions:
+                return {'error': 'No authentication with a session key on this request id; call uds_authenticate'}
+        elif source and not source.startswith(uds_secured.KEYSTORE_PREFIX) and not Path(source).is_file():
+            source = uds_secured.KEYSTORE_PREFIX + source
+        try:
+            if source == 'session':
+                context, origin = self._auth_sessions[request_id]
+                provider = uds_secured.session_provider(
+                    context, origin, self._auth_store(), length=int(signature_length) or None
+                )
+            else:
+                provider = uds_secured.load_provider(source, length=int(signature_length) or None)
+            options = uds_secured.SecuredOptions(
+                sign=bool(sign) and provider is not None,
+                encrypt=bool(encrypt),
+                signature_on_response=bool(signed_response),
+                algorithm=int(algorithm),
+                pre_established_key=source == 'session',
+            )
+        except uds_secured.SecuredDataError as e:
+            return {'error': str(e)}
+
+        async def operation(uds):
+            start = self._sdt_counters.get(request_id, 0) if counter is None else int(counter)
+            try:
+                result = await uds_secured.secured_request(uds.transport, bytes_payload, provider, options, start)
+            except uds_secured.SecuredDataError as e:
+                return {'error': str(e)}
+            self._sdt_counters[request_id] = (start + 1) % uds_secured.COUNTER_MODULO
+            return result.as_dict()
+
+        return await self._with_uds(request, response, operation, control=True)
+
+    @staticmethod
+    def _auth_store():
+        """The key store for authentication credentials: the application's (the GUI's, when attached), unlocked
+        from CANEXPLORER_KEYSTORE_PASSWORD if still locked."""
+        from can_explorer.core import keystore
+
+        store = keystore.default_store()
+        if not store.unlocked:
+            try:
+                store.unlock_from_environment()
+            except keystore.KeyStoreError as e:
+                logger.warning(f'Key store: {e}')
+        return store
+
+    async def uds_authenticate(
+        self,
+        method: str = 'certificate',
+        credentials: str = '',
+        scheme: str = '',
+        bidirectional: bool = False,
+        trusted: str = '',
+        algorithm: str = '',
+        additional: str = '',
+        communication_configuration: int = 0,
+        request: Any = DEFAULT_UDS_REQUEST,
+        response: Any = ECU_RESPONSE,
+    ) -> Dict[str, Any]:
+        """Authentication (0x29). `method`: 'certificate' (certificate exchange, `credentials` a client certificate
+        entry of the key store or 'profile:<name>'), 'challenge-response' (`credentials` a shared authentication
+        key, a client certificate entry or 'profile:<name>'; `algorithm` the algorithmIndicator, hex or a dotted
+        OID; `additional` hex) or 'configuration' (authenticationConfiguration only). `trusted`: a
+        trusted-certificates entry checking the ECU (bidirectional). A session key asked for with
+        `communication_configuration` is kept for uds_secured_request(key='session'). Active: --allow-control."""
+        from can_explorer.core import audit, uds_auth, uds_secured
+
+        method = str(method or 'certificate').lower()
+        store = self._auth_store()
+        request_id = _parse_id(request)
+        configuration = int(communication_configuration)
+        if not 0 <= configuration <= 0xFF:
+            return {'error': 'communication_configuration is one byte'}
+        try:
+            if method == 'configuration':
+                prepared = None
+            elif method == 'certificate':
+                certificate, private_key = uds_auth.credentials(store, str(credentials))
+                trusted_certificates = uds_auth.trusted_certificates(store, str(trusted)) if trusted else []
+                scheme = str(scheme or uds_auth.scheme_for(certificate.public_key()))
+                uds_auth.check_scheme(scheme, certificate.public_key())
+                prepared = (certificate, private_key, trusted_certificates)
+            elif method == 'challenge-response':
+                prove, verify_server, how = uds_auth.challenge_response_credentials(
+                    store, str(credentials), str(scheme), str(trusted)
+                )
+                prepared = (prove, verify_server, how, uds_auth.algorithm_indicator(str(algorithm)))
+            else:
+                return {'error': "method is 'certificate', 'challenge-response' or 'configuration'"}
+            extra = parse_hex_bytes(str(additional or ''))
+        except (uds_auth.UdsAuthenticationError, ValueError) as e:
+            return {'error': str(e)}
+
+        async def operation(uds):
+            if method == 'configuration':
+                return {'configuration': await uds_auth.authentication_configuration(uds)}
+            self._auth_sessions.pop(request_id, None)  # The ECU ends an authentication when a new one starts
+            try:
+                if method == 'certificate':
+                    certificate, private_key, trusted_certificates = prepared
+                    result = await uds.authenticate(
+                        certificate,
+                        private_key,
+                        scheme,
+                        bool(bidirectional),
+                        trusted_certificates,
+                        store.revocation_lists(),
+                        communication_configuration=configuration,
+                    )
+                else:
+                    prove, verify_server, how, indicator = prepared
+                    result = await uds.authenticate_challenge_response(
+                        prove,
+                        bool(bidirectional),
+                        verify_server,
+                        indicator=indicator,
+                        additional_parameter=extra,
+                        communication_configuration=configuration,
+                    )
+            except uds_auth.UdsAuthenticationError as e:
+                return {'authenticated': False, 'error': str(e)}
+            audit.record(
+                'uds authentication', source=str(credentials), method=method, authenticated=result.authenticated
+            )
+            answer: Dict[str, Any] = {
+                'authenticated': result.authenticated,
+                'method': method,
+                'steps': result.steps,
+                'return_parameter': f'0x{result.return_parameter:02X}',
+            }
+            if result.server_certificate is not None:
+                answer['ecu_certificate'] = result.server_certificate.subject.rfc4514_string()
+            if result.client_certificate is not None:
+                extensions = uds_auth.private_extensions(result.client_certificate)
+                if extensions:  # Where an ECU may read roles and white lists from
+                    answer['certificate_private_extensions'] = [f'{oid} ({size} B)' for oid, size in extensions]
+            if result.authenticated and result.session_key_info:
+                self._auth_sessions[request_id] = (
+                    uds_secured.SessionContext.from_result(result),
+                    str(credentials),
+                )
+                answer['session_key_info_bytes'] = len(result.session_key_info)
+                answer['session_key'] = "kept: uds_secured_request(key='session')"
+            return answer
+
+        return await self._with_uds(request, response, operation, control=True)
+
+    async def uds_deauthenticate(self, request: Any = DEFAULT_UDS_REQUEST, response: Any = ECU_RESPONSE):
+        """deAuthenticate (0x29 0x00): ends the authentication and forgets its session key. Active."""
+        from can_explorer.core import uds_auth
+
+        request_id = _parse_id(request)
+
+        async def operation(uds):
+            self._auth_sessions.pop(request_id, None)
+            return {'result': await uds_auth.deauthenticate(uds)}
+
+        return await self._with_uds(request, response, operation, control=True)
+
+    async def uds_transmit_certificate(
+        self, certificate: str, evaluation_id: Any, request: Any = DEFAULT_UDS_REQUEST, response: Any = ECU_RESPONSE
+    ) -> Dict[str, Any]:
+        """transmitCertificate (0x29 0x04): send a general-purpose certificate (a key store certificate entry or a
+        PEM/DER file) for a certificateEvaluationId (manufacturer specific). Active: --allow-control."""
+        from can_explorer.core import uds_auth
+
+        try:
+            certificate_value = uds_auth.certificate_to_transmit(self._auth_store(), str(certificate))
+            evaluation = evaluation_id if isinstance(evaluation_id, int) else int(str(evaluation_id), 0)
+        except (uds_auth.UdsAuthenticationError, ValueError) as e:
+            return {'error': str(e)}
+
+        async def operation(uds):
+            try:
+                text = await uds_auth.transmit_certificate(uds, certificate_value, evaluation)
+            except uds_auth.UdsAuthenticationError as e:
+                return {'error': str(e)}
+            return {
+                'result': text,
+                'evaluation_id': f'0x{evaluation:04X}',
+                'certificate': certificate_value.subject.rfc4514_string(),
+            }
 
         return await self._with_uds(request, response, operation, control=True)
 
@@ -1301,6 +1556,65 @@ class CanService:
         width = 8 if extended else 3
         return {'ecus': [f'{address:0{width}X}' for address in responders]}
 
+    # J1939
+
+    async def j1939_request(
+        self, pgn: Any, destination: Any = 'FF', source: Any = 'F9', timeout: float = 1.25
+    ) -> Dict[str, Any]:
+        """Request a J1939 parameter group (PGN 59904) and return the answers, reassembled and decoded where known.
+        The tool answers transport sessions to its address, so replies longer than 8 bytes arrive too."""
+        from can_explorer.core.j1939_tools import PGN_DM3, PGN_DM11, parse_pgn, pgn_label, request_pgn
+        from can_explorer.core.protocols.j1939 import J1939Decoder
+
+        number = pgn if isinstance(pgn, int) else parse_pgn(str(pgn))
+        # DM3 and DM11 requests clear trouble codes
+        (self._require_control if number in (PGN_DM3, PGN_DM11) else self._require_diagnostics)()
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        target, tool = _parse_j1939_address(destination), _parse_j1939_address(source)
+        answers = await request_pgn(self.session, number, target, tool, float(timeout))
+        decoder = J1939Decoder()
+        result = []
+        for answer in answers:
+            entry: Dict[str, Any] = {'source': f'{answer.source:02X}'}
+            if answer.payload is None:
+                entry['acknowledgment'] = answer.acknowledgment
+            else:
+                entry['data'] = answer.payload.hex(' ').upper()
+                entry['length'] = len(answer.payload)
+                decoded = decoder.describe_payload(number, answer.payload)
+                if decoded:
+                    entry['decoded'] = decoded
+            result.append(entry)
+        return {'pgn': f'0x{number:05X}', 'label': pgn_label(number), 'answers': result}
+
+    async def j1939_send(
+        self, pgn: Any, data: str, destination: Any = 'FF', priority: int = 6, source: Any = 'F9'
+    ) -> Dict[str, Any]:
+        """Send a J1939 parameter group: a single frame up to 8 bytes, BAM to all nodes, RTS/CTS or (over 1785
+        bytes) ETP to one node."""
+        from can_explorer.core.j1939_tools import TP_MAX, J1939Sender, is_pdu1, parse_pgn
+
+        self._require_send()
+        if self.session is None:
+            return {'sent': False, 'error': NOT_CONNECTED}
+        number = pgn if isinstance(pgn, int) else parse_pgn(str(pgn))
+        payload = parse_hex_bytes(data)
+        target, tool = _parse_j1939_address(destination), _parse_j1939_address(source)
+        if not is_pdu1(number):
+            target = 0xFF
+        try:
+            await J1939Sender(self.session).send(number, payload, tool, target, int(priority))
+        except (TimeoutError, ConnectionError, ValueError, SessionError) as e:
+            return {'sent': False, 'error': str(e)}
+        if len(payload) <= 8:
+            transport = 'single frame'
+        elif target == 0xFF:
+            transport = 'BAM'
+        else:
+            transport = 'ETP' if len(payload) > TP_MAX else 'RTS/CTS'
+        return {'sent': True, 'pgn': f'0x{number:05X}', 'bytes': len(payload), 'transport': transport}
+
     async def uds_reset(
         self, reset_type: int = 1, request: Any = DEFAULT_UDS_REQUEST, response: Any = ECU_RESPONSE
     ) -> Dict[str, Any]:
@@ -1347,3 +1661,104 @@ class CanService:
             }
 
         return await self._with_uds(request, response, operation, control=True)
+
+    # XCP / CCP measurement and calibration
+
+    async def _with_xcp(self, operation, control: bool = False, needs_bus: bool = True) -> Dict[str, Any]:
+        (self._require_control if control else self._require_diagnostics)()
+        try:
+            return await operation(self._xcp)
+        except SendNotAllowed:
+            raise
+        except Exception as e:  # XCP/CCP errors, timeouts, A2L and conversion errors: reported to the agent
+            return {'error': str(e) or type(e).__name__}
+
+    def xcp_list_variables(self, a2l: str = '', pattern: str = '', kind: str = '', limit: int = 200) -> Dict[str, Any]:
+        """The measurements and characteristics of the A2L (loading `a2l` first when given). Sends nothing."""
+        try:
+            loaded = self._xcp.load(a2l_path(a2l)) if a2l else None
+            result = self._xcp.variables(pattern, kind, limit)
+        except Exception as e:
+            return {'error': str(e)}
+        if loaded is not None:
+            result['a2l'] = loaded
+        return result
+
+    async def xcp_connect(
+        self,
+        protocol: str = 'XCP',
+        transport: str = 'CAN',
+        request: Any = '7E0',
+        response: Any = '7E1',
+        extended: bool = False,
+        station: str = '0',
+        byte_order: str = 'big',
+        host: str = '',
+        port: int = 5555,
+        key: str = '',
+        a2l: str = '',
+    ) -> Dict[str, Any]:
+        """Connect to an XCP (CAN, CAN FD, UDP, TCP) or CCP slave and keep the session for the other xcp_* tools.
+        `key`: a seed & key algorithm (a Python file, 'keystore:<entry>' or 'profile:<name>'), used when a command
+        needs a locked resource. `a2l` loads the ECU description."""
+
+        async def operation(xcp: CalibrationSession):
+            if a2l:
+                xcp.load(a2l_path(a2l))
+            compute_key = load_key_source(key) if key else None
+            if transport.upper() not in ('UDP', 'TCP') and self.session is None:
+                return {'error': NOT_CONNECTED}
+            config = getattr(self.session.source, 'config', None) if self.session is not None else None
+            return await xcp.connect(
+                self.session, protocol, transport, request, response, extended, station, byte_order, host, port,
+                compute_key, fd=bool(getattr(config, 'fd', False)) and transport.upper() == 'CAN FD',
+            )  # fmt: skip
+
+        return await self._with_xcp(operation)
+
+    async def xcp_disconnect(self) -> Dict[str, Any]:
+        async def operation(xcp: CalibrationSession):
+            await xcp.disconnect()
+            return {'connected': False}
+
+        return await self._with_xcp(operation)
+
+    async def xcp_status(self) -> Dict[str, Any]:
+        """The XCP/CCP session: protocol, byte order, locked resources, and whether the A2L matches (EPK)."""
+        return await self._with_xcp(lambda xcp: xcp.status())
+
+    async def xcp_read(self, names: List[str]) -> Dict[str, Any]:
+        """Physical values of A2L variables (scalars, arrays, curves and maps with their axes)."""
+        return await self._with_xcp(lambda xcp: xcp.read(list(names)))
+
+    async def xcp_read_memory(self, address: str, size: int, extension: int = 0) -> Dict[str, Any]:
+        return await self._with_xcp(lambda xcp: xcp.read_memory(address, int(size), int(extension)))
+
+    async def xcp_measure(self, names: List[str], duration: float = 1.0, event: Optional[int] = None) -> Dict[str, Any]:
+        return await self._with_xcp(lambda xcp: xcp.measure(list(names), duration, event))
+
+    async def xcp_daq_info(self) -> Dict[str, Any]:
+        """The XCP slave's DAQ configuration: dynamic or static, its lists (and what predefined ones carry), events."""
+        return await self._with_xcp(lambda xcp: xcp.daq_info())
+
+    async def xcp_flash_info(self) -> Dict[str, Any]:
+        """What the XCP slave offers for programming: PGM properties and flash sectors."""
+        return await self._with_xcp(lambda xcp: xcp.flash_info())
+
+    async def xcp_stimulate(
+        self, values: Dict[str, Any], event: Optional[int] = None, duration: float = 1.0
+    ) -> Dict[str, Any]:
+        """Write scalar calibration values by XCP STIM on an event. Active: requires --allow-control."""
+        return await self._with_xcp(lambda xcp: xcp.stimulate(dict(values), event, duration), control=True)
+
+    async def xcp_program(self, path: str, **options: Any) -> Dict[str, Any]:
+        """Program a file into the ECU's flash over XCP. Active: requires --allow-control."""
+        return await self._with_xcp(lambda xcp: xcp.program(path, **options), control=True)
+
+    async def xcp_write(self, name: str, value: Any, axes: Optional[List] = None) -> Dict[str, Any]:
+        """Write a calibration value (checked against its A2L limits) and read it back. Active: --allow-control."""
+        return await self._with_xcp(lambda xcp: xcp.write(name, value, axes), control=True)
+
+    async def xcp_write_memory(self, address: str, data: str, extension: int = 0) -> Dict[str, Any]:
+        """Write raw bytes to the ECU's memory. Active: requires --allow-control."""
+        return await self._with_xcp(lambda xcp: xcp.write_memory(address, data, int(extension)), control=True)

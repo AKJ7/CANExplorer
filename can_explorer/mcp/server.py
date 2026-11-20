@@ -35,8 +35,10 @@ DBC/ARXML/KCD/SYM/DBF. FlexRay is read from files: flexray_load_cluster (FIBEX/A
 flexray_analyze_log and flexray_decode on pcap, BLF or ASC logs. The resources can://status, can://identifiers, can://frames and can://database mirror this
 as readable data; the prompts guide the common workflows. Identifiers are hex strings such as "1A0".
 
-Diagnostics (OBD-II obd_* and UDS uds_*) and transmitting (send_frame, send_message) are only available when the
-server was started with the matching permission; each tool's description says which tier it needs.
+Diagnostics (OBD-II obd_*, UDS uds_* and J1939 j1939_request) and transmitting (send_frame, send_message,
+j1939_send) are only available when the server was started with the matching permission; each tool's description
+says which tier it needs. The request/response identifiers of the obd_* and uds_* tools take an ISO-TP address byte
+after a colon for extended or mixed addressing, e.g. request "6F1:12", response "612:F1".
 """
 
 # Appended to the description of each gated tool, so the agent knows what a call does to the bus
@@ -110,7 +112,10 @@ def build_mcp(service: CanService) -> MCPServer:  # noqa: C901 - a flat list of 
         name='decode_protocol',
         title='Decode with a protocol',
         description='Interpret a payload with a protocol decoder (J1939, J1939-22, "NMEA 2000", CANopen, ISO-TP, '
-        'UDS, KWP2000, "K-Line", LIN, J1587, NM, SecOC), without a database. Sends nothing.',
+        'UDS, KWP2000, "ISO-TP (extended)", "UDS (extended)", "KWP2000 (extended)" (extended or mixed addressing: '
+        'the first data byte is an address byte), "K-Line", LIN, J1587, NM, SecOC, XCP, CCP), without a database. '
+        'A single XCP or CCP frame is only labelled when it is a CONNECT (the decoder learns the identifier pair '
+        'from a session start). Sends nothing.',
     )
     async def decode_protocol(protocol: str, identifier: str, data: str, extended: bool = False) -> Dict[str, Any]:
         return service.decode_protocol(protocol, identifier, data, extended)
@@ -435,9 +440,198 @@ def build_mcp(service: CanService) -> MCPServer:  # noqa: C901 - a flat list of 
         async def uds_find_ecus(extended: bool = False, timeout: float = 0.5) -> Dict[str, Any]:
             return await service.uds_find_ecus(extended, timeout)
 
+        @mcp.tool(
+            name='j1939_request',
+            title='Request a J1939 parameter group',
+            description='Request a J1939 parameter group (PGN 59904) from one node (destination, hex address) or all '
+            '(FF) and return the answers: the data, reassembled from BAM, RTS/CTS or ETP (the tool answers transport '
+            'sessions to its source address), decoded for address claims (NAMEs), DM1/DM2 and identification text; '
+            'or the acknowledgment (e.g. NACK) of a node that does not send the group. pgn: a number or a name such '
+            'as "Address Claimed", "DM2", "Software Identification". A request to all nodes collects answers for '
+            '`timeout` seconds. Requesting DM3 or DM11 clears trouble codes and needs the control tier.'
+            + DIAGNOSTICS_TIER,
+        )
+        async def j1939_request(
+            pgn: str, destination: str = 'FF', source: str = 'F9', timeout: float = 1.25
+        ) -> Dict[str, Any]:
+            return await service.j1939_request(pgn, destination, source, timeout)
+
+    # XCP / CCP measurement and calibration
+
+    @mcp.tool(
+        name='xcp_list_variables',
+        title='List A2L variables',
+        description='The measurements, characteristics (values, curves, maps, blocks, strings) and axes of an A2L '
+        'file: name, kind, address, type, unit, limits, verbal values, and why one cannot be read. a2l loads the '
+        'file (kept for the other xcp_* tools); pattern filters by name (glob or substring), kind by kind '
+        '(MEASUREMENT, VALUE, CURVE, MAP, VAL_BLK, ASCII, AXIS_PTS). Sends nothing.',
+    )
+    async def xcp_list_variables(a2l: str = '', pattern: str = '', kind: str = '', limit: int = 200) -> Dict[str, Any]:
+        return service.xcp_list_variables(a2l, pattern, kind, limit)
+
+    if service.can_diagnose:
+
+        @mcp.tool(
+            name='xcp_connect',
+            title='Connect to an XCP or CCP slave',
+            description='Connect to an ECU\'s XCP slave (transport CAN, "CAN FD", UDP or TCP with host/port) or '
+            'CCP slave (CAN, station address, byte order), and keep the session for the other xcp_* tools. '
+            'request/response: the CAN identifiers (hex). key: a seed & key algorithm (Python file, '
+            '"keystore:<entry>" or "profile:<name>") used when a command needs a locked resource. a2l: the ECU '
+            'description; the answer says whether it matches the ECU (EPK).' + DIAGNOSTICS_TIER,
+        )
+        async def xcp_connect(
+            protocol: str = 'XCP',
+            transport: str = 'CAN',
+            request: str = '7E0',
+            response: str = '7E1',
+            extended: bool = False,
+            station: str = '0',
+            byte_order: str = 'big',
+            host: str = '',
+            port: int = 5555,
+            key: str = '',
+            a2l: str = '',
+        ) -> Dict[str, Any]:
+            return await service.xcp_connect(
+                protocol, transport, request, response, extended, station, byte_order, host, port, key, a2l
+            )
+
+        @mcp.tool(name='xcp_disconnect', title='Disconnect the XCP/CCP slave', description='End the XCP/CCP session.'
+                  + DIAGNOSTICS_TIER)  # fmt: skip
+        async def xcp_disconnect() -> Dict[str, Any]:
+            return await service.xcp_disconnect()
+
+        @mcp.tool(
+            name='xcp_status',
+            title='XCP/CCP session status',
+            description='The XCP/CCP session: protocol, byte order, address granularity, packet sizes, locked '
+            'resources, and the EPK check of the loaded A2L.' + DIAGNOSTICS_TIER,
+        )
+        async def xcp_status() -> Dict[str, Any]:
+            return await service.xcp_status()
+
+        @mcp.tool(
+            name='xcp_read',
+            title='Read A2L variables',
+            description='Read A2L variables by name over XCP/CCP and convert them to physical values: scalars, '
+            'arrays, value blocks, strings, curves and maps (values[y][x]) with their axis points.' + DIAGNOSTICS_TIER,
+        )
+        async def xcp_read(names: List[str]) -> Dict[str, Any]:
+            return await service.xcp_read(names)
+
+        @mcp.tool(
+            name='xcp_read_memory',
+            title='Read ECU memory',
+            description="Read 1 to 4096 bytes of the ECU's memory at a hex address (with an address extension) "
+            'over XCP/CCP.' + DIAGNOSTICS_TIER,
+        )
+        async def xcp_read_memory(address: str, size: int, extension: int = 0) -> Dict[str, Any]:
+            return await service.xcp_read_memory(address, size, extension)
+
+        @mcp.tool(
+            name='xcp_measure',
+            title='Measure A2L measurements',
+            description='Measure A2L measurements for a duration (seconds, at most 30) — by DAQ on an event channel '
+            '(default the first A2L event) when the ECU supports it, else by polling — and return per measurement '
+            'the number of samples, min, max, mean and last value. Configures DAQ lists in the ECU (measurement '
+            'only, no calibration change).' + DIAGNOSTICS_TIER,
+        )
+        async def xcp_measure(names: List[str], duration: float = 1.0, event: Optional[int] = None) -> Dict[str, Any]:
+            return await service.xcp_measure(names, duration, event)
+
+        @mcp.tool(
+            name='xcp_daq_info',
+            title='XCP DAQ configuration',
+            description="The XCP slave's DAQ configuration: dynamic or static, its DAQ lists (direction, size, fixed "
+            'event) and what its predefined lists carry (from the A2L, or read with READ_DAQ), its events, and '
+            'whether it offers STIM. Reads only.' + DIAGNOSTICS_TIER,
+        )
+        async def xcp_daq_info() -> Dict[str, Any]:
+            return await service.xcp_daq_info()
+
+        @mcp.tool(
+            name='xcp_flash_info',
+            title='XCP programming capabilities',
+            description='Whether the XCP slave offers flash programming (PGM), whether it is locked, its PGM '
+            'properties (absolute/functional erasing, compression and encryption supported or required) and its '
+            'flash sectors. Reads only.' + DIAGNOSTICS_TIER,
+        )
+        async def xcp_flash_info() -> Dict[str, Any]:
+            return await service.xcp_flash_info()
+
     # Active control (control tier)
 
     if service.can_control:
+
+        @mcp.tool(
+            name='xcp_write',
+            title='Write a calibration value',
+            description='Write an A2L characteristic over XCP/CCP and read it back: value is a number, a verbal '
+            'value, a list (curves, blocks, axis points), a list of rows (maps, values[y][x]) or a string (ASCII); '
+            'axes optionally rewrites the points of standard axes. Values outside the A2L limits are refused. '
+            'Changes the running ECU immediately.' + CONTROL_TIER,
+        )
+        async def xcp_write(name: str, value: Any, axes: Optional[List[Any]] = None) -> Dict[str, Any]:
+            return await service.xcp_write(name, value, axes)
+
+        @mcp.tool(
+            name='xcp_write_memory',
+            title='Write ECU memory',
+            description="Write raw bytes (hex) to the ECU's memory at a hex address over XCP/CCP. Changes the "
+            'running ECU immediately; prefer xcp_write, which checks the A2L limits.' + CONTROL_TIER,
+        )
+        async def xcp_write_memory(address: str, data: str, extension: int = 0) -> Dict[str, Any]:
+            return await service.xcp_write_memory(address, data, extension)
+
+        @mcp.tool(
+            name='xcp_stimulate',
+            title='Stimulate calibration values (XCP STIM)',
+            description='Write scalar A2L calibration values by XCP STIM: the ECU writes them at an event channel '
+            '(default the first A2L event) for duration seconds (at most 30), then STIM stops and the values are '
+            'read back. values maps names to numbers or verbal values; values outside the A2L limits are refused. '
+            'Reports STIM timeouts the ECU signalled. Changes the running ECU immediately.' + CONTROL_TIER,
+        )
+        async def xcp_stimulate(
+            values: Dict[str, Any], event: Optional[int] = None, duration: float = 1.0
+        ) -> Dict[str, Any]:
+            return await service.xcp_stimulate(values, event, duration)
+
+        @mcp.tool(
+            name='xcp_program',
+            title='Program the ECU flash over XCP',
+            description='Replace software in the ECU: program an Intel HEX, S-record or binary file (path; '
+            'base_address hex for a binary) into its flash over XCP PGM, then check it and reset the ECU. erase: '
+            '"sectors" (every sector the file touches, default), "segments" (the file ranges), "functional" '
+            '(clear_areas bit mask: 1 calibration, 2 code, 4 NVRAM) or "none". verify compares BUILD_CHECKSUM '
+            'with the file; ecu_check "internal" or "value" (check_type, check_value hex) sends PROGRAM_VERIFY. '
+            'kernel: a flash kernel file downloaded first. compression/encryption: the manufacturer method codes '
+            '(PROGRAM_FORMAT) the file was prepared with, or that encoder (a Python file defining encode(data, '
+            'address)) applies. program_max sends full packets as PROGRAM_MAX. reset ends the session. A wrong '
+            'file can leave the ECU unable to start: only program a file meant for this ECU, and only when the user '
+            'asked for it.' + CONTROL_TIER,
+        )
+        async def xcp_program(
+            path: str,
+            erase: str = 'sectors',
+            verify: bool = True,
+            reset: bool = True,
+            base_address: str = '0',
+            clear_areas: int = 2,
+            kernel: str = '',
+            compression: int = 0,
+            encryption: int = 0,
+            encoder: str = '',
+            program_max: bool = False,
+            ecu_check: str = 'none',
+            check_type: int = 4,
+            check_value: str = '0',
+        ) -> Dict[str, Any]:
+            return await service.xcp_program(
+                path, erase=erase, verify=verify, reset=reset, base_address=base_address, clear_areas=clear_areas,
+                kernel=kernel, compression=compression, encryption=encryption, encoder=encoder,
+                program_max=program_max, ecu_check=ecu_check, check_type=check_type, check_value=check_value,
+            )  # fmt: skip
 
         @mcp.tool(
             name='obd_clear',
@@ -475,6 +669,92 @@ def build_mcp(service: CanService) -> MCPServer:  # noqa: C901 - a flat list of 
         async def uds_request(payload: str, request: str = '7E0', response: str = '7E8') -> Dict[str, Any]:
             return await service.uds_request(payload, request, response)
 
+        @mcp.tool(
+            name='uds_secured_request',
+            title='Secured UDS request (0x84)',
+            description='Send a UDS request (hex, e.g. "22 F1 90") inside a SecuredDataTransmission (0x84) envelope '
+            '(ISO 14229-1:2020) and return the unwrapped response, with both envelopes, the anti-replay counters and '
+            "whether the response signature verified. key: a secured data key of the key store (CANExplorer's "
+            'reference scheme, a MAC over the message; signature_length truncates it) or a Python provider file with '
+            "the manufacturer's scheme; 'session' uses the session key of the last uds_authenticate on this "
+            'request id; empty sends it unsigned. The counter continues per request id unless given. '
+            'The algorithms behind the algorithm byte are manufacturer specific.' + CONTROL_TIER,
+        )
+        async def uds_secured_request(
+            payload: str,
+            key: str = '',
+            sign: bool = True,
+            encrypt: bool = False,
+            signed_response: bool = False,
+            algorithm: int = 0,
+            signature_length: int = 0,
+            counter: Optional[int] = None,
+            request: str = '7E0',
+            response: str = '7E8',
+        ) -> Dict[str, Any]:
+            return await service.uds_secured_request(
+                payload, key, sign, encrypt, signed_response, algorithm, signature_length, counter, request, response
+            )
+
+        @mcp.tool(
+            name='uds_authenticate',
+            title='UDS Authentication (0x29)',
+            description='Authenticate on an ECU with service 0x29 (ISO 14229-1:2020). method: "certificate" '
+            '(certificate exchange; credentials = a client certificate entry of the key store or "profile:<name>"), '
+            '"challenge-response" (credentials = a shared authentication key, a client certificate entry or '
+            '"profile:<name>"; algorithm = the algorithmIndicator in hex or as a dotted OID; additional = hex) or '
+            '"configuration" (only asks which authentication the ECU offers). bidirectional also checks the ECU, '
+            'against the trusted-certificates entry `trusted` if given. A session key asked for with '
+            'communication_configuration is kept for uds_secured_request(key="session"). Returns the steps, '
+            "and the certificate's private extensions (where an ECU may read the tester's role and white lists). "
+            'The key store is unlocked with CANEXPLORER_KEYSTORE_PASSWORD.' + CONTROL_TIER,
+        )
+        async def uds_authenticate(
+            method: str = 'certificate',
+            credentials: str = '',
+            scheme: str = '',
+            bidirectional: bool = False,
+            trusted: str = '',
+            algorithm: str = '',
+            additional: str = '',
+            communication_configuration: int = 0,
+            request: str = '7E0',
+            response: str = '7E8',
+        ) -> Dict[str, Any]:
+            return await service.uds_authenticate(
+                method,
+                credentials,
+                scheme,
+                bidirectional,
+                trusted,
+                algorithm,
+                additional,
+                communication_configuration,
+                request,
+                response,
+            )
+
+        @mcp.tool(
+            name='uds_deauthenticate',
+            title='UDS deAuthenticate',
+            description='End the authentication on an ECU (0x29 deAuthenticate) and forget its session key.'
+            + CONTROL_TIER,
+        )
+        async def uds_deauthenticate(request: str = '7E0', response: str = '7E8') -> Dict[str, Any]:
+            return await service.uds_deauthenticate(request, response)
+
+        @mcp.tool(
+            name='uds_transmit_certificate',
+            title='UDS transmitCertificate',
+            description='Send a general-purpose certificate to an ECU (0x29 transmitCertificate): a certificate entry '
+            'of the key store or a PEM/DER file, for a 16-bit certificate evaluation id (manufacturer specific: what '
+            'the certificate is for, e.g. secure coding, SecOC or TLS).' + CONTROL_TIER,
+        )
+        async def uds_transmit_certificate(
+            certificate: str, evaluation_id: str, request: str = '7E0', response: str = '7E8'
+        ) -> Dict[str, Any]:
+            return await service.uds_transmit_certificate(certificate, evaluation_id, request, response)
+
     # Transmitting (send tier)
 
     if service.allow_send:
@@ -486,6 +766,19 @@ def build_mcp(service: CanService) -> MCPServer:  # noqa: C901 - a flat list of 
         )
         async def send_frame(identifier: str, data: str, extended: bool = False, fd: bool = False) -> Dict[str, Any]:
             return service.send_frame(identifier, data, extended, fd)
+
+        @mcp.tool(
+            name='j1939_send',
+            title='Send a J1939 parameter group',
+            description='Send a J1939 parameter group (data in hex) from the source address: up to 8 bytes as one '
+            'frame, more with the transport protocol: BAM to all nodes (destination FF, at most 1785 bytes), RTS/CTS '
+            'to one node, or the extended transport protocol (ETP) to one node for more than 1785 bytes. Groups from '
+            'PGN 0xF000 (PDU2) always go to all nodes.' + SEND_TIER,
+        )
+        async def j1939_send(
+            pgn: str, data: str, destination: str = 'FF', priority: int = 6, source: str = 'F9'
+        ) -> Dict[str, Any]:
+            return await service.j1939_send(pgn, data, destination, priority, source)
 
         @mcp.tool(
             name='send_message',

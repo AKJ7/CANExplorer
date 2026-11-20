@@ -1367,6 +1367,15 @@ class ConnectionManager(QObject):
             fd = bool(options.get('fd', False)) and not lin
             single_wire = bool(options.get('single_wire', False)) and not lin and not fd
             data_bitrate = str(options.get('data_bitrate') or '')
+            host = options.get('host')
+            host = str(host).strip() if host else None
+            port = options.get('port')
+            if port not in (None, ''):
+                port = int(port)
+                if not (1 <= port <= 65535):
+                    raise ValueError(f'Port must be between 1 and 65535, got {port}')
+            else:
+                port = None
             config = BusConfig(
                 interface=canutils.get_interface_name(options['interface']) or options['interface'],
                 channel=str(options['channel']),
@@ -1377,6 +1386,8 @@ class ConnectionManager(QObject):
                 bus_type=bus_type,
                 lin_baudrate=int(options.get('lin_baudrate') or DEFAULT_BAUDRATE),
                 single_wire=single_wire,
+                host=host,
+                port=port,
             )
             protocol = options.get('protocol') or ('LIN' if lin else 'Raw')
             create_protocol_decoder(protocol)
@@ -1397,6 +1408,8 @@ class ConnectionManager(QObject):
             'fd': config.fd,
             'single_wire': config.single_wire,
             'receive_own_messages': config.receive_own_messages,
+            'host': config.host or '',
+            'port': config.port if config.port is not None else '',
         }
         connection = self._add(name, LiveSource(config), protocol)
         connection.origin = {'kind': 'bus', 'settings': settings}

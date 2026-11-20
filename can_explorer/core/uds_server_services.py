@@ -1,12 +1,13 @@
 """The services of the simulated UDS server (core/simulation.py UdsServer) beyond the basic ones: the
 ReadDTCInformation reports, ReadScalingDataByIdentifier, CommunicationControl, ControlDTCSetting,
-DynamicallyDefineDataIdentifier, ReadDataByPeriodicIdentifier, RequestFileTransfer, ResponseOnEvent and
-LinkControl. A mixin of UdsServer; the simulated ECU's own choices (rates, directory format) are documented here, they
+DynamicallyDefineDataIdentifier, ReadDataByPeriodicIdentifier, RequestFileTransfer, ResponseOnEvent,
+LinkControl and SecuredDataTransmission. A mixin of UdsServer; the simulated ECU's own choices (rates, directory format) are documented here, they
 are not taken from a standard.
 """
 
 from typing import Dict, List, Optional, Tuple
 
+from can_explorer.core import uds_secured
 from can_explorer.core.uds import NEGATIVE_RESPONSE
 
 # The simulator's periodic rates in seconds (sendAtSlowRate, Medium, Fast): its own choice, ECUs configure theirs
@@ -43,6 +44,7 @@ class ExtendedServices:
         self.events: List[Dict] = []  # ResponseOnEvent set up
         self.events_started = False
         self.outbox: List[bytes] = []  # Event-triggered responses waiting to be sent
+        self._inside_secured = False  # Handling the internal message of a SecuredDataTransmission
 
     def _extended_handlers(self):
         return {
@@ -54,6 +56,7 @@ class ExtendedServices:
             0x85: self._control_dtc_setting,
             0x86: self._response_on_event,
             0x87: self._link_control,
+            0x84: self._secured_data_transmission,
         }
 
     def _reset_extended_state(self) -> None:
@@ -67,6 +70,69 @@ class ExtendedServices:
         """A session change (or a reset) ends an unfinished download, upload or file transfer."""
         self._download = None
         self._file_transfer = None
+
+    # SecuredDataTransmission
+
+    def _needs_secured(self, did: int) -> bool:
+        secured = getattr(self, 'secured', None)
+        return secured is not None and did in secured.secured_dids and not self._inside_secured
+
+    def _secured_data_transmission(self, request: bytes) -> List[bytes]:
+        """Open the envelope (checking the counter and the signature, decrypting), handle the internal request and
+        wrap each response in a 0xC4 envelope with the request's counter, signed when the request asked for it and
+        encrypted when the request was. See uds_secured.SecuredServerConfig for the simulator's choices."""
+        config = self.secured
+        if config is None:
+            return self._negative(0x84, 0x11)
+        if self._inside_secured:
+            return self._negative(0x84, uds_secured.SECURE_DATA_TRANSMISSION_NOT_ALLOWED)  # Nested envelope
+        try:
+            message = uds_secured.parse(request)
+        except uds_secured.SecuredDataError:
+            return self._negative(0x84, 0x13)
+        header = message.header
+        if not header.request:
+            return self._negative(0x84, 0x13)
+        if config.require_signature and not header.signed:
+            return self._negative(0x84, uds_secured.SECURE_DATA_VERIFICATION_FAILED)
+        if not config.fresh(header.counter):
+            return self._negative(0x84, uds_secured.SECURE_DATA_VERIFICATION_FAILED)  # A replayed counter
+        provider = config.provider
+        if header.pre_established_key or config.require_session_key:
+            # The session key of the last authentication (communicationConfiguration with a session key)
+            authentication = getattr(self, 'authentication', None)
+            provider = getattr(authentication, 'session_provider', None) if authentication is not None else None
+            if provider is None or not header.pre_established_key:
+                return self._negative(0x84, uds_secured.SECURE_DATA_VERIFICATION_FAILED)
+        try:
+            opened = uds_secured.open_message(request, provider)
+        except uds_secured.SecuredDataError:
+            return self._negative(0x84, uds_secured.SECURE_DATA_VERIFICATION_FAILED)
+        if not opened.internal:
+            return self._negative(0x84, 0x13)
+        config.last_counter = header.counter
+        self._inside_secured = True
+        try:
+            responses = self._handle(opened.internal)
+        finally:
+            self._inside_secured = False
+        try:
+            return [
+                uds_secured.wrap(
+                    response,
+                    header.counter,
+                    request=False,
+                    provider=provider,
+                    sign=header.signature_on_response_requested,
+                    encrypt=header.encrypted,
+                    signature_on_response=header.signature_on_response_requested,
+                    algorithm=header.algorithm,
+                    pre_established_key=header.pre_established_key,
+                )
+                for response in responses
+            ]
+        except uds_secured.SecuredDataError:
+            return self._negative(0x84, uds_secured.SECURE_DATA_TRANSMISSION_NOT_ALLOWED)  # Cannot protect it
 
     # ReadDTCInformation
 

@@ -1,4 +1,5 @@
 import asyncio
+import random
 from typing import Any, Dict, List, Optional
 
 from PyQt6.QtCore import QObject, QTimer, pyqtProperty, pyqtSignal, pyqtSlot
@@ -13,11 +14,15 @@ from can_explorer.core.j1939_tools import (
     PGN_DM11,
     TOOL_ADDRESS,
     TOOL_PGN_NAMES,
+    AddressClaimer,
+    AddressClaimError,
     DiagnosticMessage,
     J1939Id,
     J1939Network,
     J1939Node,
+    J1939Name,
     J1939Sender,
+    TransportResponder,
     parse_pgn,
     pgn_label,
 )
@@ -27,6 +32,13 @@ logger = get_logger(__name__)
 
 MAX_LOG = 200
 REFRESH_MS = 500
+SERVICE_TOOL_FUNCTION = 129  # Off-board diagnostic service tool (industry group 0)
+
+
+def tool_name() -> J1939Name:
+    """The NAME the view claims an address with: an off-board diagnostic service tool, arbitrary address capable,
+    with a random identity number (so two CANExplorers on one bus do not have the same NAME)."""
+    return J1939Name((1 << 63) | (SERVICE_TOOL_FUNCTION << 40) | random.getrandbits(21))
 
 
 def _parse_address(text: str, what: str) -> int:
@@ -87,6 +99,9 @@ class J1939Controller(QObject):
         self._log_entries: List[Dict[str, Any]] = []
         self._busy = False
         self._source = TOOL_ADDRESS
+        self._responder: Optional[TransportResponder] = None  # Answers transport sessions to the tool address
+        self._claimer: Optional[AddressClaimer] = None
+        self._name = tool_name()
         self._timer = QTimer(self)
         self._timer.setInterval(REFRESH_MS)
         self._timer.timeout.connect(self._refresh)
@@ -158,9 +173,14 @@ class J1939Controller(QObject):
     def busy(self) -> bool:
         return self._busy
 
-    @pyqtProperty(str, constant=True)
+    @pyqtProperty(str, notify=changed)
     def tool_address(self) -> str:
         return f'{self._source:02X}'
+
+    @pyqtProperty(bool, notify=busy_changed)
+    def claimed(self) -> bool:
+        """Whether the tool holds its address with an address claim."""
+        return self._claimer is not None and self._claimer.address == self._source
 
     def _database_pgns(self) -> Dict[str, int]:
         database = self.session.decoder.database
@@ -205,16 +225,75 @@ class J1939Controller(QObject):
     @pyqtSlot(str, result=str)
     def set_tool_address(self, text: str) -> str:
         try:
-            self._source = _parse_address(text or 'F9', 'source address')
+            address = _parse_address(text or 'F9', 'source address')
         except ValueError as e:
             return str(e)
+        if address == self._source:
+            return ''
+        if address > 0xFD:
+            return 'The tool address is 00 to FD'
+        self._source = address
+        self._release_address()
+        self.changed.emit()
         return ''
+
+    def _release_address(self) -> None:
+        """Stop answering transport sessions and defending a claim for the previous tool address."""
+        if self._responder is not None:
+            self._responder.close()
+            self._responder = None
+        if self._claimer is not None:
+            self._claimer.close()
+            self._claimer = None
+            self.busy_changed.emit()
+
+    def _take_part(self) -> None:
+        """Once the tool sends, it answers the transport sessions other nodes open to its address (e.g. a reply of
+        more than 8 bytes to a request), as a node on the bus must."""
+        if self._responder is None:
+            self._responder = TransportResponder.attach(self.session, self._source)
+
+    @pyqtSlot(result=str)
+    def claim_address(self) -> str:
+        """Claim the tool address (J1939-81) with the NAME of a service tool; the result goes to the log."""
+        error = self._check_send()
+        if error:
+            return error
+        if self._busy:
+            return 'A transfer is in progress'
+        if self._claimer is not None:
+            self._claimer.close()
+        self._claimer = AddressClaimer(self.session, self._name, self._source, self._log)
+        self._busy = True
+        self.busy_changed.emit()
+        asyncio.ensure_future(self._claim(self._claimer))
+        return ''
+
+    async def _claim(self, claimer: AddressClaimer):
+        try:
+            address = await claimer.claim()
+            if address != self._source and claimer is self._claimer:
+                if self._responder is not None:
+                    self._responder.close()
+                    self._responder = None
+                self._source = address  # Lost the address, moved to a self-configurable one
+            self._take_part()
+            self.changed.emit()
+        except AddressClaimError as e:
+            self._log(str(e), error=True)
+        except Exception as e:
+            logger.warning(f'Claiming 0x{self._source:02X} failed: {e}')
+            self._log(f'Claiming 0x{self._source:02X} failed: {e}', error=True)
+        finally:
+            self._busy = False
+            self.busy_changed.emit()
 
     def _request(self, pgn: int, destination: int) -> str:
         error = self._check_send()
         if error:
             return error
         try:
+            self._take_part()
             self._sender.request(pgn, destination, self._source)
         except Exception as e:
             return str(e)
@@ -291,6 +370,7 @@ class J1939Controller(QObject):
                 raise ValueError('Priorities are 0 to 7')
         except ValueError as e:
             return str(e)
+        self._take_part()
         self._busy = True
         self.busy_changed.emit()
         asyncio.ensure_future(self._send(pgn, payload, address, priority))

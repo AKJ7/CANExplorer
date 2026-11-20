@@ -14,11 +14,27 @@ in a banner below the header until the next request succeeds or you dismiss them
 ## Addressing
 
 - **CAN**: the **Request ID** and **Response ID** of the ECU (default `7E0`/`7E8`), **Extended (29-bit) identifiers** for 29-bit identifiers.
-  Classic CAN and CAN FD frames (on CAN FD connections) are supported, with normal addressing.
+  Classic CAN and CAN FD frames (on CAN FD connections) are supported. Normal addressing (and normal fixed
+  addressing, e.g. `18DA10F1`/`18DAF110`) needs only the identifiers. For **extended or mixed addressing**, where
+  every frame starts with an address byte (the target address N_TA, or the address extension N_AE of mixed
+  addressing), add that byte after a colon: request `6F1:12`, response `612:F1` sends to the ECU at address 0x12
+  and accepts only response frames that start with 0xF1. The address byte takes one byte of every frame, so a
+  single frame holds 6 bytes (61 on CAN FD). Everything that uses the view's addressing (requests, tester
+  present, listening, flashing, UDS discovery) uses the address byte too.
 - **LIN**: the **NAD** of the slave node (default `01`). Requests are sent in master request frames (0x3C) and the
   response is collected by polling slave response headers (0x3D).
 - **Ethernet**: vehicles with an Ethernet diagnostic port are diagnosed with the [DoIP](doip.md) tool, which offers
   this view with the ECU's logical **Target address**.
+
+In [scripts](test-automation.md), `IsoTpClient` takes the address bytes as `tx_address` and `rx_address`, and the
+simulated ECU (`UdsEcuSimulator`) as `request_address` and `response_address`:
+
+```python
+from can_explorer.core.isotp_client import IsoTpClient
+from can_explorer.core.uds import UdsClient
+
+client = UdsClient(IsoTpClient(session, 0x6F1, 0x612, tx_address=0x12, rx_address=0xF1))
+```
 
 To find the services, data identifiers, subfunctions and routines an undocumented ECU exposes, use the
 [UDS discovery](uds-discovery.md) page, which scans them over this same transport.
@@ -44,6 +60,7 @@ Workshop interfaces with a J2534 driver work as
 | Trouble codes: **Read** / **Clear** | ReadDTCInformation (0x19) reports, see [Trouble codes](#trouble-codes), and ClearDiagnosticInformation (0x14) |
 | Trouble codes: **Details** | A DTC's snapshot (0x19 0x04) and extended data (0x19 0x06) records |
 | Periodic data | DynamicallyDefineDataIdentifier (0x2C) and ReadDataByPeriodicIdentifier (0x2A), see [Periodic data](#periodic-data) |
+| Secured transmission (0x84) | SecuredDataTransmission (0x84): every request of the page in a signed and/or encrypted envelope, see [Secured data transmission](#secured-data-transmission-0x84) |
 
 Every request and its response are added to the **History**, numbered, with the service name above the request
 bytes and the interpretation above the response bytes. A coloured stripe and a status mark show the outcome: a
@@ -198,14 +215,41 @@ it); the exchange — which sub-functions, and that the proof is the signature o
 public AUTOSAR Diagnostic Communication Manager specification (R23-11, §7.6.2.10), which agrees with it where they
 overlap. Limits:
 
-- Only communication configuration 0 (no session key): the ECU's session key information, if any, is not used to
-  secure the following requests.
-- transmitCertificate (0x04) is encoded and decoded (also in the trace) but not offered as a procedure.
+- Session keys: **Session key** (the communicationConfiguration) asks the ECU for one; turning its session key
+  information into a key is manufacturer specific, see [Session keys](#session-keys).
 - Certificate formats other than X.509 (e.g. card-verifiable certificates) are not supported.
 
 The [revocation lists](security-manager.md#revocation-lists) of the key store are applied: in bidirectional mode, an
 ECU certificate they revoke is refused. The simulated ECU refuses revoked tester certificates with
 `certificateVerificationFailed-InvalidCertificate` (NRC 0x57), as the AUTOSAR Dcm does.
+
+### Roles and white lists
+
+After a certificate exchange, an AUTOSAR ECU grants services by the **role** and the **white lists** in the
+tester's certificate (Dcm §7.6.2.10.4–5): the role is a bit field, and a service runs when it shares a bit with the
+role the ECU assigns to that service, or when a white list allows it — services by their first 1–4 bytes, DIDs per
+operation (read, write, IO control), routines per sub-function (start, stop, results), fault memory selections.
+Otherwise the ECU answers `authenticationRequired` (NRC 0x34). Which certificate extensions (OIDs) hold the role and
+white lists is part of the ECU's configuration.
+
+After an authentication by certificate exchange, the log lists the certificate's private extensions with their
+size (e.g. `certificate extensions 1.3.6.1.4.1.55555.1.1 (3 B)`): where an ECU may read the tester's rights from.
+In scripts, `can_explorer.core.uds_auth.access_rights(certificate, AccessOids(role=..., dids=...))` reads them, and
+`AccessRights.allows(request, service_role)` tells whether the ECU would allow a request.
+
+The simulated ECU (`UdsServer(service_roles={b'\x11': 0x02, ...})` with `AuthenticationServer(access_oids=...,
+role_size=..., deauthenticated_role=...)`) enforces roles and white lists as the Dcm does, refuses a role of the
+wrong size with `certificateVerificationFailed-InvalidContent` (NRC 0x55), and ends an authentication after
+`authentication_timeout` seconds without a request in the default session or on an S3 timeout (`s3_timeout`) in
+another session, as SWS_Dcm_01482/01483 describe.
+
+### transmitCertificate
+
+**Transmit** sends a certificate of the security manager (a client certificate or the first of a trusted set) with
+transmitCertificate (0x04) under a **certificateEvaluationId**: a general-purpose certificate the ECU stores for an
+application — secure coding, SecOC, TLS, enhanced rights. The evaluation ids and what each is for are defined by the
+ECU's manufacturer; an ECU answers *certificate verified*, `requestOutOfRange` (NRC 0x31) for an id it does not
+know, or a `certificateVerificationFailed-…` code. Scripts: `await t.uds.transmit_certificate(certificate, 0x0001)`.
 
 ### Challenge-response
 
@@ -236,7 +280,131 @@ are tested byte for byte against it); the built-in proofs — a MAC or a signatu
 certificate exchange — are a choice, not taken from the standard. When an ECU expects something else (the challenge
 with a VIN or a counter, a key derived per ECU, …), put the construction into a security profile's
 `prove_challenge`. Whether an OID algorithmIndicator includes the DER tag and length is not specified publicly
-either; enter the 16 bytes in hex when an ECU expects only the value. The ECU's session key information is not used.
+either; enter the 16 bytes in hex when an ECU expects only the value. A session key asked for with **Session key** can
+protect [secured transmission](#session-keys).
+
+## Secured data transmission (0x84)
+
+**SecuredDataTransmission** (0x84, positive response 0xC4) carries any diagnostic request and its response inside a
+cryptographically protected envelope: signed, encrypted, or both, with an anti-replay counter. ECUs use it to
+accept writes, routines or downloads only from a tester that holds the right key. With **Send requests secured** in
+the **Secured transmission (0x84)** section, every request of the Diagnostics page (DID reads and writes, DTCs,
+routines, raw requests, …) travels in an envelope, and every response is checked and unwrapped. The log shows the
+wrapped service as usual, followed by `(secured: counter 12, response signature verified)`.
+
+| Setting | Meaning |
+|---|---|
+| Key | **None (unsigned)**: plain envelopes. A *UDS secured data key* of the [security manager](security-manager.md): CANExplorer's [reference scheme](#the-reference-scheme). Or a **provider file**: a Python file with the manufacturer's scheme (see [below](#provider-files)) |
+| Algorithm | The *Signature/Encryption Calculation* byte (hex): which algorithm protects the message. 0x00–0x7F are vehicle manufacturer specific, 0x80–0x8F system supplier specific |
+| MAC bytes | For a secured data key: the signature length, truncating the MAC (0: the full MAC) |
+| Sign / Encrypt | Sign the request; encrypt its internal message (a provider file with `encrypt` and `decrypt`) |
+| Signed response | Ask the ECU to sign its response (*signature on the response is requested*) and refuse an unsigned one |
+| Counter | The anti-replay counter of the next request; it increases by one per request. An ECU refuses counters it has already seen, so after restarting CANExplorer set it past the last one used |
+
+TesterPresent keep-alive and [flashing](flashing.md) are sent unsecured. Negative responses to the envelope itself,
+such as `secureDataVerificationFailed` (NRC 0x3A) for a bad signature or a replayed counter, are shown for the
+wrapped request. A plain request to a DID that needs the envelope is answered `secureDataTransmissionRequired` (0x38).
+The [trace](protocols.md) describes 0x84 and 0xC4 messages: their flags, counter and algorithm, and the
+service inside them unless it is encrypted.
+
+### The envelope
+
+ISO 14229-1:2020 defines the envelope, for requests and responses alike:
+
+| Field | Bytes | Contents |
+|---|---|---|
+| Administrative Parameter | 2 | bit 0 *request message*, bit 3 *pre-established key*, bit 4 *encrypted*, bit 5 *signed*, bit 6 *signature on the response requested*; the other bits are reserved |
+| Signature/Encryption Calculation | 1 | the algorithm |
+| Signature Length | 2 | the length of the Signature/MAC at the end (0: not signed) |
+| Anti-replay Counter | 2 | |
+| Internal message | 1 + n | the wrapped service ID and its parameters, or their ciphertext |
+| Signature/MAC | Signature Length | |
+
+ISO 14229-1 is not freely available. This layout follows Wireshark's UDS dissector and the tables of the *py-uds*
+knowledge base, which agree on the fields and the bit positions. Scapy's UDS layer has the same fields with the
+administrative bits in mirrored order (request message as bit 15); CANExplorer follows the two sources that agree.
+The NRCs 0x38–0x3A follow *python-udsoncan* and Wireshark. The AUTOSAR Dcm does not support the service. ISO
+14229-1:2013 had a single opaque record instead: such a message (or any message that does not fit the 2020 layout)
+is labelled *not decoded* in the trace, not guessed at.
+
+### The reference scheme
+
+The standard leaves the cryptography to the vehicle manufacturer: which algorithms the algorithm byte stands for,
+what the signature covers, how the counter enters the computation, and how keys are agreed. A *UDS secured data
+key* of the security manager therefore uses **CANExplorer's own reference scheme**, a documented choice, not taken
+from the standard. The signature is an HMAC-SHA-256 or AES-CMAC with the shared key over every byte before the
+signature (service ID to internal message), truncated to **MAC bytes**. It does not encrypt. It works with the
+simulated ECU and with ECUs built to the same scheme, not with any particular manufacturer's ECUs: for those, use a
+provider file.
+
+### Provider files
+
+A provider file implements the manufacturer's scheme. It defines any of these functions; `header` has the fields
+`administrative`, `algorithm`, `signature_length` and `counter`, and the flags `request`, `signed`, `encrypted`,
+`pre_established_key` and `signature_on_response_requested`:
+
+```python
+def signature_length(header) -> int: ...  # Needed with sign(): the length is part of the signed header
+def sign(header, data: bytes) -> bytes: ...  # data: the message bytes before the signature
+def verify(header, data: bytes, signature: bytes) -> bool: ...  # Optional: otherwise sign() and compare
+def encrypt(header, plaintext: bytes) -> bytes: ...  # The internal message (service ID and parameters)
+def decrypt(header, ciphertext: bytes) -> bytes: ...
+```
+
+Requests are encrypted first, then signed. In scripts, wrap any transport:
+
+```python
+from can_explorer.core.uds import UdsClient
+from can_explorer.core.uds_secured import MacProvider, SecuredOptions, SecuredTransport
+
+secured = SecuredTransport(transport, MacProvider(key, 'aes-cmac', 8), SecuredOptions(signature_on_response=True))
+uds = UdsClient(secured)
+await uds.write_data_by_identifier(0xF198, b'WS-0042')  # Sent signed; the response is verified
+print(secured.next_counter, secured.last.describe())
+```
+
+`uds_secured.load_provider('keystore:<entry>')` or `load_provider('oem.py')` loads a provider, and
+`uds_secured.secured_request` sends one request.
+
+### Session keys
+
+Authentication (0x29) can establish a session key for the secured requests that follow. The tester asks for one
+with the *communicationConfiguration* byte (**Session key** in the Authentication section, hex; 00 asks for none),
+and the ECU answers the last step with *session key information*. The Authentication section then shows
+`session key info 16 bytes (communicationConfiguration 0x01, challenge-response)`, and **Session key
+(Authentication)** in the Secured transmission section protects the requests with it. These envelopes set the
+*pre-established key* bit. De-authenticating, or authenticating again, ends the session key and the secured requests
+that use it.
+
+Which communicationConfiguration values ask for a session key, and what the session key information holds ("e.g.
+encrypted session keys"), are left to the vehicle manufacturer; the AUTOSAR Dcm supports only 0 (no session key).
+So turning it into a key is up to the source of the authentication:
+
+- A **security profile** (the authentication's certificate or key) with `session_provider(context)`: it returns the
+  0x84 provider, e.g. after unwrapping the session key information with the tester's private key, or a key agreement
+  with the ephemeral public keys of the certificate exchange.
+- A **UDS authentication key** (challenge-response with a shared key): CANExplorer's **reference derivation**, a
+  documented choice, not from the standard. The session key is HKDF-SHA-256 (RFC 5869) of the shared key, with the
+  ECU's challenge followed by the tester's challenge (empty when unidirectional) as the salt, and the label
+  `CANExplorer UDS session key`, the communicationConfiguration byte and the session key information as the info. It
+  is 32 bytes for HMAC-SHA-256 and 16 for AES-CMAC, the MAC of the key entry. The signatures are then those of the
+  [reference scheme](#the-reference-scheme) with the session key. The simulated ECU's session key information for it
+  is a random 16-byte nonce.
+
+`context` (`can_explorer.core.uds_secured.SessionContext`) holds the method (`certificate` or
+`challenge-response`), the communicationConfiguration, the session key information, both challenges, the algorithm
+indicator, the certificates, and the ephemeral public keys of the certificate exchange. In scripts:
+
+```python
+from can_explorer.core.uds_secured import SecuredOptions, SecuredTransport, SessionContext, session_provider
+
+result = await uds.authenticate_challenge_response(prove, communication_configuration=0x01)
+provider = session_provider(SessionContext.from_result(result), oem_session_provider)  # Or 'profile:<name>'
+secured = UdsClient(SecuredTransport(transport, provider, SecuredOptions(pre_established_key=True)))
+```
+
+`uds.authenticate(…, ephemeral_public_key=…)` sends the tester's ephemeral public key with the proof of ownership
+(bytes, or a function of the ECU's ephemeral public key returning it), for key agreements.
 
 ## Diagnostic descriptions (CDD, ODX/PDX)
 
@@ -329,7 +497,8 @@ address over [DoIP](doip.md); the functional addresses are vehicle specific, so 
       as bytes, not evaluated.
     - The durations of the ResponseOnEvent window times other than *infinite*, and the per-event records of
       *reportActivatedEvents* (their length depends on each event's service to respond to).
-    - SecuredDataTransmission (0x84) is named but not decoded: its security layout is manufacturer specific.
+    - SecuredDataTransmission (0x84): ISO 14229-1:2013 records are not decoded, and encrypted internal messages
+      only with a provider that decrypts them (see [above](#secured-data-transmission-0x84)).
     - Directory information of RequestFileTransfer *readDir* is returned as bytes: its format is manufacturer specific.
     - For 0x19 0x55 the references disagree: udsoncan reads 5-byte records (with a severity), the AUTOSAR
       specification returns DTCAndStatusRecords (4 bytes). CANExplorer follows AUTOSAR.
@@ -341,6 +510,9 @@ DTCs with snapshot and extended data records, routines, downloads for [flashing]
 control, DTC setting, scaling data, dynamically defined and periodic DIDs, a small file system for RequestFileTransfer,
 ResponseOnEvent, link control, functional requests on 0x7DF, and Authentication by certificate exchange when given a
 `can_explorer.core.uds_auth.AuthenticationServer` with the trusted certificates and the DIDs it protects, and by
-challenge-response when given a `ChallengeResponseConfig`, e.g. `symmetric_challenge_response(key, 'aes-cmac')`)
+challenge-response when given a `ChallengeResponseConfig`, e.g. `symmetric_challenge_response(key, 'aes-cmac')`,
+and SecuredDataTransmission when given a `can_explorer.core.uds_secured.SecuredServerConfig` with a provider and
+the DIDs that need it; with a `SessionKeyIssuer` for its AuthenticationServer it issues session keys for the
+communicationConfiguration 0x01, its own choice)
 reachable over ISO-TP (`UdsEcuSimulator`) or behind simulated LIN slaves (`LinSlaveSimulator`). The
 tests and `tools/docs_screenshots.py` use them; the latter shows how to run one next to the application.

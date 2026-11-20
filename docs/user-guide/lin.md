@@ -1,7 +1,8 @@
 # LIN
 
 CANExplorer accesses LIN (ISO 17987, LIN 2.x) through Linux LIN drivers that present the bus as a SocketCAN
-interface, following the convention of [sllin](https://rtime.felk.cvut.cz/gitweb/linux-lin.git):
+interface, and through the LIN adapters of PEAK, Kvaser and Vector ([LIN adapters](../reference/interfaces.md#lin-adapters)).
+Both follow the convention of [sllin](https://rtime.felk.cvut.cz/gitweb/linux-lin.git):
 
 | CAN frame | LIN |
 |---|---|
@@ -16,7 +17,9 @@ without hardware, e.g. with the LIN slave simulator.
 
 Create a connection with bus type **LIN**, interface *SocketcanBus* and the channel of the LIN driver (e.g.
 `sllin0`), and the **Baud rate** of the bus (19200 by default). The baud rate is used for the bus load; the driver's
-own setting applies to the bus.
+own setting applies to the bus. With a PEAK, Kvaser or Vector adapter, choose the interface *PlinBus*,
+*KvaserLinBus* or *VectorLinBus* instead: the adapter is set to the baud rate, as master or (with `@slave` after
+the channel) as slave; see [LIN adapters](../reference/interfaces.md#lin-adapters).
 
 ![LIN trace](../assets/screenshots/lin-trace.png)
 

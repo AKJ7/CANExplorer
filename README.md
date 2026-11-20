@@ -84,15 +84,17 @@
   the answers, for reverse engineering diagnostics; and fuzz it with mutated requests, detecting hangs and crashes
 - Bus gateway: forward frames between two connections with filtering, identifier rewriting and rate limiting
 - Security manager: a password-protected key store for SecOC keys, TLS certificates, IPsec/MACsec keys, seed/key
-  algorithms and UDS authentication keys — SecOC secured PDUs of an ARXML verified in the trace and secured when sent
-  (restbus, transmit, test scripts, with replay and forgery tests; AUTOSAR trip/reset freshness values), DoIP over
-  mutual TLS, UDS Authentication (0x29) by certificate exchange or challenge-response, IPsec ESP, MACsec and TLS
+  algorithms and UDS authentication and secured data keys — SecOC secured PDUs of an ARXML verified in the trace and
+  secured when sent (restbus, transmit, test scripts, with replay and forgery tests; AUTOSAR trip/reset freshness
+  values), DoIP over mutual TLS, UDS Authentication (0x29) by certificate exchange or challenge-response, UDS
+  SecuredDataTransmission (0x84) with signed/encrypted envelopes and anti-replay counters, IPsec ESP, MACsec and TLS
   (with a key log) in Ethernet captures decrypted and decoded, security events for buses and captures, security
   access tests (seed quality, lockout), revocation lists, an HMAC-chained audit log, key bundles, test certificates
   and the OS keychain; security profiles and key servers supply manufacturer keys, seed/key and signatures without
   keeping the secrets on this computer
-- XCP/CCP measurement and calibration: read measurements live and read/write calibration values by address or by
-  name from an A2L file, with simulated slaves for trying it without hardware
+- XCP (CAN, CAN FD, Ethernet) and CCP measurement and calibration: measurements polled or by DAQ and plotted,
+  calibration values, curves and maps by name from an A2L file, seed & key, calibration pages, checksums and
+  datasets (JSON, DCM), XCP STIM and flash programming, with simulated slaves for trying it without hardware
 - GMLAN (GMW3110) diagnostics for GM/Opel vehicles — data identifiers, modes, security access and trouble codes —
   over CAN, including single-wire (SWCAN, 33.3 kbit/s) buses; a simulated ECU works without hardware
 - GM Class 2 (SAE J1850 VPW) for the pre-CAN GM vehicles of 1996–2007 (e.g. the 99–06 P01/P59 PCMs): monitor the
@@ -111,7 +113,8 @@
 - Physical I/O: switch the digital outputs of a USB I/O adapter (aio_usb) and watch its inputs and analogue values,
   from the tool or test scripts; needs the `io` extra, a simulated device works without
 - Decoding of ISO-TP, UDS, KWP2000, K-Line (ISO 9141-2 / ISO 14230), J1939, J1939-22 (J1939 on CAN FD),
-  NMEA 2000 (marine, with Fast Packet), CANopen, LIN, J1587, AUTOSAR Network Management and SecOC frames in the trace
+  NMEA 2000 (marine, with Fast Packet), CANopen, LIN, J1587, AUTOSAR Network Management, SecOC, XCP and CCP frames in
+  the trace
 - LIN master schedule tables
 
 **Simulation and test automation**
@@ -151,6 +154,7 @@ uv sync                  # Add --extra mf4 for ASAM MF4 log files (installs asam
                          # --extra mqtt for MQTT (installs aiomqtt),
                          # --extra ethercat for EtherCAT adapters (installs pysoem),
                          # --extra io for USB I/O adapters (installs pyusb and libusb),
+                         # --extra pkcs11 for PKCS#11 tokens in the security manager,
                          # --extra drivers for the python-can interfaces marked ¹ below
 uv run canexplorer
 ```
@@ -184,6 +188,11 @@ support and the Linux kernel drivers.
 | gs_usb (`gs_usb`) ¹ | candleLight/gs_usb firmware adapters through libusb | Windows, Linux, macOS |
 | slcan (`slcan`) | Lawicel CANUSB, CANable (slcan firmware), USBtin and other serial slcan adapters | Windows, Linux, macOS |
 | GVRET (`gvret`) | ESP32RET boards, Macchina M2 (M2RET), CANDue: SavvyCAN's GVRET protocol over USB serial or WiFi | Windows, Linux, macOS |
+| panda (`panda`) ¹ | comma.ai pandas on USB: red panda, comma three/3X/four; CAN and CAN FD (experimental) | Windows, Linux, macOS |
+| panda UDP (`panda_udp`) | comma.ai panda (original white panda) CAN stream over WiFi UDP, receive only (experimental) | Windows, Linux, macOS |
+| PEAK LIN (`plin`) | PLIN-USB and PCAN-USB Pro LIN channels, LIN master or slave (experimental) | Windows |
+| Kvaser LIN (`kvaser_lin`) | Kvaser LIN Leaf, LIN master or slave (experimental) | Windows, Linux |
+| Vector LIN (`vector_lin`) | LIN channels of Vector interfaces, LIN master or slave (experimental) | Windows |
 | J2534 (`j2534`) | J2534 pass-thru devices: Mongoose, CarDAQ, OpenPort 2.0, Bosch, Autel …; 32-bit drivers through a bridge process | Windows |
 | RP1210 (`rp1210`) | TMC RP1210 heavy-duty (truck/bus/off-highway) adapters: Nexiq USB-Link, DG DPA 5, Noregon DLA+, Cummins INLINE …; 32-bit Windows drivers | Windows |
 | ZLG (`zlg`) | ZLG USBCAN-II, USBCAN-E-U and USBCANFD series (experimental) | Windows |
@@ -200,7 +209,8 @@ support and the Linux kernel drivers.
 | UDP multicast (`udp_multicast`) ¹ | A software bus between computers over UDP multicast | Windows, Linux, macOS |
 | Virtual (`virtual`) | A software bus inside CANExplorer, no hardware needed | Windows, Linux, macOS |
 
-¹ Needs Python packages that the installers do not include: run from source with `uv sync --extra drivers`.
+¹ Needs Python packages that the installers do not include: run from source with `uv sync --extra drivers`
+(Python 3.13 or older: `cantact` has no build for 3.14 yet).
 
 ## Try it without hardware
 

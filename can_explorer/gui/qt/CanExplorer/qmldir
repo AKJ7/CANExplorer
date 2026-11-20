@@ -31,6 +31,7 @@ StatCard 1.0 StatCard.qml
 Sidebar 1.0 Sidebar.qml
 TopBar 1.0 TopBar.qml
 AppMenu 1.0 AppMenu.qml
+Chevron 1.0 Chevron.qml
 CommandPalette 1.0 CommandPalette.qml
 HelpView 1.0 HelpView.qml
 UpdateDialog 1.0 UpdateDialog.qml

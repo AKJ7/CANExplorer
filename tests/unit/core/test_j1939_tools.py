@@ -137,3 +137,109 @@ async def test_sender_single_frame_bam_and_rts_cts():
         await sender.send(0xEF00, bytes(20), destination=0x55)  # Nobody answers
     peer.shutdown()
     session.stop()
+
+
+@pytest.fixture
+async def tool_and_node():
+    channel = f'j1939-{uuid.uuid4().hex}'
+    tool = BusSession(LiveSource(BusConfig('virtual', channel)))
+    node = BusSession(LiveSource(BusConfig('virtual', channel)))
+    tool.start()
+    node.start()
+    yield tool, node
+    tool.stop()
+    node.stop()
+
+
+async def test_rts_cts_and_etp_to_a_responding_node(tool_and_node):
+    from can_explorer.core.j1939_tools import TransportReassembler, TransportResponder
+    from tests.unit.waiting import wait_until
+
+    tool, node = tool_and_node
+    received = []
+    reassembler = TransportReassembler()
+
+    def on_message(frame):
+        result = reassembler.on_message(frame)
+        if result is not None and result[0] == 0xEF00:
+            received.append(result)
+
+    node.add_message_listener(on_message)
+    responder = TransportResponder.attach(node, 0x42)  # Answers with CTS blocks of 16 packets
+    log = []
+    sender = J1939Sender(tool, log.append)
+    try:
+        short, long = bytes(i % 256 for i in range(200)), bytes(i % 253 for i in range(5000))
+        await asyncio.wait_for(sender.send(0xEF00, short, destination=0x42), 10)
+        assert log[-1] == 'Sent 0x0EF00 (200 B) to 0x42 with RTS/CTS'
+        await asyncio.wait_for(sender.send(0xEF00, long, destination=0x42), 20)  # Over 1785 bytes: ETP
+        assert log[-1] == 'Sent 0x0EF00 (5000 B) to 0x42 with ETP'
+        assert await wait_until(lambda: len(received) == 2)
+        assert received == [(0xEF00, 0xF9, 0x42, short), (0xEF00, 0xF9, 0x42, long)]
+    finally:
+        responder.close()
+    with pytest.raises(ValueError):
+        await sender.send(0xEF00, bytes(2000))  # Too long for BAM, ETP needs a destination
+
+
+async def test_request_pgn_accepts_transported_answers_and_nacks(tool_and_node):
+    from can_explorer.core.j1939_tools import J1939Name, request_pgn
+
+    tool, node = tool_and_node
+    software = b'*ECU-SW 1.2.3*BUILD 42*'  # 23 bytes: RTS/CTS to the requester
+    node_sender = J1939Sender(node)
+
+    def on_request(frame):
+        ident = J1939Id.from_can_id(frame.arbitration_id)
+        if not frame.is_rx or ident.pgn != 0xEA00:
+            return
+        pgn = int.from_bytes(bytes(frame.data[:3]), 'little')
+        if pgn == 0xFEDA:
+            asyncio.ensure_future(node_sender.send(0xFEDA, software, source=0x00, destination=ident.source_address))
+        elif pgn == PGN_ADDRESS_CLAIMED:
+            node.send(msg(build_can_id(PGN_ADDRESS_CLAIMED, 0x00), ENGINE_NAME.to_bytes()))
+        else:  # NACK: not supported
+            node.send(msg(build_can_id(0xE800, 0x00), [1, 0xFF, 0xFF, 0xFF, ident.source_address, *frame.data[:3]]))
+
+    node.add_message_listener(on_request)
+    answers = await request_pgn(tool, 0xFEDA, destination=0x00)
+    assert [(answer.source, answer.payload) for answer in answers] == [(0x00, software)]
+    answers = await request_pgn(tool, 0xFEEB, destination=0x00)
+    assert answers[0].payload is None and answers[0].acknowledgment == 'NACK'
+    answers = await request_pgn(tool, PGN_ADDRESS_CLAIMED, timeout=0.3)  # Global: collects for the timeout
+    assert [J1939Name.from_bytes(answer.payload) for answer in answers] == [ENGINE_NAME]
+
+
+async def test_address_claim_contention(tool_and_node):
+    from can_explorer.core.j1939_tools import AddressClaimer, AddressClaimError, J1939Name
+    from tests.unit.waiting import wait_until
+
+    tool, node = tool_and_node
+    strong = AddressClaimer(node, J1939Name(0x0000_0000_0000_0001), 0x80)  # Lower NAME: higher priority
+    assert await strong.claim() == 0x80
+    weak = AddressClaimer(tool, J1939Name((1 << 63) | 0x55), 0x80)  # Arbitrary address capable
+    try:
+        # Lost 0x80, moved to the next free self-configurable address (on a slow bus the defence may come after
+        # the 250 ms, then the claimer moves on its own)
+        await weak.claim()
+        assert await wait_until(lambda: weak.address == 0x81) and strong.address == 0x80
+        fixed = AddressClaimer(tool, J1939Name(0x77), 0x80)  # Not arbitrary address capable
+        try:
+            await fixed.claim()
+        except AddressClaimError:
+            pass
+        assert await wait_until(lambda: fixed.address is None)  # Cannot claim
+        fixed.close()
+        claims = []
+        node.add_message_listener(
+            lambda frame: (
+                claims.append(frame.arbitration_id & 0xFF)
+                if frame.is_rx and J1939Id.from_can_id(frame.arbitration_id).pgn == PGN_ADDRESS_CLAIMED
+                else None
+            )
+        )
+        J1939Sender(node).request(PGN_ADDRESS_CLAIMED, source=0x80)
+        assert await wait_until(lambda: 0x81 in claims)  # The claimer answers requests for address claims
+    finally:
+        weak.close()
+        strong.close()

@@ -1,4 +1,5 @@
 import asyncio
+import socket
 import threading
 from collections import deque
 from dataclasses import dataclass
@@ -34,6 +35,66 @@ GMLAN_SINGLE_WIRE_BITRATE = 33_333
 GMLAN_SINGLE_WIRE_HIGH_SPEED = 83_333
 # python-can backends whose can.Bus accepts a single_wire option to switch the transceiver
 SINGLE_WIRE_INTERFACES = frozenset({'kvaser'})
+# LIN adapters with a vendor API (core/lin_adapter.py): they take the LIN baud rate as their bitrate
+LIN_ADAPTER_INTERFACES = frozenset({'plin', 'kvaser_lin', 'vector_lin'})
+
+
+def _queue_socketcand_frames(bus, text: str, convert) -> str:
+    """Parse the complete '< ... >' messages in `text` into the bus's receive queue; return the incomplete rest.
+
+    python-can parses its receive buffer only after the next TCP read, so frames that arrive together with the
+    handshake reply would otherwise wait for the next packet (forever on a quiet bus).
+    """
+    while True:
+        start = text.find('<')
+        end = text.find('>', start)
+        if start == -1 or end == -1:
+            return text[start:] if start != -1 else ''
+        message = convert(text[start : end + 1])
+        if message is not None:
+            message.channel = bus.channel
+            bus._SocketCanDaemonBus__message_buffer.append(message)
+        text = text[end + 1 :]
+
+
+def _patch_socketcand() -> None:
+    """Work around python-can's SocketCanDaemonBus._expect_msg, which requires one TCP read to be exactly '< ok >'.
+
+    With traffic on the bus, socketcand's reply to 'rawmode' and the first frames arrive in one read
+    ('< ok >< frame ... >') and opening fails. The replacement waits for the expected reply in the buffered data and
+    queues the frames that came with it.
+    """
+    try:
+        from can.interfaces.socketcand import socketcand as module
+
+        bus_class = module.SocketCanDaemonBus
+        convert = module.convert_ascii_message_to_can_message
+    except (ImportError, AttributeError):
+        return
+    if getattr(bus_class, '_canexplorer_patched', False):
+        return
+
+    def _expect_msg(self, msg: str) -> None:
+        sock = self._SocketCanDaemonBus__socket
+        buffer = self._SocketCanDaemonBus__receive_buffer
+        while msg not in buffer:
+            if '< error' in buffer:
+                raise can.CanError(f"Expected '{msg}' got: '{buffer}'")
+            chunk = sock.recv(1024).decode('ascii')
+            if not chunk:
+                raise can.CanError(f"Connection closed while expecting '{msg}', got: '{buffer}'")
+            if self._SocketCanDaemonBus__tcp_tune and hasattr(socket, 'TCP_QUICKACK'):
+                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_QUICKACK, 1)
+            buffer += chunk
+        index = buffer.find(msg)
+        rest = buffer[:index] + buffer[index + len(msg) :]
+        self._SocketCanDaemonBus__receive_buffer = _queue_socketcand_frames(self, rest, convert)
+
+    bus_class._expect_msg = _expect_msg
+    bus_class._canexplorer_patched = True
+
+
+_patch_socketcand()
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +111,8 @@ class BusConfig:
     # GMLAN single-wire CAN (SWCAN): one-wire physical layer at 33.3 kbit/s. The frames are ordinary CAN frames;
     # the flag selects the single-wire transceiver on interfaces that have one (e.g. Kvaser) and labels the bus.
     single_wire: bool = False
+    host: Optional[str] = None
+    port: Optional[int] = None
 
     @property
     def is_lin(self) -> bool:
@@ -162,6 +225,11 @@ class LiveSource:
             rate += f' (FD{f", data {config.data_bitrate} bit/s" if config.data_bitrate else ""})'
         elif config.single_wire:
             rate += ' (single-wire)'
+        if config.host:
+            endpoint = (
+                f'{config.host}:{config.port}/{config.channel}' if config.port else f'{config.host}/{config.channel}'
+            )
+            return f'{config.interface}:{endpoint} @ {rate}'
         return f'{config.interface}:{config.channel} @ {rate}'
 
     @property
@@ -200,8 +268,18 @@ class LiveSource:
             channel=config.channel,
             receive_own_messages=config.receive_own_messages,
         )
+        if config.host:
+            options['host'] = config.host
+        elif config.interface == 'socketcand':
+            options['host'] = '127.0.0.1'
+        if config.port is not None:
+            options['port'] = config.port
+        elif config.interface == 'socketcand':
+            options['port'] = 29536
         if not config.is_lin:  # The LIN baud rate is a setting of the LIN driver, not of the CAN socket
             options.update(bitrate=config.bitrate, fd=config.fd)
+        elif config.interface in LIN_ADAPTER_INTERFACES:  # … except for adapters that set it themselves
+            options['bitrate'] = config.lin_baudrate
         if config.fd and config.data_bitrate and not config.is_lin:
             options['data_bitrate'] = config.data_bitrate
         # Select the single-wire transceiver on interfaces whose python-can backend accepts the option; on others

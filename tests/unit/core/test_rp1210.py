@@ -112,7 +112,8 @@ class FakeDll:
 
 
 def rp1210_frame(identifier, data, extended=False, timestamp=1000):
-    body = bytes([1 if extended else 0]) + identifier.to_bytes(4, 'big') + bytes(data)
+    # The identifier takes 2 bytes (11-bit) or 4 bytes (29-bit), as PyRP1210 reads it
+    body = bytes([1 if extended else 0]) + identifier.to_bytes(4 if extended else 2, 'big') + bytes(data)
     return timestamp.to_bytes(4, 'big') + body
 
 
@@ -159,8 +160,9 @@ def test_installed_vendors_skips_unreadable(windir, tmp_path):
 
 
 def test_encode_message():
+    # An 11-bit identifier in 2 bytes, a 29-bit one in 4 (big endian), after the CAN type byte
     assert encode_message(can.Message(arbitration_id=0x123, data=b'\x01\x02', is_extended_id=False)) == (
-        b'\x00\x00\x00\x01\x23\x01\x02'
+        b'\x00\x01\x23\x01\x02'
     )
     assert encode_message(can.Message(arbitration_id=0x18FEF100, data=b'', is_extended_id=True)) == (
         b'\x01\x18\xfe\xf1\x00'
@@ -169,6 +171,7 @@ def test_encode_message():
         can.Message(arbitration_id=1, is_fd=True),
         can.Message(arbitration_id=1, is_remote_frame=True),
         can.Message(arbitration_id=1, data=bytes(9), dlc=9),
+        can.Message(arbitration_id=0x800, is_extended_id=False),
     ):
         with pytest.raises(can.CanOperationError):
             encode_message(bad)
@@ -184,6 +187,17 @@ def test_decode_message():
         b'',
     )
     assert decode_message(b'\x00\x00\x00', 1.0) is None  # Too short
+    assert decode_message(b'\x00\x00\x00\x01\x01\x18\xfe', 1.0) is None  # A 29-bit identifier cut short
+    assert decode_message(b'\x00\x00\x00\x01\x02\x07\xe8\x00', 1.0) is None  # An ISO 15765 type, not CAN
+
+
+def test_standard_frame_keeps_all_eight_data_bytes():
+    """With the identifier in 2 bytes, a full 11-bit frame is 4 + 1 + 2 + 8 bytes and loses no data (read as
+    4 bytes, the identifier would swallow the first two data bytes)."""
+    raw = bytes.fromhex('000003E80007E80102030405060708')
+    assert decode_message(raw, 1.0) == (1000, 0x7E8, False, bytes(range(1, 9)))
+    message = can.Message(arbitration_id=0x7E8, data=bytes(range(1, 9)), is_extended_id=False)
+    assert encode_message(message) == raw[4:]
 
 
 # Bus (with a fake DLL — no hardware)
@@ -208,7 +222,7 @@ def test_bus_connect_sets_protocol_and_pass_filter(fake_bus):
 def test_bus_send_and_receive(fake_bus):
     bus, dll = fake_bus
     bus.send(can.Message(arbitration_id=0x244, data=b'\x10\x20', is_extended_id=False))
-    assert dll.sent == [b'\x00\x00\x00\x02\x44\x10\x20']
+    assert dll.sent == [b'\x00\x02\x44\x10\x20']  # Type, 11-bit identifier in 2 bytes, data
 
     dll.rx.append(rp1210_frame(0x7E8, b'\x03\x41\x0c', timestamp=1500))
     message = bus.recv(timeout=1)

@@ -12,6 +12,7 @@ Dialog {
 
     readonly property var detected: connectionManager.detected_channels[interfaceBox.currentText] || []
     readonly property bool lin: busBox.currentText === "LIN"
+    readonly property bool isSocketcand: interfaceBox.currentText === "SocketCanDaemonBus"
 
     onAboutToShow: {
         nameField.text = qsTr("Connection %1").arg(connectionManager.connections.length + 1)
@@ -26,6 +27,8 @@ Dialog {
             lin_baudrate: linBaudrateBox.currentText,
             interface: interfaceBox.currentText,
             channel: channelBox.editText,
+            host: dialog.isSocketcand ? hostField.text : "",
+            port: dialog.isSocketcand ? portField.text : "",
             bitrate: bitrateBox.currentText,
             data_bitrate: fdCheckBox.checked ? dataBitrateBox.currentText : "",
             protocol: dialog.lin ? "LIN" : protocolBox.currentText,
@@ -93,6 +96,33 @@ Dialog {
                     text: connectionManager.detecting ? qsTr("Detecting…") : qsTr("Detect")
                     enabled: !connectionManager.detecting
                     onClicked: connectionManager.detect_channels()
+                }
+
+                Label {
+                    text: qsTr("Host / IP")
+                    visible: dialog.isSocketcand
+                }
+                TextField {
+                    id: hostField
+                    text: "127.0.0.1"
+                    placeholderText: "127.0.0.1"
+                    visible: dialog.isSocketcand
+                    Layout.fillWidth: true
+                    Layout.columnSpan: 2
+                }
+
+                Label {
+                    text: qsTr("Port")
+                    visible: dialog.isSocketcand
+                }
+                TextField {
+                    id: portField
+                    text: "29536"
+                    placeholderText: "29536"
+                    visible: dialog.isSocketcand
+                    Layout.fillWidth: true
+                    Layout.columnSpan: 2
+                    validator: IntValidator { bottom: 1; top: 65535 }
                 }
                 Label {
                     visible: interfaceBox.currentText === "RemoteBus"

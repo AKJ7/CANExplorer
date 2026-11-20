@@ -24,3 +24,18 @@ def test_no_qml_uses_qt_quick_dialogs():
             line = text.count('\n', 0, match.start()) + 1
             offenders.append(f'{path.relative_to(QML_ROOT)}:{line}: {match.group(0).strip()}')
     assert offenders == [], 'Use FileChooser instead of QtQuick.Dialogs:\n' + '\n'.join(offenders)
+
+
+def test_menu_icons_exist_and_are_not_icon_theme_names():
+    """The application menu draws bundled line icons (Actions.menuIcon): an icon theme name shows nothing on
+    Windows and macOS, and a misspelt icon file only shows as a blank space, without a QML warning."""
+    actions = (QML_ROOT / 'CanExplorer' / 'Actions.qml').read_text(encoding='utf-8')
+    assert 'icon.name' not in actions
+    used = set()
+    for path in QML_FILES:
+        used.update(re.findall(r'menuIcon\("([\w-]+)"\)', path.read_text(encoding='utf-8')))
+    assert len(used) > 15
+    missing = sorted(
+        name for name in used if not (QML_ROOT / 'CanExplorer' / 'images' / 'menu' / f'{name}.svg').is_file()
+    )
+    assert missing == []

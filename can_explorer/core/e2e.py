@@ -9,7 +9,8 @@ AUTOSAR E2E Protocol Specification (PRS_E2EProtocol):
 - **Profile 2** — a one-byte CRC (CRC8, 0x1D), a 4-bit sequence counter and a 16-entry Data ID list.
 - **Profile 5** — a two-byte CRC (CRC16/CCITT, 0x1021, little endian), an 8-bit counter and an implicit 16-bit
   Data ID (spec §6.8).
-- **Profile 22** — the Profile 2 bus layout but with the CRC8H2F polynomial (0x2F) (spec §6.13).
+- **Profile 22** — the Profile 2 bus layout but with the CRC8H2F polynomial (0x2F), at any byte offset (spec §6.13;
+  used for the functional safety trailers of SAE J1939-22, core/j1939_assurance.py).
 
 Three more, the profiles of SOME/IP and other large, variable-length data, carry an explicit Length and can sit at
 any byte offset in the data (e.g. after the SOME/IP header). Their header fields are big endian, and the CRC covers
@@ -177,36 +178,44 @@ class Profile5:
 
 
 class Profile22:
-    """AUTOSAR E2E Profile 22: the Profile 2 bus layout (byte 0 is the CRC, the low nibble of byte 1 is the 4-bit
-    counter) but with the CRC8H2F polynomial (0x2F). The CRC is computed over everything after the CRC byte,
-    followed by the Data ID selected from the 16-entry Data ID list by the counter. Only the default header
-    position (offset 0) is implemented."""
+    """AUTOSAR E2E Profile 22: the Profile 2 bus layout (the CRC byte, then a byte whose low nibble is the 4-bit
+    counter) but with the CRC8H2F polynomial (0x2F). The header sits at byte `offset` of the data (0, the Profile 2
+    layout, by default). The CRC is computed over the data before the CRC byte, then the data after it, followed by
+    the Data ID selected from the 16-entry Data ID list by the counter (PRS_E2E_00527, figure 6.116 of the R23-11
+    specification; the tests reproduce its examples with offset 0 and 64 bits)."""
 
-    def __init__(self, data_ids: Sequence[int]):
+    def __init__(self, data_ids: Sequence[int], offset: int = 0):
         if len(data_ids) != 16:
             raise ValueError('Profile 22 needs a Data ID list of 16 entries (one per counter value)')
+        if offset < 0:
+            raise ValueError('The Profile 22 offset cannot be negative')
         self.data_ids: List[int] = list(data_ids)
+        self.offset = offset  # In bytes (the specification gives it in bits, always a multiple of 8)
 
     def _crc(self, data: bytes, counter: int) -> int:
-        crc = crc8h2f(data[1:])  # Over everything after the CRC byte
+        at = self.offset
+        if at > 0:
+            crc = crc8h2f(data[:at])
+            crc = crc8h2f(data[at + 1 :], start=crc, first_call=False)
+        else:
+            crc = crc8h2f(data[1:])  # Over everything after the CRC byte
         return crc8h2f(bytes([self.data_ids[counter & 0x0F]]), start=crc, first_call=False)
 
     def check(self, data: bytes) -> E2eResult:
         """Verify a received PDU's CRC against its counter's Data ID."""
-        counter = data[1] & 0x0F if len(data) >= 2 else 0
+        at = self.offset
+        if len(data) < at + 2:
+            return E2eResult(False, 0, 0, 0, f'{len(data)} bytes are too short for the header at byte {at}')
+        counter = data[at + 1] & 0x0F
         expected = self._crc(data, counter)
-        return E2eResult(
-            ok=len(data) >= 2 and data[0] == expected,
-            counter=counter,
-            crc=data[0] if data else 0,
-            expected_crc=expected,
-        )
+        return E2eResult(ok=data[at] == expected, counter=counter, crc=data[at], expected_crc=expected)
 
     def protect(self, data: bytes, counter: int) -> bytes:
-        """Return `data` with byte 1's counter set and byte 0 set to the computed CRC (data[0] is reserved for it)."""
+        """Return `data` with the counter nibble set and the CRC byte (at `offset`, reserved for it) computed."""
+        at = self.offset
         out = bytearray(data)
-        out[1] = (out[1] & 0xF0) | (counter & 0x0F)
-        out[0] = self._crc(bytes(out), counter)
+        out[at + 1] = (out[at + 1] & 0xF0) | (counter & 0x0F)
+        out[at] = self._crc(bytes(out), counter)
         return bytes(out)
 
 

@@ -18,6 +18,7 @@ Dialog {
         { value: "macsec", text: qsTr("MACsec association") },
         { value: "seed-key", text: qsTr("Seed/key algorithm") },
         { value: "uds-auth-key", text: qsTr("UDS authentication key") },
+        { value: "uds-sdt-key", text: qsTr("UDS secured data key") },
         { value: "pkcs11", text: qsTr("PKCS#11 token key") },
         { value: "key-server", text: qsTr("Key server") },
     ]
@@ -104,6 +105,9 @@ Dialog {
             break
         case "uds-auth-key":
             error = security.add_auth_key(name, authKeyField.text, authMacBox.currentText)
+            break
+        case "uds-sdt-key":
+            error = security.add_secured_data_key(name, authKeyField.text, authMacBox.currentText)
             break
         case "key-server": {
             const trusted = serverTrustedBox.currentIndex > 0 ? serverTrustedBox.currentText : ""
@@ -534,10 +538,10 @@ Dialog {
                     }
                 }
 
-                // UDS authentication by challenge-response
-                Label { text: qsTr("Key"); visible: dialog.purpose === "uds-auth-key" }
+                // UDS authentication by challenge-response, and secured data transmission (0x84): a shared key and a MAC
+                Label { text: qsTr("Key"); visible: dialog.purpose === "uds-auth-key" || dialog.purpose === "uds-sdt-key" }
                 RowLayout {
-                    visible: dialog.purpose === "uds-auth-key"
+                    visible: dialog.purpose === "uds-auth-key" || dialog.purpose === "uds-sdt-key"
                     Layout.fillWidth: true
                     TextField {
                         id: authKeyField
@@ -551,7 +555,9 @@ Dialog {
                         model: dialog.security.auth_key_macs
                         Layout.preferredWidth: 140
                         ToolTip.visible: hovered
-                        ToolTip.text: qsTr("The proof of ownership is this MAC over the ECU's challenge (a choice: the standard leaves it to the manufacturer)")
+                        ToolTip.text: dialog.purpose === "uds-sdt-key"
+                            ? qsTr("The signature of a secured message is this MAC over the message (CANExplorer's reference scheme: the standard leaves the algorithm to the manufacturer)")
+                            : qsTr("The proof of ownership is this MAC over the ECU's challenge (a choice: the standard leaves it to the manufacturer)")
                     }
                 }
 

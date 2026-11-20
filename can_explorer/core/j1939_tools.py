@@ -9,12 +9,29 @@ from typing import Callable, Dict, List, Optional, Tuple
 import can
 
 from can_explorer.core.protocols.j1939 import (
+    ACK_CONTROL,
+    ETP_CTS,
+    ETP_DPO,
+    ETP_EOMA,
+    ETP_MAX_SIZE,
+    ETP_RTS,
     GLOBAL_ADDRESS,
+    PGN_ACKNOWLEDGMENT,
+    PGN_COMMANDED_ADDRESS,
+    PGN_ETP_CM,
+    PGN_ETP_DT,
     PGN_NAMES,
     PGN_REQUEST,
     PGN_TP_CM,
     PGN_TP_DT,
+    TP_ABORT,
+    TP_BAM,
+    TP_CTS,
+    TP_EOMA,
+    TP_RTS,
     J1939Id,
+    TransportTracker,
+    abort_reason,
 )
 
 PGN_ADDRESS_CLAIMED = 0xEE00
@@ -382,53 +399,21 @@ def encode_dm(dtcs: List[Dtc], lamps: Optional[Dict[str, str]] = None) -> bytes:
 # Passive transport reassembly
 
 
-@dataclass
-class _Transfer:
-    pgn: int
-    size: int
-    packets: int
-    data: bytearray = field(default_factory=bytearray)
-    next_sequence: int = 1
-
-
 class TransportReassembler:
-    """Reassembles BAM and RTS/CTS transfers seen on the bus; `on_message` returns (pgn, source, destination,
+    """Reassembles BAM, RTS/CTS and ETP transfers seen on the bus; `on_message` returns (pgn, source, destination,
     payload) for complete parameter groups, single frame or transported."""
 
     def __init__(self):
-        self._transfers: Dict[Tuple[int, int], _Transfer] = {}
+        self._tracker = TransportTracker()
 
     def on_message(self, msg: can.Message) -> Optional[Tuple[int, int, int, bytes]]:
         if not msg.is_extended_id or msg.is_error_frame or msg.is_remote_frame:
             return None
         ident = J1939Id.from_can_id(msg.arbitration_id)
         data = bytes(msg.data)
-        key = (ident.source_address, ident.destination_address)
-        if ident.pgn == PGN_TP_CM and len(data) >= 8:
-            if data[0] in (16, 32):  # RTS, BAM
-                self._transfers[key] = _Transfer(
-                    int.from_bytes(data[5:8], 'little'), int.from_bytes(data[1:3], 'little'), data[3]
-                )
-            elif data[0] == 255:
-                self._transfers.pop(key, None)
-                self._transfers.pop((ident.destination_address, ident.source_address), None)
-            return None
-        if ident.pgn == PGN_TP_DT and data:
-            transfer = self._transfers.get(key)
-            if transfer is None or data[0] != transfer.next_sequence:
-                self._transfers.pop(key, None)
-                return None
-            transfer.data += data[1:8]
-            transfer.next_sequence += 1
-            if data[0] >= transfer.packets:
-                del self._transfers[key]
-                return (
-                    transfer.pgn,
-                    ident.source_address,
-                    ident.destination_address,
-                    bytes(transfer.data[: transfer.size]),
-                )
-            return None
+        transport = self._tracker.feed(ident, data)
+        if transport is not None:
+            return transport[1]
         return ident.pgn, ident.source_address, ident.destination_address, data
 
 
@@ -498,14 +483,22 @@ class J1939Network:
 # Sending
 
 
+def _control_frame(control: int, body: bytes, pgn: int) -> bytes:
+    """A TP.CM/ETP.CM frame: control byte, four bytes, the PGN of the transported message."""
+    return bytes([control]) + body.ljust(4, b'\xff') + pgn.to_bytes(3, 'little')
+
+
 class J1939Sender:
-    """Sends parameter groups on a session: single frames, BAM to all nodes, RTS/CTS to one node."""
+    """Sends parameter groups on a session: single frames, BAM to all nodes, RTS/CTS to one node, and the extended
+    transport protocol (ETP) to one node for more than 1785 bytes."""
 
     def __init__(self, session, log: Optional[Callable[[str], None]] = None):
         self.session = session
         self._log = log or (lambda text: None)
-        self._cts: Optional[asyncio.Queue] = None
+        self._controls: Optional[asyncio.Queue] = None
         self._address = TOOL_ADDRESS
+        self._peer = GLOBAL_ADDRESS
+        self._control_pgn = PGN_TP_CM
 
     def _send(self, can_id: int, data: bytes) -> None:
         self.session.send(can.Message(arbitration_id=can_id, is_extended_id=True, data=data))
@@ -525,58 +518,460 @@ class J1939Sender:
         destination: int = GLOBAL_ADDRESS,
         priority: int = DEFAULT_PRIORITY,
     ) -> None:
-        """Send a parameter group; more than 8 bytes go with the transport protocol."""
+        """Send a parameter group; more than 8 bytes go with the transport protocol: BAM to all nodes (at most 1785
+        bytes), RTS/CTS to one node, ETP to one node for more than 1785 bytes."""
         data = bytes(data)
-        if len(data) > TP_MAX:
-            raise ValueError(f'At most {TP_MAX} bytes')
         if not is_pdu1(pgn):
             destination = GLOBAL_ADDRESS  # PDU2 groups are broadcast
+        if len(data) > ETP_MAX_SIZE:
+            raise ValueError(f'At most {ETP_MAX_SIZE} bytes')
+        if len(data) > TP_MAX and destination == GLOBAL_ADDRESS:
+            raise ValueError(
+                f'At most {TP_MAX} bytes to all nodes (BAM); the extended transport protocol needs a destination'
+            )
         if len(data) <= 8:
             self._send(build_can_id(pgn, source, destination, priority), data)
             self._log(f'Sent {pgn_label(pgn)} from 0x{source:02X}: {data.hex(" ").upper()}')
             return
         packets = [data[i : i + TP_PACKET].ljust(TP_PACKET, b'\xff') for i in range(0, len(data), TP_PACKET)]
-        header = len(data).to_bytes(2, 'little') + bytes([len(packets)])
-        pgn_bytes = pgn.to_bytes(3, 'little')
         if destination == GLOBAL_ADDRESS:
-            self._send(build_can_id(PGN_TP_CM, source, GLOBAL_ADDRESS, 7), bytes([32]) + header + b'\xff' + pgn_bytes)
+            header = len(data).to_bytes(2, 'little') + bytes([len(packets)])
+            self._send(build_can_id(PGN_TP_CM, source, GLOBAL_ADDRESS, 7), _control_frame(TP_BAM, header, pgn))
             for number, packet in enumerate(packets, start=1):
                 await asyncio.sleep(BAM_INTERVAL)
                 self._send(build_can_id(PGN_TP_DT, source, GLOBAL_ADDRESS, 7), bytes([number]) + packet)
             self._log(f'Sent {pgn_label(pgn)} ({len(data)} B) with BAM')
             return
-        await self._send_rts_cts(pgn, data, packets, header, pgn_bytes, source, destination)
+        await self._send_connection(pgn, data, packets, source, destination, etp=len(data) > TP_MAX)
 
-    async def _send_rts_cts(self, pgn, data, packets, header, pgn_bytes, source, destination) -> None:
-        self._cts = asyncio.Queue()
-        self._address = source
+    async def _send_connection(self, pgn, data, packets, source, destination, etp: bool) -> None:
+        """RTS/CTS (or ETP): the receiver asks for blocks of packets with CTS frames and confirms the end."""
+        control_pgn, data_pgn = (PGN_ETP_CM, PGN_ETP_DT) if etp else (PGN_TP_CM, PGN_TP_DT)
+        self._controls = asyncio.Queue()
+        self._address, self._peer, self._control_pgn = source, destination, control_pgn
         listener = self._on_message
         self.session.add_message_listener(listener)
+        control_id = build_can_id(control_pgn, source, destination, 7)
+        data_id = build_can_id(data_pgn, source, destination, 7)
         try:
-            self._send(build_can_id(PGN_TP_CM, source, destination, 7), bytes([16]) + header + b'\xff' + pgn_bytes)
+            if etp:
+                self._send(control_id, _control_frame(ETP_RTS, len(data).to_bytes(4, 'little'), pgn))
+            else:
+                self._send(
+                    control_id, _control_frame(TP_RTS, len(data).to_bytes(2, 'little') + bytes([len(packets)]), pgn)
+                )
             while True:
                 try:
-                    control = await asyncio.wait_for(self._cts.get(), TP_TIMEOUT)
+                    control = await asyncio.wait_for(self._controls.get(), TP_TIMEOUT)
                 except asyncio.TimeoutError:
                     raise TimeoutError(f'0x{destination:02X} did not answer the transport request') from None
-                if control[0] == 255:
-                    raise ConnectionError(f'0x{destination:02X} aborted the transfer (reason {control[1]})')
-                if control[0] == 19:  # EndOfMsgAck
-                    self._log(f'Sent {pgn_label(pgn)} ({len(data)} B) to 0x{destination:02X} with RTS/CTS')
+                if control[0] == TP_ABORT:
+                    raise ConnectionError(f'0x{destination:02X} aborted the transfer ({abort_reason(control[1])})')
+                if control[0] in (TP_EOMA, ETP_EOMA):
+                    protocol = 'ETP' if etp else 'RTS/CTS'
+                    self._log(f'Sent {pgn_label(pgn)} ({len(data)} B) to 0x{destination:02X} with {protocol}')
                     return
-                if control[0] == 17:  # CTS: number of packets, next packet number
-                    count, first = control[1], control[2]
-                    for number in range(first, min(first + count, len(packets) + 1)):  # Count 0: wait
-                        self._send(
-                            build_can_id(PGN_TP_DT, source, destination, 7), bytes([number]) + packets[number - 1]
-                        )
+                if control[0] not in (TP_CTS, ETP_CTS):
+                    continue
+                count = control[1]  # 0: hold the connection open, wait for the next CTS
+                first = int.from_bytes(control[2:5], 'little') if etp else control[2]
+                if not count:
+                    continue
+                if not 1 <= first <= len(packets):
+                    self._send(control_id, _control_frame(TP_ABORT, bytes([15]), pgn))
+                    raise ConnectionError(f'0x{destination:02X} asked for packet #{first} of {len(packets)}')
+                last = min(first + count - 1, len(packets))
+                if etp:  # The data packets of the block are numbered 1.. after this offset
+                    self._send(
+                        control_id,
+                        _control_frame(ETP_DPO, bytes([last - first + 1]) + (first - 1).to_bytes(3, 'little'), pgn),
+                    )
+                for number in range(first, last + 1):
+                    sequence = number - first + 1 if etp else number
+                    self._send(data_id, bytes([sequence]) + packets[number - 1])
+                    await asyncio.sleep(0)  # Let the bus and the receiver keep up with long blocks
         finally:
             self.session.remove_message_listener(listener)
-            self._cts = None
+            self._controls = None
 
     def _on_message(self, msg: can.Message) -> None:
-        if self._cts is None or not msg.is_extended_id:
+        if self._controls is None or not msg.is_extended_id or not msg.is_rx:
             return
         ident = J1939Id.from_can_id(msg.arbitration_id)
-        if ident.pgn == PGN_TP_CM and ident.destination_address == self._address and len(msg.data) >= 8:
-            self._cts.put_nowait(bytes(msg.data))
+        if (
+            ident.pgn == self._control_pgn
+            and ident.destination_address == self._address
+            and ident.source_address == self._peer
+            and len(msg.data) >= 8
+            and msg.data[0] not in (TP_RTS, ETP_RTS, TP_BAM)
+        ):
+            self._controls.put_nowait(bytes(msg.data))
+
+
+# Receiving transported messages addressed to the tool
+
+
+@dataclass
+class _Incoming:
+    pgn: int
+    size: int
+    packets: int
+    max_per_cts: int
+    etp: bool
+    next_packet: int = 1
+    block_end: int = 0  # Last packet of the block asked for with the last CTS
+    offset: int = 0  # ETP: data packet offset (DPO)
+    retries: int = 0
+    timer: Optional[asyncio.TimerHandle] = None
+
+
+class TransportResponder:
+    """Answers the transport sessions other nodes open to `address` (RTS/CTS and ETP): clear to send, the end of
+    message acknowledgment, and aborts on timeouts. Without it, a node that answers a request from the tool with
+    more than 8 bytes gives up after T3, as nobody sends it CTS. The data itself is reassembled passively (by a
+    TransportReassembler) by whoever wants it.
+
+    One responder per session and address: `attach` shares it between users; `close` the returned handle."""
+
+    _shared: Dict[Tuple[int, int], 'TransportResponder'] = {}
+
+    def __init__(self, session, address: int, block: int = 16):
+        self.session, self.address, self.block = session, address, block
+        self._incoming: Dict[Tuple[bool, int], _Incoming] = {}
+        self._users = 0
+        session.add_message_listener(self._on_message)
+
+    @classmethod
+    def attach(cls, session, address: int) -> 'TransportResponder':
+        key = (id(session), address)
+        responder = cls._shared.get(key)
+        if responder is None or responder.session is not session:
+            responder = cls._shared[key] = cls(session, address)
+        responder._users += 1
+        return responder
+
+    def close(self) -> None:
+        self._users -= 1
+        if self._users > 0:
+            return
+        self.session.remove_message_listener(self._on_message)
+        for incoming in self._incoming.values():
+            if incoming.timer is not None:
+                incoming.timer.cancel()
+        self._incoming.clear()
+        key = (id(self.session), self.address)
+        if self._shared.get(key) is self:
+            del self._shared[key]
+
+    def _send(self, peer: int, etp: bool, data: bytes) -> None:
+        pgn = PGN_ETP_CM if etp else PGN_TP_CM
+        try:
+            self.session.send(
+                can.Message(arbitration_id=build_can_id(pgn, self.address, peer, 7), is_extended_id=True, data=data)
+            )
+        except Exception:  # noqa: BLE001 - a closed bus; the sender times out on its own
+            pass
+
+    def _arm(self, peer: int, incoming: _Incoming) -> None:
+        """T2: the sender must send the asked-for packets within 1.25 s, or the session is aborted."""
+        if incoming.timer is not None:
+            incoming.timer.cancel()
+            incoming.timer = None
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        incoming.timer = loop.call_later(TP_TIMEOUT, self._timeout, peer, incoming)
+
+    def _timeout(self, peer: int, incoming: _Incoming) -> None:
+        if self._incoming.get((incoming.etp, peer)) is incoming:
+            del self._incoming[(incoming.etp, peer)]
+            self._send(peer, incoming.etp, _control_frame(TP_ABORT, bytes([3]), incoming.pgn))
+
+    def _clear_to_send(self, peer: int, incoming: _Incoming) -> None:
+        count = min(incoming.packets - incoming.next_packet + 1, incoming.max_per_cts, self.block)
+        incoming.block_end = incoming.next_packet + count - 1
+        if incoming.etp:
+            body = bytes([count]) + incoming.next_packet.to_bytes(3, 'little')
+            self._send(peer, True, _control_frame(ETP_CTS, body, incoming.pgn))
+        else:
+            self._send(peer, False, _control_frame(TP_CTS, bytes([count, incoming.next_packet]), incoming.pgn))
+        self._arm(peer, incoming)
+
+    def _on_message(self, msg: can.Message) -> None:
+        if not msg.is_rx or not msg.is_extended_id or msg.is_error_frame or msg.is_remote_frame:
+            return
+        ident = J1939Id.from_can_id(msg.arbitration_id)
+        if ident.destination_address != self.address or ident.pgn not in (PGN_TP_CM, PGN_TP_DT, PGN_ETP_CM, PGN_ETP_DT):
+            return
+        data, peer = bytes(msg.data), ident.source_address
+        etp = ident.pgn in (PGN_ETP_CM, PGN_ETP_DT)
+        if ident.pgn in (PGN_TP_CM, PGN_ETP_CM):
+            if len(data) < 8:
+                return
+            pgn = int.from_bytes(data[5:8], 'little')
+            if data[0] == TP_RTS and not etp:
+                size, packets = int.from_bytes(data[1:3], 'little'), data[3]
+                if size > TP_MAX or packets != -(-size // TP_PACKET):
+                    self._send(peer, False, _control_frame(TP_ABORT, bytes([9 if size > TP_MAX else 250]), pgn))
+                    return
+                self._start(peer, _Incoming(pgn, size, packets, data[4] or 255, False))
+            elif data[0] == ETP_RTS and etp:
+                size = int.from_bytes(data[1:5], 'little')
+                if not TP_MAX < size <= ETP_MAX_SIZE:
+                    self._send(peer, True, _control_frame(TP_ABORT, bytes([250]), pgn))
+                    return
+                self._start(peer, _Incoming(pgn, size, -(-size // TP_PACKET), 255, True))
+            elif data[0] == ETP_DPO and etp:
+                incoming = self._incoming.get((True, peer))
+                if incoming is not None:
+                    incoming.offset = int.from_bytes(data[2:5], 'little')
+                    if incoming.offset + 1 != incoming.next_packet:
+                        self._abort(peer, incoming, 12)
+            elif data[0] == TP_ABORT:
+                incoming = self._incoming.pop((etp, peer), None)
+                if incoming is not None and incoming.timer is not None:
+                    incoming.timer.cancel()
+            return
+        incoming = self._incoming.get((etp, peer))
+        if incoming is None or not data:
+            return
+        packet = incoming.offset + data[0] if etp else data[0]
+        if packet < incoming.next_packet:
+            return  # A packet repeated before our CTS took effect
+        if packet != incoming.next_packet:
+            incoming.retries += 1
+            if incoming.retries > 2:
+                self._abort(peer, incoming, 5)
+            else:
+                self._clear_to_send(peer, incoming)  # Ask again from the missing packet
+            return
+        incoming.next_packet += 1
+        if incoming.next_packet > incoming.packets:
+            del self._incoming[(etp, peer)]
+            if incoming.timer is not None:
+                incoming.timer.cancel()
+            if etp:
+                self._send(peer, True, _control_frame(ETP_EOMA, incoming.size.to_bytes(4, 'little'), incoming.pgn))
+            else:
+                body = incoming.size.to_bytes(2, 'little') + bytes([incoming.packets])
+                self._send(peer, False, _control_frame(TP_EOMA, body, incoming.pgn))
+        elif packet >= incoming.block_end:
+            self._clear_to_send(peer, incoming)
+        else:
+            self._arm(peer, incoming)
+
+    def _start(self, peer: int, incoming: _Incoming) -> None:
+        previous = self._incoming.get((incoming.etp, peer))
+        if previous is not None and previous.timer is not None:
+            previous.timer.cancel()  # A new RTS from the same node replaces its earlier session
+        self._incoming[(incoming.etp, peer)] = incoming
+        self._clear_to_send(peer, incoming)
+
+    def _abort(self, peer: int, incoming: _Incoming, reason: int) -> None:
+        self._incoming.pop((incoming.etp, peer), None)
+        if incoming.timer is not None:
+            incoming.timer.cancel()
+        self._send(peer, incoming.etp, _control_frame(TP_ABORT, bytes([reason]), incoming.pgn))
+
+
+# Requesting a parameter group and waiting for the answers
+
+
+@dataclass(frozen=True)
+class RequestAnswer:
+    source: int
+    payload: Optional[bytes]  # None for an acknowledgment instead of data
+    acknowledgment: Optional[str] = None  # 'ACK', 'NACK', 'Access denied', 'Cannot respond'
+
+
+async def request_pgn(
+    session,
+    pgn: int,
+    destination: int = GLOBAL_ADDRESS,
+    source: int = TOOL_ADDRESS,
+    timeout: float = TP_TIMEOUT,
+) -> List[RequestAnswer]:
+    """Request a parameter group and collect the answers: data (single frame, BAM, RTS/CTS or ETP, which the tool
+    accepts) or an acknowledgment (e.g. NACK for a PGN the node does not support). A request to one node returns
+    on its first answer; a global request collects answers for `timeout` seconds (longer while a transfer is in
+    progress, up to four times that)."""
+    answers: List[RequestAnswer] = []
+    done = asyncio.Event()
+    reassembler = TransportReassembler()
+    transferring = {'active': False}
+
+    def on_message(msg: can.Message) -> None:
+        if not msg.is_rx:
+            return
+        if msg.is_extended_id:
+            ident = J1939Id.from_can_id(msg.arbitration_id)
+            if ident.pgn in (PGN_TP_CM, PGN_ETP_CM) and msg.data and msg.data[0] in (TP_RTS, ETP_RTS, TP_BAM):
+                transferring['active'] = int.from_bytes(bytes(msg.data[5:8]), 'little') == pgn
+        result = reassembler.on_message(msg)
+        if result is None:
+            return
+        got_pgn, sender, receiver, payload = result
+        if destination != GLOBAL_ADDRESS and sender != destination:
+            return
+        if receiver not in (source, GLOBAL_ADDRESS):
+            return
+        if got_pgn == pgn:
+            answers.append(RequestAnswer(sender, payload))
+        elif got_pgn == PGN_ACKNOWLEDGMENT and len(payload) >= 8 and int.from_bytes(payload[5:8], 'little') == pgn:
+            answers.append(RequestAnswer(sender, None, ACK_CONTROL.get(payload[0], f'control {payload[0]}')))
+        else:
+            return
+        transferring['active'] = False
+        if destination != GLOBAL_ADDRESS:
+            done.set()
+
+    responder = TransportResponder.attach(session, source)
+    session.add_message_listener(on_message)
+    try:
+        J1939Sender(session).request(pgn, destination, source)
+        loop = asyncio.get_running_loop()
+        deadline, limit = loop.time() + timeout, loop.time() + 4 * timeout
+        while True:
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                if transferring['active'] and loop.time() < limit:
+                    deadline = min(loop.time() + timeout, limit)
+                    continue
+                break
+            try:
+                await asyncio.wait_for(done.wait(), remaining)
+                break
+            except asyncio.TimeoutError:
+                continue
+    finally:
+        session.remove_message_listener(on_message)
+        responder.close()
+    return answers
+
+
+# Address claiming (J1939-81)
+
+ARBITRARY_FIRST, ARBITRARY_LAST = 128, 247  # Self-configurable addresses of industry group 0 (global)
+CLAIM_WAIT = 0.25  # A node may use its address 250 ms after its claim when nobody contended
+
+
+class AddressClaimError(Exception):
+    pass
+
+
+class AddressClaimer:
+    """Claims an address for the tool (J1939-81) and keeps it: answers requests for address claims, defends the
+    address against claims with a lower priority NAME, and moves to another address (when its NAME is arbitrary
+    address capable) or announces that it cannot claim one when it loses. A commanded address (PGN 0xFED8) for its
+    NAME moves it there.
+
+    `claim` sends the claim and waits 250 ms for contention; the claimer then stays active until `close`."""
+
+    def __init__(self, session, name: J1939Name, address: int, log: Optional[Callable[[str], None]] = None):
+        if not 0 <= address <= 0xFD:
+            raise ValueError('Addresses are 0x00 to 0xFD')
+        self.session, self.name = session, name
+        self.address: Optional[int] = None  # The claimed address, None while claiming or after losing it
+        self._wanted = address
+        self._taken: Dict[int, int] = {}  # Address -> NAME value of other nodes' claims
+        self._log = log or (lambda text: None)
+        self._candidate = address  # The address being claimed
+        self._lost = asyncio.Event()
+        self._listening = False
+
+    def _send_claim(self, address: int) -> None:
+        self.session.send(
+            can.Message(
+                arbitration_id=build_can_id(PGN_ADDRESS_CLAIMED, address, GLOBAL_ADDRESS, 6),
+                is_extended_id=True,
+                data=self.name.to_bytes(),
+            )
+        )
+
+    async def claim(self) -> int:
+        """Claim the address; returns it (or the arbitrary address it moved to). Raises AddressClaimError."""
+        if not self._listening:
+            self.session.add_message_listener(self._on_message)
+            self._listening = True
+        address = self._wanted
+        while True:
+            self._lost.clear()
+            self.address = None
+            self._candidate = address
+            self._send_claim(address)
+            try:
+                await asyncio.wait_for(self._lost.wait(), CLAIM_WAIT)
+            except asyncio.TimeoutError:
+                self.address = address
+                self._log(f'Claimed address 0x{address:02X}')
+                return address
+            address = self._next_address(address)
+            if address is None:
+                self._cannot_claim()
+                raise AddressClaimError(
+                    f'Cannot claim address 0x{self._candidate:02X}: a node with a higher priority NAME holds it'
+                )
+
+    def _next_address(self, lost: int) -> Optional[int]:
+        if not self.name.arbitrary_address_capable:
+            return None
+        for address in range(ARBITRARY_FIRST, ARBITRARY_LAST + 1):
+            if address != lost and address not in self._taken:
+                return address
+        return None
+
+    def _cannot_claim(self) -> None:
+        self.address = None
+        self._send_claim(NULL_ADDRESS)
+        self._log('Cannot claim an address')
+
+    def close(self) -> None:
+        if self._listening:
+            self.session.remove_message_listener(self._on_message)
+            self._listening = False
+        self.address = None
+
+    def _on_message(self, msg: can.Message) -> None:
+        if not msg.is_rx or not msg.is_extended_id or msg.is_error_frame:
+            return
+        ident = J1939Id.from_can_id(msg.arbitration_id)
+        data = bytes(msg.data)
+        ours = self.address if self.address is not None else self._candidate
+        if ident.pgn == PGN_ADDRESS_CLAIMED and len(data) >= 8 and ident.source_address != NULL_ADDRESS:
+            other = J1939Name.from_bytes(data).value
+            self._taken[ident.source_address] = other
+            if ident.source_address != ours or other == self.name.value:
+                return
+            if other < self.name.value:  # The lower NAME wins the address
+                self._log(f'Lost address 0x{ours:02X} to NAME {other:016X}')
+                if self.address is None:
+                    self._lost.set()  # claim() moves on
+                else:
+                    self.address = None
+                    asyncio.ensure_future(self._reclaim(ours))
+            else:
+                self._send_claim(ours)  # Defend
+        elif ident.pgn == PGN_REQUEST and len(data) >= 3 and int.from_bytes(data[:3], 'little') == PGN_ADDRESS_CLAIMED:
+            if ident.destination_address in (GLOBAL_ADDRESS, ours):
+                if self.address is not None:
+                    self._send_claim(self.address)
+        elif ident.pgn == PGN_COMMANDED_ADDRESS and len(data) >= 9 and J1939Name.from_bytes(data[:8]) == self.name:
+            self._wanted = data[8]
+            self._log(f'Commanded to address 0x{data[8]:02X}')
+            self.address = None
+            asyncio.ensure_future(self._reclaim(None))
+
+    async def _reclaim(self, lost: Optional[int]) -> None:
+        if lost is not None:
+            following = self._next_address(lost)
+            if following is None:
+                self._cannot_claim()
+                return
+            self._wanted = following
+        try:
+            await self.claim()
+        except AddressClaimError:
+            pass
+        except Exception as e:  # noqa: BLE001 - the bus closed
+            self._log(f'Claiming failed: {e}')

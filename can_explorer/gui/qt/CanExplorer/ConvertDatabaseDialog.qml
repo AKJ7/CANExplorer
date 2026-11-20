@@ -22,7 +22,7 @@ Dialog {
         spacing: 8
 
         Label {
-            text: qsTr("Converts between Vector DBC, BUSMASTER DBF, KCD and SYM (ARXML as input).")
+            text: qsTr("Converts between Vector DBC, BUSMASTER DBF, KCD, SYM and AUTOSAR ARXML.")
             wrapMode: Text.Wrap
             Layout.preferredWidth: 520
         }

@@ -113,8 +113,9 @@ def test_sym(data_dir):
 
 
 def test_every_readable_format_has_a_writable_output():
-    """Every readable (hence editable) format can be output: a writable format maps to itself, a read-only one
-    (ARXML) falls back to the default writable format, so no editable database is ever a dead end."""
+    """Every readable (hence editable) format can be output: a format written back maps to itself, one that is not
+    (an opened ARXML system description) falls back to the default writable format, so no editable database is ever
+    a dead end."""
     from can_explorer.core.database_io import READ_SUFFIXES, WRITE_SUFFIXES, output_suffix
 
     assert all(output_suffix(suffix) in WRITE_SUFFIXES for suffix in READ_SUFFIXES)

@@ -47,6 +47,7 @@ PURPOSE_NAMES = {
     keystore.MACSEC: 'MACsec association',
     keystore.SEED_KEY: 'Seed/key algorithm',
     keystore.AUTH_KEY: 'UDS authentication key',
+    keystore.SECURED_DATA_KEY: 'UDS secured data key',
     keystore.PKCS11: 'PKCS#11 token key',
     keystore.KEY_SERVER: 'Key server',
 }
@@ -86,6 +87,8 @@ def _details(info: keystore.KeyInfo) -> str:
         return f'{params.get("key", "")} on {params.get("token", "")}'
     if info.purpose == keystore.AUTH_KEY:
         return f'challenge-response · {params.get("mac", "")}'
+    if info.purpose == keystore.SECURED_DATA_KEY:
+        return f'secured data transmission (0x84) · {params.get("mac", "")}'
     if info.purpose == keystore.SEED_KEY:
         return f'compute_key from {params.get("file") or "a script"}'
     return ''
@@ -483,6 +486,12 @@ class SecurityController(QObject):
     @pyqtSlot(str, str, str, result=str)
     def add_auth_key(self, name: str, key_hex: str, mac: str) -> str:
         return self._run(lambda: self.store.add_auth_key(name, parse_hex(key_hex), mac), 'add entry', entry=name)
+
+    @pyqtSlot(str, str, str, result=str)
+    def add_secured_data_key(self, name: str, key_hex: str, mac: str) -> str:
+        return self._run(
+            lambda: self.store.add_secured_data_key(name, parse_hex(key_hex), mac), 'add entry', entry=name
+        )
 
     # SecOC
 

@@ -476,7 +476,10 @@ async def test_diagnostics_authenticate_with_a_key_store_certificate(manager, ce
     connection.open()
     ecu_session = BusSession(LiveSource(BusConfig('virtual', channel)))
     ecu_session.start()
-    server = UdsServer(authentication=AuthenticationServer([ca], 'ecdsa-sha256'), authentication_dids=(0xF198,))
+    server = UdsServer(
+        authentication=AuthenticationServer([ca], 'ecdsa-sha256', certificate_evaluation_ids=(0x0042,)),
+        authentication_dids=(0xF198,),
+    )
     simulator = UdsEcuSimulator(ecu_session, server=server)
     simulator.start()
     security = manager.security
@@ -508,6 +511,12 @@ async def test_diagnostics_authenticate_with_a_key_store_certificate(manager, ce
         assert not diagnostics.authenticated and diagnostics.history[-1]['description'] == (
             'deAuthenticate: de-authentication successful'
         )
+        # transmitCertificate: a certificate of the Security Manager for an evaluation id
+        assert 'Invalid hex certificate evaluation id' in diagnostics.transmit_certificate('Tester', 'xyz')
+        assert diagnostics.transmit_certificate('Tester', '42') == ''
+        await wait_until(lambda: not diagnostics.busy)
+        assert diagnostics.history[-1]['description'] == 'transmitCertificate 0x0042 (Tester): certificate verified'
+        assert server.authentication.received_certificates[0x42] == tester
         # An ECU that does not trust the tester's issuer refuses the certificate
         server.authentication.trusted = [certificates_ca(certificates)]
         assert diagnostics.authenticate({'certificate': 'Tester', 'scheme': 'ecdsa-sha256'}) == ''
@@ -840,3 +849,113 @@ def test_oauth_client_credentials_pkcs11_and_pkcs12_entries(security, tmp_path):
     assert 'wrong password' in security.add_tls_client('Tester', QUrl.fromLocalFile(str(path)), QUrl(), 'nope')
     assert security.add_tls_client('Tester', QUrl.fromLocalFile(str(path)), QUrl(), 'secret') == ''
     assert {entry['name'] for entry in security.entries} >= {'Tester', 'Card', 'Bench'}
+
+
+def test_secured_data_key_entries(security):
+    assert security.create('pw', 'pw') == ''
+    assert '16, 24 or 32 bytes' in security.add_secured_data_key('ECU', '0102', 'aes-cmac')
+    assert security.add_secured_data_key('ECU', KEY.hex(), 'aes-cmac') == ''
+    [entry] = security.entries
+    assert entry['kind'] == 'UDS secured data key'
+    assert entry['details'] == 'secured data transmission (0x84) · aes-cmac'
+
+
+async def test_diagnostics_secured_data_transmission(manager):
+    """The Diagnostics page's requests in SecuredDataTransmission envelopes, signed with a secured data key."""
+    from can_explorer.core.session import BusSession
+    from can_explorer.core.simulation import UdsEcuSimulator, UdsServer
+    from can_explorer.core.sources import BusConfig, LiveSource
+    from can_explorer.core.uds_secured import MacProvider, SecuredServerConfig
+
+    channel = f'secured-{uuid.uuid4().hex}'
+    manager.add_connection({'name': 'Bus', 'interface': 'VirtualBus', 'channel': channel})
+    connection = manager.connections[-1]
+    connection.open()
+    ecu_session = BusSession(LiveSource(BusConfig('virtual', channel)))
+    ecu_session.start()
+    config = SecuredServerConfig(provider=MacProvider(KEY, 'aes-cmac', 8), secured_dids=(0xF190,))
+    simulator = UdsEcuSimulator(ecu_session, server=UdsServer(secured=config))
+    simulator.start()
+    security = manager.security
+    diagnostics = connection.diagnostics
+    try:
+        assert diagnostics.read_did('F190') == ''
+        await wait_until(lambda: not diagnostics.busy)
+        assert diagnostics.history[-1]['description'].endswith('secureDataTransmissionRequired')
+
+        assert 'not a secured data key' in diagnostics.set_secured({'enabled': True, 'source': 'keystore:ECU'})
+        assert not diagnostics.secured
+        assert security.create('pw', 'pw') == ''
+        assert security.add_secured_data_key('ECU', KEY.hex(), 'aes-cmac') == ''
+        options = {'enabled': True, 'source': 'keystore:ECU', 'length': 8, 'signed_response': True, 'counter': 10}
+        assert diagnostics.set_secured(options) == ''
+        assert diagnostics.secured and diagnostics.secured_counter == 10
+        assert diagnostics.read_did('F190') == ''
+        await wait_until(lambda: not diagnostics.busy)
+        entry = diagnostics.history[-1]
+        assert entry['positive'] and 'WDB1234567890ABCD' in entry['description'], entry
+        assert entry['description'].endswith('(secured: counter 10, response signature verified)')
+        assert diagnostics.secured_counter == 11 and config.last_counter == 10
+
+        assert diagnostics.set_secured({**options, 'counter': 10}) == ''  # Replaying a used counter
+        assert diagnostics.read_did('F190') == ''
+        await wait_until(lambda: not diagnostics.busy)
+        assert diagnostics.history[-1]['description'].endswith('secureDataVerificationFailed')
+        assert diagnostics.set_secured({'enabled': False}) == '' and not diagnostics.secured
+    finally:
+        simulator.stop()
+        ecu_session.stop()
+
+
+async def test_diagnostics_secured_with_session_key(manager):
+    """Authentication by challenge-response asking for a session key, then secured requests with it."""
+    from can_explorer.core import uds_auth
+    from can_explorer.core.session import BusSession
+    from can_explorer.core.simulation import UdsEcuSimulator, UdsServer
+    from can_explorer.core.sources import BusConfig, LiveSource
+    from can_explorer.core.uds_secured import SecuredServerConfig, SessionKeyIssuer
+
+    channel = f'session-{uuid.uuid4().hex}'
+    manager.add_connection({'name': 'Bus', 'interface': 'VirtualBus', 'channel': channel})
+    connection = manager.connections[-1]
+    connection.open()
+    ecu_session = BusSession(LiveSource(BusConfig('virtual', channel)))
+    ecu_session.start()
+    authentication = uds_auth.AuthenticationServer(
+        [],
+        challenge_response=uds_auth.symmetric_challenge_response(KEY, 'aes-cmac'),
+        session_keys=SessionKeyIssuer(KEY, 'aes-cmac'),
+    )
+    server = UdsServer(
+        authentication=authentication, secured=SecuredServerConfig(require_session_key=True, secured_dids=(0xF190,))
+    )
+    simulator = UdsEcuSimulator(ecu_session, server=server)
+    simulator.start()
+    security = manager.security
+    diagnostics = connection.diagnostics
+    try:
+        assert 'No session key' in diagnostics.set_secured({'enabled': True, 'source': 'session'})
+        assert security.create('pw', 'pw') == ''
+        assert security.add_auth_key('Shared', KEY.hex(), 'aes-cmac') == ''
+        assert 'communication configuration' in diagnostics.authenticate_challenge_response(
+            {'source': 'Shared', 'configuration': 'xyz'}
+        )
+        assert diagnostics.authenticate_challenge_response({'source': 'Shared', 'configuration': '01'}) == ''
+        await wait_until(lambda: not diagnostics.busy)
+        assert diagnostics.history[-1]['description'].endswith(
+            'session key info 16 bytes (proof: shared key (aes-cmac))'
+        )
+        assert diagnostics.session_key.startswith('session key info 16 bytes (communicationConfiguration 0x01')
+
+        assert diagnostics.set_secured({'enabled': True, 'source': 'session', 'signed_response': True}) == ''
+        assert diagnostics.read_did('F190') == ''
+        await wait_until(lambda: not diagnostics.busy)
+        entry = diagnostics.history[-1]
+        assert entry['positive'] and 'WDB1234567890ABCD' in entry['description'], entry
+
+        assert diagnostics.deauthenticate() == ''
+        await wait_until(lambda: not diagnostics.busy)
+        assert not diagnostics.secured and diagnostics.session_key == ''  # The session key ended with it
+    finally:
+        simulator.stop()
+        ecu_session.stop()

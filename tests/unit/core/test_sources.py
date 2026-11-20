@@ -1,11 +1,12 @@
 import asyncio
 import threading
+from collections import deque
 
 import can
 import pytest
 
 from can_explorer.core.session import BusSession, SessionState
-from can_explorer.core.sources import MAX_BATCH, FileSource, ThreadBridge
+from can_explorer.core.sources import MAX_BATCH, BusConfig, FileSource, LiveSource, ThreadBridge
 
 
 async def test_thread_bridge_batches_and_preserves_order():
@@ -119,3 +120,85 @@ async def test_replay_restart(tmp_path, realtime):
         while session.state is not SessionState.FINISHED:
             await asyncio.sleep(0.01)
         assert session.trace.total == expected
+
+
+def test_livesource_socketcand_host_and_port(mocker):
+    config = BusConfig('socketcand', 'can0', host='192.168.1.10', port=29536)
+    source = LiveSource(config)
+    assert source.description == 'socketcand:192.168.1.10:29536/can0 @ 500000 bit/s'
+
+    mock_bus = mocker.patch('can.Bus')
+    mocker.patch('can.Notifier')
+    loop = asyncio.new_event_loop()
+    try:
+        source.open(loop)
+        mock_bus.assert_called_once()
+        _, kwargs = mock_bus.call_args
+        assert kwargs['host'] == '192.168.1.10'
+        assert kwargs['port'] == 29536
+        assert kwargs['channel'] == 'can0'
+    finally:
+        loop.close()
+
+
+def test_livesource_socketcand_defaults(mocker):
+    config = BusConfig('socketcand', 'can0')
+    source = LiveSource(config)
+    mock_bus = mocker.patch('can.Bus')
+    mocker.patch('can.Notifier')
+    loop = asyncio.new_event_loop()
+    try:
+        source.open(loop)
+        mock_bus.assert_called_once()
+        _, kwargs = mock_bus.call_args
+        assert kwargs['host'] == '127.0.0.1'
+        assert kwargs['port'] == 29536
+    finally:
+        loop.close()
+
+
+def _handshake_bus(mocker, *reads: bytes):
+    from can.interfaces.socketcand import SocketCanDaemonBus
+
+    sock = mocker.MagicMock()
+    sock.recv.side_effect = list(reads)
+    bus = object.__new__(SocketCanDaemonBus)
+    bus.channel = 'can0'
+    bus._SocketCanDaemonBus__socket = sock
+    bus._SocketCanDaemonBus__tcp_tune = False
+    bus._SocketCanDaemonBus__receive_buffer = ''
+    bus._SocketCanDaemonBus__message_buffer = deque()
+    return bus
+
+
+def test_socketcand_patch_queues_frames_received_with_handshake(mocker):
+    bus = _handshake_bus(mocker, b'< hi >', b'< ok >', b'< ok >< frame 123 1.000000 DEADBEEF >< frame 4')
+
+    bus._expect_msg('< hi >')
+    bus._expect_msg('< ok >')
+    bus._expect_msg('< ok >')
+
+    # The complete frame is delivered right away, without waiting for the next TCP read
+    (message,) = bus._SocketCanDaemonBus__message_buffer
+    assert message.arbitration_id == 0x123 and message.data == bytes.fromhex('DEADBEEF')
+    assert message.channel == 'can0'
+    # The incomplete one stays buffered for python-can to finish
+    assert bus._SocketCanDaemonBus__receive_buffer == '< frame 4'
+
+
+def test_socketcand_patch_waits_for_split_reply(mocker):
+    bus = _handshake_bus(mocker, b'< o', b'k >')
+    bus._expect_msg('< ok >')
+    assert bus._SocketCanDaemonBus__receive_buffer == ''
+
+
+def test_socketcand_patch_raises_on_error_reply(mocker):
+    bus = _handshake_bus(mocker, b'< error could not open bus >')
+    with pytest.raises(can.CanError, match='could not open bus'):
+        bus._expect_msg('< ok >')
+
+
+def test_socketcand_patch_raises_when_connection_closes(mocker):
+    bus = _handshake_bus(mocker, b'')
+    with pytest.raises(can.CanError, match='closed'):
+        bus._expect_msg('< hi >')

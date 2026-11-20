@@ -23,12 +23,22 @@ T.ComboBox {
         hoverEnabled: control.hoverEnabled
     }
 
-    indicator: Text {
-        x: control.mirrored ? control.padding : control.width - width - control.padding - 6
+    // A drawn chevron rather than a "▾" character: the glyph was tiny, sat below the centre, hugged the border and
+    // depends on the font having it. It points up while the list is open.
+    indicator: Item {
+        implicitWidth: 30
+        implicitHeight: 24
+        x: control.mirrored ? control.padding : control.width - width - control.padding
         y: control.topPadding + (control.availableHeight - height) / 2
-        text: "▾"
-        color: control.enabled ? Theme.muted : Theme.alpha(Theme.muted, 0.4)
-        font.pixelSize: 14
+
+        Chevron {
+            anchors.centerIn: parent
+            anchors.horizontalCenterOffset: control.mirrored ? 2 : -2
+            color: !control.enabled ? Theme.alpha(Theme.muted, 0.4)
+                : control.popup.visible || control.down ? Theme.accent
+                : control.hovered ? Theme.text : Theme.muted
+            rotation: control.popup.visible ? 180 : 0
+        }
     }
 
     contentItem: T.TextField {

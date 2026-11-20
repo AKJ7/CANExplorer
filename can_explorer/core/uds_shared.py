@@ -61,16 +61,37 @@ class SharedIsoTp:
         rx_id: int,
         extended: bool = False,
         fd: bool = False,
+        tx_address: Optional[int] = None,
+        rx_address: Optional[int] = None,
         on_idle: Optional[Callable[[bytes], None]] = None,
     ):
+        """`tx_address`/`rx_address`: the address byte of extended or mixed addressing, see IsoTpClient."""
         self.session = session
-        self.key = (tx_id, rx_id, extended, fd)
+        self.key = (tx_id, rx_id, extended, fd, tx_address, rx_address)
         self.on_idle = on_idle
         self._users: List[SharedTransport] = []
-        self.client = IsoTpClient(session, tx_id, rx_id, extended, fd=fd, on_payload=self._deliver)
+        self.client = IsoTpClient(
+            session,
+            tx_id,
+            rx_id,
+            extended,
+            fd=fd,
+            on_payload=self._deliver,
+            tx_address=tx_address,
+            rx_address=rx_address,
+        )
 
-    def matches(self, session, tx_id: int, rx_id: int, extended: bool, fd: bool) -> bool:
-        return session is self.session and self.key == (tx_id, rx_id, extended, fd)
+    def matches(
+        self,
+        session,
+        tx_id: int,
+        rx_id: int,
+        extended: bool,
+        fd: bool,
+        tx_address: Optional[int] = None,
+        rx_address: Optional[int] = None,
+    ) -> bool:
+        return session is self.session and self.key == (tx_id, rx_id, extended, fd, tx_address, rx_address)
 
     def transport(self, receiving: bool = True) -> SharedTransport:
         return SharedTransport(self, receiving)

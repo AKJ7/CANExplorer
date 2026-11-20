@@ -8,6 +8,249 @@ development stages are listed by date and commit, newest first.
 
 ## [Unreleased]
 
+## [1.10.0] – 2026-11-20
+
+### Added
+
+- **ARXML export of signal databases**: the converter (dialog and `can-db-convert`), the database editor's *Save
+  as…* and scripts (`save_database`, `core.arxml_writer`) write AUTOSAR R20-11 system descriptions of the CAN part
+  of a database, valid against the official `AUTOSAR_00049.xsd` schema.
+    - One `CAN-CLUSTER` per bus, so a multi-bus database keeps its buses apart, unlike DBC. Frames, signal PDUs
+      with their cycle times, multiplexed PDUs (one selector), container frames (short headers), signals with base
+      types, initial and invalid values, conversions (linear, value tables or both, with limits), units, comments,
+      and ECUs with what they send and receive.
+    - E2E protections (profile, Data IDs) and SecOC secured PDUs (Data ID, algorithm names, lengths) of an ARXML
+      are written back, so the E2E and SecOC checks keep working on the exported file.
+    - Signal start bits are written unchanged: AUTOSAR counts them like DBC (checked against the schema's
+      documentation of `START-POSITION`).
+    - Reported, not silently dropped: nested multiplexing (ARXML has one selector field), renamed names (ARXML
+      allows only letters, digits and `_`), and per-signal receivers, which become per-message.
+    - **An opened ARXML is never overwritten**, as it usually holds more than the signal database: the editor saves
+      it under a new name. ARXML files CANExplorer wrote are marked and saved over directly.
+
+- **UDS SecuredDataTransmission (0x84 / 0xC4)**, the ISO 14229-1:2020 envelope that carries any diagnostic request
+  and its response signed, encrypted, or both, with an anti-replay counter.
+    - **Diagnostics**: a *Secured transmission (0x84)* section sends every request of the page in envelopes (reads,
+      writes, DTCs, routines, raw requests) and checks and unwraps the responses. Settings: the algorithm byte,
+      signing, encryption, signed responses (unsigned ones are refused) and the counter. The History notes the
+      counter and whether the response signature verified.
+    - **Keys**: a new *UDS secured data key* in the Security Manager uses CANExplorer's own reference scheme
+      (HMAC-SHA-256 or AES-CMAC over the message, optionally truncated; a documented choice, not from the standard).
+      A **Python provider file** (`signature_length`, `sign`, `verify`, `encrypt`, `decrypt`) implements a
+      manufacturer's scheme, encryption included.
+    - **Trace and decoding**: 0x84/0xC4 messages show their flags, counter, algorithm and signature length, and the
+      wrapped service unless it is encrypted. Messages in the ISO 14229-1:2013 format (an opaque record) are labelled
+      and kept raw. The NRCs 0x38 *secureDataTransmissionRequired*, 0x39 *secureDataTransmissionNotAllowed* and
+      0x3A *secureDataVerificationFailed* are named.
+    - **Scripts**: `uds_secured.SecuredTransport` runs any `UdsClient` service secured; `secured_request` sends a
+      single request.
+    - **Simulated ECU**: answers 0x84 with a `SecuredServerConfig`. It checks signatures and counters (replays are
+      refused), signs and encrypts its responses as asked, and has DIDs that only answer inside an envelope.
+    - **MCP**: a new `uds_secured_request` tool (control tier).
+    - **Session keys from Authentication (0x29)**: the Authentication section's *Session key* (the
+      communicationConfiguration) asks the ECU for one, and *Session key (Authentication)* protects the secured
+      requests with it (pre-established key bit) until de-authentication. The session key information is turned
+      into a key by a security profile's new `session_provider(context)`, or, for a shared authentication key, by
+      CANExplorer's reference derivation (HKDF-SHA-256 over the challenges; a documented choice, since the standard
+      leaves the contents to the manufacturer). The certificate exchange can send and keep ephemeral public keys for
+      key agreements. The simulated ECU issues session keys (`SessionKeyIssuer`).
+    - The layout follows Wireshark's UDS dissector and the py-uds knowledge base, which agree. Scapy mirrors the
+      administrative bits; that is noted in the docs. The standard leaves the cryptography to the vehicle manufacturer.
+- **ISO-TP extended and mixed addressing** (ISO 15765-2), where every frame starts with an address byte (N_TA or
+  N_AE), as used by BMW and many gateway-routed setups.
+    - **Diagnostics**: the Request ID and Response ID take the address byte after a colon (`6F1:12` / `612:F1`).
+      Requests, tester present, listening, flashing and UDS discovery all use it.
+    - **Trace**: new *ISO-TP (extended)*, *UDS (extended)* and *KWP2000 (extended)* decoders show the address byte
+      and reassemble the transfers of each address separately.
+    - **Scripts and simulation**: `IsoTpClient(…, tx_address=, rx_address=)`; `UdsEcuSimulator(…, request_address=,
+      response_address=)` simulates such an ECU.
+    - **MCP**: the `obd_*`/`uds_*` tools take the same `ID:AA` identifiers.
+- **J1939 transport and network management, completed** (J1939-21/-81; layouts checked against the Linux kernel's
+  J1939 stack and AgIsoStack++).
+    - **Extended transport protocol (ETP)** for messages over 1785 bytes: decoded and reassembled in the trace
+      (RTS, CTS, DPO, EndOfMsgAck) and sent from the J1939 view and scripts (`J1939Sender.send` to one node).
+    - **RTS/CTS retransmissions**: a CTS that asks for packets again is followed in the trace, and the sender
+      repeats them.
+    - **Answering transport sessions**: once the J1939 view has sent something, the tool answers RTS/CTS and ETP
+      sessions addressed to it (CTS, EndOfMsgAck, aborts on timeout). A node's long answer to a request (e.g. its
+      software identification) now arrives instead of timing out. Scripts: `TransportResponder`.
+    - **Address claiming**: **Claim** in the J1939 view claims the tool address with a service tool NAME. The tool
+      then defends the address, answers requests for address claims, follows commanded addresses, and moves to a
+      free self-configurable address when it loses. Scripts: `AddressClaimer`.
+    - **Decoding**: acknowledgments (ACK/NACK/access denied/cannot respond), the reasons of connection aborts,
+      commanded addresses, and the text of the identification groups (software, component, vehicle).
+    - **Scripts**: `request_pgn` requests a parameter group and returns the answers, reassembled, or the node's
+      acknowledgment.
+    - **MCP**: new `j1939_request` (diagnostics tier; DM3/DM11 need the control tier) and `j1939_send` (send tier)
+      tools.
+
+- **comma.ai pandas on USB** (interface `panda`, experimental): the red panda and the panda of comma three/3X/four,
+  CAN and CAN FD on all three buses or one (`@1`, or the serial number). Listen only uses the SILENT safety mode.
+  Otherwise CANExplorer asks for ALLOUTPUT; release firmware lacks it, so it falls back to ELM327, which sends
+  diagnostic frames only, and says so in the log. Needs pyusb/libusb (now part of the `drivers` extra). Written
+  from panda's open-source firmware and library; not tested on a real panda.
+- **LIN adapters on Windows** (and Kvaser on Linux), as LIN master or slave (`@slave`), with the existing LIN
+  trace, LDF decoding, schedule tables and LIN diagnostics:
+    - PEAK PLIN-USB and PCAN-USB Pro LIN channels (interface `plin`, PLIN-API);
+    - Kvaser LIN Leaf (interface `kvaser_lin`, LINlib);
+    - LIN channels of Vector interfaces (interface `vector_lin`, XL Driver Library).
+
+  All three are experimental: written from the vendors' published APIs and tested against simulated libraries.
+  LIN connections now pass their baud rate to these adapters. Lipowsky Baby-LIN is not supported, because its
+  library is only available to Lipowsky's customers.
+- **comma.ai panda over WiFi UDP** (interface `panda_udp`, experimental): receives the CAN stream that the
+  original WiFi panda sends to UDP port 1338, from all buses or one (`192.168.0.10@1`), and keeps the subscription
+  alive. Receive only, because the stream is one way. Classic CAN; timestamps are the host's arrival time. The
+  format comes from panda's open-source WiFi code and has not been tested against a real panda. **Detect** offers
+  the panda when the computer is in its network.
+- **XCP and CCP measurement & calibration, extended** (the XCP/CCP page):
+    - **Transports**: XCP on CAN FD and on Ethernet (UDP and TCP, `XcpEthernetTransport`), besides CAN.
+      **Settings from A2L** fills in the identifiers or address from the A2L's `IF_DATA`.
+    - **Seed & key**: GET_SEED/UNLOCK (multi-packet seeds) for XCP and CCP, with an algorithm from a Python file or
+      the Security Manager. A locked resource is unlocked when a command needs it.
+    - **Reliability**:
+        - XCP address granularity (word and dword ECUs) and slave/master block modes.
+        - *Command busy* answers are repeated.
+        - After a timeout, SYNCH, then SET_MTA, then the command again, so uploads and downloads are never shifted.
+    - **DAQ**: DAQ lists per event channel, for XCP (all identification field types, DAQ timestamps, ODTs
+      split to the packet size) and for CCP. Start and stop from the page; DAQ samples go into the table and the
+      plot. XCP ECUs with static DAQ have their fixed lists configured (GET_DAQ_LIST_INFO, CLEAR_DAQ_LIST): each
+      event takes the first free list that can run on it and is large enough. Predefined lists (dynamic or static
+      ECUs) measure what they carry: their content comes from the A2L's `DAQ_LIST … PREDEFINED`, now read, or from
+      the ECU (READ_DAQ). `xcp_measure` uses them too.
+    - **STIM**: set a scalar calibration value's Measure column to *STIM* on an event, and while DAQ runs, **Set**
+      sends the value for the ECU to write at that event. In scripts, `start_stimulation` / `stimulate`, alone or
+      with a measurement, optionally repeated each period. A STIM timeout from the ECU sends the data again and is
+      counted in the slave details.
+    - **Flash programming over XCP** (PGM, `core/xcp_flash.py`): the new **Flash programming** section programs an
+      Intel HEX, S-record or binary file: PROGRAM_START, PROGRAM_CLEAR of the sectors the image touches (from
+      GET_SECTOR_INFO; or the image's ranges), PROGRAM in master blocks when the ECU takes them, PROGRAM with no
+      data to end, a BUILD_CHECKSUM check of each range, and PROGRAM_RESET. Each step shows its state. More
+      options: functional erasing (calibration, code, NVRAM areas), a flash kernel (PROGRAM_PREPARE), compressed or
+      encrypted images (PROGRAM_FORMAT, with an optional Python encoder), PROGRAM_MAX, and an ECU check
+      (PROGRAM_VERIFY, internal or with a value).
+    - **Plot**: any measurement or value can be plotted next to the bus signals.
+    - **Polling**: neighbouring measurements are read with one upload.
+    - **A2L**:
+        - `/include` files, `ECU_ADDRESS_EXTENSION`, `BYTE_ORDER`, `BIT_MASK`.
+        - Arrays (`ARRAY_SIZE`, `MATRIX_DIM`), `VAL_BLK`, `ASCII`, `CURVE`, `MAP` and `AXIS_PTS`.
+        - Standard, fixed and common axes; record layouts with axis point counts and alignment.
+        - Conversions: non-linear `RAT_FUNC`, `TAB_INTP`, `TAB_NOINTP`, verbal tables (`TAB_VERB`) and formulae
+          (`FORM`).
+        - `IF_DATA` of XCP (protocol layer, DAQ events, CAN/CAN FD/UDP/TCP) and CCP (TP_BLOB, rasters).
+        - EPK.
+    - **Calibration**: an editor for curves, maps, blocks and arrays (with standard-axis points). Values are checked
+      against the A2L limits. Calibration pages (XCP GET/SET/COPY_CAL_PAGE; CCP SELECT/GET_ACTIVE_CAL_PAGE).
+      BUILD_CHECKSUM, verified against an upload for the standard XCP types.
+    - **EPK check**: on connect, the A2L's EPK is compared with the ECU, and a mismatch is reported.
+    - **The page is reorganised**:
+        - A header shows the session's state: transport, connection, A2L, EPK, locked resources, DAQ.
+        - Sections on the left hold the slave (with what it reported) and the tools: seed & key, measuring,
+          pages, memory, dataset.
+        - The variable table has a name and kind filter and columns that stay aligned. Narrow windows get a compact
+          layout.
+        - Curves and maps are summarised by size and range. The log can be resized.
+        - The curve and map editor fits its content, shades cells by value, outlines changed cells, shows limits and
+          axis names, and can revert.
+    - **Datasets**: save the characteristics to JSON or DCM, compare a dataset with the ECU, and write it.
+    - **More commands**: GET_ID, GET_COMM_MODE_INFO, CCP EXCHANGE_ID, DNLOAD_6, GET/SET_S_STATUS.
+    - **Trace**: new **XCP** and **CCP** protocol decoders label commands, responses, errors, events and DAQ data,
+      and for XCP the master's STIM data and the programming commands. They learn the identifiers from a CONNECT,
+      or from the page when it connects.
+    - **MCP**:
+        - `xcp_list_variables` (always available).
+        - `xcp_connect`, `xcp_disconnect`, `xcp_status`, `xcp_read`, `xcp_read_memory`, `xcp_measure`,
+          `xcp_daq_info` and `xcp_flash_info` (diagnostics tier).
+        - `xcp_write`, `xcp_write_memory`, `xcp_stimulate` and `xcp_program` (control tier).
+    - **Simulators**: the XCP slave (`core/xcp_slave.py`, also on UDP/TCP) and the CCP slave answer seed & key,
+      pages, checksums, identification and DAQ with cyclic events, and inject busy answers and lost responses. The
+      XCP slave also has static and predefined DAQ lists, READ_DAQ, STIM with optional timeouts, and a flash in
+      sectors that must be erased before it is programmed, with a demonstration cipher, PROGRAM_VERIFY and an
+      optional flash kernel.
+      `example_memory()` matches the extended `examples/calibration/example.a2l`.
+    - **Limits**: XCP programming follows public implementations (OpenBLT, pyxcp) and a public command
+      reference, and is not yet tried on a production bootloader. The data of the STIM timeout event is not
+      interpreted (its layout is not public). Some CCP details the public sources leave open are
+      documented as assumptions: the byte order of multi-byte parameters, ODT element positions, and the TP_BLOB
+      byte-order code.
+- **J1939-22 Multi-PG and FD transport decoding**. The J1939-22 decoder used to label these frames only.
+    - **Multi-PG** frames are split into their parameter groups. Each is decoded like a single frame: requests,
+      acknowledgments, DM1 and the other known PGs.
+    - **FD.TP** messages are reassembled, BAM and RTS/CTS, including segments a receiver asks for again. The control
+      frames show their session, size, segment counts, CTS windows, end-of-message status and abort reasons.
+    - **Sources**: SAE J1939-22 is not public. The layouts follow the open-source python-can-j1939 implementation
+      (MIT), and the header widths agree with public J1939-22 presentations. The tests replay frames generated by
+      that library (`tests/data/j1939_22_frames.txt`).
+    - **Limits**: FD.TP transfers announcing assurance data are labelled with its type and size only (where its
+      bytes travel is not public). Not yet checked against a J1939-22 ECU.
+- **J1939-22 assurance data trailers** (cybersecurity and functional safety). The trailer of a parameter group
+  is split off by its type of service and trailer format (32/64-bit cybersecurity, functional safety, or both;
+  reserved formats stay raw), so its data now decodes like any parameter group, and the trailer is shown after it.
+    - **Checks**, for the parameter groups configured in `j1939_assurance.json` (or `CANEXPLORER_J1939_ASSURANCE`):
+      functional safety data with AUTOSAR E2E Profile 22 (CRC, counter sequence: lost, repeated, wrong
+      sequence), and J1939-91C cybersecurity data (the truncated AES-CMAC tag with a key of the Security Manager,
+      and a freshness value that must increase). Encrypted payloads are labelled, not decrypted.
+    - **E2E Profile 22 at any offset** (`Profile22(data_ids, offset)`), tested against the AUTOSAR offset example.
+    - **Sources and choices**: the TOS/TF table, Profile 22 for safety data and the J1939-91C tag construction
+      come from a public J1939-91C presentation (New Eagle, 2025). The field widths, the nonce encoding and what
+      Profile 22 covers are not public, so they are configuration or documented choices, never assumed: a wrong
+      layout shows "does not verify with this configuration".
+- **UDS Authentication (0x29), extended** (Diagnostics view, scripts, MCP):
+    - **transmitCertificate (0x04)** as a procedure: **Transmit** sends a certificate of the Security Manager
+      under a certificateEvaluationId (`UdsClient.transmit_certificate`).
+    - **Roles and white lists** from the tester's certificate, as the AUTOSAR Dcm reads them (role bit field,
+      services, DIDs, routines, fault memory selections; the extension OIDs are given): `uds_auth.access_rights`.
+      After a certificate exchange the log lists the certificate's private extensions.
+    - **Simulated ECU**: role checks per service with NRC 0x34, role size checks (NRC 0x55), transmitCertificate
+      (NRC 0x31 for unknown evaluation ids), and de-authentication when idle in the default session or on an S3
+      timeout, after the AUTOSAR Dcm specification (R23-11, §7.6.2.10).
+    - **MCP**: `uds_authenticate` (certificate exchange, challenge-response or the ECU's configuration),
+      `uds_deauthenticate` and `uds_transmit_certificate` (control tier); `uds_secured_request(key="session")`
+      protects requests with the session key of the authentication.
+- **End-to-end SocketCAN benchmark** (`tools/benchmark_socketcan.py`, for developers): receive throughput, lost
+  frames, CPU use and garbage collection pauses at increasing rates, and periodic transmit timing (software and
+  kernel-timed, idle and under load), through the Linux SocketCAN stack on `vcan` interfaces. See *Building and
+  testing*.
+- **socketcand host and port**: the New Connection dialog and `BusConfig` take the host (or IP address) and TCP
+  port of a remote `socketcand` daemon; without them, `127.0.0.1:29536` is used.
+
+### Fixed
+
+- XCP: error codes from 0x23 on were named one off, e.g. *access locked* (0x25) was shown as *page not valid*.
+  The table now follows the standard.
+- XCP/CCP: the address extension of A2L variables was ignored, so every value was read from extension 0.
+- CCP: a response was accepted without checking its command counter. A late answer to an earlier command could be
+  taken for the current one, and DAQ data or event messages on the response identifier for a response.
+- ISO-TP: a classic CAN frame with a zero single-frame length is no longer read as the CAN FD escape sequence (only
+  valid in CAN FD frames over 8 bytes).
+- ISO-TP: a segmented message whose consecutive frames stop (N_Cr timeout) is dropped instead of being continued by
+  a later, unrelated frame.
+- Application menu: every entry has its own bundled line icon, tinted with the theme and dimmed when disabled. The
+  icons used to come from the desktop's icon theme, so they were missing on Windows and macOS, mixed styles on
+  Linux, and several entries shared one; the *Recent* submenus now have an icon too.
+- Combo boxes: the drop-down arrow is a drawn chevron, centred and clear of the border, that points up while the list
+  is open. It was a small "▾" character that sat low against the edge, could be overlapped by long text and showed
+  as a box with fonts that lack it. The database editor's *New* menu button and the fold markers of its *By sender*
+  tree use the same chevron.
+- Documentation: the MCP page is reorganised around a quick start, client setup (Claude Code, JSON configs), example
+  sessions with real tool outputs, a tool reference grouped by task and tier with each tool's main arguments, and
+  troubleshooting. Its Python examples now use the `mcp` 2 client API (the HTTP example imported
+  `streamablehttp_client`, which `mcp` 2 no longer has) and read list answers in full instead of only their first
+  item.
+- RP1210: 11-bit identifiers are now sent and read in 2 bytes, 29-bit ones in 4. All identifiers used to take
+  4 bytes, which, going by the open RP1210 code the layout now follows (PyRP1210), gave 11-bit frames a wrong
+  identifier and cost them their first two data bytes. J1939 traffic (29-bit only) was not affected. Not yet
+  checked against an adapter.
+- Live capture lost frames on busy buses: from about 5 000 frames/s (0.2–4 % at 5 000–20 000 frames/s). Python's
+  full garbage collections, which walk every frame in the trace, stopped the program for 35–150 ms, longer than the
+  kernel's socket buffer can bridge. They also delayed periodic transmissions (one interval of 145 ms instead of 10).
+  While a bus is open, full collections now run only when traffic is low (below 500 frames/s over all buses, at most
+  once a minute, and in any case after 30 minutes). Measured on SocketCAN: no frames lost up to 20 000 frames/s,
+  and periodic transmit stays within 2 ms under load. On Python 3.14, whose incremental collector has no such full
+  collections (it ignores the threshold that suspends them), this stays off.
+- socketcand: connecting failed with `Expected '< ok >' got: '< ok > < frame ... >'` when the bus already carried
+  traffic. Frames that arrive during the rawmode handshake are now buffered.
+
 ## [1.9.0] – 2026-11-15
 
 ### Added
@@ -1272,7 +1515,8 @@ Called "Milestone 0.1.0" in the commit message and the README roadmap.
 - Qt Widgets user interface: main window, new connection dialog, about dialog and a raw CAN frame table.
 - Pipenv based project setup, VS Code development container, Dockerfile and a CI workflow skeleton.
 
-[Unreleased]: https://github.com/AKJ7/CANExplorer/compare/v1.9.0...HEAD
+[Unreleased]: https://github.com/AKJ7/CANExplorer/compare/v1.10.0...HEAD
+[1.10.0]: https://github.com/AKJ7/CANExplorer/compare/v1.9.0...v1.10.0
 [1.9.0]: https://github.com/AKJ7/CANExplorer/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/AKJ7/CANExplorer/compare/v1.7.1...v1.8.0
 [1.7.1]: https://github.com/AKJ7/CANExplorer/compare/v1.7.0...v1.7.1
