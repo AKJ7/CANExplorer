@@ -32,92 +32,92 @@
     <context>
         <name>Actions</name>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="37" />
+            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="43" />
             <source>&amp;Exit</source>
             <translation>&amp;Beenden</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="44" />
+            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="50" />
             <source>&amp;About</source>
             <translation>&amp;Über</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="50" />
+            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="56" />
             <source>&amp;Help</source>
             <translation>&amp;Hilfe</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="58" />
+            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="64" />
             <source>Copy &amp;System Report</source>
             <translation>&amp;Systembericht kopieren</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="64" />
+            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="70" />
             <source>&amp;New Connection...</source>
             <translation>&amp;Neue Verbindung...</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="71" />
+            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="77" />
             <source>&amp;Replay Log File...</source>
             <translation>Log-Datei &amp;abspielen...</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="78" />
+            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="84" />
             <source>&amp;Close Connection</source>
             <translation>Verbindung &amp;schließen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="86" />
+            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="92" />
             <source>&amp;Copy Selected Rows</source>
             <translation>Ausgewählte Zeilen &amp;kopieren</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="94" />
+            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="100" />
             <source>Select &amp;All</source>
             <translation>&amp;Alles auswählen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="102" />
+            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="108" />
             <source>Con&amp;vert Signal Database...</source>
             <translation>Signaldatenbank &amp;konvertieren...</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="108" />
+            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="114" />
             <source>Open &amp;Workspace...</source>
             <translation>&amp;Arbeitsbereich öffnen...</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="115" />
+            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="121" />
             <source>&amp;Save Workspace</source>
             <translation>Arbeitsbereich &amp;speichern</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="123" />
+            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="129" />
             <source>Save Workspace &amp;As...</source>
             <translation>Arbeitsbereich speichern &amp;unter...</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="131" />
+            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="137" />
             <source>&amp;Edit Signal Database...</source>
             <translation>Signaldatenbank &amp;bearbeiten...</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="137" />
+            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="143" />
             <source>Command &amp;Palette...</source>
             <translation>&amp;Befehlspalette...</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="144" />
+            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="150" />
             <source>Check for &amp;Updates...</source>
             <translation>Nach &amp;Updates suchen...</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="150" />
+            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="156" />
             <source>Security &amp;Manager...</source>
             <translation>Sicherheits&amp;manager...</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="156" />
+            <location filename="../../gui/qt/CanExplorer/Actions.qml" line="162" />
             <source>&amp;Preferences...</source>
             <translation>&amp;Einstellungen...</translation>
         </message>
@@ -130,12 +130,12 @@
             <translation>Letzte &amp;Verbindungen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/AppMenu.qml" line="29" />
+            <location filename="../../gui/qt/CanExplorer/AppMenu.qml" line="32" />
             <source>Recent &amp;Log Files</source>
             <translation>Letzte &amp;Log-Dateien</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/AppMenu.qml" line="48" />
+            <location filename="../../gui/qt/CanExplorer/AppMenu.qml" line="54" />
             <source>Recent W&amp;orkspaces</source>
             <translation>Letzte A&amp;rbeitsbereiche</translation>
         </message>
@@ -1335,616 +1335,616 @@ B: %3</translation>
         </message>
         <message>
             <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="167" />
-            <source>New ▾</source>
-            <translation>Neu ▾</translation>
+            <source>New</source>
+            <translation type="unfinished" />
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="172" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="187" />
             <source>CAN database</source>
             <translation>CAN-Datenbank</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="176" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="191" />
             <source>LIN database (LDF)</source>
             <translation>LIN-Datenbank (LDF)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="182" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="197" />
             <source>Open…</source>
             <translation>Öffnen…</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="186" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="201" />
             <source>Save</source>
             <translation>Speichern</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="196" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="211" />
             <source>Saved %1</source>
             <translation>%1 gespeichert</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="200" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="215" />
             <source>Save as…</source>
             <translation>Speichern unter…</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="208" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="223" />
             <source>Revert</source>
             <translation>Zurücksetzen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="229" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="244" />
             <source>Open a CAN or LIN database to edit its messages or frames, signals and nodes, or create a new one.</source>
             <translation>CAN- oder LIN-Datenbank öffnen, um ihre Nachrichten bzw. Frames, Signale und Knoten zu bearbeiten, oder eine neue erstellen.</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="241" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="256" />
             <source>New CAN database</source>
             <translation>Neue CAN-Datenbank</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="245" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="260" />
             <source>New LIN database</source>
             <translation>Neue LIN-Datenbank</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="257" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="272" />
             <source>Frames and signals</source>
             <translation>Frames und Signale</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="258" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="273" />
             <source>Nodes</source>
             <translation>Knoten</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="259" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="274" />
             <source>Encoding types</source>
             <translation>Encoding-Typen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="260" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="275" />
             <source>Schedule tables</source>
             <translation>Schedule-Tabellen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="275" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="290" />
             <source>Signals by sender (%1)</source>
             <translation>Signale nach Sender (%1)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="276" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="291" />
             <source>Frames (%1)</source>
             <translation>Frames (%1)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="276" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="291" />
             <source>Messages (%1)</source>
             <translation>Nachrichten (%1)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="284" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="299" />
             <source>Unfold all</source>
             <translation>Alle aufklappen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="291" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="306" />
             <source>Fold all</source>
             <translation>Alle zuklappen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="299" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="314" />
             <source>Add a message</source>
             <translation>Nachricht hinzufügen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="307" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="322" />
             <source>Duplicate the selected message, with its signals</source>
             <translation>Ausgewählte Nachricht mit ihren Signalen duplizieren</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="316" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="331" />
             <source>Remove the selected message</source>
             <translation>Ausgewählte Nachricht entfernen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="329" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="344" />
             <source>Frames</source>
             <translation>Frames</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="329" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="344" />
             <source>Messages</source>
             <translation>Nachrichten</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="330" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="345" />
             <source>By sender</source>
             <translation>Nach Sender</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="335" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="350" />
             <source>Search name, ID or signal</source>
             <translation>Name, ID oder Signal suchen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="475" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="496" />
             <source>No sender</source>
             <translation>Kein Sender</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="489" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="510" />
             <source>%1 messages</source>
             <translation>%1 Nachrichten</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="490" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="511" />
             <source>%1 signals</source>
             <translation>%1 Signale</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="498" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="519" />
             <source>No signals</source>
             <translation>Keine Signale</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="512" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="533" />
             <source>Nodes: %1</source>
             <translation>Knoten: %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="538" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="559" />
             <source>The database has no frames yet; add one with +.</source>
             <translation>Die Datenbank hat noch keine Frames; mit + einen hinzufügen.</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="539" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="560" />
             <source>The database has no messages yet; add one with +.</source>
             <translation>Die Datenbank hat noch keine Nachrichten; mit + eine hinzufügen.</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="547" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="568" />
             <source>Frame</source>
             <translation>Frame</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="547" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="568" />
             <source>Message</source>
             <translation>Nachricht</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="558" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="579" />
             <source>Name</source>
             <translation>Name</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="565" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="586" />
             <source>Identifier (hex, 0–3B)</source>
             <translation>Identifier (hex, 0–3B)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="565" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="586" />
             <source>Identifier (hex)</source>
             <translation>Identifier (hex)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="575" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="596" />
             <source>Length (bytes)</source>
             <translation>Länge (Bytes)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="582" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="603" />
             <source>Publisher</source>
             <translation>Publisher</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="590" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="611" />
             <source>Cycle time (ms)</source>
             <translation>Zykluszeit (ms)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="594" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="615" />
             <source>not cyclic</source>
             <translation>nicht zyklisch</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="600" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="621" />
             <source>Senders</source>
             <translation>Sender</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="604" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="625" />
             <source>Node names, comma separated</source>
             <translation>Knotennamen, durch Komma getrennt</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="613" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="634" />
             <source>Extended (29 bit)</source>
             <translation>Extended (29 Bit)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="619" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="640" />
             <source>CAN FD</source>
             <translation>CAN FD</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="625" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="646" />
             <source>Comment</source>
             <translation>Kommentar</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="640" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="661" />
             <source>Signals (%1)</source>
             <translation>Signale (%1)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="648" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="669" />
             <source>Add a signal</source>
             <translation>Signal hinzufügen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="656" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="677" />
             <source>Duplicate the selected signal (placed at the first free bits)</source>
             <translation>Ausgewähltes Signal duplizieren (an den ersten freien Bits platziert)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="661" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="682" />
             <source>Copy</source>
             <translation>Kopieren</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="664" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="685" />
             <source>Copy the selected signal, to paste it into another message</source>
             <translation>Ausgewähltes Signal kopieren, um es in eine andere Nachricht einzufügen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="667" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="688" />
             <source>Copied %1: select a message and paste it</source>
             <translation>%1 kopiert: Nachricht auswählen und einfügen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="672" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="693" />
             <source>Paste</source>
             <translation>Einfügen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="675" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="696" />
             <source>Add a copy of %1 to this message</source>
             <translation>Eine Kopie von %1 zu dieser Nachricht hinzufügen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="683" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="704" />
             <source>Remove the selected signal</source>
             <translation>Ausgewähltes Signal entfernen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="731" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="752" />
             <source>No signal selected</source>
             <translation>Kein Signal ausgewählt</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="748" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="769" />
             <source>Unit</source>
             <translation>Einheit</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="750" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="771" />
             <source>Encoding type</source>
             <translation>Encoding-Typ</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="753" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="774" />
             <source>(none)</source>
             <translation>(keiner)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="759" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="780" />
             <source>Start bit</source>
             <translation>Startbit</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="761" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="782" />
             <source>Length (bits)</source>
             <translation>Länge (Bits)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="764" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="785" />
             <source>Byte order</source>
             <translation>Bytereihenfolge</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="767" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="788" />
             <source>Intel (little endian)</source>
             <translation>Intel (Little Endian)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="767" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="788" />
             <source>Motorola (big endian)</source>
             <translation>Motorola (Big Endian)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="772" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="793" />
             <source>Value type</source>
             <translation>Werttyp</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="775" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="796" />
             <source>Unsigned</source>
             <translation>Vorzeichenlos</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="775" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="796" />
             <source>Signed</source>
             <translation>Vorzeichenbehaftet</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="781" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="802" />
             <source>Factor</source>
             <translation>Faktor</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="783" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="804" />
             <source>Offset</source>
             <translation>Offset</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="786" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="807" />
             <source>Minimum</source>
             <translation>Minimum</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="787" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="808" />
             <source>none</source>
             <translation>keiner</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="788" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="809" />
             <source>Maximum</source>
             <translation>Maximum</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="791" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="812" />
             <source>Initial value</source>
             <translation>Anfangswert</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="791" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="812" />
             <source>Initial value (raw)</source>
             <translation>Anfangswert (roh)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="794" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="815" />
             <source>number, or bytes: 1, 2, 3</source>
             <translation>Zahl oder Bytes: 1, 2, 3</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="796" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="817" />
             <source>Subscribers</source>
             <translation>Subscriber</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="796" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="817" />
             <source>Receivers</source>
             <translation>Empfänger</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="799" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="820" />
             <source>Published by</source>
             <translation>Veröffentlicht von</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="802" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="823" />
             <source>%1 (the publisher of the frame)</source>
             <translation>%1 (der Publisher des Frames)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="807" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="828" />
             <source>Value descriptions</source>
             <translation>Wertbeschreibungen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="811" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="832" />
             <source>e.g. 0=Off; 1=On; 3=Error</source>
             <translation>z. B. 0=Aus; 1=Ein; 3=Fehler</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="824" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="845" />
             <source>Multiplexing</source>
             <translation>Multiplexing</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="829" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="850" />
             <source>None</source>
             <translation>Keines</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="829" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="850" />
             <source>Multiplexer</source>
             <translation>Multiplexer</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="829" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="850" />
             <source>Multiplexed</source>
             <translation>Multiplext</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="849" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="870" />
             <source>Switch values, e.g. 0, 1, 3</source>
             <translation>Umschaltwerte, z. B. 0, 1, 3</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="873" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="894" />
             <source>Layout</source>
             <translation>Layout</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="903" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="924" />
             <source>Byte %1</source>
             <translation>Byte %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="932" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="953" />
             <source>Bit %1: several signals</source>
             <translation>Bit %1: mehrere Signale</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="934" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="955" />
             <source>Bit %1: %2</source>
             <translation>Bit %1: %2</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="949" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="970" />
             <source>Problems (%1)</source>
             <translation>Probleme (%1)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="949" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="970" />
             <source>Notes</source>
             <translation>Hinweise</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="996" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1017" />
             <source>Bus</source>
             <translation>Bus</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1006" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1027" />
             <source>Speed (bit/s)</source>
             <translation>Geschwindigkeit (bit/s)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1015" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1036" />
             <source>Channel name</source>
             <translation>Kanalname</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1018" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1039" />
             <source>optional</source>
             <translation>optional</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1023" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1044" />
             <source>Protocol version</source>
             <translation>Protokollversion</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1030" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1051" />
             <source>Language version</source>
             <translation>Sprachversion</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1037" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1058" />
             <source>Master node</source>
             <translation>Master-Knoten</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1044" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1065" />
             <source>Time base / jitter (ms)</source>
             <translation>Zeitbasis / Jitter (ms)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1064" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1085" />
             <source>Slave nodes (%1)</source>
             <translation>Slave-Knoten (%1)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1070" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1091" />
             <source>New node name</source>
             <translation>Neuer Knotenname</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1076" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1097" />
             <source>Add</source>
             <translation>Hinzufügen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1089" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1110" />
             <source>Configured NAD</source>
             <translation>Konfigurierte NAD</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1089" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1110" />
             <source>Initial NAD</source>
             <translation>Initiale NAD</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1089" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1110" />
             <source>Supplier ID</source>
             <translation>Supplier-ID</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1090" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1111" />
             <source>Function ID</source>
             <translation>Function-ID</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1090" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1111" />
             <source>Variant</source>
             <translation>Variante</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1090" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1111" />
             <source>LIN protocol</source>
             <translation>LIN-Protokoll</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1125" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1146" />
             <source>Remove the node</source>
             <translation>Knoten entfernen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1152" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1173" />
             <source>%1 (%2)</source>
             <translation>%1 (%2)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1161" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1182" />
             <source>New name</source>
             <translation>Neuer Name</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1202" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1223" />
             <source>Remove</source>
             <translation>Entfernen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1225" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1246" />
             <source>Used by: %1</source>
             <translation>Verwendet von: %1</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1225" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1246" />
             <source>Used by no signal</source>
             <translation>Von keinem Signal verwendet</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1248" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1269" />
             <source>Apply</source>
             <translation>Übernehmen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1278" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1299" />
             <source>One entry per line, as in an LDF: SeatStatus delay 10 ms;  MasterReq delay 20 ms;  AssignNAD { SeatECU } delay 20 ms;</source>
             <translation>Ein Eintrag pro Zeile, wie in einer LDF: SeatStatus delay 10 ms;  MasterReq delay 20 ms;  AssignNAD { SeatECU } delay 20 ms;</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1287" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1308" />
             <source>Open signal database</source>
             <translation>Signaldatenbank öffnen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1295" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1316" />
             <source>Save signal database as</source>
             <translation>Signaldatenbank speichern unter</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1307" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1328" />
             <source>Discard changes?</source>
             <translation>Änderungen verwerfen?</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1315" />
+            <location filename="../../gui/qt/CanExplorer/DatabaseEditorView.qml" line="1336" />
             <source>%1 has unsaved changes.</source>
             <translation>%1 hat nicht gespeicherte Änderungen.</translation>
         </message>
@@ -10306,185 +10306,610 @@ B: %3</translation>
     <context>
         <name>XcpView</name>
         <message>
-            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="36" />
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="19" />
+            <source>Poll</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="20" />
+            <source>All</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="20" />
+            <source>Measurements</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="20" />
+            <source>Characteristics</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="20" />
+            <source>Plotted</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="20" />
+            <source>By DAQ</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="72" />
+            <source>The A2L has no XCP or CCP interface settings</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="148" />
+            <source>Measurement &amp; calibration</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="157" />
+            <source>Connected</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="157" />
+            <source>Not connected</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="171" />
+            <source>EPK ok</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="171" />
+            <source>EPK mismatch</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="175" />
+            <source>The A2L's build identifier matches the ECU</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="176" />
+            <source>The A2L does not describe this ECU software: %1</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="181" />
+            <source>Locked: %1</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="186" />
+            <source>DAQ running</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="198" />
+            <source>Waiting for the ECU…</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="232" />
+            <source>Dismiss</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="255" />
+            <source>Slave</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="263" />
             <source>Protocol</source>
             <translation>Protokoll</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="43" />
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="264" />
+            <source>Transport</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="277" />
+            <source>XCP on CAN, CAN FD, or Ethernet (UDP or TCP); CCP runs on CAN</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="280" />
             <source>Command ID</source>
             <translation>Command-ID</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="50" />
-            <source>CAN identifier the master sends commands on (XCP CMD / CCP CRO)</source>
-            <translation>CAN-Identifier, auf dem der Master Befehle sendet (XCP CMD / CCP CRO)</translation>
-        </message>
-        <message>
-            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="52" />
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="281" />
             <source>Response ID</source>
             <translation>Response-ID</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="59" />
-            <source>CAN identifier the slave answers on (XCP RES / CCP DTO)</source>
-            <translation>CAN-Identifier, auf dem der Slave antwortet (XCP RES / CCP DTO)</translation>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="290" />
+            <source>CAN identifier (hex) the master sends commands on (XCP CMD / CCP CRO)</source>
+            <translation type="unfinished" />
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="63" />
-            <source>Ext</source>
-            <translation>Ext</translation>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="300" />
+            <source>CAN identifier (hex) the slave answers on (XCP RES / CCP DTO)</source>
+            <translation type="unfinished" />
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="66" />
-            <source>Station</source>
-            <translation>Station</translation>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="303" />
+            <source>Host</source>
+            <translation type="unfinished" />
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="74" />
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="304" />
+            <source>Port</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="321" />
+            <source>Station address</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="322" />
+            <source>Byte order</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="331" />
             <source>CCP station address (hex) selecting the ECU on a shared bus</source>
             <translation>CCP-Stationsadresse (hex), die das Steuergerät auf einem gemeinsamen Bus auswählt</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="80" />
-            <source>Intel (little endian)</source>
-            <translation>Intel (Little Endian)</translation>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="337" />
+            <source>Intel</source>
+            <translation type="unfinished" />
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="80" />
-            <source>Motorola (big endian)</source>
-            <translation>Motorola (Big Endian)</translation>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="337" />
+            <source>Motorola</source>
+            <translation type="unfinished" />
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="84" />
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="341" />
             <source>Byte order of the ECU's addresses and values (XCP reports its own)</source>
             <translation>Bytereihenfolge der Adressen und Werte des Steuergeräts (XCP meldet seine eigene)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="87" />
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="346" />
+            <source>Extended (29-bit) identifiers</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="352" />
             <source>Disconnect</source>
             <translation>Trennen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="87" />
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="352" />
             <source>Connect</source>
             <translation>Verbinden</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="100" />
-            <source>A2L file…</source>
-            <translation>A2L-Datei…</translation>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="367" />
+            <source>Unload A2L</source>
+            <translation type="unfinished" />
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="102" />
-            <source>A2L loaded; click to unload</source>
-            <translation>A2L geladen; zum Entladen klicken</translation>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="367" />
+            <source>Load A2L…</source>
+            <translation type="unfinished" />
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="102" />
-            <source>Load an A2L file to see measurements and calibration values by name</source>
-            <translation>A2L-Datei laden, um Messgrößen und Kalibrierwerte nach Namen zu sehen</translation>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="369" />
+            <source>The A2L file describes the ECU's measurements and calibration values</source>
+            <translation type="unfinished" />
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="125" />
-            <source>Address</source>
-            <translation>Adresse</translation>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="374" />
+            <source>Settings from A2L</source>
+            <translation type="unfinished" />
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="129" />
-            <source>hex</source>
-            <translation>hex</translation>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="377" />
+            <source>Fill in the protocol, transport and identifiers from the A2L's IF_DATA</source>
+            <translation type="unfinished" />
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="132" />
-            <source>Size</source>
-            <translation>Größe</translation>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="418" />
+            <source>Seed &amp; key</source>
+            <translation type="unfinished" />
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="141" />
-            <source>Read</source>
-            <translation>Lesen</translation>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="426" />
+            <source>Algorithm: %1. Locked resources are unlocked when a command needs them.</source>
+            <translation type="unfinished" />
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="147" />
-            <source>bytes to write, hex</source>
-            <translation>zu schreibende Bytes, hex</translation>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="427" />
+            <source>No algorithm: commands on locked resources are refused.</source>
+            <translation type="unfinished" />
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="151" />
-            <source>Write</source>
-            <translation>Schreiben</translation>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="433" />
+            <source>Python file…</source>
+            <translation type="unfinished" />
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="156" />
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="435" />
+            <source>A Python file defining compute_key(level, seed) -&gt; bytes; level is the resource to unlock (XCP: 1 CAL/PAG, 4 DAQ, 16 PGM; CCP: 1 CAL, 2 DAQ, 64 PGM)</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="445" />
+            <source>Unlock all</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="452" />
+            <source>Measuring</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="456" />
             <source>Poll every</source>
             <translation>Abfragen alle</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="166" />
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="466" />
             <source>ms</source>
             <translation>ms</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="187" />
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="474" />
+            <source>%n measurement(s) set to a DAQ event.</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="475" />
+            <source>For synchronous measurement, set a measurement's Measure column to a DAQ event.</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="479" />
+            <source>Stop DAQ</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="479" />
+            <source>Start DAQ</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="492" />
+            <source>Calibration pages</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="501" />
+            <source>page address, hex</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="501" />
+            <source>page number</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="504" />
+            <source>Start address (hex) of the calibration page to activate</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="505" />
+            <source>Calibration page for the ECU and the XCP access (e.g. 0 working, 1 reference)</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="508" />
+            <source>Activate</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="516" />
+            <source>Restore working page from reference</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="519" />
+            <source>COPY_CAL_PAGE 1 → 0: copy the reference page over the working page, undoing every change</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="525" />
+            <source>Memory</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="533" />
+            <source>Address (hex[:ext])</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="534" />
+            <source>Bytes</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="541" />
+            <source>Address in hex, optionally with the address extension after a colon, e.g. 1000:1</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="556" />
+            <source>Read</source>
+            <translation>Lesen</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="559" />
+            <source>Read up to 64 bytes into the log</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="564" />
+            <source>Checksum</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="567" />
+            <source>BUILD_CHECKSUM over the range; XCP also compares it with the uploaded bytes</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="575" />
+            <source>Bytes to write, hex</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="580" />
+            <source>Write</source>
+            <translation>Schreiben</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="588" />
+            <source>Dataset</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="594" />
+            <source>Save…</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="597" />
+            <source>Save the ECU's calibration values (JSON, or DCM by the .dcm extension)</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="602" />
+            <source>Compare…</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="604" />
+            <source>Load a dataset (JSON or DCM) and compare it with the ECU</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="615" />
+            <source>%1: %n value(s) differ from the ECU</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="616" />
+            <source>%1: same as the ECU</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="627" />
+            <source>file %1  ·  ECU %2</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="638" />
+            <source>Write dataset to the ECU</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="667" />
+            <source>Variables</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="686" />
+            <source>Filter by name or description</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="707" />
             <source>Name</source>
             <translation>Name</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="188" />
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="708" />
             <source>Value</source>
             <translation>Wert</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="189" />
-            <source>Type</source>
-            <translation>Typ</translation>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="709" />
+            <source>Type · address</source>
+            <translation type="unfinished" />
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="191" />
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="710" />
+            <source>Measure</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="711" />
+            <source>Plot</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="712" />
             <source>Set</source>
             <translation>Setzen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="256" />
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="762" />
+            <source>CAL</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="771" />
+            <source>Calibration value: can be written</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="798" />
+            <source>raw: %1</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="835" />
+            <source>Poll, or measure by DAQ on an event of the ECU</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="849" />
+            <source>Plot the value on the Plot page</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="865" />
             <source>value</source>
             <translation>Wert</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="275" />
-            <source>Load an A2L file to see the ECU's measurements and calibration values, or read and write raw addresses above.</source>
-            <translation>A2L-Datei laden, um die Messgrößen und Kalibrierwerte des Steuergeräts zu sehen, oder oben Rohadressen lesen und schreiben.</translation>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="884" />
+            <source>Edit…</source>
+            <translation type="unfinished" />
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="292" />
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="884" />
+            <source>Show…</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="899" />
+            <source>No variable matches the filter.</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="912" />
+            <source>No A2L file loaded</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="922" />
+            <source>An A2L file names the ECU's measurements and calibration values, with their addresses, types and units. Without one, read and write memory by address on the left.</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="948" />
             <source>Log</source>
             <translation>Log</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="295" />
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="951" />
             <source>Clear</source>
             <translation>Löschen</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="322" />
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="1084" />
+            <source>Read-only</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="1102" />
+            <source>Limits %1</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="1104" />
+            <source>Columns: %1 · rows: %2</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="1105" />
+            <source>Top row: %1</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="1107" />
+            <source>Axis points are fixed or shared; change a shared axis through its AXIS_PTS.</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="1212" />
+            <source>%n cell(s) changed</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="1217" />
+            <source>Revert</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="1223" />
+            <source>Re-read</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="1235" />
+            <source>Close</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="1244" />
             <source>A2L file</source>
             <translation>A2L-Datei</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="324" />
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="1246" />
             <source>A2L files (*.a2l)</source>
             <translation>A2L-Dateien (*.a2l)</translation>
         </message>
         <message>
-            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="324" />
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="1246" />
             <source>All files (*)</source>
             <translation>Alle Dateien (*)</translation>
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="1251" />
+            <source>Seed &amp; key algorithm</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="1253" />
+            <source>Python files (*.py)</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="1258" />
+            <source>Save calibration dataset</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="1261" />
+            <source>Calibration datasets (*.json *.dcm)</source>
+            <translation type="unfinished" />
+        </message>
+        <message>
+            <location filename="../../gui/qt/CanExplorer/XcpView.qml" line="1266" />
+            <source>Calibration dataset</source>
+            <translation type="unfinished" />
         </message>
     </context>
     <context>
         <name>ComboBox</name>
         <message>
-            <location filename="../../gui/qt/CanExplorerStyle/ComboBox.qml" line="95" />
+            <location filename="../../gui/qt/CanExplorerStyle/ComboBox.qml" line="105" />
             <source>No items</source>
             <translation>Keine Einträge</translation>
         </message>

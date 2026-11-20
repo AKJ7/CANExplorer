@@ -85,13 +85,105 @@ development stages are listed by date and commit, newest first.
   alive. Receive only, because the stream is one way. Classic CAN; timestamps are the host's arrival time. The
   format comes from panda's open-source WiFi code and has not been tested against a real panda. **Detect** offers
   the panda when the computer is in its network.
+- **XCP and CCP measurement & calibration, extended** (the XCP/CCP page):
+    - **Transports**: XCP on CAN FD and on Ethernet (UDP and TCP, `XcpEthernetTransport`), besides CAN.
+      **Settings from A2L** fills in the identifiers or address from the A2L's `IF_DATA`.
+    - **Seed & key**: GET_SEED/UNLOCK (multi-packet seeds) for XCP and CCP, with an algorithm from a Python file or
+      the Security Manager. A locked resource is unlocked when a command needs it.
+    - **Reliability**:
+        - XCP address granularity (word and dword ECUs) and slave/master block modes.
+        - *Command busy* answers are repeated.
+        - After a timeout, SYNCH, then SET_MTA, then the command again, so uploads and downloads are never shifted.
+    - **DAQ**: dynamic DAQ lists per event channel, for XCP (all identification field types, DAQ timestamps, ODTs
+      split to the packet size) and for CCP. Start and stop from the page; DAQ samples go into the table and the
+      plot.
+    - **Plot**: any measurement or value can be plotted next to the bus signals.
+    - **Polling**: neighbouring measurements are read with one upload.
+    - **A2L**:
+        - `/include` files, `ECU_ADDRESS_EXTENSION`, `BYTE_ORDER`, `BIT_MASK`.
+        - Arrays (`ARRAY_SIZE`, `MATRIX_DIM`), `VAL_BLK`, `ASCII`, `CURVE`, `MAP` and `AXIS_PTS`.
+        - Standard, fixed and common axes; record layouts with axis point counts and alignment.
+        - Conversions: non-linear `RAT_FUNC`, `TAB_INTP`, `TAB_NOINTP`, verbal tables (`TAB_VERB`) and formulae
+          (`FORM`).
+        - `IF_DATA` of XCP (protocol layer, DAQ events, CAN/CAN FD/UDP/TCP) and CCP (TP_BLOB, rasters).
+        - EPK.
+    - **Calibration**: an editor for curves, maps, blocks and arrays (with standard-axis points). Values are checked
+      against the A2L limits. Calibration pages (XCP GET/SET/COPY_CAL_PAGE; CCP SELECT/GET_ACTIVE_CAL_PAGE).
+      BUILD_CHECKSUM, verified against an upload for the standard XCP types.
+    - **EPK check**: on connect, the A2L's EPK is compared with the ECU, and a mismatch is reported.
+    - **The page is reorganised**:
+        - A header shows the session's state: transport, connection, A2L, EPK, locked resources, DAQ.
+        - Sections on the left hold the slave (with what it reported) and the tools: seed & key, measuring,
+          pages, memory, dataset.
+        - The variable table has a name and kind filter and columns that stay aligned. Narrow windows get a compact
+          layout.
+        - Curves and maps are summarised by size and range. The log can be resized.
+        - The curve and map editor fits its content, shades cells by value, outlines changed cells, shows limits and
+          axis names, and can revert.
+    - **Datasets**: save the characteristics to JSON or DCM, compare a dataset with the ECU, and write it.
+    - **More commands**: GET_ID, GET_COMM_MODE_INFO, CCP EXCHANGE_ID, DNLOAD_6, GET/SET_S_STATUS.
+    - **Trace**: new **XCP** and **CCP** protocol decoders label commands, responses, errors, events and DAQ data.
+      They learn the identifiers from a CONNECT, or from the page when it connects.
+    - **MCP**:
+        - `xcp_list_variables` (always available).
+        - `xcp_connect`, `xcp_disconnect`, `xcp_status`, `xcp_read`, `xcp_read_memory` and `xcp_measure`
+          (diagnostics tier).
+        - `xcp_write` and `xcp_write_memory` (control tier).
+    - **Simulators**: the XCP slave (`core/xcp_slave.py`, also on UDP/TCP) and the CCP slave answer seed & key,
+      pages, checksums, identification and DAQ with cyclic events, and inject busy answers and lost responses.
+      `example_memory()` matches the extended `examples/calibration/example.a2l`.
+    - **Limits**: XCP STIM, static DAQ lists and programming are not implemented. Some CCP details the public
+      sources leave open are documented as assumptions: the byte order of multi-byte parameters, ODT element
+      positions, and the TP_BLOB byte-order code.
+- **J1939-22 Multi-PG and FD transport decoding**. The J1939-22 decoder used to label these frames only.
+    - **Multi-PG** frames are split into their parameter groups. Each is decoded like a single frame: requests,
+      acknowledgments, DM1 and the other known PGs.
+    - **FD.TP** messages are reassembled, BAM and RTS/CTS, including segments a receiver asks for again. The control
+      frames show their session, size, segment counts, CTS windows, end-of-message status and abort reasons.
+    - **Sources**: SAE J1939-22 is not public. The layouts follow the open-source python-can-j1939 implementation
+      (MIT), and the header widths agree with public J1939-22 presentations. The tests replay frames generated by
+      that library (`tests/data/j1939_22_frames.txt`).
+    - **Limits**: parameter groups and transfers with cybersecurity or functional safety assurance data are
+      labelled with their type, but their trailers are not decoded or checked. Not yet checked against a J1939-22
+      ECU.
+- **End-to-end SocketCAN benchmark** (`tools/benchmark_socketcan.py`, for developers): receive throughput, lost
+  frames, CPU use and garbage collection pauses at increasing rates, and periodic transmit timing (software and
+  kernel-timed, idle and under load), through the Linux SocketCAN stack on `vcan` interfaces. See *Building and
+  testing*.
 
 ### Fixed
 
+- XCP: error codes from 0x23 on were named one off, e.g. *access locked* (0x25) was shown as *page not valid*.
+  The table now follows the standard.
+- XCP/CCP: the address extension of A2L variables was ignored, so every value was read from extension 0.
+- CCP: a response was accepted without checking its command counter. A late answer to an earlier command could be
+  taken for the current one, and DAQ data or event messages on the response identifier for a response.
 - ISO-TP: a classic CAN frame with a zero single-frame length is no longer read as the CAN FD escape sequence (only
   valid in CAN FD frames over 8 bytes).
 - ISO-TP: a segmented message whose consecutive frames stop (N_Cr timeout) is dropped instead of being continued by
   a later, unrelated frame.
+- Application menu: every entry has its own bundled line icon, tinted with the theme and dimmed when disabled. The
+  icons used to come from the desktop's icon theme, so they were missing on Windows and macOS, mixed styles on
+  Linux, and several entries shared one; the *Recent* submenus now have an icon too.
+- Combo boxes: the drop-down arrow is a drawn chevron, centred and clear of the border, that points up while the list
+  is open. It was a small "▾" character that sat low against the edge, could be overlapped by long text and showed
+  as a box with fonts that lack it. The database editor's *New* menu button and the fold markers of its *By sender*
+  tree use the same chevron.
+- Documentation: the MCP page is reorganised around a quick start, client setup (Claude Code, JSON configs), example
+  sessions with real tool outputs, a tool reference grouped by task and tier with each tool's main arguments, and
+  troubleshooting. Its Python examples now use the `mcp` 2 client API (the HTTP example imported
+  `streamablehttp_client`, which `mcp` 2 no longer has) and read list answers in full instead of only their first
+  item.
+- RP1210: 11-bit identifiers are now sent and read in 2 bytes, 29-bit ones in 4. All identifiers used to take
+  4 bytes, which, going by the open RP1210 code the layout now follows (PyRP1210), gave 11-bit frames a wrong
+  identifier and cost them their first two data bytes. J1939 traffic (29-bit only) was not affected. Not yet
+  checked against an adapter.
+- Live capture lost frames on busy buses: from about 5 000 frames/s (0.2–4 % at 5 000–20 000 frames/s). Python's
+  full garbage collections, which walk every frame in the trace, stopped the program for 35–150 ms, longer than the
+  kernel's socket buffer can bridge. They also delayed periodic transmissions (one interval of 145 ms instead of 10).
+  While a bus is open, full collections now run only when traffic is low (below 500 frames/s over all buses, at most
+  once a minute, and in any case after 30 minutes). Measured on SocketCAN: no frames lost up to 20 000 frames/s,
+  and periodic transmit stays within 2 ms under load.
 
 ## [1.9.0] – 2026-11-15
 

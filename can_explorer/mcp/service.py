@@ -37,8 +37,9 @@ from can_explorer.core.reverse.reference import (
 from can_explorer.core.reverse.related import signal_groups
 from can_explorer.core.secoc_check import KeyStoreSecOcKeys, SecOcVerifier
 from can_explorer.core.session import BusSession, SessionError
+from can_explorer.core.calibration_session import CalibrationSession, a2l_path
 from can_explorer.core.sources import BusConfig, LiveSource, MessageSource
-from can_explorer.core.uds import UdsClient, UdsError
+from can_explorer.core.uds import UdsClient, UdsError, load_key_source
 from can_explorer.sys.log_handler import get_logger
 
 DEFAULT_UDS_REQUEST = 0x7E0  # Physical request to the first ECU; OBD uses the functional 0x7DF
@@ -180,6 +181,7 @@ class CanService:
         self._markers: List[Marker] = []  # Moments the agent marked, for reaction_at_markers
         self._flexray = None  # The FlexRay cluster description (a FlexRayDatabase), for the flexray_* tools
         self._sdt_counters: Dict[int, int] = {}  # SecuredDataTransmission anti-replay counter per request id
+        self._xcp = CalibrationSession()  # The XCP/CCP slave of the xcp_* tools, kept open between calls
 
     @classmethod
     def attach(
@@ -297,6 +299,7 @@ class CanService:
 
     def disconnect(self) -> Dict[str, Any]:
         """Close the current bus, if any."""
+        self._xcp.close()
         if self.session is not None:
             self.session.stop()
             self.session = None
@@ -1493,3 +1496,86 @@ class CanService:
             }
 
         return await self._with_uds(request, response, operation, control=True)
+
+    # XCP / CCP measurement and calibration
+
+    async def _with_xcp(self, operation, control: bool = False, needs_bus: bool = True) -> Dict[str, Any]:
+        (self._require_control if control else self._require_diagnostics)()
+        try:
+            return await operation(self._xcp)
+        except SendNotAllowed:
+            raise
+        except Exception as e:  # XCP/CCP errors, timeouts, A2L and conversion errors: reported to the agent
+            return {'error': str(e) or type(e).__name__}
+
+    def xcp_list_variables(self, a2l: str = '', pattern: str = '', kind: str = '', limit: int = 200) -> Dict[str, Any]:
+        """The measurements and characteristics of the A2L (loading `a2l` first when given). Sends nothing."""
+        try:
+            loaded = self._xcp.load(a2l_path(a2l)) if a2l else None
+            result = self._xcp.variables(pattern, kind, limit)
+        except Exception as e:
+            return {'error': str(e)}
+        if loaded is not None:
+            result['a2l'] = loaded
+        return result
+
+    async def xcp_connect(
+        self,
+        protocol: str = 'XCP',
+        transport: str = 'CAN',
+        request: Any = '7E0',
+        response: Any = '7E1',
+        extended: bool = False,
+        station: str = '0',
+        byte_order: str = 'big',
+        host: str = '',
+        port: int = 5555,
+        key: str = '',
+        a2l: str = '',
+    ) -> Dict[str, Any]:
+        """Connect to an XCP (CAN, CAN FD, UDP, TCP) or CCP slave and keep the session for the other xcp_* tools.
+        `key`: a seed & key algorithm (a Python file, 'keystore:<entry>' or 'profile:<name>'), used when a command
+        needs a locked resource. `a2l` loads the ECU description."""
+
+        async def operation(xcp: CalibrationSession):
+            if a2l:
+                xcp.load(a2l_path(a2l))
+            compute_key = load_key_source(key) if key else None
+            if transport.upper() not in ('UDP', 'TCP') and self.session is None:
+                return {'error': NOT_CONNECTED}
+            config = getattr(self.session.source, 'config', None) if self.session is not None else None
+            return await xcp.connect(
+                self.session, protocol, transport, request, response, extended, station, byte_order, host, port,
+                compute_key, fd=bool(getattr(config, 'fd', False)) and transport.upper() == 'CAN FD',
+            )  # fmt: skip
+
+        return await self._with_xcp(operation)
+
+    async def xcp_disconnect(self) -> Dict[str, Any]:
+        async def operation(xcp: CalibrationSession):
+            await xcp.disconnect()
+            return {'connected': False}
+
+        return await self._with_xcp(operation)
+
+    async def xcp_status(self) -> Dict[str, Any]:
+        """The XCP/CCP session: protocol, byte order, locked resources, and whether the A2L matches (EPK)."""
+        return await self._with_xcp(lambda xcp: xcp.status())
+
+    async def xcp_read(self, names: List[str]) -> Dict[str, Any]:
+        """Physical values of A2L variables (scalars, arrays, curves and maps with their axes)."""
+        return await self._with_xcp(lambda xcp: xcp.read(list(names)))
+
+    async def xcp_read_memory(self, address: str, size: int, extension: int = 0) -> Dict[str, Any]:
+        return await self._with_xcp(lambda xcp: xcp.read_memory(address, int(size), int(extension)))
+
+    async def xcp_measure(self, names: List[str], duration: float = 1.0, event: Optional[int] = None) -> Dict[str, Any]:
+        return await self._with_xcp(lambda xcp: xcp.measure(list(names), duration, event))
+
+    async def xcp_write(self, name: str, value: Any, axes: Optional[List] = None) -> Dict[str, Any]:
+        """Write a calibration value (checked against its A2L limits) and read it back. Active: --allow-control."""
+        return await self._with_xcp(lambda xcp: xcp.write(name, value, axes), control=True)
+
+    async def xcp_write_memory(self, address: str, data: str, extension: int = 0) -> Dict[str, Any]:
+        """Write raw bytes to the ECU's memory. Active: requires --allow-control."""
+        return await self._with_xcp(lambda xcp: xcp.write_memory(address, data, int(extension)), control=True)

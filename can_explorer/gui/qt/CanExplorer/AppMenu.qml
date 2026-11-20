@@ -10,6 +10,9 @@ Menu {
     Menu {
         id: recentConnectionsMenu
         title: qsTr("Recent &Connections")
+        icon.source: Actions.menuIcon("history")
+        icon.width: 16  // Replaces the menu item's whole icon, so its size too
+        icon.height: 16
         enabled: connectionManager.app_state.recent_connections.length > 0
         Instantiator {
             model: connectionManager.app_state.recent_connections
@@ -27,6 +30,9 @@ Menu {
     Menu {
         id: recentLogFilesMenu
         title: qsTr("Recent &Log Files")
+        icon.source: Actions.menuIcon("history")
+        icon.width: 16  // Replaces the menu item's whole icon, so its size too
+        icon.height: 16
         enabled: connectionManager.app_state.recent_log_files.length > 0
         Instantiator {
             model: connectionManager.app_state.recent_log_files
@@ -46,6 +52,9 @@ Menu {
     Menu {
         id: recentWorkspacesMenu
         title: qsTr("Recent W&orkspaces")
+        icon.source: Actions.menuIcon("history")
+        icon.width: 16  // Replaces the menu item's whole icon, so its size too
+        icon.height: 16
         enabled: connectionManager.app_state.recent_workspaces.length > 0
         Instantiator {
             model: connectionManager.app_state.recent_workspaces

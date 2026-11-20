@@ -236,6 +236,13 @@ each vendor's own `<API>.INI`. The bus runs at the connection's bitrate and rece
 **Receive own messages** adds sent frames locally. RP1210 (04.00) here is classic CAN only — no CAN FD, no
 listen-only mode.
 
+The RP1210 specification is sold by the TMC and not public. CANExplorer's message layout (a type byte, then the
+identifier in 2 bytes for 11-bit and 4 bytes for 29-bit identifiers) follows open RP1210 code: the University of
+Tulsa's [PyRP1210](https://github.com/Heavy-Vehicle-Networking-At-U-Tulsa/PyRP1210) and
+[dfieschko/RP1210](https://github.com/dfieschko/RP1210). It has not been checked against an adapter here: if 11-bit
+frames show wrong identifiers or lose data bytes, please [report it](https://github.com/AKJ7/CANExplorer/issues/new/choose).
+J1939 uses 29-bit identifiers only.
+
 RP1210 drivers are **32-bit** Windows DLLs. A 64-bit program cannot load them, so to use an RP1210 adapter run
 CANExplorer as 32-bit Python (from [python.org](https://www.python.org/downloads/windows/), *Windows installer
 (32-bit)*); opening an adapter from a 64-bit build says so plainly.

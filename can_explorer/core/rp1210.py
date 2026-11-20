@@ -11,11 +11,13 @@ RP1210 is a Windows API provided as 32-bit DLLs. A 64-bit process cannot load th
 CANExplorer as 32-bit Python (python.org, "Windows installer (32-bit)"); a clear error names the problem otherwise.
 
 The bus uses the RP1210 CAN protocol: classic CAN with 11 and 29 bit identifiers at the bitrates the adapter offers.
-An RP1210 CAN message is a CAN-type byte (0x00 for an 11-bit identifier, 0x01 for a 29-bit one) followed by the
-identifier (4 bytes, big endian) and the payload; a received message is prefixed by the adapter's 4-byte big-endian
-timestamp. (The RP1210C message layout is defined by the TMC and not reproduced here; this matches the published
-filter-command structure — a CAN type byte and a 4-byte header. Validate against your adapter.) RP1210 04.00 as used
-here has no CAN FD.
+An RP1210 CAN message is a CAN-type byte (0x00 for an 11-bit identifier, 0x01 for a 29-bit one), the identifier
+big endian in 2 bytes (11-bit) or 4 bytes (29-bit), and the payload; a received message is prefixed by the adapter's
+4-byte big-endian timestamp (and, only with echo turned on, which this bus does not do, an echo byte). The RP1210C
+document is sold by the TMC and not reproduced here: the type values agree with the open dfieschko/RP1210 library
+(RP1210/Commands.py) and the identifier sizes with the University of Tulsa's PyRP1210 (RP1210.py), which reads the
+RP1210 CAN protocol of real adapters this way. Neither has been checked here against an adapter. RP1210 04.00 as
+used here has no CAN FD.
 """
 
 import configparser
@@ -272,25 +274,39 @@ def load_api(api: str) -> Any:
 # Message translation
 
 
+def _identifier_bytes(extended: bool) -> int:
+    return 4 if extended else 2
+
+
 def encode_message(msg: can.Message) -> bytes:
-    """An RP1210 CAN message body (type byte, 4-byte big-endian identifier, payload) for a frame."""
+    """An RP1210 CAN message body (type byte, identifier in 2 or 4 bytes big endian, payload) for a frame."""
     if msg.is_remote_frame or msg.is_fd or msg.is_error_frame:
         raise can.CanOperationError('RP1210 sends classic CAN data frames only')
     if msg.dlc > 8:
         raise can.CanOperationError(f'Classic CAN frames have up to 8 bytes, got {msg.dlc}')
-    can_type = CAN_EXTENDED if msg.is_extended_id else CAN_STANDARD
-    return bytes([can_type]) + (msg.arbitration_id & 0x1FFFFFFF).to_bytes(4, 'big') + bytes(msg.data[: msg.dlc])
+    extended = msg.is_extended_id
+    if not extended and msg.arbitration_id > 0x7FF:
+        raise can.CanOperationError(f'0x{msg.arbitration_id:X} is not an 11-bit identifier')
+    can_type = CAN_EXTENDED if extended else CAN_STANDARD
+    identifier = (msg.arbitration_id & 0x1FFFFFFF).to_bytes(_identifier_bytes(extended), 'big')
+    return bytes([can_type]) + identifier + bytes(msg.data[: msg.dlc])
 
 
 def decode_message(raw: bytes, timestamp_weight: float) -> Optional[Tuple[int, int, bool, bytes]]:
-    """(timestamp µs, identifier, extended, data) of a received RP1210 CAN message; None if it is too short."""
-    if len(raw) < 9:  # timestamp (4) + type (1) + identifier (4)
+    """(timestamp µs, identifier, extended, data) of a received RP1210 CAN message; None if it is too short or of
+    another CAN type (the ISO 15765 types are not used by the CAN protocol)."""
+    if len(raw) < 5:  # timestamp (4) + type (1)
         return None
     timestamp = int.from_bytes(raw[0:4], 'big')
-    body = raw[4:]
-    extended = body[0] == CAN_EXTENDED
-    identifier = int.from_bytes(body[1:5], 'big') & 0x1FFFFFFF
-    return int(timestamp * timestamp_weight), identifier, extended or identifier > 0x7FF, body[5:]
+    can_type = raw[4]
+    if can_type not in (CAN_STANDARD, CAN_EXTENDED):
+        return None
+    extended = can_type == CAN_EXTENDED
+    end = 5 + _identifier_bytes(extended)
+    if len(raw) < end:
+        return None
+    identifier = int.from_bytes(raw[5:end], 'big') & (0x1FFFFFFF if extended else 0x7FF)
+    return int(timestamp * timestamp_weight), identifier, extended, bytes(raw[end:])
 
 
 # Bus

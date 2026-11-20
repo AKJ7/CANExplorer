@@ -729,3 +729,48 @@ async def test_j1939_clearing_needs_the_control_tier(channel):
             await svc.j1939_request('DM11', destination='00')
     finally:
         svc.stop()
+
+
+async def test_xcp_tools(channel, data_dir):
+    from can_explorer.core.xcp_slave import XcpSlaveSimulator, example_memory
+    from can_explorer.core.session import BusSession
+
+    a2l = str(data_dir / 'example.a2l')
+    listing = service_unstarted(channel).xcp_list_variables(a2l, pattern='Fuel*')
+    assert listing['total'] == 1 and listing['variables'][0]['kind'] == 'MAP' and listing['a2l']['epk'] == 'EX-1.0'
+
+    read_only = service(channel)
+    try:
+        with pytest.raises(SendNotAllowed):
+            await read_only.xcp_connect(a2l=a2l)
+    finally:
+        read_only.stop()
+
+    svc = service(channel, allow_diagnostics=True)
+    ecu = BusSession(LiveSource(BusConfig('virtual', channel, bitrate=500_000)))
+    ecu.start()
+    simulator = XcpSlaveSimulator(ecu, memory=example_memory())
+    try:
+        status = await svc.xcp_connect(a2l=a2l)
+        assert status['connected'] and status['epk']['match'] is True
+        values = await svc.xcp_read(['EngineSpeed', 'FuelMap', 'Nope'])
+        assert values['values']['EngineSpeed'] == {'kind': 'MEASUREMENT', 'value': 1500.0, 'unit': 'rpm'}
+        assert values['values']['FuelMap']['axes'][1] == [20.0, 50.0, 80.0]
+        assert values['errors'] == {'Nope': 'Nope is not in the A2L'}
+        assert (await svc.xcp_read_memory('1000', 2))['data'] == '70 17'
+        measured = await svc.xcp_measure(['EngineSpeed', 'CoolantTemp'], duration=0.3)
+        assert measured['method'] == 'DAQ (event 0)' and measured['values']['EngineSpeed']['last'] == 1500.0
+        assert measured['values']['CoolantTemp']['samples'] > 3
+        with pytest.raises(SendNotAllowed):
+            await svc.xcp_write('IdleTarget', 900)
+        svc.allow_control = True
+        written = await svc.xcp_write('IdleTarget', 900)
+        assert written['now']['value'] == 900.0
+        assert 'above its maximum' in (await svc.xcp_write('IdleTarget', 1e6))['error']
+        assert (await svc.xcp_write_memory('2002', '01'))['written'] == 1 and simulator.memory[0x2002] == 1
+        assert (await svc.xcp_disconnect()) == {'connected': False}
+        assert 'Not connected' in (await svc.xcp_read(['EngineSpeed']))['error']
+    finally:
+        simulator.stop()
+        ecu.stop()
+        svc.stop()

@@ -47,19 +47,120 @@ def test_j1939_22_single_pg_on_can_fd():
     assert decoder.describe(fd) == 'PGN 0x0FEF1 CCVS1 SA=0x00 DA=0xFF P6'
 
 
-def test_j1939_22_multi_pg_and_fd_transport_are_labelled():
+def _fd(can_id, data):
+    return can.Message(arbitration_id=can_id, is_extended_id=True, is_fd=True, data=bytes(data))
+
+
+def _reference_frames(data_dir):
+    """The J1939-22 frames python-can-j1939 sends (tests/data/j1939_22_frames.txt), in bus order."""
+    frames = []
+    for line in (data_dir / 'j1939_22_frames.txt').read_text().splitlines():
+        if line and not line.startswith('#'):
+            identifier, *data = line.split()
+            frames.append(_fd(int(identifier, 16), [int(byte, 16) for byte in data]))
+    return frames
+
+
+def test_j1939_22_decodes_the_reference_implementation(data_dir):
+    """Frames from python-can-j1939's J1939-22 code: what CANExplorer reads matches what that library's receiver
+    reassembled (Multi-PG contents, a 130 byte BAM and a 150 byte RTS/CTS transfer)."""
     from can_explorer.core.protocols.j1939 import J1939_22Decoder
 
     decoder = J1939_22Decoder()
-    multi = can.Message(
-        arbitration_id=(6 << 26) | (0x2500 << 8) | 0x00, is_extended_id=True, is_fd=True, data=bytes(32)
+    texts = [decoder.describe(frame) for frame in _reference_frames(data_dir)]
+    assert texts[0] == (
+        'PGN 0x02500 Multi-PG SA=0x00 DA=0xFF P3: 2 PGs: PGN 0x0FEF1 CCVS1: FF 00 3C 00 00 00 00 FF'
+        ' | PGN 0x0F004 EEC1: 01 02 03 04 05 06 07 08'
     )
+    # A destination-specific PG inside a Multi-PG: the frame's DA addresses it, its contents decode as a request
+    assert texts[1] == (
+        'PGN 0x02500 Multi-PG SA=0x00 DA=0x42 P6: 1 PG: PGN 0x0EA00 Request: EC FE 00'
+        ' — requests PGN 0x0FEEC Vehicle Identification'
+    )
+    assert texts[2].endswith('FD.TP.BAM session 0: 130 B in 3 segments for PGN 0x0FEEC Vehicle Identification')
+    assert texts[4].endswith('FD.TP.DT session 0 #2/3')
+    assert 'complete PGN 0x0FEEC Vehicle Identification (130 B)' in texts[5]
+    assert 'text "1HGCM82633A004352*' in texts[5] and texts[5].endswith('*1234"')
+    assert texts[6].endswith(
+        'FD.TP.EndOfMsgStatus session 0: 130 B in 3 segments for PGN 0x0FEEC Vehicle Identification'
+    )
+    assert texts[7].endswith('FD.TP.RTS session 0: 150 B in 3 segments for PGN 0x0EF00, at most 3 per CTS')
     assert (
-        decoder.describe(multi)
-        == 'PGN 0x02500 Multi-PG SA=0x00 DA=0x00 P6: multiplexed PGs, 32 bytes (contained PGs not expanded)'
+        texts[8] == 'PGN 0x04D00 FD.TP.CM SA=0x42 DA=0x00 P7: FD.TP.CTS session 0: 3 segments from #1 for PGN 0x0EF00'
     )
-    tp = can.Message(arbitration_id=(6 << 26) | (0x4D00 << 8) | 0x00, is_extended_id=True, is_fd=True, data=bytes(16))
-    assert 'FD.TP.CM' in decoder.describe(tp) and '(not reassembled)' in decoder.describe(tp)
+    assert 'FD.TP.DT session 0 #3/3: complete PGN 0x0EF00 (150 B): 00 01 02' in texts[11]
+    assert texts[13].endswith('FD.TP.EndOfMsgAck session 0: 150 B in 3 segments for PGN 0x0EF00')
+
+
+def test_j1939_22_reassembled_payloads_are_exact(data_dir):
+    from can_explorer.core.protocols.j1939 import FdTransportTracker, J1939Id
+
+    tracker = FdTransportTracker()
+    complete = []
+    for frame in _reference_frames(data_dir):
+        result = tracker.feed(J1939Id.from_can_id(frame.arbitration_id), bytes(frame.data))
+        if result is not None and result[1] is not None:
+            complete.append(result[1])
+    assert complete == [
+        (0xFEEC, 0x00, 0xFF, b'1HGCM82633A004352*' * 7 + b'1234'),
+        (0xEF00, 0x00, 0x42, bytes(range(150))),
+    ]
+
+
+def test_split_multi_pg_stops_at_padding_and_flags_assurance_data():
+    from can_explorer.core.protocols.j1939 import CPg, split_multi_pg
+
+    plain = [0x40, 0xFE, 0xF1, 2, 0xAB, 0xCD]
+    secured = [(3 << 5) | (1 << 2), 0xF0, 0x04, 3, 1, 2, 3]  # Type of service 3, trailer format 1
+    padding = [0x00, 0x00, 0x00, 0xAA, 0xAA]  # Type of service 0: the rest is padding
+    pgs = split_multi_pg(bytes(plain + secured + padding))
+    assert pgs == [CPg(2, 0, 0xFEF1, b'\xab\xcd'), CPg(3, 1, 0xF004, b'\x01\x02\x03')]
+    assert pgs[0].plain and not pgs[1].plain
+    assert split_multi_pg(bytes([0x40, 0xFE, 0xF1, 8, 1, 2])) == [CPg(2, 0, 0xFEF1, b'\x01\x02', True)]
+    # The CPGN's top two bits (data page and extended data page) come from byte 0
+    assert split_multi_pg(bytes([0x41, 0xFE, 0xF1, 0]))[0].pgn == 0x1FEF1
+
+
+def test_j1939_22_multi_pg_labels_what_it_does_not_decode():
+    from can_explorer.core.protocols.j1939 import J1939_22Decoder
+
+    decoder = J1939_22Decoder()
+    secured = [(3 << 5) | (1 << 2), 0xF0, 0x04, 3, 1, 2, 3]
+    text = decoder.describe(_fd(0x18250000 | 0xFF00, secured + [0x40, 0xFE, 0xF1, 4, 1]))
+    assert 'PGN 0x0F004 EEC1 (type of service 3, trailer format 1: assurance data not decoded): 01 02 03' in text
+    assert 'PGN 0x0FEF1 CCVS1: 01 (truncated)' in text
+    assert decoder.describe(_fd(0x1825FF00, [0, 0, 0, 0xAA])).endswith(': no parameter groups (padding only)')
+
+
+def test_j1939_22_fd_transport_retransmission_abort_and_errors():
+    from can_explorer.core.protocols.j1939 import J1939_22Decoder
+
+    decoder = J1939_22Decoder()
+    rts = [0x10 | 0, 100, 0, 0, 2, 0, 0, 2, 0, 0x00, 0xEF, 0x00]  # Session 1: 100 B in 2 segments of PGN 0xEF00
+    assert 'FD.TP.RTS session 1: 100 B in 2 segments for PGN 0x0EF00, at most 2 per CTS' in decoder.describe(
+        _fd(0x184D4200, rts)
+    )
+    decoder.describe(_fd(0x1C4E4200, [0x10, 1, 0, 0, *b'x' * 60]))
+    # The receiver asks for segment 1 again: the repeated segment replaces the first
+    cts = [0x10 | 1, 0xFF, 0xFF, 0xFF, 1, 0, 0, 2, 0, 0x00, 0xEF, 0x00]
+    assert 'FD.TP.CTS session 1: 2 segments from #1' in decoder.describe(_fd(0x1C4D0042, cts))
+    decoder.describe(_fd(0x1C4E4200, [0x10, 1, 0, 0, *range(60)]))
+    done = decoder.describe(_fd(0x1C4E4200, [0x10, 2, 0, 0, *range(60, 100), *[0xFF] * 4]))
+    assert 'FD.TP.DT session 1 #2/2: complete PGN 0x0EF00 (100 B): 00 01 02' in done
+    hold = [0x10 | 1, 0xFF, 0xFF, 0xFF, 1, 0, 0, 0, 0, 0x00, 0xEF, 0x00]
+    assert 'hold the connection open' in decoder.describe(_fd(0x1C4D0042, hold))
+    # A segment out of order ends the session; data without a session is reported
+    decoder.describe(_fd(0x184D4200, rts))
+    assert 'expected #1, session aborted' in decoder.describe(_fd(0x1C4E4200, [0x10, 2, 0, 0, 0]))
+    assert '(no session)' in decoder.describe(_fd(0x1C4E4200, [0x10, 1, 0, 0, 0]))
+    abort = [0x10 | 15, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 3, 0x00, 0xEF, 0x00]
+    assert 'FD.TP.Abort session 1 (timeout) for PGN 0x0EF00' in decoder.describe(_fd(0x1C4D0042, abort))
+    assert 'FD.TP.CM too short (8 B)' in decoder.describe(_fd(0x1C4D0042, bytes(8)))
+    # Assurance data is named, not checked
+    secured_bam = [0x20 | 4, 70, 0, 0, 2, 0, 0, 0xFF, 1, 0xEC, 0xFE, 0x00]
+    assert 'with manufacturer cybersecurity assurance data (not checked)' in decoder.describe(
+        _fd(0x184DFF00, secured_bam)
+    )
     assert decoder.describe(can.Message(arbitration_id=0x100, is_extended_id=False, data=bytes(2))) is None
 
 

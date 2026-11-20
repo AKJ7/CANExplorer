@@ -9,6 +9,7 @@ from can_explorer.core.protocols.kline import KLineDecoder
 from can_explorer.core.protocols.kwp2000 import Kwp2000Decoder, Kwp2000ExtendedDecoder
 from can_explorer.core.protocols.nm import NmDecoder
 from can_explorer.core.protocols.nmea2000 import NmeaDecoder
+from can_explorer.core.protocols.xcp import CcpDecoder, XcpDecoder
 from can_explorer.core.lin import LinDecoder
 from can_explorer.core.secoc import SecOcDecoder
 from can_explorer.core.uds import UdsDecoder, UdsExtendedDecoder
@@ -30,6 +31,8 @@ PROTOCOL_DECODERS: Dict[str, Optional[Callable[[], ProtocolDecoder]]] = {
     J1587Decoder.name: J1587Decoder,
     NmDecoder.name: NmDecoder,
     SecOcDecoder.name: SecOcDecoder,
+    XcpDecoder.name: XcpDecoder,
+    CcpDecoder.name: CcpDecoder,
 }
 
 

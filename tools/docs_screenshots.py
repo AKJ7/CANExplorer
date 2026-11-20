@@ -444,10 +444,9 @@ async def reverse_engineering_scenario():
 
 async def xcp_scenario():
     """The XCP/CCP page reading an ECU's measurements and calibration values from its A2L (simulated XCP slave)."""
-    import struct
     import uuid as _uuid
 
-    from can_explorer.core.xcp import XcpSlaveSimulator
+    from can_explorer.core.xcp_slave import XcpSlaveSimulator, example_memory
 
     channel = f'xcp-{_uuid.uuid4().hex}'
     manager.add_connection({'name': 'Powertrain ECU', 'interface': 'VirtualBus', 'channel': channel})
@@ -456,19 +455,13 @@ async def xcp_scenario():
     window.setProperty('selectedIndex', len(manager.connections) - 1)
     slave_session = BusSession(LiveSource(BusConfig('virtual', channel)))
     slave_session.start()
-    slave = XcpSlaveSimulator(slave_session, request_id=0x7E0, response_id=0x7E1)
-    slave.memory[0x1000:0x1002] = (6000).to_bytes(2, 'little')  # 1500 rpm
-    slave.memory[0x1002:0x1003] = bytes([90])  # 50 degC
-    slave.memory[0x1004:0x1006] = (13800).to_bytes(2, 'little')  # 13.8 V
-    slave.memory[0x2000:0x2002] = (3200).to_bytes(2, 'little')  # idle 800 rpm
-    slave.memory[0x2002:0x2003] = bytes([1])
-    slave.memory[0x2004:0x2008] = struct.pack('<f', 1.0)
+    slave = XcpSlaveSimulator(slave_session, request_id=0x7E0, response_id=0x7E1, memory=example_memory())
     xcp = connection.xcp
     show_page('xcp')
-    xcp.connect_slave({'protocol': 'XCP', 'request_id': '7E0', 'response_id': '7E1'})
-    while xcp.busy:
-        await asyncio.sleep(0.05)
     xcp.load_a2l(QUrl.fromLocalFile(str(ROOT / 'examples' / 'calibration' / 'example.a2l')))
+    xcp.connect_slave({'protocol': 'XCP', 'request_id': '7E0', 'response_id': '7E1'})
+    while xcp.busy or not xcp.connected:
+        await asyncio.sleep(0.05)
     await xcp._poll_once()
     await shot('xcp', 0.5)
     xcp.disconnect_slave()

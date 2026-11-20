@@ -113,8 +113,9 @@ def build_mcp(service: CanService) -> MCPServer:  # noqa: C901 - a flat list of 
         title='Decode with a protocol',
         description='Interpret a payload with a protocol decoder (J1939, J1939-22, "NMEA 2000", CANopen, ISO-TP, '
         'UDS, KWP2000, "ISO-TP (extended)", "UDS (extended)", "KWP2000 (extended)" (extended or mixed addressing: '
-        'the first data byte is an address byte), "K-Line", LIN, J1587, NM, SecOC), without a database. Sends '
-        'nothing.',
+        'the first data byte is an address byte), "K-Line", LIN, J1587, NM, SecOC, XCP, CCP), without a database. '
+        'A single XCP or CCP frame is only labelled when it is a CONNECT (the decoder learns the identifier pair '
+        'from a session start). Sends nothing.',
     )
     async def decode_protocol(protocol: str, identifier: str, data: str, extended: bool = False) -> Dict[str, Any]:
         return service.decode_protocol(protocol, identifier, data, extended)
@@ -455,9 +456,113 @@ def build_mcp(service: CanService) -> MCPServer:  # noqa: C901 - a flat list of 
         ) -> Dict[str, Any]:
             return await service.j1939_request(pgn, destination, source, timeout)
 
+    # XCP / CCP measurement and calibration
+
+    @mcp.tool(
+        name='xcp_list_variables',
+        title='List A2L variables',
+        description='The measurements, characteristics (values, curves, maps, blocks, strings) and axes of an A2L '
+        'file: name, kind, address, type, unit, limits, verbal values, and why one cannot be read. a2l loads the '
+        'file (kept for the other xcp_* tools); pattern filters by name (glob or substring), kind by kind '
+        '(MEASUREMENT, VALUE, CURVE, MAP, VAL_BLK, ASCII, AXIS_PTS). Sends nothing.',
+    )
+    async def xcp_list_variables(a2l: str = '', pattern: str = '', kind: str = '', limit: int = 200) -> Dict[str, Any]:
+        return service.xcp_list_variables(a2l, pattern, kind, limit)
+
+    if service.can_diagnose:
+
+        @mcp.tool(
+            name='xcp_connect',
+            title='Connect to an XCP or CCP slave',
+            description='Connect to an ECU\'s XCP slave (transport CAN, "CAN FD", UDP or TCP with host/port) or '
+            'CCP slave (CAN, station address, byte order), and keep the session for the other xcp_* tools. '
+            'request/response: the CAN identifiers (hex). key: a seed & key algorithm (Python file, '
+            '"keystore:<entry>" or "profile:<name>") used when a command needs a locked resource. a2l: the ECU '
+            'description; the answer says whether it matches the ECU (EPK).' + DIAGNOSTICS_TIER,
+        )
+        async def xcp_connect(
+            protocol: str = 'XCP',
+            transport: str = 'CAN',
+            request: str = '7E0',
+            response: str = '7E1',
+            extended: bool = False,
+            station: str = '0',
+            byte_order: str = 'big',
+            host: str = '',
+            port: int = 5555,
+            key: str = '',
+            a2l: str = '',
+        ) -> Dict[str, Any]:
+            return await service.xcp_connect(
+                protocol, transport, request, response, extended, station, byte_order, host, port, key, a2l
+            )
+
+        @mcp.tool(name='xcp_disconnect', title='Disconnect the XCP/CCP slave', description='End the XCP/CCP session.'
+                  + DIAGNOSTICS_TIER)  # fmt: skip
+        async def xcp_disconnect() -> Dict[str, Any]:
+            return await service.xcp_disconnect()
+
+        @mcp.tool(
+            name='xcp_status',
+            title='XCP/CCP session status',
+            description='The XCP/CCP session: protocol, byte order, address granularity, packet sizes, locked '
+            'resources, and the EPK check of the loaded A2L.' + DIAGNOSTICS_TIER,
+        )
+        async def xcp_status() -> Dict[str, Any]:
+            return await service.xcp_status()
+
+        @mcp.tool(
+            name='xcp_read',
+            title='Read A2L variables',
+            description='Read A2L variables by name over XCP/CCP and convert them to physical values: scalars, '
+            'arrays, value blocks, strings, curves and maps (values[y][x]) with their axis points.' + DIAGNOSTICS_TIER,
+        )
+        async def xcp_read(names: List[str]) -> Dict[str, Any]:
+            return await service.xcp_read(names)
+
+        @mcp.tool(
+            name='xcp_read_memory',
+            title='Read ECU memory',
+            description="Read 1 to 4096 bytes of the ECU's memory at a hex address (with an address extension) "
+            'over XCP/CCP.' + DIAGNOSTICS_TIER,
+        )
+        async def xcp_read_memory(address: str, size: int, extension: int = 0) -> Dict[str, Any]:
+            return await service.xcp_read_memory(address, size, extension)
+
+        @mcp.tool(
+            name='xcp_measure',
+            title='Measure A2L measurements',
+            description='Measure A2L measurements for a duration (seconds, at most 30) — by DAQ on an event channel '
+            '(default the first A2L event) when the ECU supports it, else by polling — and return per measurement '
+            'the number of samples, min, max, mean and last value. Configures DAQ lists in the ECU (measurement '
+            'only, no calibration change).' + DIAGNOSTICS_TIER,
+        )
+        async def xcp_measure(names: List[str], duration: float = 1.0, event: Optional[int] = None) -> Dict[str, Any]:
+            return await service.xcp_measure(names, duration, event)
+
     # Active control (control tier)
 
     if service.can_control:
+
+        @mcp.tool(
+            name='xcp_write',
+            title='Write a calibration value',
+            description='Write an A2L characteristic over XCP/CCP and read it back: value is a number, a verbal '
+            'value, a list (curves, blocks, axis points), a list of rows (maps, values[y][x]) or a string (ASCII); '
+            'axes optionally rewrites the points of standard axes. Values outside the A2L limits are refused. '
+            'Changes the running ECU immediately.' + CONTROL_TIER,
+        )
+        async def xcp_write(name: str, value: Any, axes: Optional[List[Any]] = None) -> Dict[str, Any]:
+            return await service.xcp_write(name, value, axes)
+
+        @mcp.tool(
+            name='xcp_write_memory',
+            title='Write ECU memory',
+            description="Write raw bytes (hex) to the ECU's memory at a hex address over XCP/CCP. Changes the "
+            'running ECU immediately; prefer xcp_write, which checks the A2L limits.' + CONTROL_TIER,
+        )
+        async def xcp_write_memory(address: str, data: str, extension: int = 0) -> Dict[str, Any]:
+            return await service.xcp_write_memory(address, data, extension)
 
         @mcp.tool(
             name='obd_clear',

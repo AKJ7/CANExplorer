@@ -32,23 +32,29 @@ Item {
     // Show a tool page, e.g. "database-editor"
     signal showTool(string tool)
 
+    // A line icon of images/menu, tinted by the style with the menu text colour (so it follows the theme and the
+    // enabled state). Bundled rather than an icon theme name: Windows and macOS have no icon theme.
+    function menuIcon(name) {
+        return Qt.resolvedUrl(`images/menu/${name}.svg`)
+    }
+
     Action {
         id: exitAction
         text: qsTr("&Exit")
-        icon.name: "application-exit"
+        icon.source: menuIcon("exit")
         shortcut: StandardKey.Quit
     }
 
     Action {
         id: aboutAction
         text: qsTr("&About")
-        icon.name: "help-about"
+        icon.source: menuIcon("info")
     }
 
     Action {
         id: helpAction
         text: qsTr("&Help")
-        icon.name: "help-contents"
+        icon.source: menuIcon("help")
         shortcut: StandardKey.HelpContents
     }
 
@@ -56,27 +62,27 @@ Item {
     Action {
         id: systemReportAction
         text: qsTr("Copy &System Report")
-        icon.name: "edit-copy"
+        icon.source: menuIcon("clipboard")
     }
 
     Action {
         id: newConnectionAction
         text: qsTr("&New Connection...")
-        icon.name: "network-wired"
+        icon.source: menuIcon("plug")
         shortcut: StandardKey.New
     }
 
     Action {
         id: openLogFileAction
         text: qsTr("&Replay Log File...")
-        icon.name: "document-open"
+        icon.source: menuIcon("file-play")
         shortcut: StandardKey.Open
     }
 
     Action {
         id: closeConnectionAction
         text: qsTr("&Close Connection")
-        icon.name: "window-close"
+        icon.source: menuIcon("plug-off")
         shortcut: StandardKey.Close
         enabled: connectionManager.connections.length > 0
     }
@@ -84,7 +90,7 @@ Item {
     Action {
         id: copyAction
         text: qsTr("&Copy Selected Rows")
-        icon.name: "edit-copy"
+        icon.source: menuIcon("copy")
         shortcut: StandardKey.Copy
         enabled: connectionManager.connections.length > 0
     }
@@ -92,7 +98,7 @@ Item {
     Action {
         id: selectAllAction
         text: qsTr("Select &All")
-        icon.name: "edit-select-all"
+        icon.source: menuIcon("select-all")
         shortcut: StandardKey.SelectAll
         enabled: connectionManager.connections.length > 0
     }
@@ -100,20 +106,20 @@ Item {
     Action {
         id: convertDatabaseAction
         text: qsTr("Con&vert Signal Database...")
-        icon.name: "document-save-as"
+        icon.source: menuIcon("convert")
     }
 
     Action {
         id: openWorkspaceAction
         text: qsTr("Open &Workspace...")
-        icon.name: "document-open"
+        icon.source: menuIcon("folder-open")
         shortcut: "Ctrl+Shift+O"
     }
 
     Action {
         id: saveWorkspaceAction
         text: qsTr("&Save Workspace")
-        icon.name: "document-save"
+        icon.source: menuIcon("save")
         shortcut: StandardKey.Save
         enabled: connectionManager.connections.length > 0
     }
@@ -121,7 +127,7 @@ Item {
     Action {
         id: saveWorkspaceAsAction
         text: qsTr("Save Workspace &As...")
-        icon.name: "document-save-as"
+        icon.source: menuIcon("save-as")
         shortcut: StandardKey.SaveAs
         enabled: connectionManager.connections.length > 0
     }
@@ -129,32 +135,32 @@ Item {
     Action {
         id: editDatabaseAction
         text: qsTr("&Edit Signal Database...")
-        icon.name: "document-edit"
+        icon.source: menuIcon("database-edit")
     }
 
     Action {
         id: commandPaletteAction
         text: qsTr("Command &Palette...")
-        icon.name: "system-search"
+        icon.source: menuIcon("search")
         shortcut: "Ctrl+K"
     }
 
     Action {
         id: checkForUpdatesAction
         text: qsTr("Check for &Updates...")
-        icon.name: "system-software-update"
+        icon.source: menuIcon("refresh")
     }
 
     Action {
         id: securityManagerAction
         text: qsTr("Security &Manager...")
-        icon.name: "security-high"
+        icon.source: menuIcon("shield-key")
     }
 
     Action {
         id: preferencesAction
         text: qsTr("&Preferences...")
-        icon.name: "preferences-system"
+        icon.source: menuIcon("sliders")
         shortcut: StandardKey.Preferences
     }
 }

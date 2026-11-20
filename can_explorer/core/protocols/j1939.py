@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Callable, Dict, NamedTuple, Optional, Tuple
+from typing import Callable, Dict, List, NamedTuple, Optional, Tuple
 
 import can
 
@@ -256,14 +256,18 @@ class J1939Decoder:
             if complete is not None:
                 payload = complete[3]
                 detail = f'{detail}: {format_hex(payload, self._preview)}'
-                extra = self.describe_payload(complete[0], payload)
+                extra = self.describe_pg(complete[0], payload)
                 if extra:
                     detail = f'{detail} — {extra}'
-        elif j1939_id.pgn == PGN_REQUEST and len(data) >= 3:
-            detail = f'requests {self.pgn_label(int.from_bytes(data[:3], "little"))}'
         else:
-            detail = self.describe_payload(j1939_id.pgn, data)
+            detail = self.describe_pg(j1939_id.pgn, data)
         return f'{header}: {detail}' if detail else header
+
+    def describe_pg(self, pgn: int, data: bytes) -> Optional[str]:
+        """The meaning of one parameter group's data (a request, or what describe_payload knows); None if unknown."""
+        if pgn == PGN_REQUEST and len(data) >= 3:
+            return f'requests {self.pgn_label(int.from_bytes(data[:3], "little"))}'
+        return self.describe_payload(pgn, data)
 
     def describe_payload(self, pgn: int, data: bytes) -> Optional[str]:
         """Address claims, acknowledgments, commanded addresses, diagnostic messages and the text of identification
@@ -288,24 +292,205 @@ class J1939Decoder:
         return None
 
 
-# SAE J1939-22 (J1939-FD) PGNs (values from the open python-can-j1939 project)
-PGN_MULTI_PG = 0x2500  # Multiplexed PG container: several parameter groups in one CAN FD frame
+# SAE J1939-22 (J1939-FD): J1939 on CAN FD.
+#
+# SAE J1939-22 itself is not public. The layouts below are those of the open-source python-can-j1939 project
+# (j1939/j1939_22.py, MIT licence), which implements them; the C-PG header widths (TOS 3, TF 3, CPGN 18, payload
+# length 8 bits) agree with the escar USA 2025 J1939-91C presentation and the JCOM1939 J1939-22 guide. Only the
+# "no assurance data" form is interpreted: C-PGs and FD.TP messages carrying cybersecurity or functional safety
+# assurance data are recognised and labelled, their trailers are not decoded or checked.
+PGN_MULTI_PG = 0x2500  # Multiplexed PG container: several parameter groups (C-PGs) in one CAN FD frame
 PGN_FD_TP_CM = 0x4D00  # FD transport protocol, connection management
 PGN_FD_TP_DT = 0x4E00  # FD transport protocol, data transfer
 J1939_22_PGN_NAMES = {PGN_MULTI_PG: 'Multi-PG', PGN_FD_TP_CM: 'FD.TP.CM', PGN_FD_TP_DT: 'FD.TP.DT'}
 
+# C-PG header (4 bytes): byte 0 = TOS (bits 7-5) | TF (bits 4-2) | CPGN bits 17-16 (bits 1-0); bytes 1-2 = CPGN
+# bits 15-0, big endian; byte 3 = payload length. The payload length counts every byte after the header.
+CPG_HEADER_BYTES = 4
+TOS_PADDING = 0  # Type of service 0: the rest of the frame is padding
+TOS_NO_ASSURANCE, TF_NO_ASSURANCE = 2, 0  # "SAE J1939 with no assurance data"
+
+# FD.TP.CM (12 bytes): byte 0 = control (bits 3-0) | session (bits 7-4); bytes 1-3 message size; bytes 4-6 number of
+# segments (CTS: the next segment to send); byte 7 (RTS: segments per CTS, CTS: segments allowed, EOM status:
+# assurance data size); byte 8 (RTS/BAM/EOM status: assurance data type, abort: reason); bytes 9-11 the PGN. All
+# multi-byte fields little endian. FD.TP.DT: byte 0 = DTFI (bits 3-0) | session (bits 7-4); bytes 1-3 segment
+# number (from 1); then up to 60 data bytes.
+FD_TP_RTS, FD_TP_CTS, FD_TP_EOM_STATUS, FD_TP_EOM_ACK, FD_TP_BAM, FD_TP_ABORT = 0, 1, 2, 3, 4, 15
+FD_TP_CONTROL = {
+    FD_TP_RTS: 'RTS',
+    FD_TP_CTS: 'CTS',
+    FD_TP_EOM_STATUS: 'EndOfMsgStatus',
+    FD_TP_EOM_ACK: 'EndOfMsgAck',
+    FD_TP_BAM: 'BAM',
+    FD_TP_ABORT: 'Abort',
+}
+FD_TP_SEGMENT_BYTES = 60
+FD_TP_ABORT_REASONS = {
+    1: 'already in a session',
+    2: 'resources needed for another task',
+    3: 'timeout',
+    4: 'CTS while data transfer in progress',  # As AUTOSAR uses it; SAE reserves 4..250
+}
+# Assurance data types of FD.TP (RTS, BAM and EndOfMsgStatus byte 8)
+ASSURANCE_TYPES = {
+    0: 'none',
+    1: 'manufacturer cybersecurity',
+    2: 'manufacturer functional safety',
+    3: 'manufacturer cybersecurity and functional safety',
+}
+
+
+class CPg(NamedTuple):
+    """One contained parameter group of a Multi-PG frame."""
+
+    tos: int  # Type of service
+    tf: int  # Trailer format
+    pgn: int
+    data: bytes  # Payload length bytes after the header (the PG data, and any assurance data trailer)
+    truncated: bool = False  # The frame ended before the payload length
+
+    @property
+    def plain(self) -> bool:
+        """A J1939 PG without assurance data: `data` is exactly the PG's data."""
+        return self.tos == TOS_NO_ASSURANCE and self.tf == TF_NO_ASSURANCE
+
+
+def split_multi_pg(data: bytes) -> List[CPg]:
+    """The C-PGs of a Multi-PG frame's data, in order, up to the padding (type of service 0) or the end."""
+    pgs = []
+    while len(data) >= CPG_HEADER_BYTES:
+        tos = data[0] >> 5
+        if tos == TOS_PADDING:
+            break
+        tf = (data[0] >> 2) & 0x7
+        pgn = ((data[0] & 0x3) << 16) | (data[1] << 8) | data[2]
+        length = data[3]
+        payload = bytes(data[CPG_HEADER_BYTES : CPG_HEADER_BYTES + length])
+        pgs.append(CPg(tos, tf, pgn, payload, len(payload) < length))
+        data = data[CPG_HEADER_BYTES + length :]
+    return pgs
+
+
+@dataclass(slots=True)
+class _FdTpSession:
+    pgn: int
+    size: int
+    segments: int
+    data: bytearray = field(default_factory=bytearray)
+    next_segment: int = 1
+
+    def __post_init__(self):
+        self.data = bytearray(b'\xff' * (self.segments * FD_TP_SEGMENT_BYTES))
+
+
+class FdTransportTracker:
+    """Follows the J1939-22 FD transport protocol sessions on a bus (BAM and RTS/CTS, including segments a receiver
+    asks for again with a CTS). Like TransportTracker: `feed` returns None for other frames, else a text and, when a
+    message is complete, (pgn, source, destination, payload)."""
+
+    def __init__(self, pgn_label: Callable[[int], str] = default_pgn_label):
+        self._label = pgn_label
+        self._sessions: Dict[Tuple[int, int, int], _FdTpSession] = {}  # (session number, sender, receiver)
+
+    def reset(self) -> None:
+        self._sessions.clear()
+
+    def feed(self, ident: J1939Id, data: bytes) -> Optional[Tuple[Optional[str], Optional[Complete]]]:
+        if ident.pgn == PGN_FD_TP_CM:
+            return self._control(ident, data), None
+        if ident.pgn == PGN_FD_TP_DT:
+            return self._data(ident, data)
+        return None
+
+    def _control(self, ident: J1939Id, data: bytes) -> Optional[str]:
+        if len(data) < 12:
+            return f'FD.TP.CM too short ({len(data)} B)'
+        sa, da = ident.source_address, ident.destination_address
+        control, session_number = data[0] & 0xF, data[0] >> 4
+        size = int.from_bytes(data[1:4], 'little')
+        segments = int.from_bytes(data[4:7], 'little')
+        pgn = int.from_bytes(data[9:12], 'little')
+        label = self._label(pgn)
+        name = FD_TP_CONTROL.get(control, f'control {control}')
+        prefix = f'FD.TP.{name} session {session_number}'
+        match control:
+            case 0 | 4:  # RTS, BAM: the sender opens a session
+                self._sessions[(session_number, sa, da)] = _FdTpSession(pgn, size, segments)
+                text = f'{prefix}: {size} B in {segments} segments for {label}'
+                if control == FD_TP_RTS and data[7] != 0xFF:
+                    text += f', at most {data[7]} per CTS'
+                return text + self._assurance(data[8])
+            case 1:  # CTS from the receiver: the sender continues (or repeats) from segment `segments`
+                session = self._sessions.get((session_number, da, sa))
+                if data[7] == 0:
+                    return f'{prefix}: hold the connection open for {label}'
+                if session is not None:
+                    session.next_segment = segments
+                return f'{prefix}: {data[7]} segments from #{segments} for {label}'
+            case 2:  # EndOfMsgStatus from the sender
+                text = f'{prefix}: {size} B in {segments} segments for {label}' + self._assurance(data[8])
+                if data[8] and data[7]:
+                    text += f', {data[7]} B of assurance data'
+                return text
+            case 3:  # EndOfMsgAck from the receiver
+                self._sessions.pop((session_number, da, sa), None)
+                return f'{prefix}: {size} B in {segments} segments for {label}'
+            case 15:
+                self._sessions.pop((session_number, sa, da), None)
+                self._sessions.pop((session_number, da, sa), None)
+                reason = FD_TP_ABORT_REASONS.get(data[8], f'reason {data[8]}')
+                return f'{prefix} ({reason}) for {label}'
+        return f'{prefix} for {label}'
+
+    @staticmethod
+    def _assurance(code: int) -> str:
+        if code == 0:
+            return ''
+        return f', with {ASSURANCE_TYPES.get(code, f"type {code}")} assurance data (not checked)'
+
+    def _data(self, ident: J1939Id, data: bytes) -> Tuple[Optional[str], Optional[Complete]]:
+        if len(data) < 5:
+            return f'FD.TP.DT too short ({len(data)} B)', None
+        session_number = data[0] >> 4
+        segment = int.from_bytes(data[1:4], 'little')
+        prefix = f'FD.TP.DT session {session_number} #{segment}'
+        key = (session_number, ident.source_address, ident.destination_address)
+        session = self._sessions.get(key)
+        if session is None:
+            return f'{prefix} (no session)', None
+        if segment != session.next_segment or not 1 <= segment <= session.segments:
+            del self._sessions[key]
+            return f'{prefix} (expected #{session.next_segment}, session aborted)', None
+        start = (segment - 1) * FD_TP_SEGMENT_BYTES
+        chunk = bytes(data[4 : 4 + FD_TP_SEGMENT_BYTES])
+        session.data[start : start + len(chunk)] = chunk
+        session.next_segment = segment + 1
+        if segment < session.segments:
+            return f'{prefix}/{session.segments}', None
+        del self._sessions[key]
+        payload = bytes(session.data[: session.size])
+        done = (session.pgn, ident.source_address, ident.destination_address, payload)
+        return f'{prefix}/{session.segments}: complete {self._label(session.pgn)} ({session.size} B)', done
+
 
 class J1939_22Decoder(J1939Decoder):
     """Passive SAE J1939-22 (J1939-FD) decoder: J1939 carried on CAN FD. Ordinary single-PG frames decode exactly
-    like J1939 (on the longer FD payload); the FD transport protocol (FD.TP) and the multiplexed-PG (Multi-PG)
-    frames are recognised and labelled.
+    like J1939 (on the longer FD payload); Multi-PG frames are split into their contained parameter groups (C-PGs),
+    and FD transport protocol (FD.TP) messages are reassembled, both then decoded like single PGs.
 
-    Expanding a Multi-PG frame into its contained PGs, and reassembling FD.TP messages, needs the C-PG / FD-TP byte
-    layout of the SAE J1939-22 standard (which is not public); until that is confirmed those frames are recognised
-    but their payload is shown as raw bytes rather than split into the individual parameter groups.
+    The layouts come from the open python-can-j1939 implementation (see the comment above), as SAE J1939-22 is not
+    public. C-PGs and FD.TP messages with assurance data are labelled; their trailers are shown raw, not checked.
     """
 
     name = 'J1939-22'
+
+    def __init__(self, preview_bytes: int = 32):
+        super().__init__(preview_bytes)
+        self._fd_transport = FdTransportTracker(self.pgn_label)
+
+    def reset(self) -> None:
+        super().reset()
+        self._fd_transport.reset()
 
     @staticmethod
     def pgn_label(pgn: int) -> str:
@@ -316,14 +501,39 @@ class J1939_22Decoder(J1939Decoder):
         if not msg.is_extended_id:
             return None
         j1939_id = J1939Id.from_can_id(msg.arbitration_id)
-        if j1939_id.pgn in (PGN_MULTI_PG, PGN_FD_TP_CM, PGN_FD_TP_DT):
-            header = (
-                f'{self.pgn_label(j1939_id.pgn)} SA=0x{j1939_id.source_address:02X} '
-                f'DA=0x{j1939_id.destination_address:02X} P{j1939_id.priority}'
-            )
-            if j1939_id.pgn == PGN_MULTI_PG:
-                detail = f'multiplexed PGs, {len(msg.data)} bytes (contained PGs not expanded)'
-            else:
-                detail = f'FD transport, {len(msg.data)} bytes (not reassembled)'
-            return f'{header}: {detail}'
-        return super().describe(msg)
+        if j1939_id.pgn not in (PGN_MULTI_PG, PGN_FD_TP_CM, PGN_FD_TP_DT):
+            return super().describe(msg)
+        header = (
+            f'{self.pgn_label(j1939_id.pgn)} SA=0x{j1939_id.source_address:02X} '
+            f'DA=0x{j1939_id.destination_address:02X} P{j1939_id.priority}'
+        )
+        data = bytes(msg.data)
+        if j1939_id.pgn == PGN_MULTI_PG:
+            return f'{header}: {self._describe_multi_pg(data)}'
+        detail, complete = self._fd_transport.feed(j1939_id, data)
+        if complete is not None:
+            detail = f'{detail}: {format_hex(complete[3], self._preview)}'
+            extra = self.describe_pg(complete[0], complete[3])
+            if extra:
+                detail = f'{detail} — {extra}'
+        return f'{header}: {detail}'
+
+    def _describe_multi_pg(self, data: bytes) -> str:
+        pgs = split_multi_pg(data)
+        if not pgs:
+            return 'no parameter groups (padding only)'
+        parts = []
+        for pg in pgs:
+            text = f'{self.pgn_label(pg.pgn)}'
+            if not pg.plain:
+                text += f' (type of service {pg.tos}, trailer format {pg.tf}: assurance data not decoded)'
+            text += f': {format_hex(pg.data, self._preview)}' if pg.data else ': no data'
+            if pg.truncated:
+                text += ' (truncated)'
+            elif pg.plain:
+                extra = self.describe_pg(pg.pgn, pg.data)
+                if extra:
+                    text += f' — {extra}'
+            parts.append(text)
+        count = f'{len(pgs)} PG' + ('s' if len(pgs) > 1 else '')
+        return f'{count}: ' + ' | '.join(parts)

@@ -12,13 +12,14 @@ frame in arrival order, so multi-frame transfers are reassembled.
 | ISO-TP (extended), UDS (extended), KWP2000 (extended) | The same with ISO-TP **extended or mixed addressing**: the first data byte of every frame is an address byte (the target address N_TA, or the address extension N_AE of mixed addressing), shown in brackets, e.g. `ISO-TP [12] SF`. Transfers to different addresses on one identifier are reassembled separately |
 | K-Line | KWP2000 (ISO 14230) and OBD-II/J1979 services on a [K-Line bus](../reference/interfaces.md#k-line-iso-9141-2-iso-14230) (the `elm327_kline` interface), where each frame already carries one bare service payload (no ISO-TP). Use this rather than KWP2000, which expects ISO-TP on CAN |
 | J1939 | Priority, PGN with names of common PGNs, source and destination address, requests, acknowledgments (ACK, NACK, access denied, cannot respond), address claims and commanded addresses with the NAME, DM1/DM2 lamps and trouble codes, identification text (software, component, vehicle), the transport protocol (BAM and RTS/CTS, including packets a receiver asks for again) and the extended transport protocol (ETP, messages over 1785 bytes) with reassembly, and the reasons of connection aborts; see also the [J1939 view](j1939.md) |
-| J1939-22 | SAE J1939-22 (J1939-FD): J1939 on CAN FD. Single-PG frames decode like J1939 on the longer FD payload; the FD transport (FD.TP) and multiplexed-PG (Multi-PG) frames are recognised and labelled |
+| J1939-22 | SAE J1939-22 (J1939-FD): J1939 on CAN FD. Single-PG frames decode like J1939 on the longer FD payload; multiplexed-PG (Multi-PG) frames are split into their parameter groups, and FD transport (FD.TP) messages, BAM and RTS/CTS, are reassembled |
 | NMEA 2000 | The marine protocol, built on J1939: PGN with names of common marine PGNs, source address, Fast Packet reassembly, and fields of the common PGNs (engine, position, COG/SOG, heading, wind, depth, speed, battery) in marine units |
 | CANopen | NMT, SYNC, EMCY, TIME, PDOs, SDO requests and responses, heartbeat and node guarding; with an object dictionary loaded in the [CANopen view](canopen.md), SDO object names and PDO values |
 | LIN | Headers and responses, diagnostic frames, see [LIN](lin.md) |
 | J1587 | SAE J1587 messages (MID and PIDs) of the older heavy-truck bus, with common parameters scaled. J1587 runs over J1708, a 9600-baud serial bus (**not** CAN); decode a live capture through the [J1708 interface](../reference/interfaces.md#sae-j1708), a serial log, or a gateway. Each frame's data is one J1587 message |
 | NM | AUTOSAR Network Management (CAN-NM / UDP-NM): the source node id, the control-bit flags (Repeat Message, Active Wakeup, Sleep Ready, PN Learning) and, when the Partial Network Information bit is set, the requested partial-network clusters. Point it at the bus's NM identifiers; the node-id and control-vector positions are configurable |
 | SecOC | AUTOSAR Secure Onboard Communication: splits a secured PDU into the authentic payload, the truncated freshness value and the truncated MAC. Verifying the MAC (CMAC/AES-128) needs the key and configuration — available as a library (`can_explorer.core.secoc`) |
+| XCP, CCP | The commands, responses, errors, events and DAQ data of an [XCP or CCP](xcp.md) measurement and calibration session: e.g. `SHORT_UPLOAD 2 @ 0x00001000`, the CONNECT parameters, seed & key, `ERR access locked`, `DAQ PID 3`. The command/response identifiers are set when the XCP/CCP page connects, or learnt from a CONNECT and its answer; until then only CONNECT candidates are labelled, with a question mark |
 
 !!! tip "Choose the protocol of the traffic"
     ISO-TP and UDS interpret the first byte of every frame as a transport protocol header. On a bus that also
@@ -36,10 +37,13 @@ ISO-TP [12] SF (2 B): 10 03 | UDS DiagnosticSessionControl 03
 PGN 127488 Engine Parameters, Rapid Update SA=35 P2: engine 0: 2400 rpm
 SDO response node 5: read response 0x1018:01 = 78 56 34 12
 ISO-TP SF (2 B): 10 81 | KWP StartDiagnosticSession 81
-PGN 0x02500 Multi-PG SA=0x00 DA=0x00 P6: multiplexed PGs, 32 bytes (contained PGs not expanded)
+PGN 0x02500 Multi-PG SA=0x00 DA=0xFF P3: 2 PGs: PGN 0x0FEF1 CCVS1: FF 00 3C 00 00 00 00 FF | PGN 0x0F004 EEC1: 01 02 …
+PGN 0x04E00 FD.TP.DT SA=0x00 DA=0x42 P7: FD.TP.DT session 0 #3/3: complete PGN 0x0EF00 (150 B): 00 01 02 …
 MID 128 Engine #1, PID 84 Road Speed 60 mph, PID 190 Engine Speed 1500 rpm
 NM node 0x12 [ActiveWakeup] PN requests #0, #2
 SecOC: authentic 11 22 33 44 | freshness 05 | MAC AABBCCDD
+XCP SHORT_UPLOAD 2 @ 0x00001000 ext 0
+CCP CRM #7 access locked (seed & key required)
 ```
 
 With a [diagnostic description](diagnostics.md#diagnostic-descriptions-cdd-odxpdx), UDS (and LIN diagnostics) decode
@@ -83,9 +87,12 @@ with can.LogReader('diagnostics.asc') as log:
   *(extended)* variants. Pick the one the bus uses: one decoder cannot tell an address byte from an ISO-TP header.
 - J1939: names are known for common PGNs and SPNs; signals of J1939 messages are decoded with a DBC. The text of
   identification groups is shown as it is; its fields are not split.
-- J1939-22: single-PG frames are decoded; expanding a Multi-PG frame into its contained PGs and reassembling the
-  FD transport (FD.TP) need the C-PG / FD-TP byte layout from the SAE J1939-22 standard (which is not public), so
-  those frames are recognised and labelled but not expanded.
+- J1939-22: SAE J1939-22 is not public. The Multi-PG and FD.TP layouts follow the open-source
+  [python-can-j1939](https://github.com/juergenH87/python-can-j1939) implementation (its `j1939_22.py`), and the
+  tests replay frames that library sends; the parameter group header also agrees with public J1939-22
+  presentations. Parameter groups and transfers that carry **assurance data** (cybersecurity or functional safety
+  trailers) are labelled with their type, and their bytes shown raw: the trailers are not decoded or checked.
+  Nothing has been checked against a J1939-22 ECU yet.
 - NMEA 2000: names for common PGNs, fields for the most common ones; the full PGN catalogue is not built in.
 - CANopen: the predefined connection set (default COB-IDs).
 - J1587: a subset of MIDs and PIDs is named and the well-known parameters are scaled; others are shown as raw
@@ -97,3 +104,5 @@ with can.LogReader('diagnostics.asc') as log:
 - SecOC: the decoder shows the secured-PDU structure of any frame, with byte-aligned trailer lengths it is given.
   With an ARXML database, the secured PDUs it describes are checked (MAC and freshness) with the keys of the
   [security manager](security-manager.md#secoc-in-the-trace), whichever decoder is selected.
+- XCP, CCP: XCP on CAN or CAN FD (XCP on Ethernet is not CAN traffic). A DTO is labelled with its packet id; its
+  values are only known to the master that configured the DAQ lists (the [XCP/CCP page](xcp.md)).

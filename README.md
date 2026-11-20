@@ -92,8 +92,9 @@
   access tests (seed quality, lockout), revocation lists, an HMAC-chained audit log, key bundles, test certificates
   and the OS keychain; security profiles and key servers supply manufacturer keys, seed/key and signatures without
   keeping the secrets on this computer
-- XCP/CCP measurement and calibration: read measurements live and read/write calibration values by address or by
-  name from an A2L file, with simulated slaves for trying it without hardware
+- XCP (CAN, CAN FD, Ethernet) and CCP measurement and calibration: measurements polled or by DAQ and plotted,
+  calibration values, curves and maps by name from an A2L file, seed & key, calibration pages, checksums and
+  datasets (JSON, DCM), with simulated slaves for trying it without hardware
 - GMLAN (GMW3110) diagnostics for GM/Opel vehicles — data identifiers, modes, security access and trouble codes —
   over CAN, including single-wire (SWCAN, 33.3 kbit/s) buses; a simulated ECU works without hardware
 - GM Class 2 (SAE J1850 VPW) for the pre-CAN GM vehicles of 1996–2007 (e.g. the 99–06 P01/P59 PCMs): monitor the
