@@ -66,12 +66,14 @@ nav:
       - Flashing: user-guide/flashing.md
       - UDS discovery: user-guide/uds-discovery.md
       - XCP/CCP: user-guide/xcp.md
+      - VW TP 2.0 / KWP2000: user-guide/kwp2000-tp20.md
       - GMLAN: user-guide/gmlan.md
       - J1850 / Class 2: user-guide/j1850.md
       - DoIP: user-guide/doip.md
       - SOME/IP: user-guide/someip.md
       - Ethernet capture: user-guide/ethernet.md
       - Security manager: user-guide/security-manager.md
+      - SecOC reverse engineering: user-guide/secoc-reverse-engineering.md
       - J1939: user-guide/j1939.md
       - CANopen: user-guide/canopen.md
       - EtherCAT (CoE): user-guide/ethercat.md
@@ -100,6 +102,9 @@ nav:
       - Packaging: development/packaging.md
       - Translations: development/translations.md
       - Contributing: development/contributing.md
+  - Roadmaps:
+      - Security reverse engineering: roadmaps/security-reverse-engineering.md
+      - Hardware security testing: roadmaps/hardware-security-testing.md
   - Changelog: changelog.md
 
 markdown_extensions:

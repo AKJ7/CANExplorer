@@ -21,7 +21,10 @@ Dialog {
         { value: "uds-sdt-key", text: qsTr("UDS secured data key") },
         { value: "pkcs11", text: qsTr("PKCS#11 token key") },
         { value: "key-server", text: qsTr("Key server") },
+        { value: "oem-token", text: qsTr("OEM credentials") },
     ]
+    // How the OEM portal login is given: username & password, or a bearer access token
+    readonly property bool oemBearer: oemAuthBox.currentIndex === 1
     // A PKCS#12 file (.p12/.pfx) holds the certificate with its key: no separate key file
     readonly property bool pkcs12: /\.(p12|pfx)$/i.test(certificateFile.toString())
     readonly property string serverAuth: ["token", "client-credentials", "device"][serverAuthBox.currentIndex]
@@ -58,7 +61,8 @@ Dialog {
         for (const field of [passwordField, repeatField, oldPasswordField, newPasswordField, newRepeatField,
                              nameField, secocKeyField, keyPasswordField, encryptionKeyField, integrityKeyField,
                              sakField, sciField, spiField, authKeyField, serverTokenField, clientSecretField,
-                             pkcs11PinField])
+                             pkcs11PinField, oemProviderField, oemField, oemUsernameField, oemPasswordField,
+                             oemAccessTokenField])
             field.text = ""
         certificateFile = ""
         keyFile = ""
@@ -124,6 +128,14 @@ Dialog {
         case "pkcs11":
             error = security.add_pkcs11_key(name, pkcs11ModuleField.text, pkcs11TokenField.text, pkcs11KeyField.text,
                                              pkcs11PinField.text)
+            break
+        case "oem-token":
+            if (oemBearer)
+                error = security.add_oem_credentials(name, oemProviderField.text, oemField.text, "", "",
+                                                     oemAccessTokenField.text)
+            else
+                error = security.add_oem_credentials(name, oemProviderField.text, oemField.text,
+                                                     oemUsernameField.text, oemPasswordField.text, "")
             break
         }
         if (done(error, qsTr("Added %1").arg(name)))
@@ -371,6 +383,73 @@ Dialog {
                         }), qsTr("Created the test certificates")))
                             pkiGrid.visible = false
                     }
+                }
+            }
+
+            // Crack seed/key
+            Label { text: qsTr("Crack seed/key"); font.bold: true; visible: dialog.security.exists }
+            Label {
+                visible: dialog.security.exists
+                text: qsTr("Paste hex seed:key pairs (one per line, e.g. AABBCCDD:11223344) and crack the algorithm.")
+                color: Theme.muted
+                wrapMode: Text.Wrap
+                Layout.fillWidth: true
+            }
+            ColumnLayout {
+                visible: dialog.security.exists
+                spacing: 6
+                Layout.fillWidth: true
+
+                ScrollView {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 100
+                    TextArea {
+                        id: crackInput
+                        placeholderText: qsTr("AABBCCDD:11223344\nEEFF0011:55667788\n...")
+                        font.family: "monospace"
+                        font.pixelSize: 12
+                        wrapMode: TextArea.Wrap
+                    }
+                }
+                RowLayout {
+                    spacing: 8
+                    Button {
+                        text: qsTr("Crack")
+                        enabled: crackInput.text.trim().length > 0
+                        highlighted: true
+                        onClicked: {
+                            crackResult.text = ""
+                            const json = dialog.security.crack_seed_key(crackInput.text)
+                            try {
+                                const result = JSON.parse(json)
+                                if (result.error) {
+                                    crackResult.text = result.error
+                                    crackResult.color = Theme.danger
+                                } else {
+                                    crackResult.text = result.summary
+                                    crackResult.color = Theme.text
+                                }
+                            } catch (e) {
+                                crackResult.text = json
+                                crackResult.color = Theme.danger
+                            }
+                        }
+                    }
+                    Label {
+                        text: qsTr("Tests identity, XOR, ADD, rotation, shuffle, GF(2) linear, per-byte lookup, AES KDF and LFSR hypotheses")
+                        color: Theme.muted
+                        font.pixelSize: 11
+                        elide: Text.ElideRight
+                        Layout.fillWidth: true
+                    }
+                }
+                Label {
+                    id: crackResult
+                    visible: text.length > 0
+                    wrapMode: Text.Wrap
+                    font.family: "monospace"
+                    font.pixelSize: 12
+                    Layout.fillWidth: true
                 }
             }
 
@@ -659,6 +738,56 @@ Dialog {
                     visible: dialog.purpose === "pkcs11"
                     echoMode: TextInput.Password
                     placeholderText: qsTr("kept encrypted; the key never leaves the token")
+                    Layout.fillWidth: true
+                }
+
+                // OEM right-to-repair portal credentials: the legitimate path through a security gateway
+                Label { text: qsTr("Provider"); visible: dialog.purpose === "oem-token" }
+                TextField {
+                    id: oemProviderField
+                    visible: dialog.purpose === "oem-token"
+                    placeholderText: qsTr("the token provider that uses this login, e.g. a portal plug-in's name")
+                    Layout.fillWidth: true
+                    ToolTip.visible: hovered && dialog.security.oem_token_providers.length > 0
+                    ToolTip.text: qsTr("Installed providers: %1").arg(dialog.security.oem_token_providers.join(", "))
+                }
+                Label { text: qsTr("Manufacturer"); visible: dialog.purpose === "oem-token" }
+                TextField {
+                    id: oemField
+                    visible: dialog.purpose === "oem-token"
+                    placeholderText: qsTr("the vehicle manufacturer (optional)")
+                    Layout.fillWidth: true
+                }
+                Label { text: qsTr("Login"); visible: dialog.purpose === "oem-token" }
+                ComboBox {
+                    id: oemAuthBox
+                    visible: dialog.purpose === "oem-token"
+                    model: [qsTr("Username and password"), qsTr("Bearer access token")]
+                    Layout.preferredWidth: 280
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("How the shop authenticates to the OEM portal; kept encrypted in the key store")
+                }
+                Label { text: qsTr("Username"); visible: dialog.purpose === "oem-token" && !dialog.oemBearer }
+                TextField {
+                    id: oemUsernameField
+                    visible: dialog.purpose === "oem-token" && !dialog.oemBearer
+                    placeholderText: qsTr("the shop's portal account")
+                    Layout.fillWidth: true
+                }
+                Label { text: qsTr("Password"); visible: dialog.purpose === "oem-token" && !dialog.oemBearer }
+                TextField {
+                    id: oemPasswordField
+                    visible: dialog.purpose === "oem-token" && !dialog.oemBearer
+                    echoMode: TextInput.Password
+                    placeholderText: qsTr("kept encrypted")
+                    Layout.fillWidth: true
+                }
+                Label { text: qsTr("Access token"); visible: dialog.purpose === "oem-token" && dialog.oemBearer }
+                TextField {
+                    id: oemAccessTokenField
+                    visible: dialog.purpose === "oem-token" && dialog.oemBearer
+                    echoMode: TextInput.Password
+                    placeholderText: qsTr("bearer token, kept encrypted")
                     Layout.fillWidth: true
                 }
 

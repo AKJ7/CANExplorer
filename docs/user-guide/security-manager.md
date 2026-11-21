@@ -16,6 +16,7 @@ that the secured parts of a vehicle network need, in one password-protected key 
 | UDS secured data key | UDS [SecuredDataTransmission (0x84)](diagnostics.md#secured-data-transmission-0x84) with a key shared with the ECUs ([reference scheme](diagnostics.md#the-reference-scheme): HMAC-SHA-256 or AES-CMAC) |
 | PKCS#11 token key | A [smart card, USB token or HSM](#pkcs11-tokens) holding the tester's certificate and key, for UDS Authentication |
 | Key server | A [remote provider](#key-servers) of SecOC keys, seed/key, certificates and signatures, with a token or [OAuth 2.0 sign-in](#signing-in-with-oauth-20) |
+| OEM credentials | A shop's login for an [OEM right-to-repair portal](#oem-right-to-repair-tokens), used to obtain diagnostic access through a vehicle's security gateway |
 
 Keys and algorithms can also come from [security profiles](#security-profiles-and-key-servers): manufacturer plug-ins
 and key servers, so the secrets need not be on this computer.
@@ -256,6 +257,62 @@ Diagnostics and GMLAN views, **From Security Manager** chooses it instead of a f
 it is used. The same button lists the security profiles that compute keys (`profile:<name>`). Scripts can load
 either with `can_explorer.core.uds.load_key_source('keystore:<name>')` or `load_key_source('profile:<name>')`.
 
+### Seed/key algorithm recovery
+
+If you have captured seed/key pairs (from a trace or from the seed analysis) but not the algorithm,
+`can_explorer.core.seedkey_crack.crack()` tests a series of hypotheses against the pairs and reports
+every algorithm that predicts held-back verification pairs correctly. The [MCP interface](mcp.md) exposes
+the same as the `crack_seed_key` tool.
+
+The families tested, cheapest first:
+
+| Family | What it checks |
+|---|---|
+| Identity | key = seed, reversed, or bitwise complement |
+| Constant XOR | key = seed XOR a fixed value |
+| Constant ADD / SUB | key = seed + or &minus; a fixed value (mod 2^n) |
+| Per-byte XOR | each key byte XORed with a fixed mask byte |
+| Per-byte ADD | each key byte added to a fixed mask byte (mod 256) |
+| Bit rotation | key = rotate_left or rotate_right(seed, n) |
+| Byte shuffle | key bytes are seed bytes in a fixed permutation |
+| GF(2) linear | key = M &middot; seed &oplus; c, a bit-matrix transform (covers CRC-based and LFSR schemes) |
+| Per-byte lookup | each key byte is a fixed function of the corresponding seed byte |
+| AES-based KDF | key = AES-ECB, CMAC-AES, HMAC-SHA-256 or HMAC-SHA-256(level &vert;&vert; seed) with a candidate master key (see below) |
+| LFSR | key bits are the continuation of an LFSR seeded by the seed bits (Berlekamp&ndash;Massey recovery) |
+
+Pairs are split 75/25 into fit and verify sets (minimum 2 verify pairs). A match is reported only
+when it predicts **every** verification pair correctly, so the tool does not guess. At least 3 pairs
+are needed; the GF(2) family needs at least 8&times;*seed_length*&nbsp;+&nbsp;2.
+
+**AES-based KDF hypotheses.** Many automotive ECUs derive the key from the seed using AES, CMAC or HMAC with a
+fixed master key. Because brute-forcing a 128-bit key is infeasible, the tool tests *candidate keys* you supply
+(from a key store, a leaked list, or extracted from firmware). Pass them as `candidate_keys` to `crack()` or to
+the MCP tool `crack_seed_key`. When no candidates are given and the seeds are at most 16 bytes long, a small set
+of well-known default and test keys (all-zeros, all-ones, 0x00..0x0F, etc.) is tried automatically. The patterns
+tested for each candidate are:
+
+- `key = AES_ECB(candidate, zero_padded(seed))`
+- `key = AES_ECB(candidate, PKCS7(seed))`
+- `key = AES_ECB(candidate, seed XOR candidate)`
+- `key = CMAC_AES(candidate, seed)`
+- `key = HMAC_SHA256(candidate, seed)`
+- `key = HMAC_SHA256(candidate, level_byte || seed)`
+
+**LFSR hypothesis.** Some ECUs use an LFSR-based scrambler: the seed bits seed the register and the key bits are
+the output. The tool runs Berlekamp&ndash;Massey over GF(2) on the concatenated seed+key bit sequence of the
+first pair to recover the shortest LFSR, then verifies it against all other pairs.
+
+### Cracking in the Security Manager dialog
+
+The **Crack seed/key** section of the Security Manager dialog lets you paste hex seed:key pairs (one per line,
+e.g. `AABBCCDD:11223344`), press **Crack** and see the matched algorithms and their parameters. This is the
+same analysis the `crack_seed_key` MCP tool and `can_explorer.core.seedkey_crack.crack()` perform.
+
+Manufacturer seed/key algorithms are proprietary. The tool tests hypotheses from captured pairs; it
+does not ship or guess algorithms and cannot recover transforms it has no hypothesis for.
+A confirmed match produces a `compute_key(level, seed)` callable that can be plugged
+into the Diagnostics view or into `UdsClient.security_access()`.
+
 ## Security profiles and key servers
 
 A **security profile** supplies manufacturer-specific security from outside the key store: SecOC keys or complete
@@ -456,6 +513,32 @@ uses. PKCS#11 needs the python-pkcs11 package, which the installers do not conta
 `uv sync --extra pkcs11`.
 Tokens are used for UDS Authentication only; the TLS of DoIP takes certificates from the key store.
 
+## OEM right-to-repair tokens
+
+A modern vehicle places a **security gateway** between the diagnostic connector and the internal buses, so a
+third-party tool cannot reach the ECUs behind it without authenticating. The gateway is not something to work
+around: the legitimate path — the one the manufacturer's own tools use, and the one right-to-repair legislation
+provides for independent shops — is to obtain a short-lived access token from the OEM's right-to-repair portal and
+present it. The shop authenticates to the portal with its own account, identifies the vehicle, and the portal
+issues a time-limited token.
+
+An **OEM credentials** entry — added in this dialog under **Add** like any other entry — keeps that portal login
+(a username and password, or a bearer access token) encrypted in the key store, named for the **provider** that
+uses it. A *token provider* is a small plug-in that knows one
+OEM's portal: given the credentials and a vehicle (VIN, make), it requests a token. CANExplorer ships the portal
+side as two building blocks a provider is built from — an **OAuth 2.0** provider (for portals built on OAuth, such
+as those reached through a sign-in) and a plain **REST** provider (a single request that returns a token) — and
+loads providers that installed packages register through the `can_explorer.oem_token_providers` entry point, so a
+provider for a specific portal (for example an SGW unlock portal) can be added without changing CANExplorer.
+
+What CANExplorer does **not** do is guess how a token is presented to a particular OEM's gateway: the exact
+service and byte layout of a gateway unlock are manufacturer-specific and often paywalled, and are not fabricated
+here (see the [reverse-engineering honesty note](reverse-engineering.md)). A provider that knows a specific portal
+supplies that recipe itself; without one, the obtained token is handed back for you to present through whatever
+documented mechanism the vehicle uses. The token's secret value never appears in logs, the system report or the
+[MCP interface](mcp.md) — the MCP `oem_token_providers` and `request_oem_token` tools return only a provider list
+and a token's metadata (its OEM, kind, scope and lifetime).
+
 ## Security events
 
 The **Security events** page of a connection collects what suggests an attack or a misbehaving node, as frames
@@ -548,6 +631,9 @@ the parameter sets such as *Distributed SAK* — but the keys they distribute ar
   listed are not supported; AES-GCM expects a 16-byte ICV.
 - MACsec: the extended packet number (XPN) cipher suites and a VLAN tag in front of the SecTAG are not supported.
 - One key store per user; it is not part of a [workspace](workspaces.md) (move entries with key bundles).
+- OEM tokens: CANExplorer obtains and manages the portal token (the OAuth 2.0 and REST building blocks are built
+  in); the vehicle-side gateway unlock is provider-supplied and not guessed, so a portal with no provider yields a
+  token for you to present by a documented mechanism, not an automatic gateway unlock.
 - Security profiles: one profile answers a request (the first able to). Key servers are reached synchronously, with a
   5-second timeout.
 - PKCS#11: tested against a simulated token, not yet against real cards; DoIP TLS cannot use a token's key.

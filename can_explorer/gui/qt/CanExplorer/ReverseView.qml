@@ -133,6 +133,10 @@ SplitView {
             TabButton { text: qsTr("Bits") }
             TabButton { text: qsTr("Activity") }
             TabButton { text: qsTr("Automatic analysis") }
+            TabButton { text: qsTr("Cryptanalysis") }
+            TabButton { text: qsTr("Gateway security") }
+            TabButton { text: qsTr("SecOC") }
+            TabButton { text: qsTr("Security dashboard") }
             TabButton { text: qsTr("Reference signals") }
             TabButton { text: qsTr("Markers") }
             TabButton { text: qsTr("Related signals") }
@@ -555,6 +559,24 @@ SplitView {
                 connection: root.connection
                 onFieldUsed: tabBar.currentIndex = 0
                 onPlotted: root.showPage("signals")
+                onMessage: text => root.showStatus(text)
+            }
+            ReverseCryptoPanel {
+                tools: root.tools
+                onFieldUsed: tabBar.currentIndex = 0
+                onPlotted: root.showPage("signals")
+                onMessage: text => root.showStatus(text)
+            }
+            GatewaySecurityPanel {
+                tools: root.tools
+                onMessage: text => root.showStatus(text)
+            }
+            SecOcReversePanel {
+                tools: root.tools
+                onMessage: text => root.showStatus(text)
+            }
+            SecurityDashboard {
+                tools: root.tools
                 onMessage: text => root.showStatus(text)
             }
             ReverseReferencePanel {

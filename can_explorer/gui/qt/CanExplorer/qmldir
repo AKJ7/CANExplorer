@@ -45,6 +45,8 @@ ReverseMarkersPanel 1.0 ReverseMarkersPanel.qml
 ReverseReactionPanel 1.0 ReverseReactionPanel.qml
 ReverseRelatedPanel 1.0 ReverseRelatedPanel.qml
 ReverseConsolePanel 1.0 ReverseConsolePanel.qml
+ReverseCryptoPanel 1.0 ReverseCryptoPanel.qml
+GatewaySecurityPanel 1.0 GatewaySecurityPanel.qml
 ReverseActivityPanel 1.0 ReverseActivityPanel.qml
 ReverseTimelineBar 1.0 ReverseTimelineBar.qml
 WelcomeView 1.0 WelcomeView.qml
@@ -60,6 +62,7 @@ EthernetView 1.0 EthernetView.qml
 UdsScanView 1.0 UdsScanView.qml
 XcpView 1.0 XcpView.qml
 GmlanView 1.0 GmlanView.qml
+Tp20View 1.0 Tp20View.qml
 J1850View 1.0 J1850View.qml
 GatewayView 1.0 GatewayView.qml
 RestbusView 1.0 RestbusView.qml
@@ -78,5 +81,7 @@ SecurityManagerDialog 1.0 SecurityManagerDialog.qml
 SeedKeyButton 1.0 SeedKeyButton.qml
 SomeIpE2eDialog 1.0 SomeIpE2eDialog.qml
 SecurityEventsView 1.0 SecurityEventsView.qml
+SecOcReversePanel 1.0 SecOcReversePanel.qml
+SecurityDashboard 1.0 SecurityDashboard.qml
 singleton Theme 1.0 Theme.qml
 FileChooser 1.0 FileChooser.qml

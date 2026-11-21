@@ -369,3 +369,26 @@ def test_key_servers(store):
     assert info.params == {'url': 'https://keys.example.com/api', 'trusted': '', 'auth': 'token'}
     assert store.secrets('Server') == {'token': b'bearer-s3cr3t'}  # The token is a secret, kept encrypted
     assert 'bearer-s3cr3t' not in store.path.read_text()
+
+
+def test_add_oem_credentials_keeps_the_login_encrypted(store):
+    info = store.add_oem_credentials(
+        'FCA shop', provider='autoauth', oem='Stellantis', username='shop42', password='hunter2secret'
+    )
+    assert info.purpose == keystore.OEM_TOKEN
+    assert info.params == {'provider': 'autoauth', 'oem': 'Stellantis'}
+    assert store.secrets('FCA shop') == {'username': b'shop42', 'password': b'hunter2secret'}
+    text = store.path.read_text()
+    assert 'shop42' not in text and 'hunter2secret' not in text  # The login is encrypted at rest
+
+
+def test_add_oem_credentials_accepts_a_bearer_token(store):
+    store.add_oem_credentials('VW shop', provider='odis', access_token='tok')
+    assert store.secrets('VW shop') == {'access_token': b'tok'}
+
+
+def test_add_oem_credentials_needs_a_provider_and_a_secret(store):
+    with pytest.raises(KeyStoreError):
+        store.add_oem_credentials('No provider', provider='', username='x')
+    with pytest.raises(KeyStoreError):
+        store.add_oem_credentials('No secret', provider='autoauth')

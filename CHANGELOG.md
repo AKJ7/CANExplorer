@@ -8,6 +8,222 @@ development stages are listed by date and commit, newest first.
 
 ## [Unreleased]
 
+## [1.11.0] – 2026-11-22
+
+### Added
+
+- **VW TP 2.0 transport** (`core.tp20`): the CAN transport of VW, Audi, Seat and Škoda diagnostics before UDS —
+  `Tp20Client` opens a channel to a module's logical address (setup on 0x200, parameters, acknowledged data,
+  channel-test keep-alive, disconnect) and is a `UdsTransport`, so diagnostic clients run over it. TP 2.0 has no
+  public specification: it follows the community description at jazdw.net/tp20, whose example exchange the tests
+  replay; the points that page states only by example (channel-id and timing byte layouts, ACK numbering, block
+  size) are inferred and documented. Refused setups carry no reason and broadcasts are only labelled. Not yet
+  checked against a real vehicle.
+- **KWP2000 client** (`core.kwp2000_client`): an active ISO 14230-3 client over TP 2.0, ISO-TP or a K-Line bus
+  (`KLineTransport`, on the `elm327_kline` interface) — sessions (e.g. 0x89), ECU reset, identification, security
+  access with your `compute_key`, local identifiers, routines and raw requests. A client of its own because UDS's
+  suppress-positive-response bit would misread KWP session 0x89. The trouble-code services (0x18, 0x17, 0x14) stay
+  raw requests: their layouts are in the paywalled ISO 14230-3 and could not be confirmed.
+- **Measuring blocks** (`core.measuring_blocks`): KWP2000 group reads (0x21) parsed into formula byte and data
+  bytes a, b; a layout that is not three-byte values keeps its remainder unparsed. VW's scaling is not built in: a
+  user-supplied JSON formula table names and scales the values with safe expressions over a and b.
+- **VW TP 2.0 trace decoder**: channel setups, parameters, ACKs, channel tests, disconnects and the data packets
+  reassembled into KWP2000 messages; the channel identifiers are learnt from the setup response.
+- **MCP KWP2000 tools**: `kwp_read_measuring_block` and `kwp_read_identification` (diagnostics tier) and
+  `kwp_request` (control tier), over a TP 2.0 channel or ISO-TP.
+- **VW TP 2.0 page**: a channel to a module (with channel tests and a TesterPresent keep-alive), the module scan,
+  measuring blocks read once or live, coding records edited field by field with a confirmation, backup and
+  read-back check, security access with a key file or key-store entry, and raw KWP2000 requests.
+- **VW TP 2.0 module scan** (`core.tp20_scan`): a channel setup to each logical address (0.1 s each), closed again;
+  optionally StartDiagnosticSession and ReadECUIdentification with an option you give. MCP `kwp_scan_modules`.
+- **Label files** (`core.diagnostic_labels`): your own JSON with module names, measuring-block formulas and value
+  names, and coding records with their fields — no manufacturer data is built in, and Ross-Tech's label files are
+  not read. Plain formula tables still load.
+- **Coding records** (`core.coding`): a record at a KWP2000 local identifier or a UDS data identifier, decoded into
+  bit fields; `write_record` reads it first (the backup), refuses another length or a record that changed since it
+  was read, writes and reads it back. MCP `coding_read` (diagnostics tier) and `coding_write` (control tier).
+- **KWP2000 session keep-alive** (`KwpKeepAlive`): TesterPresent after two idle seconds; `KwpClient` now runs one
+  request at a time so the keep-alive never interleaves with a request.
+- `Tp20Client` takes a separate `setup_timeout`, and `open()` raises `Tp20NoAnswer` or `Tp20Refused`.
+- **Shared safe expression evaluator** (`a2l.evaluate_expression`): the A2L formula evaluator over any named
+  variables, used by the measuring-block formulas.
+
+- **Active probe executor** (`core.reverse.active_prober`): runs the passive probing plans
+  (`enumerate_plan`, `brute_plan`, `scan_plan_non_standard`) on a bench with safety rails — dry run,
+  request-ID allowlist, state-changing services (`DANGEROUS_SERVICES`) skipped by default, rate limit,
+  request cap and per-step confirmation. For authorised benches only; the caller supplies the `send`
+  callable. MCP `preview_probe_plan` (dry run); the live run is driven from the gateway panel.
+- **Responsible-disclosure report** (`gateway_security.disclosure_report`): a PSIRT-ready Markdown or
+  JSON document built from the captured gateway findings — each weakness with its evidence,
+  remediation and WP.29 R155 / ISO 21434 reference, most-severe first; states only what the capture
+  shows and names no exploit. MCP `disclosure_report`; a menu item in the gateway security panel.
+- **More seed/key families** (`core.seedkey_crack`): hash truncation (MD5/SHA-1/SHA-256), CRC
+  (common CRC-16/32 parameter sets with the xorout solved from a pair) and a DES/3DES KDF alongside
+  the AES KDF.
+- **Findings to artifacts** (`core.reverse.findings_artifacts`): `gateway_map_to_dbc` writes a DBC
+  scaffold naming each discovered ECU's request/response message; `match_to_script` turns a recovered
+  closed-form seed/key algorithm into a `compute_key` script to store in the key store. MCP
+  `gateway_findings_to_dbc`; a menu item in the gateway security panel.
+
+- **OEM right-to-repair token providers** (`core.oem_tokens`): the legitimate path to diagnostic
+  access through a vehicle security gateway — obtain a short-lived token from the OEM portal rather
+  than circumventing the gateway.
+    - **Provider plug-in architecture**: an `OemTokenProvider` protocol and a `ProviderRegistry`
+      extensible through the `can_explorer.oem_token_providers` entry point group, so a provider for a
+      specific OEM portal can be shipped without changing CANExplorer.
+    - **Ready providers**: `OAuthTokenProvider` (OAuth 2.0 portals, reusing `core.oauth`) and
+      `HttpTokenProvider` (single-request REST portals), both unit-tested through an injectable
+      transport.
+    - **Encrypted credentials**: a new `oem-token` key store purpose
+      (`KeyStore.add_oem_credentials`) keeps a shop's portal login encrypted at rest, added and
+      listed in the **Security Manager** dialog like any other entry.
+    - **Honesty about the vehicle side**: the gateway-unlock frame is provider-supplied, never
+      guessed; a portal with no provider yields a token to present by a documented mechanism.
+    - MCP tools `oem_token_providers` and `request_oem_token` (metadata only; the token value is never
+      returned). Documented in the Security Manager guide (`docs/user-guide/security-manager.md`).
+
+- **SecOC reverse engineering guide** (`docs/user-guide/secoc-reverse-engineering.md`): dedicated
+  documentation page covering the SecOC reverse engineering workflow, including layout detection,
+  freshness reconstruction, strength assessment, key recovery, bypass detection and the MCP tools.
+- **E2E reverse engineering** (`core.reverse.e2e_reverse`): passive recovery of AUTOSAR E2E
+  protection parameters from captured CAN traffic without an ARXML.
+    - **Profile detection**: identifies profiles 2, 4, 5, 6, 7 and 22 by testing each profile's CRC
+      computation at plausible byte offsets.
+    - **Alive counter detection**: scans nibbles and bytes for monotonic increment modulo N.
+    - **Data ID recovery**: deterministic recovery for P2/P22, 16-bit brute-force for P5/P6, header
+      extraction for P4/P7.
+    - **E2E bypass detection**: static CRC, frozen counter, zero/0xFF CRC bytes.
+    - **Header computation** (`compute_e2e_header`): compute valid E2E headers with recovered
+      parameters for authorised bench testing.
+    - Integrated into the **Cryptanalysis** tab; MCP tools `detect_e2e` and `compute_e2e`.
+- **Seed/key algorithm recovery** (`core.seedkey_crack`): given captured UDS 0x27 SecurityAccess
+  (seed, key) pairs, tests hypotheses from identity through GF(2) linear algebra and reports every
+  confirmed match with a `compute_key` callable. Pairs are split into fit and verify sets; a match
+  must predict all held-back pairs. MCP tool `crack_seed_key`.
+    - **AES-based KDF hypotheses**: tests candidate master keys against AES-ECB, CMAC-AES,
+      HMAC-SHA-256 and HMAC-SHA-256(level || seed) patterns. Well-known default keys (all-zeros,
+      all-ones, etc.) are tried automatically for seeds up to 16 bytes.
+    - **LFSR hypothesis**: Berlekamp-Massey over GF(2) recovers LFSR-based seed-to-key scramblers
+      from the concatenated seed+key bit sequence.
+    - **Seed entropy assessment** (`assess_seed_quality`): Shannon entropy, unique ratio, sequential
+      pattern and fixed byte detection; weak seeds are flagged as predictable.
+    - **Crack UI in the Security Manager**: paste hex seed:key pairs and see the matched algorithms.
+    - **Crack integration in Gateway security**: the analysis automatically cracks seed/key pairs per
+      ECU and reports recovered algorithms; a dedicated **Crack seed/key** button re-runs cracking.
+- **Gateway security analysis** (`core.reverse.gateway_security`): passive analysis of captured UDS
+  traffic for gateway authentication patterns, bypass paths and cross-ECU seed/key correlations.
+    - **Authentication pattern detection**: which services are locked behind 0x27 or 0x29, at what
+      level and in what session type.
+    - **Bypass detection**: unfiltered diagnostic IDs, session fallback, timing windows after session
+      changes, and functional addressing bypass.
+    - **Cross-ECU seed/key correlation**: whether different ECUs share the same algorithm or master key.
+    - **Automated gateway mapping** (`map_gateway`): clusters ECUs by response timing into bus
+      segments, with per-ECU service and authentication summary.
+    - **UDS service access matrix** (`build_access_matrix`): records every (ECU, service, session)
+      observed and classifies as granted, denied or conditional.
+    - **Unlock sequence extraction** (`extract_unlock_sequence`): reconstructs the exact authentication
+      recipe (session change, seed/key exchange, timing) from the captured traffic.
+    - **Consolidated gateway report** (`gateway_report`): combines all analyses into a single report
+      with an overall severity rating and prioritised summary.
+    - **NRC fingerprinting** (`fingerprint_ecu`): identifies ECU software stacks from their NRC
+      response patterns and timing profile.
+    - **Multi-session probing planner** (`plan_probing`): suggests services to try in sessions where
+      they have not been observed yet.
+    - **DID/routine security classification** (`classify_did_security`): per-DID breakdown of read/
+      write access and authentication posture.
+    - **Authentication timing analysis** (`analyse_auth_timing`): times each step of the 0x27 flow
+      and flags unusually fast or slow key verification.
+    - **Bus segmentation detection** (`detect_bus_segments`): clusters CAN IDs by timing and ID range
+      to infer physical bus segments (periodic vs event-driven classification).
+    - **Response-after-reset analysis** (`analyse_reset_behaviour`): detects services that succeed
+      shortly after an ECU reset, indicating a boot-up security bypass window.
+    - **OEM-specific NRC decoder** (`decode_nrc`): decodes vendor-specific NRCs (0x70-0x7E) from
+      public sources; integrated into `analyse_gateway_auth` details output.
+    - **Export gateway findings** (`export_report`): exports `GatewayReport` as structured JSON or CSV.
+    - MCP tools `analyse_gateway_auth`, `analyse_gateway_filtering`, `correlate_ecu_seeds`,
+      `map_gateway`, `access_matrix`, `extract_unlock_sequence`, `gateway_report`,
+      `classify_did_security`, `assess_seed_quality`, `detect_bus_segments`,
+      `analyse_reset_behaviour`, `export_gateway_report`, `fingerprint_ecu`,
+      `analyse_auth_timing`, `plan_probing`, `auth_state_machine`, `differential_analysis`,
+      `infer_filter_rules`, `enumerate_plan`, `identify_ecu`, `brute_plan`,
+      `detect_timing_side_channel`, `infer_routing_table`, `detect_rewriting`,
+      `discover_unlock_chains`, `scan_plan_non_standard`, `analyse_doip_gateway`,
+      `gateway_compliance_report`, `assess_fd_security`, `attack_surface_report`.
+- **Cryptanalysis tab** in the Reverse engineering view: runs randomness tests (monobit, runs,
+  chi-square, serial correlation), linear dependency search and keystream reuse detection on every
+  identifier's payloads. Same analyses as the MCP tool `assess_frame_security`, now in the GUI.
+- **Gateway security tab** in the Reverse engineering view: authentication patterns, bypass detection
+  and cross-ECU seed/key correlations from the captured UDS traffic.
+- **SecOC tab** in the Reverse engineering view: detects AUTOSAR SecOC-protected frames from
+  statistical payload properties, reconstructs freshness counters, assesses MAC truncation strength,
+  attempts key recovery from common/weak keys and detects bypass paths. Passive — reads captured
+  frames only.
+- **Security dashboard tab** in the Reverse engineering view: combined security posture from gateway
+  analysis, SecOC analysis, seed quality and NRC fingerprints. Summary cards (ECU count, findings,
+  overall score and grade) and a prioritised findings table. MCP tool: `attack_surface_report`.
+- **Cryptanalysis suite for CAN frames** — passive security assessment of any identifier's payloads:
+    - **Randomness tests** (`core.reverse.crypto`): monobit, runs, chi-square and serial correlation
+      tests replace the simple half-set/half-flip threshold for detecting random trailing bytes (possible
+      MACs or encrypted data). Counter correlation detects bytes that track a counter.
+    - **Freshness and replay analysis** (`core.reverse.crypto`): evaluates counter+MAC pairs for replay
+      protection — counter wraps, MAC repetition on wrap, forgery probability and expected forgery time.
+    - **Linear dependency search** (`core.reverse.linear`): GF(2) Gaussian elimination finds affine bit
+      relations (CRC-16, CRC-32, XOR masks, arbitrary affine functions) and matches them against known
+      CRC polynomials (0x1021, 0x8005, 0x04C11DB7, 0xF4ACFB13, 0x42F0E1EBA9EA3693).
+    - **Keystream reuse detection** (`core.reverse.crypto`): finds repeated counter values in suspected
+      encrypted bytes and checks whether XOR of same-counter frames shows structure.
+    - **Active bench tests** (`core.active_security_test`): replay, MAC forgery, functional addressing
+      bypass, session race condition, ECU reset bypass and DoS resilience tests against an ECU on an
+      authorised bench — the only part that sends frames.
+    - MCP tool `assess_frame_security`: runs the passive analyses on one identifier and returns a
+      combined security assessment.
+    - MCP tools for SecOC reverse engineering: `detect_secoc_layout`, `assess_secoc_strength`,
+      `detect_secoc_bypass`, `try_secoc_key_recovery`, `detect_shared_secoc_keys`,
+      `predict_freshness`, `replay_window`, `classify_secoc_profile`,
+      `analyse_e2e_secoc_interaction`.
+    - New synthetic traffic behaviours: `cmac`, `cmac_no_freshness`, `xor_obfuscated`, `crc16`.
+
+### Improved
+
+- **Cryptanalysis**: MAC pattern detection (`classify_mac`) classifies suspected MAC byte ranges by length,
+  inferring CMAC-AES-128 (truncated/full), HMAC-SHA-256 or CRC. When a freshness counter is present, 24-32 bit
+  fields are strongly associated with AUTOSAR SecOC. The MCP tool `assess_frame_security` now includes MAC
+  classification and SecOC config cross-check in its output.
+- **Cryptanalysis**: double-clicking a row in the Cryptanalysis tab navigates to the identifier in the Bits tab;
+  the plot button shows the inter-frame interval.
+- **Gateway security**: the controller now runs the full analysis pipeline automatically — topology mapping,
+  access matrix, authentication timing, seed/key cracking, entropy assessment, bus segmentation and
+  reset-behaviour analysis — in addition to auth pattern detection, bypass detection and cross-ECU
+  correlation. Double-clicking a gateway result navigates to the ECU identifier. **Generate report**,
+  **Crack seed/key** and **Export** buttons provide one-click access to the consolidated report,
+  standalone algorithm recovery and JSON/CSV export.
+- **Gateway security**: vendor-specific NRCs (0x70-0x7E) are decoded from public sources and shown in
+  authentication pattern details.
+- **Gateway security**: the response-ID convention (request + offset) is now configurable via the `response_offset`
+  parameter (default 8), supporting OEMs that use non-standard offsets. Functional addressing (0x7DF) responses are
+  paired with any ECU's physical response ID.
+- **Gateway security**: O(n^2) timing-window analysis replaced with pre-indexed timestamp lookup.
+- **Gateway security**: `_is_positive_response` is bounded to 0x41..0x7E (was >= 0x41), excluding 0x7F
+  negative-response header and invalid bytes above 0x7E.
+- **Gateway security MCP**: `analyse_gateway_auth` and `analyse_gateway_filtering` use `_recent()` (capped at 20k
+  frames) instead of scanning the full trace.
+- **Linear relations**: the `LinearRelation` dataclass carries a `confidence` field (share of verification frames
+  that matched), surfaced in the GUI and MCP output.
+- **MCP**: added send-tier active security bench tests: `replay_test`, `forgery_test`,
+  `functional_bypass_test`, `session_race_test`, `reset_bypass_test` and `dos_resilience_test`.
+- **Synthetic traffic**: the `xor_obfuscated` behaviour's keystream is configurable via `Behaviour(keystream=...)`.
+
+### Fixed
+
+- **Cryptanalysis GUI**: the `detect_keystream_reuse` call now passes all three required arguments (payloads,
+  counter_field, encrypted_range) instead of just payloads, and uses the correct attributes (`structured_xor_pairs`,
+  `reused_counter_values`, `findings`) of `KeystreamReuseReport`.
+- **Diagnostics**: the Authentication section no longer runs past its edge in a narrow pane or with a long
+  translation: its captions sit above the fields, which take the section's whole width, and its buttons wrap onto a
+  second line when they do not fit.
+- **XCP/CCP**: the "No A2L file loaded" hint is centred in the variables card instead of sitting on its left.
+- **Updates**: long release notes wrap inside the update dialog instead of running past its right edge.
+
 ## [1.10.0] – 2026-11-20
 
 ### Added
@@ -1515,7 +1731,8 @@ Called "Milestone 0.1.0" in the commit message and the README roadmap.
 - Qt Widgets user interface: main window, new connection dialog, about dialog and a raw CAN frame table.
 - Pipenv based project setup, VS Code development container, Dockerfile and a CI workflow skeleton.
 
-[Unreleased]: https://github.com/AKJ7/CANExplorer/compare/v1.10.0...HEAD
+[Unreleased]: https://github.com/AKJ7/CANExplorer/compare/v1.11.0...HEAD
+[1.11.0]: https://github.com/AKJ7/CANExplorer/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/AKJ7/CANExplorer/compare/v1.9.0...v1.10.0
 [1.9.0]: https://github.com/AKJ7/CANExplorer/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/AKJ7/CANExplorer/compare/v1.7.1...v1.8.0

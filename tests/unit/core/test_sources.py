@@ -202,3 +202,29 @@ def test_socketcand_patch_raises_when_connection_closes(mocker):
     bus = _handshake_bus(mocker, b'')
     with pytest.raises(can.CanError, match='closed'):
         bus._expect_msg('< hi >')
+
+
+def test_send_gives_a_slow_serial_adapter_enough_time():
+    """A serial adapter (ELM327, GVRET, …) runs a multi-round-trip dialogue per frame, so LiveSource.send must
+    allow more than a real CAN interface needs: a send slower than the old 0.1 s budget still succeeds, and the
+    bus is given the generous timeout."""
+    import time
+
+    from can_explorer.core.sources import SEND_TIMEOUT
+
+    assert SEND_TIMEOUT >= 1.0
+
+    class SlowSerialBus:
+        def __init__(self):
+            self.timeout = None
+
+        def send(self, msg, timeout=None):
+            self.timeout = timeout
+            time.sleep(0.2)  # Longer than the former 0.1 s send budget, well within SEND_TIMEOUT
+            if timeout is not None and timeout < 0.2:
+                raise can.CanOperationError('Sending timed out')
+
+    source = LiveSource(BusConfig('elm327', 'socket://127.0.0.1:1'))
+    source._bus = SlowSerialBus()  # Stand in for an opened adapter
+    source.send(can.Message(arbitration_id=0x7E0, is_extended_id=False, data=b'\x02\x10\x03'))
+    assert source._bus.timeout == SEND_TIMEOUT

@@ -245,8 +245,9 @@ another session, as SWS_Dcm_01482/01483 describe.
 
 ### transmitCertificate
 
-**Transmit** sends a certificate of the security manager (a client certificate or the first of a trusted set) with
-transmitCertificate (0x04) under a **certificateEvaluationId**: a general-purpose certificate the ECU stores for an
+**Transmit** sends the certificate chosen on the *Transmit* line (a client certificate of the security manager, or the
+first of a trusted set) with transmitCertificate (0x04) under the **certificateEvaluationId** typed on the
+*Evaluation* line: a general-purpose certificate the ECU stores for an
 application — secure coding, SecOC, TLS, enhanced rights. The evaluation ids and what each is for are defined by the
 ECU's manufacturer; an ECU answers *certificate verified*, `requestOutOfRange` (NRC 0x31) for an id it does not
 know, or a `certificateVerificationFailed-…` code. Scripts: `await t.uds.transmit_certificate(certificate, 0x0001)`.

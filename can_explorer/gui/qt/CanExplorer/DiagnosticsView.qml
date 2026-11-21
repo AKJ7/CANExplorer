@@ -577,9 +577,13 @@ ColumnLayout {
                     readonly property var anyCertificates: entries.filter(entry => entry.purpose === "tls-client" || entry.purpose === "tls-ca")
                         .map(entry => entry.name)
 
-                    RowLayout {
+                    // Captions above the fields, which take the section's whole width: a column of labels beside
+                    // them would push them past the section's edge in a narrow pane or with a long translation
+                    ColumnLayout {
                         Layout.fillWidth: true
-                        FieldLabel { text: qsTr("Method") }
+                        spacing: 2
+
+                        FieldLabel { Layout.topMargin: 4; text: qsTr("Method") }
                         ComboBox {
                             id: authMethodBox
                             model: [qsTr("Certificate exchange"), qsTr("Challenge-response")]
@@ -587,10 +591,8 @@ ColumnLayout {
                             ToolTip.visible: hovered
                             ToolTip.text: qsTr("Certificate exchange (sub-functions 0x01–0x03) or challenge-response without certificates (0x05–0x07); authenticationConfiguration (0x08) tells which one the ECU offers")
                         }
-                    }
-                    RowLayout {
-                        Layout.fillWidth: true
-                        FieldLabel { text: authSection.challengeResponse ? qsTr("Key") : qsTr("Certificate") }
+
+                        FieldLabel { Layout.topMargin: 4; text: authSection.challengeResponse ? qsTr("Key") : qsTr("Certificate") }
                         ComboBox {
                             id: authCredentialBox
                             model: authSection.credentials.length > 0 ? authSection.credentials : [{ value: "", text: qsTr("none in the Security Manager") }]
@@ -603,13 +605,15 @@ ColumnLayout {
                                 ? qsTr("A shared authentication key (the proof is a MAC), a client certificate's private key (a signature), or a security profile, from the Security Manager (unlocked)")
                                 : qsTr("A client certificate with its private key from the Security Manager (unlocked), or a security profile's certificate")
                         }
-                    }
-                    RowLayout {
-                        Layout.fillWidth: true
-                        visible: !(authSection.credential && authSection.credential.symmetric)
-                        FieldLabel { text: qsTr("Proof") }
+
+                        FieldLabel {
+                            Layout.topMargin: 4
+                            visible: authSchemeBox.visible
+                            text: qsTr("Proof")
+                        }
                         ComboBox {
                             id: authSchemeBox
+                            visible: !(authSection.credential && authSection.credential.symmetric)
                             model: root.diagnostics.signature_schemes
                             textRole: "name"
                             valueRole: "value"
@@ -617,77 +621,88 @@ ColumnLayout {
                             ToolTip.visible: hovered
                             ToolTip.text: qsTr("How the proof of ownership (the signature over the ECU's challenge) is made; the ECU's configuration decides which one it expects")
                         }
-                    }
-                    RowLayout {
-                        Layout.fillWidth: true
-                        visible: authSection.challengeResponse
-                        FieldLabel { text: qsTr("Algorithm") }
+
+                        FieldLabel {
+                            Layout.topMargin: 4
+                            visible: authSection.challengeResponse
+                            text: qsTr("Algorithm")
+                        }
                         TextField {
                             id: authAlgorithmField
+                            visible: authSection.challengeResponse
                             placeholderText: qsTr("hex or OID, empty for zeros")
                             font.family: "monospace"
                             Layout.fillWidth: true
                             ToolTip.visible: hovered
                             ToolTip.text: qsTr("The algorithm asked for in requestChallengeForAuthentication: 16 bytes in hex, or a dotted OID (DER encoded). The proof is made for the algorithm the ECU answers with")
                         }
-                    }
-                    RowLayout {
-                        Layout.fillWidth: true
-                        visible: authSection.challengeResponse
-                        FieldLabel { text: qsTr("Additional") }
+
+                        FieldLabel {
+                            Layout.topMargin: 4
+                            visible: authSection.challengeResponse
+                            text: qsTr("Additional")
+                        }
                         TextField {
                             id: authAdditionalField
+                            visible: authSection.challengeResponse
                             placeholderText: qsTr("additional parameter, hex")
                             font.family: "monospace"
                             Layout.fillWidth: true
                             ToolTip.visible: hovered
                             ToolTip.text: qsTr("Sent when the ECU asks for an additional parameter; what it holds is manufacturer specific")
                         }
-                    }
-                    RowLayout {
-                        Layout.fillWidth: true
-                        CheckBox {
-                            id: authBidirectionalBox
-                            text: qsTr("Bidirectional")
-                            ToolTip.visible: hovered
-                            ToolTip.text: authSection.challengeResponse
-                                ? qsTr("The ECU also proves owning its key over a challenge of ours; checked with the shared key, the profile or trusted certificates")
-                                : qsTr("The ECU also sends its certificate and proves owning it; check it against trusted certificates")
-                        }
-                        ComboBox {
-                            id: authTrustedBox
-                            visible: authBidirectionalBox.checked && !(authSection.credential && authSection.credential.symmetric)
-                            model: [qsTr("Not checked")].concat(authSection.trustedSets)
+
+                        FieldLabel { Layout.topMargin: 4; text: qsTr("ECU proof") }
+                        RowLayout {
                             Layout.fillWidth: true
+                            spacing: 8
+                            CheckBox {
+                                id: authBidirectionalBox
+                                text: qsTr("Bidirectional")
+                                ToolTip.visible: hovered
+                                ToolTip.text: authSection.challengeResponse
+                                    ? qsTr("The ECU also proves owning its key over a challenge of ours; checked with the shared key, the profile or trusted certificates")
+                                    : qsTr("The ECU also sends its certificate and proves owning it; check it against trusted certificates")
+                            }
+                            ComboBox {
+                                id: authTrustedBox
+                                visible: authBidirectionalBox.checked && !(authSection.credential && authSection.credential.symmetric)
+                                model: [qsTr("Not checked")].concat(authSection.trustedSets)
+                                Layout.fillWidth: true
+                                ToolTip.visible: hovered
+                                ToolTip.text: qsTr("The trusted certificates the ECU's certificate is checked against")
+                            }
                         }
-                    }
-                    RowLayout {
-                        Layout.fillWidth: true
-                        FieldLabel { text: qsTr("Session key") }
-                        TextField {
-                            id: authConfigurationField
-                            text: "00"
-                            font.family: "monospace"
-                            Layout.preferredWidth: 60
-                            ToolTip.visible: hovered
-                            ToolTip.text: qsTr("The communicationConfiguration (hex): 00 asks for no session key; the values asking an ECU for one are defined by its manufacturer. The session key can then protect secured transmission (0x84)")
+
+                        FieldLabel { Layout.topMargin: 4; text: qsTr("Session key") }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+                            TextField {
+                                id: authConfigurationField
+                                text: "00"
+                                font.family: "monospace"
+                                Layout.preferredWidth: 60
+                                ToolTip.visible: hovered
+                                ToolTip.text: qsTr("The communicationConfiguration (hex): 00 asks for no session key; the values asking an ECU for one are defined by its manufacturer. The session key can then protect secured transmission (0x84)")
+                            }
+                            Label {
+                                text: root.diagnostics.session_key || qsTr("none")
+                                color: root.diagnostics.session_key ? Theme.success : Theme.muted
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                            }
                         }
+
                         Label {
-                            text: root.diagnostics.session_key || qsTr("none")
-                            color: root.diagnostics.session_key ? Theme.success : Theme.muted
-                            elide: Text.ElideRight
+                            visible: root.diagnostics.authenticated
+                            text: qsTr("Authenticated")
+                            color: Theme.success
                             Layout.fillWidth: true
                         }
-                    }
-                    Label {
-                        visible: root.diagnostics.authenticated
-                        text: qsTr("Authenticated")
-                        color: Theme.success
-                        Layout.fillWidth: true
-                    }
-                    RowLayout {
-                        Layout.fillWidth: true
-                        FieldLabel { text: qsTr("Transmit") }
+
+                        // transmitCertificate (0x04): on two lines, the certificate's name needs the width
+                        FieldLabel { Layout.topMargin: 4; text: qsTr("Transmit") }
                         ComboBox {
                             id: transmitCertificateBox
                             model: authSection.anyCertificates.length > 0 ? authSection.anyCertificates : [qsTr("none in the Security Manager")]
@@ -696,35 +711,32 @@ ColumnLayout {
                             ToolTip.visible: hovered
                             ToolTip.text: qsTr("A general-purpose certificate to give the ECU with transmitCertificate (0x04), e.g. for secure coding, SecOC or TLS")
                         }
-                        TextField {
-                            id: evaluationIdField
-                            placeholderText: qsTr("evaluation id")
-                            font.family: "monospace"
-                            Layout.preferredWidth: 110
-                            ToolTip.visible: hovered
-                            ToolTip.text: qsTr("The certificateEvaluationId (hex, 16 bits): tells the ECU what the certificate is for; the values are defined by its manufacturer")
-                        }
-                        Button {
-                            text: qsTr("Transmit")
-                            enabled: root.ready && authSection.anyCertificates.length > 0 && evaluationIdField.text.length > 0
-                            onClicked: root.report(root.diagnostics.transmit_certificate(transmitCertificateBox.currentText, evaluationIdField.text))
+
+                        FieldLabel { Layout.topMargin: 4; text: qsTr("Evaluation") }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+                            TextField {
+                                id: evaluationIdField
+                                placeholderText: qsTr("evaluation id")
+                                font.family: "monospace"
+                                Layout.fillWidth: true
+                                ToolTip.visible: hovered
+                                ToolTip.text: qsTr("The certificateEvaluationId (hex, 16 bits): tells the ECU what the certificate is for; the values are defined by its manufacturer")
+                            }
+                            Button {
+                                text: qsTr("Transmit")
+                                enabled: root.ready && authSection.anyCertificates.length > 0 && evaluationIdField.text.length > 0
+                                onClicked: root.report(root.diagnostics.transmit_certificate(transmitCertificateBox.currentText, evaluationIdField.text))
+                            }
                         }
                     }
-                    RowLayout {
+                    // Wrapping onto a second line in a narrow pane (or with long translations); right to left, so
+                    // the buttons keep their order from the right edge
+                    Flow {
                         Layout.fillWidth: true
-                        Item { Layout.fillWidth: true }
-                        Button {
-                            text: qsTr("Configuration")
-                            enabled: root.ready
-                            onClicked: root.report(root.diagnostics.authentication_configuration())
-                            ToolTip.visible: hovered
-                            ToolTip.text: qsTr("Ask the ECU which authentication it offers (authenticationConfiguration)")
-                        }
-                        Button {
-                            text: qsTr("De-authenticate")
-                            enabled: root.ready
-                            onClicked: root.report(root.diagnostics.deauthenticate())
-                        }
+                        layoutDirection: Qt.RightToLeft
+                        spacing: 6
                         Button {
                             text: qsTr("Authenticate")
                             enabled: root.ready && authSection.credentials.length > 0
@@ -750,6 +762,18 @@ ColumnLayout {
                                         configuration: authConfigurationField.text,
                                     }))
                             }
+                        }
+                        Button {
+                            text: qsTr("De-authenticate")
+                            enabled: root.ready
+                            onClicked: root.report(root.diagnostics.deauthenticate())
+                        }
+                        Button {
+                            text: qsTr("Configuration")
+                            enabled: root.ready
+                            onClicked: root.report(root.diagnostics.authentication_configuration())
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("Ask the ECU which authentication it offers (authenticationConfiguration)")
                         }
                     }
                 }

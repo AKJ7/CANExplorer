@@ -959,3 +959,97 @@ async def test_diagnostics_secured_with_session_key(manager):
     finally:
         simulator.stop()
         ecu_session.stop()
+
+
+def test_oem_credentials_and_token_request(security):
+    from can_explorer.core.oem_tokens import HttpTokenProvider, OemToken, OemTokenProvider
+
+    assert security.create('pw', 'pw') == ''
+    assert security.add_oem_credentials('FCA shop', 'autoauth', 'Stellantis', 'shop42', 'secretpw', '') == ''
+    assert security.add_oem_credentials('No secret', 'autoauth', '', '', '', '') == (
+        'OEM credentials need a username/password or an access token'
+    )
+    rows = {row['name']: row for row in security.entries}
+    assert rows['FCA shop']['kind'] == 'OEM credentials'
+    assert rows['FCA shop']['details'] == 'provider autoauth · Stellantis'
+    assert not any('secretpw' in str(row) for row in security.entries)  # The login never reaches QML
+
+    class StubProvider:
+        name = 'autoauth'
+        oem = 'Stellantis'
+
+        def request_token(self, request, credentials):
+            assert credentials == {'username': b'shop42', 'password': b'secretpw'}
+            return OemToken(value='TOP-SECRET', kind='one-time', oem='Stellantis', scope='diag', expires_at=0.0)
+
+        def gateway_unlock(self, token):
+            return None
+
+    assert isinstance(StubProvider(), OemTokenProvider)
+    security._oem_tokens.add(StubProvider())
+    assert 'autoauth' in security.oem_token_providers
+
+    result = security.request_oem_token('autoauth', 'FCA shop', '1HGBH41JXMN', 'Jeep')
+    assert result == {
+        'oem': 'Stellantis',
+        'kind': 'one-time',
+        'scope': 'diag',
+        'expires_at': 0.0,
+        'expired': False,
+        'gateway_unlock': '',
+    }
+    assert 'TOP-SECRET' not in str(result)  # The token value is never returned to QML
+    assert security.request_oem_token('unknown', 'FCA shop', '', '')['error'].startswith('No OEM token provider')
+    assert isinstance(HttpTokenProvider('p', 'Acme', 'https://x.example.com/t'), OemTokenProvider)
+
+
+def test_oem_token_request_needs_unlocked_store(security):
+    assert security.create('pw', 'pw') == ''
+    security.lock()
+    assert security.request_oem_token('autoauth', 'FCA shop', '', '') == {'error': 'Unlock the key store first'}
+
+
+def test_security_manager_dialog_oem_form_loads_and_adds(qapp, tmp_path, monkeypatch):
+    """Load the real SecurityManagerDialog QML through the engine and drive the OEM credentials form, so a broken
+    binding or a mistyped field id in the new form surfaces as a QML warning rather than silently at runtime."""
+    import os
+
+    from PyQt6.QtCore import QObject
+    from PyQt6.QtQml import QQmlComponent, QQmlEngine
+
+    from can_explorer.gui.signal_plot import register_qml_types
+    from can_explorer.util.gui import get_res_path
+
+    register_qml_types()
+    os.environ.setdefault('QT_QUICK_CONTROLS_STYLE', 'CanExplorerStyle')
+    monkeypatch.setenv(keystore.PATH_VARIABLE, str(tmp_path / 'keys.json'))
+    manager = ConnectionManager()
+    manager.security.store._scrypt_cost = 16
+    assert manager.security.create('pw', 'pw') == ''
+    engine = QQmlEngine()
+    engine.addImportPath(str(get_res_path('.')))
+    warnings = []
+    engine.warnings.connect(lambda errors: warnings.extend(error.toString() for error in errors))
+    engine.rootContext().setContextProperty('connectionManager', manager)
+    try:
+        component = QQmlComponent(engine)
+        component.setData(b'import CanExplorer 1.0\nSecurityManagerDialog { }', QUrl.fromLocalFile('/d.qml'))
+        dialog = component.create()
+        assert dialog is not None, component.errorString()
+        dialog.setProperty('purpose', 'oem-token')
+        assert dialog.property('purpose') == 'oem-token'
+        qapp.processEvents()  # Realise the OEM form so its visible/oemBearer bindings evaluate
+        # Click Add with empty fields: runs addEntry()'s oem-token branch, which references the new field ids
+        add = next(
+            child
+            for child in dialog.findChildren(QObject)
+            if child.property('text') == 'Add' and 'Button' in child.metaObject().className()
+        )
+        add.metaObject().invokeMethod(add, 'clicked')
+        qapp.processEvents()
+        assert warnings == []  # A mistyped binding or field id anywhere in the new form would warn here
+        # The branch really ran: an empty provider is rejected, so nothing was stored
+        assert 'oem-token' not in [row['purpose'] for row in manager.security.entries]
+        dialog.deleteLater()
+    finally:
+        manager.close_all()

@@ -470,7 +470,7 @@ ones; the agent sees the full list.
 | Tool | Main arguments | What it does |
 |---|---|---|
 | `decode_frame` | `identifier`, `data` | Decode a payload with the loaded database |
-| `decode_protocol` | `protocol`, `identifier`, `data` | Decode with a protocol decoder, no database: J1939, J1939-22, NMEA 2000, CANopen, ISO-TP, UDS, KWP2000, their *(extended)* variants, K-Line, LIN, J1587, NM, SecOC, XCP, CCP |
+| `decode_protocol` | `protocol`, `identifier`, `data` | Decode with a protocol decoder, no database: J1939, J1939-22, NMEA 2000, CANopen, ISO-TP, UDS, KWP2000, their *(extended)* variants, K-Line, VW TP 2.0, LIN, J1587, NM, SecOC, XCP, CCP |
 | `load_database` / `unload_database` | `path` | Load a DBC, ARXML, KCD, SYM or DBF, or go back to raw bytes |
 | `secoc_status` | — | SecOC secured PDUs of the loaded ARXML and their live checks (MAC, freshness). Never shows a key. `can-mcp` unlocks the key store with `CANEXPLORER_KEYSTORE_PASSWORD` |
 
@@ -505,6 +505,9 @@ These use the same engine as the [Reverse engineering](reverse-engineering.md) v
 OBD-II tools default to `request="7DF"` (functional) and `response="7E8"`; UDS tools to `7E0`/`7E8`. For ISO-TP
 extended or mixed addressing, put the address byte after a colon, as in the
 [Diagnostics view](diagnostics.md#addressing): `"request": "6F1:12", "response": "612:F1"`.
+KWP2000 tools default to `transport="tp20"`: a [VW TP 2.0](kwp2000-tp20.md) channel to the logical address
+`module` (`"01"`, the engine), opened and closed around each call; `transport="isotp"` uses `request`/`response`
+instead. The read tools first send StartDiagnosticSession `session="89"` (`""` skips it).
 
 | Tool | Main arguments | What it does |
 |---|---|---|
@@ -516,6 +519,10 @@ extended or mixed addressing, put the address byte after a colon, as in the
 | `uds_read_dtcs` | `status_mask` | Read trouble codes (0x19) |
 | `uds_dtc_details` | `dtc` | A DTC's snapshot (freeze frame) and extended data. Records of unknown length are returned raw |
 | `uds_find_ecus` | `extended` | The ECUs answering a functional TesterPresent |
+| `kwp_read_measuring_block` | `group`, `module`, `formulas` | A KWP2000 [measuring block](kwp2000-tp20.md#measuring-blocks) (0x21 group): each value's formula byte and data bytes, scaled and named with a formula table or [label file](kwp2000-tp20.md#label-files) you supply (raw without one) |
+| `kwp_read_identification` | `option`, `module` | KWP2000 ReadECUIdentification (0x1A): raw bytes and printable text |
+| `kwp_scan_modules` | `addresses`, `identification`, `labels` | [Scan for VW TP 2.0 modules](kwp2000-tp20.md#scanning-for-modules): a channel setup to each logical address, closed again; optionally their identification |
+| `coding_read` | `module`, `record`, `labels` | Read a [coding record](kwp2000-tp20.md#coding) — from a label file you supply, or raw as `kwp:9A` / `uds:0600` — with its fields decoded |
 | `j1939_request` | `pgn`, `destination` (`FF` = all) | Request a parameter group and decode the answers (address claims, DM1/DM2, identification text, acknowledgments). Requesting DM3 or DM11 clears codes and needs `control` |
 | `xcp_connect` / `xcp_disconnect` / `xcp_status` | `protocol`, `transport`, `request`, `response`, `a2l`, `key` | Open an [XCP](xcp.md) (CAN, CAN FD, UDP, TCP) or CCP session for the other `xcp_*` tools |
 | `xcp_read` / `xcp_read_memory` | `names` / `address`, `size` | A2L variables in physical units, or raw memory |
@@ -531,6 +538,8 @@ extended or mixed addressing, put the address byte after a colon, as in the
 | `uds_reset` | `reset_type` | ECU reset (0x11) |
 | `uds_routine` | `control_type`, `routine`, `data` | Routine control (0x31) |
 | `uds_request` | `payload` | Any raw UDS request |
+| `kwp_request` | `payload`, `module`, `transport` | Any raw KWP2000 request over TP 2.0 or ISO-TP, with the response described; also the way to the trouble-code services (0x18, 0x14) |
+| `coding_write` | `module`, `record`, `changes` or `data` | Change a [coding record](kwp2000-tp20.md#coding) by field name or as a whole: reads it first (the backup, returned as `before`), refuses another length or a record changed since, writes and reads back (`verified`) |
 | `uds_secured_request` | `payload`, `key`, `sign`, `encrypt` | A request inside a [SecuredDataTransmission](diagnostics.md#secured-data-transmission-0x84) (0x84) envelope; returns the unwrapped response and whether its signature verified. `key="session"` uses the session key of the last `uds_authenticate` |
 | `uds_authenticate` | `method`, `credentials`, `bidirectional`, `trusted`, `algorithm`, `communication_configuration` | [Authentication](diagnostics.md#authentication-0x29) (0x29) by certificate exchange or challenge-response with key store entries or a security profile (`method="configuration"` only asks which one the ECU offers); keeps a session key for `uds_secured_request` |
 | `uds_deauthenticate` | — | End the authentication (deAuthenticate) and forget its session key |

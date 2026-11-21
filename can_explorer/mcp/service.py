@@ -18,6 +18,10 @@ from can_explorer.core.database_io import DatabaseFormatError, WRITE_SUFFIXES
 from can_explorer.core.decoding import DbcDecoder, FrameDecoder, open_signal_database
 from can_explorer.core.frames import parse_hex_bytes
 from can_explorer.core.isotp_client import IsoTpClient
+from can_explorer.core.kwp2000_client import KwpClient, KwpError
+from can_explorer.core.coding import CodingError, CodingRecord, write_record
+from can_explorer.core.diagnostic_labels import LabelFile
+from can_explorer.core.measuring_blocks import MeasuringBlockError, read_measuring_block
 from can_explorer.core.obd import ECU_RESPONSE, FUNCTIONAL_REQUEST, ObdClient
 from can_explorer.core.protocols import PROTOCOL_DECODERS, create_protocol_decoder
 from can_explorer.core.reverse.analysis import analyse, collect
@@ -39,6 +43,8 @@ from can_explorer.core.secoc_check import KeyStoreSecOcKeys, SecOcVerifier
 from can_explorer.core.session import BusSession, SessionError
 from can_explorer.core.calibration_session import CalibrationSession, a2l_path
 from can_explorer.core.sources import BusConfig, LiveSource, MessageSource
+from can_explorer.core.tp20 import Tp20Client, Tp20Error
+from can_explorer.core.tp20_scan import SETUP_TIMEOUT, parse_addresses, scan_modules
 from can_explorer.core.uds import UdsClient, UdsError, load_key_source
 from can_explorer.sys.log_handler import get_logger
 
@@ -1042,6 +1048,140 @@ class CanService:
             'bytes': bytes_summary,
         }
 
+    def assess_frame_security(self, identifier: Any, extended: bool = False) -> Dict[str, Any]:
+        """Run a passive security assessment on the recent frames of one identifier: randomness tests on trailing
+        bytes, freshness/replay analysis, linear dependency search and keystream reuse detection."""
+        from can_explorer.core.reverse.crypto import (
+            analyse_freshness,
+            classify_mac,
+            detect_keystream_reuse,
+            test_randomness,
+        )
+        from can_explorer.core.reverse.linear import find_linear_relations
+
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        key: Tuple[int, bool] = (_parse_id(identifier), bool(extended))
+        messages = self._recent(key[0], key[1], ANALYSIS_FRAMES)
+        frames = collect(frame.message for frame in messages)
+        if key not in frames:
+            return {'id': _id_text(*key), 'frames': 0, 'assessment': {}, 'note': 'No frames for this identifier'}
+
+        id_frames = frames[key]
+        payloads = id_frames.payloads
+        timestamps = id_frames.times
+        n = len(payloads)
+
+        if n < 20:
+            return {
+                'id': _id_text(*key),
+                'frames': n,
+                'assessment': {},
+                'note': f'Too few frames ({n}); need at least 20',
+            }
+
+        length = len(payloads[0]) if payloads else 0
+        assessment: Dict[str, Any] = {}
+
+        # 1. Run the automatic analysis to find fields
+        result = analyse(id_frames, secoc=self._secured().get(key))
+        fields_info = [self._field(found) for found in result.fields if found.kind != 'constant']
+        assessment['fields'] = fields_info
+
+        # 2. Randomness tests on trailing bytes (last 2+ bytes that look random)
+        if length >= 3:
+            randomness = test_randomness(payloads, (max(0, length - 4), length - 1))
+            assessment['randomness'] = {
+                'byte_range': list(randomness.byte_range),
+                'monobit_p': randomness.monobit_p,
+                'runs_p': randomness.runs_p,
+                'chi_square_p': randomness.chi_square_p,
+                'serial_correlation': randomness.serial_correlation,
+                'counter_correlation': randomness.counter_correlation,
+                'verdict': randomness.verdict,
+                'confidence': randomness.confidence,
+            }
+
+        # 3. Freshness analysis (if a counter and trailing random bytes are found)
+        counter_field = None
+        mac_range = None
+        for found in result.fields:
+            if found.kind == 'counter' and counter_field is None:
+                counter_field = found.field
+            if found.kind in ('random', 'mac'):
+                first_byte = min(found.field.bits) // 8
+                last_byte = max(found.field.bits) // 8
+                mac_range = (first_byte, last_byte)
+
+        if counter_field is not None and mac_range is not None:
+            freshness = analyse_freshness(payloads, timestamps, counter_field, mac_range)
+            assessment['freshness'] = {
+                'has_freshness': freshness.has_freshness,
+                'counter_wraps': freshness.counter_wraps,
+                'mac_repeats_on_wrap': freshness.mac_repeats_on_wrap,
+                'mac_bits': freshness.mac_bits,
+                'forgery_probability': freshness.forgery_probability,
+                'frames_per_second': freshness.frames_per_second,
+                'expected_forgery_time': freshness.expected_forgery_time,
+                'replay_possible': freshness.replay_possible,
+                'findings': freshness.findings,
+            }
+
+        # 4. MAC classification (if a suspected MAC range is found)
+        if mac_range is not None:
+            mac_class = classify_mac(payloads, mac_range, has_counter=counter_field is not None)
+            assessment['mac_classification'] = {
+                'byte_range': list(mac_range),
+                'mac_bits': mac_class.mac_bits,
+                'likely_algorithm': mac_class.likely_algorithm,
+                'truncated': mac_class.truncated,
+                'findings': mac_class.findings,
+            }
+
+        # 5. SecOC configuration cross-check
+        secoc_config = self._secured().get(key)
+        if secoc_config is not None:
+            assessment['secoc'] = {
+                'configured': True,
+                'note': 'This identifier has a SecOC configuration from the loaded ARXML',
+            }
+
+        # 6. Linear dependency search
+        linear = find_linear_relations(payloads)
+        if linear:
+            assessment['linear_relations'] = [
+                {
+                    'output_bits': rel.output_bits[:8],  # Truncate for readability
+                    'algorithm': rel.algorithm,
+                    'polynomial': f'0x{rel.polynomial:X}' if rel.polynomial else None,
+                    'description': rel.description,
+                    'confidence': rel.confidence,
+                }
+                for rel in linear
+            ]
+
+        # 7. Keystream reuse detection (if a counter is found)
+        if counter_field is not None and length >= 3:
+            enc_first = 0
+            enc_last = length - 1
+            # Exclude the counter bytes from the encrypted range
+            counter_bytes = {b // 8 for b in counter_field.bits}
+            enc_first = min(b for b in range(length) if b not in counter_bytes)
+            enc_last = max(b for b in range(length) if b not in counter_bytes)
+            reuse = detect_keystream_reuse(payloads, counter_field, (enc_first, enc_last))
+            assessment['keystream_reuse'] = {
+                'reused_counter_values': reuse.reused_counter_values[:20],
+                'structured_xor_pairs': reuse.structured_xor_pairs,
+                'findings': reuse.findings,
+            }
+
+        return {
+            'id': _id_text(*key),
+            'frames': n,
+            'length': length,
+            'assessment': assessment,
+        }
+
     def extract_field(
         self,
         identifier: Any,
@@ -1149,6 +1289,1411 @@ class CanService:
         # Each backend on its own: one failing backend no longer hides the channels of all the others
         configs = configs_of(detect_channels())
         return [{'interface': config.get('interface'), 'channel': str(config.get('channel'))} for config in configs]
+
+    @staticmethod
+    def crack_seed_key(
+        pairs: List[Dict[str, str]], level: int = 1, candidate_keys: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """Recover the seed/key algorithm from captured UDS 0x27 SecurityAccess pairs."""
+        from can_explorer.core.seedkey_crack import crack
+
+        try:
+            decoded = [(bytes.fromhex(p['seed']), bytes.fromhex(p['key'])) for p in pairs]
+        except (KeyError, ValueError) as e:
+            return {'error': f'Invalid pair: {e}. Each pair must be {{seed: hex, key: hex}}.'}
+        keys = None
+        if candidate_keys:
+            try:
+                keys = [bytes.fromhex(k) for k in candidate_keys]
+            except ValueError as e:
+                return {'error': f'Invalid candidate key: {e}. Provide 16-byte hex keys.'}
+        report = crack(decoded, level, candidate_keys=keys)
+        return {
+            'level': report.level,
+            'pairs': len(report.pairs),
+            'matches': [
+                {
+                    'algorithm': m.algorithm,
+                    'description': m.description,
+                    'parameters': m.parameters,
+                    'pairs_tested': m.pairs_tested,
+                    'pairs_confirmed': m.pairs_confirmed,
+                }
+                for m in report.matches
+            ],
+            'summary': report.describe(),
+        }
+
+    def analyse_gateway_auth(self) -> Dict[str, Any]:
+        """Passive analysis of UDS traffic for gateway authentication patterns."""
+        from can_explorer.core.reverse.gateway_security import analyse_gateway_auth
+
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        messages = [frame.message for frame in self._recent(None, None, ANALYSIS_FRAMES)]
+        patterns = analyse_gateway_auth(messages)
+        return {
+            'ecus': len(patterns),
+            'patterns': [
+                {
+                    'request_id': f'{p.request_id:03X}',
+                    'response_id': f'{p.response_id:03X}',
+                    'auth_type': p.auth_type,
+                    'session_type': p.session_type,
+                    'security_level': p.security_level,
+                    'locked_services': [f'0x{s:02X}' for s in p.locked_services],
+                    'unlocked_services': [f'0x{s:02X}' for s in p.unlocked_services],
+                    'details': p.details,
+                }
+                for p in patterns
+            ],
+        }
+
+    def analyse_gateway_filtering(self) -> Dict[str, Any]:
+        """Passive analysis of UDS traffic for gateway filtering weaknesses."""
+        from can_explorer.core.reverse.gateway_security import analyse_gateway_filtering
+
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        messages = [frame.message for frame in self._recent(None, None, ANALYSIS_FRAMES)]
+        findings = analyse_gateway_filtering(messages)
+        return {
+            'findings': len(findings),
+            'results': [
+                {
+                    'finding_type': f.finding_type,
+                    'description': f.description,
+                    'evidence': f.evidence,
+                    'severity': f.severity,
+                }
+                for f in findings
+            ],
+        }
+
+    @staticmethod
+    def correlate_ecu_seeds(seed_key_pairs: Dict[str, List[Dict[str, str]]]) -> Dict[str, Any]:
+        """Check whether different ECUs share the same seed/key algorithm or master key."""
+        from can_explorer.core.reverse.gateway_security import correlate_ecu_seeds
+
+        try:
+            decoded: Dict[int, List[tuple]] = {}
+            for ecu_hex, pairs in seed_key_pairs.items():
+                ecu_id = int(ecu_hex.strip().lower().removeprefix('0x'), 16)
+                decoded[ecu_id] = [(bytes.fromhex(p['seed']), bytes.fromhex(p['key'])) for p in pairs]
+        except (KeyError, ValueError) as e:
+            return {'error': f'Invalid input: {e}'}
+        correlations = correlate_ecu_seeds(decoded)
+        return {
+            'ecus': len(decoded),
+            'correlations': [
+                {
+                    'ecu_pairs': [(f'0x{a:03X}', f'0x{b:03X}') for a, b in c.ecu_pairs],
+                    'finding': c.finding,
+                    'details': c.details,
+                }
+                for c in correlations
+            ],
+        }
+
+    # --- Items 1-8: new gateway analysis tools ---
+
+    def map_gateway(self) -> Dict[str, Any]:
+        """Build a topology map of ECUs from captured UDS traffic."""
+        from can_explorer.core.reverse.gateway_security import map_gateway
+
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        messages = [frame.message for frame in self._recent(None, None, ANALYSIS_FRAMES)]
+        gw_map = map_gateway(messages)
+        return {
+            'ecus': [
+                {
+                    'request_id': f'0x{e.request_id:03X}',
+                    'response_id': f'0x{e.response_id:03X}',
+                    'supported_sessions': e.supported_sessions,
+                    'auth_type': e.auth_type,
+                    'services_seen': [f'0x{s:02X}' for s in e.services_seen],
+                    'mean_response_ms': e.mean_response_ms,
+                }
+                for e in gw_map.ecus
+            ],
+            'segments': gw_map.segments,
+            'diagnostic_ids': [f'0x{i:03X}' for i in gw_map.diagnostic_ids],
+            'functional_ids_seen': [f'0x{i:03X}' for i in gw_map.functional_ids_seen],
+        }
+
+    def access_matrix(self) -> Dict[str, Any]:
+        """Build a per-ECU, per-service, per-session security classification."""
+        from can_explorer.core.reverse.gateway_security import build_access_matrix
+
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        messages = [frame.message for frame in self._recent(None, None, ANALYSIS_FRAMES)]
+        matrix = build_access_matrix(messages)
+        return {
+            'ecus': [f'0x{e:03X}' for e in matrix.ecus],
+            'sessions': matrix.sessions,
+            'services': [f'0x{s:02X}' for s in matrix.services],
+            'rows': [
+                {
+                    'ecu_id': f'0x{r.ecu_id:03X}',
+                    'service': f'0x{r.service:02X}',
+                    'service_name': r.service_name,
+                    'session': r.session,
+                    'auth_required': r.auth_required,
+                    'security_level': r.security_level,
+                    'status': r.status,
+                }
+                for r in matrix.rows
+            ],
+        }
+
+    def extract_unlock_sequence(self, ecu_id: Any) -> Dict[str, Any]:
+        """Extract the authentication sequence for one ECU."""
+        from can_explorer.core.reverse.gateway_security import extract_unlock_sequence
+
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        eid = _parse_id(ecu_id)
+        messages = [frame.message for frame in self._recent(None, None, ANALYSIS_FRAMES)]
+        seq = extract_unlock_sequence(messages, eid)
+        if seq is None:
+            return {'ecu_id': f'0x{eid:03X}', 'found': False, 'note': 'No authentication flow observed'}
+        return {
+            'ecu_id': f'0x{eid:03X}',
+            'found': True,
+            'auth_type': seq.auth_type,
+            'total_time_ms': seq.total_time_ms,
+            'steps': [
+                {
+                    'action': s.action,
+                    'sid': f'0x{s.sid:02X}',
+                    'sub_function': s.sub_function,
+                    'request': s.request_data,
+                    'response': s.response_data,
+                    'timing_constraint_ms': s.timing_constraint_ms,
+                }
+                for s in seq.steps
+            ],
+        }
+
+    def gateway_full_report(self) -> Dict[str, Any]:
+        """Run all gateway analyses and produce a combined report."""
+        from can_explorer.core.reverse.gateway_security import gateway_report
+
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        messages = [frame.message for frame in self._recent(None, None, ANALYSIS_FRAMES)]
+        report = gateway_report(messages)
+        return {
+            'ecus': len(report.gateway_map.ecus),
+            'auth_patterns': len(report.auth_patterns),
+            'bypass_findings': len(report.bypass_findings),
+            'correlations': len(report.correlations),
+            'unlock_sequences': len(report.unlock_sequences),
+            'severity_summary': report.severity_summary,
+            'segments': report.gateway_map.segments,
+            'access_rows': len(report.access_matrix.rows),
+        }
+
+    def classify_did_security(self, ecu_id: Any) -> Dict[str, Any]:
+        """Classify the security posture of DIDs and routines for one ECU."""
+        from can_explorer.core.reverse.gateway_security import classify_did_security
+
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        eid = _parse_id(ecu_id)
+        messages = [frame.message for frame in self._recent(None, None, ANALYSIS_FRAMES)]
+        dids = classify_did_security(messages, eid)
+        return {
+            'ecu_id': f'0x{eid:03X}',
+            'identifiers': [
+                {
+                    'id': f'0x{d.identifier:04X}',
+                    'service': f'0x{d.service:02X}',
+                    'service_name': d.service_name,
+                    'readable': d.readable,
+                    'writable': d.writable,
+                    'auth_required': d.auth_required,
+                    'nrc': f'0x{d.nrc:02X}' if d.nrc is not None else None,
+                }
+                for d in dids
+            ],
+        }
+
+    def detect_bus_segments(self) -> Dict[str, Any]:
+        """Detect physical bus segments from CAN ID timing characteristics."""
+        from can_explorer.core.reverse.gateway_security import detect_bus_segments
+
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        messages = [frame.message for frame in self._recent(None, None, ANALYSIS_FRAMES)]
+        segments = detect_bus_segments(messages)
+        return {
+            'segments': [
+                {
+                    'name': s.name,
+                    'ids': [f'0x{i:03X}' for i in s.ids],
+                    'id_range': [f'0x{s.id_range[0]:03X}', f'0x{s.id_range[1]:03X}'],
+                    'mean_rate_hz': s.mean_rate_hz,
+                    'periodic_ratio': s.periodic_ratio,
+                    'event_driven_ids': [f'0x{i:03X}' for i in s.event_driven_ids],
+                }
+                for s in segments
+            ],
+            'count': len(segments),
+        }
+
+    def analyse_reset_behaviour(self) -> Dict[str, Any]:
+        """Detect services that succeed shortly after an ECU reset."""
+        from can_explorer.core.reverse.gateway_security import analyse_reset_behaviour
+
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        messages = [frame.message for frame in self._recent(None, None, ANALYSIS_FRAMES)]
+        findings = analyse_reset_behaviour(messages)
+        return {
+            'findings': [
+                {
+                    'ecu_id': f'0x{f.ecu_id:03X}',
+                    'service': f'0x{f.service:02X}',
+                    'service_name': f.service_name,
+                    'session': f.session,
+                    'success_time_after_reset_ms': f.success_time_after_reset_ms,
+                    'finding': f.finding,
+                    'severity': f.severity,
+                }
+                for f in findings
+            ],
+            'count': len(findings),
+        }
+
+    def export_gateway_report(self, fmt: str = 'json') -> Dict[str, Any]:
+        """Export the full gateway report as JSON or CSV."""
+        from can_explorer.core.reverse.gateway_security import export_report, gateway_report
+
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        messages = [frame.message for frame in self._recent(None, None, ANALYSIS_FRAMES)]
+        report = gateway_report(messages)
+        try:
+            output = export_report(report, fmt=fmt)
+        except ValueError as e:
+            return {'error': str(e)}
+        return {'format': fmt, 'content': output}
+
+    @staticmethod
+    def assess_seed_quality(seeds: List[str]) -> Dict[str, Any]:
+        """Assess the quality of seeds from an ECU's 0x27 SecurityAccess."""
+        from can_explorer.core.seedkey_crack import assess_seed_quality
+
+        try:
+            decoded = [bytes.fromhex(s) for s in seeds]
+        except ValueError as e:
+            return {'error': f'Invalid seed hex: {e}'}
+        report = assess_seed_quality(decoded)
+        return {
+            'length': report.length,
+            'entropy_bits': report.entropy_bits,
+            'unique_ratio': report.unique_ratio,
+            'sequential_pattern': report.sequential_pattern,
+            'predictable': report.predictable,
+            'findings': report.findings,
+        }
+
+    def oem_token_providers(self) -> Dict[str, Any]:
+        """The registered OEM right-to-repair token providers: the legitimate path to diagnostic access through a
+        vehicle security gateway. Lists each provider's name and OEM; returns no secrets."""
+        from can_explorer.core import oem_tokens
+
+        registry = oem_tokens.registry()
+        registry.load_entry_points()
+        return {
+            'providers': [
+                {'name': loaded.provider.name, 'oem': getattr(loaded.provider, 'oem', ''), 'source': loaded.source}
+                for loaded in registry.providers
+            ]
+        }
+
+    def request_oem_token(self, provider: str, credentials: str, vin: str = '', make: str = '') -> Dict[str, Any]:
+        """Request a diagnostic access token for a vehicle from an OEM right-to-repair portal through a registered
+        provider, using the shop login stored in the key store entry `credentials`. Returns the token's metadata
+        only (its secret value is never returned); `gateway_unlock` reports whether the provider knows how to
+        present it to that OEM's gateway."""
+        from can_explorer.core import oem_tokens
+
+        registry = oem_tokens.registry()
+        registry.load_entry_points()
+        try:
+            chosen = registry.get(provider)
+        except oem_tokens.OemTokenError as e:
+            return {'error': str(e)}
+        store = self._auth_store()
+        if not store.unlocked:
+            return {'error': 'Unlock the key store to use OEM credentials'}
+        try:
+            secrets = store.secrets(credentials)
+        except Exception as e:  # noqa: BLE001 - surface any key store error to the caller
+            return {'error': f'Credentials {credentials!r}: {e}'}
+        try:
+            request = oem_tokens.TokenRequest(vin=vin, make=make)
+            token = chosen.request_token(request, secrets)
+        except oem_tokens.OemTokenError as e:
+            return {'error': str(e)}
+        unlock = chosen.gateway_unlock(token)
+        return {
+            'oem': token.oem,
+            'kind': token.kind,
+            'scope': token.scope,
+            'expires_at': token.expires_at,
+            'expired': token.expired(),
+            'gateway_unlock': None
+            if unlock is None
+            else {'service': f'0x{unlock.service:02X}', 'description': unlock.description},
+        }
+
+    def fingerprint_ecu(self, ecu_id: Any) -> Dict[str, Any]:
+        """Build an NRC pattern and timing fingerprint for one ECU."""
+        from can_explorer.core.reverse.gateway_security import fingerprint_ecu
+
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        eid = _parse_id(ecu_id)
+        messages = [frame.message for frame in self._recent(None, None, ANALYSIS_FRAMES)]
+        fp = fingerprint_ecu(messages, eid)
+        return {
+            'request_id': f'0x{fp.request_id:03X}',
+            'response_id': f'0x{fp.response_id:03X}',
+            'nrc_set': [f'0x{n:02X}' for n in fp.nrc_set],
+            'nrc_counts': {f'0x{k:02X}': v for k, v in fp.nrc_counts.items()},
+            'supported_sessions': fp.supported_sessions,
+            'timing_profile': fp.timing_profile,
+            'vendor_hints': fp.vendor_hints,
+        }
+
+    def analyse_auth_timing(self) -> Dict[str, Any]:
+        """Measure the timing of each step of authentication flows for all ECUs."""
+        from can_explorer.core.reverse.gateway_security import analyse_auth_timing
+
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        messages = [frame.message for frame in self._recent(None, None, ANALYSIS_FRAMES)]
+        results = analyse_auth_timing(messages)
+        return {
+            'ecus': len(results),
+            'results': [
+                {
+                    'ecu_id': f'0x{r.ecu_id:03X}',
+                    'auth_type': r.auth_type,
+                    'request_to_seed_ms': r.request_to_seed_ms,
+                    'seed_to_key_ms': r.seed_to_key_ms,
+                    'key_to_response_ms': r.key_to_response_ms,
+                    'total_ms': r.total_ms,
+                    'jitter_ms': r.jitter_ms,
+                    'findings': r.findings,
+                }
+                for r in results
+            ],
+        }
+
+    def plan_probing(self, priority: str = 'coverage') -> Dict[str, Any]:
+        """Suggest which services to try next to maximize attack-surface coverage."""
+        from can_explorer.core.reverse.gateway_security import build_access_matrix, plan_probing
+
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        messages = [frame.message for frame in self._recent(None, None, ANALYSIS_FRAMES)]
+        matrix = build_access_matrix(messages)
+        steps = plan_probing(matrix, priority=priority)
+        return {
+            'steps': [
+                {
+                    'ecu_id': f'0x{s.ecu_id:03X}',
+                    'service': f'0x{s.service:02X}',
+                    'service_name': s.service_name,
+                    'session': s.session,
+                    'auth_level': s.auth_level,
+                    'rationale': s.rationale,
+                    'priority': s.priority,
+                }
+                for s in steps
+            ],
+            'count': len(steps),
+        }
+
+    def auth_state_machine(self, ecu_id: Any) -> Dict[str, Any]:
+        """Reconstruct the authentication state machine for one ECU."""
+        from can_explorer.core.reverse.gateway_security import recover_auth_state_machine
+
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        eid = _parse_id(ecu_id)
+        messages = [frame.message for frame in self._recent(None, None, ANALYSIS_FRAMES)]
+        sm = recover_auth_state_machine(messages, eid)
+        if sm is None:
+            return {'ecu_id': f'0x{eid:03X}', 'found': False, 'note': 'No authentication flow observed'}
+        return {
+            'ecu_id': f'0x{sm.ecu_id:03X}',
+            'found': True,
+            'states': [
+                {
+                    'name': s.name,
+                    'session': s.session,
+                    'security_level': s.security_level,
+                    'services_available': [f'0x{svc:02X}' for svc in s.services_available],
+                }
+                for s in sm.states
+            ],
+            'transitions': [
+                {
+                    'from_state': t.from_state,
+                    'to_state': t.to_state,
+                    'action': t.action,
+                    'sid': f'0x{t.sid:02X}',
+                    'sub_function': t.sub_function,
+                    'timing_constraint_ms': t.timing_constraint_ms,
+                    'mandatory': t.mandatory,
+                }
+                for t in sm.transitions
+            ],
+            'initial_state': sm.initial_state,
+            'tester_present_required': sm.tester_present_required,
+            'tester_present_interval_ms': sm.tester_present_interval_ms,
+            'total_unlock_time_ms': sm.total_unlock_time_ms,
+            'findings': sm.findings,
+        }
+
+    def differential_analysis(self, captures: List[List[Dict[str, Any]]]) -> Dict[str, Any]:
+        """Compare two or more captures to find security-relevant changes."""
+        from can_explorer.core.reverse.gateway_security import differential_analysis
+
+        # Convert dicts back to can.Messages
+        capture_messages: List[List[can.Message]] = []
+        for cap in captures:
+            msgs = []
+            for entry in cap:
+                arb_id = _parse_id(entry.get('id', '0'))
+                data = bytes.fromhex(entry.get('data', ''))
+                ts = float(entry.get('timestamp', 0.0))
+                msgs.append(can.Message(arbitration_id=arb_id, data=data, timestamp=ts, is_extended_id=False))
+            capture_messages.append(msgs)
+
+        result = differential_analysis(capture_messages)
+        return {
+            'capture_count': result.capture_count,
+            'changes': [
+                {
+                    'identifier': f'0x{c.identifier:03X}',
+                    'change_type': c.change_type,
+                    'description': c.description,
+                    'auth_correlated': c.auth_correlated,
+                    'details': c.details,
+                }
+                for c in result.changes
+            ],
+            'summary': result.summary,
+            'auth_events_detected': result.auth_events_detected,
+        }
+
+    def infer_filter_rules(self) -> Dict[str, Any]:
+        """Infer the gateway's filter rules from captured UDS traffic."""
+        from can_explorer.core.reverse.gateway_security import infer_filter_rules
+
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        messages = [frame.message for frame in self._recent(None, None, ANALYSIS_FRAMES)]
+        ruleset = infer_filter_rules(messages)
+        return {
+            'rules': [
+                {
+                    'ecu_id': f'0x{r.ecu_id:03X}',
+                    'service': f'0x{r.service:02X}',
+                    'service_name': r.service_name,
+                    'session': r.session,
+                    'action': r.action,
+                    'granularity': r.granularity,
+                    'sub_function': r.sub_function,
+                    'did': f'0x{r.did:04X}' if r.did is not None else None,
+                    'max_length': r.max_length,
+                    'max_rate_hz': r.max_rate_hz,
+                    'evidence': r.evidence,
+                }
+                for r in ruleset.rules
+            ],
+            'ecus': [f'0x{e:03X}' for e in ruleset.ecus],
+            'coverage': ruleset.coverage,
+            'findings': ruleset.findings,
+        }
+
+    @staticmethod
+    def detect_secoc_layout(payloads_hex: List[str], identifier: str = '0') -> Dict[str, Any]:
+        """Detect SecOC layout (freshness + MAC boundary) without ARXML."""
+        from can_explorer.core.reverse.crypto import detect_secoc_layout
+
+        try:
+            payloads = [bytes.fromhex(p) for p in payloads_hex]
+        except ValueError as e:
+            return {'error': f'Invalid hex payload: {e}'}
+        can_id = int(identifier.strip().lower().removeprefix('0x'), 16) if identifier != '0' else 0
+        layout = detect_secoc_layout(payloads, identifier=can_id)
+        if layout is None:
+            return {'detected': False, 'note': 'No SecOC layout detected with sufficient confidence'}
+        return {
+            'detected': True,
+            'identifier': f'0x{layout.identifier:03X}',
+            'payload_end': layout.payload_end,
+            'freshness_start': layout.freshness_start,
+            'freshness_end': layout.freshness_end,
+            'freshness_bits': layout.freshness_bits,
+            'mac_start': layout.mac_start,
+            'mac_end': layout.mac_end,
+            'mac_bits': layout.mac_bits,
+            'confidence': layout.confidence,
+            'findings': layout.findings,
+        }
+
+    @staticmethod
+    def assess_secoc_strength(
+        payloads_hex: List[str],
+        timestamps: List[float],
+        mac_start: int,
+        mac_end: int,
+        freshness_start: int,
+        freshness_end: int,
+        identifier: str = '0',
+    ) -> Dict[str, Any]:
+        """Assess the practical security margin of a SecOC-protected identifier."""
+        from can_explorer.core.reverse.crypto import secoc_strength_assessment
+
+        try:
+            payloads = [bytes.fromhex(p) for p in payloads_hex]
+        except ValueError as e:
+            return {'error': f'Invalid hex payload: {e}'}
+        can_id = int(identifier.strip().lower().removeprefix('0x'), 16) if identifier != '0' else 0
+        result = secoc_strength_assessment(
+            payloads, timestamps, mac_start, mac_end, freshness_start, freshness_end, identifier=can_id
+        )
+        return {
+            'identifier': f'0x{result.identifier:03X}',
+            'mac_bits': result.mac_bits,
+            'freshness_bits': result.freshness_bits,
+            'forgery_probability': result.forgery_probability,
+            'expected_forgery_time': result.expected_forgery_time,
+            'frames_per_second': result.frames_per_second,
+            'freshness_window': result.freshness_window,
+            'replay_before_forgery': result.replay_before_forgery,
+            'meets_autosar': result.meets_autosar,
+            'severity': result.severity,
+            'findings': result.findings,
+        }
+
+    @staticmethod
+    def detect_secoc_bypass(
+        payloads_hex: List[str],
+        timestamps: List[float],
+        expected_length: Optional[int] = None,
+        mac_start: Optional[int] = None,
+        mac_end: Optional[int] = None,
+        freshness_start: Optional[int] = None,
+        freshness_end: Optional[int] = None,
+        identifier: str = '0',
+    ) -> Dict[str, Any]:
+        """Detect SecOC bypass paths."""
+        from can_explorer.core.reverse.crypto import detect_secoc_bypass
+
+        try:
+            payloads = [bytes.fromhex(p) for p in payloads_hex]
+        except ValueError as e:
+            return {'error': f'Invalid hex payload: {e}'}
+        can_id = int(identifier.strip().lower().removeprefix('0x'), 16) if identifier != '0' else 0
+        findings = detect_secoc_bypass(
+            payloads,
+            timestamps,
+            expected_length=expected_length,
+            mac_start=mac_start,
+            mac_end=mac_end,
+            freshness_start=freshness_start,
+            freshness_end=freshness_end,
+            identifier=can_id,
+        )
+        return {
+            'findings': [
+                {
+                    'identifier': f'0x{f.identifier:03X}',
+                    'bypass_type': f.bypass_type,
+                    'description': f.description,
+                    'evidence': f.evidence,
+                    'severity': f.severity,
+                }
+                for f in findings
+            ],
+            'count': len(findings),
+        }
+
+    def attack_surface_report(self) -> Dict[str, Any]:
+        """Produce a consolidated attack surface report."""
+        from can_explorer.core.reverse.gateway_security import attack_surface_report
+
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        messages = [frame.message for frame in self._recent(None, None, ANALYSIS_FRAMES)]
+        report = attack_surface_report(messages)
+        return {
+            'entries': [
+                {
+                    'ecu_id': f'0x{e.ecu_id:03X}',
+                    'category': e.category,
+                    'finding': e.finding,
+                    'severity': e.severity,
+                    'details': e.details,
+                }
+                for e in report.entries
+            ],
+            'ecu_scores': {f'0x{k:03X}': v for k, v in report.ecu_scores.items()},
+            'overall_score': report.overall_score,
+            'summary': report.summary,
+            'ecu_count': report.ecu_count,
+        }
+
+    def enumerate_plan(self) -> Dict[str, Any]:
+        """Generate a minimal UDS enumeration plan from captured traffic analysis."""
+        from can_explorer.core.reverse.gateway_security import enumerate_plan
+
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        messages = [frame.message for frame in self._recent(None, None, ANALYSIS_FRAMES)]
+        plan = enumerate_plan(messages)
+        return {
+            'steps': [
+                {
+                    'ecu_id': f'0x{s.ecu_id:03X}',
+                    'description': s.description,
+                    'uds_request_hex': s.uds_request_hex,
+                    'expected_response': s.expected_response,
+                    'prerequisites': s.prerequisites,
+                    'session': s.session,
+                    'security_level': s.security_level,
+                }
+                for s in plan.steps
+            ],
+            'ecu_count': plan.ecu_count,
+            'estimated_time_seconds': plan.estimated_time_seconds,
+            'findings': plan.findings,
+        }
+
+    def identify_ecu(self, ecu_id: Any) -> Dict[str, Any]:
+        """Build a full ECU identity card from captured traffic."""
+        from can_explorer.core.reverse.gateway_security import identify_ecu
+
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        eid = _parse_id(ecu_id)
+        messages = [frame.message for frame in self._recent(None, None, ANALYSIS_FRAMES)]
+        identity = identify_ecu(messages, eid)
+        return {
+            'request_id': f'0x{identity.request_id:03X}',
+            'response_id': f'0x{identity.response_id:03X}',
+            'did_values': {f'0x{k:04X}': v for k, v in identity.did_values.items()},
+            'vendor_hints': identity.vendor_hints,
+            'hardware_version': identity.hardware_version,
+            'software_version': identity.software_version,
+            'ecu_serial': identity.ecu_serial,
+            'spare_part': identity.spare_part,
+            'system_supplier': identity.system_supplier,
+            'findings': identity.findings,
+        }
+
+    def brute_plan(self) -> Dict[str, Any]:
+        """Generate a brute-force plan for OEM sessions and security levels."""
+        from can_explorer.core.reverse.gateway_security import brute_plan
+
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        messages = [frame.message for frame in self._recent(None, None, ANALYSIS_FRAMES)]
+        plan = brute_plan(messages)
+        return {
+            'steps': [
+                {
+                    'ecu_id': f'0x{s.ecu_id:03X}',
+                    'session': s.session,
+                    'security_level': s.security_level,
+                    'description': s.description,
+                    'uds_request_hex': s.uds_request_hex,
+                }
+                for s in plan.steps
+            ],
+            'ecu_count': plan.ecu_count,
+            'oem_sessions': plan.oem_sessions,
+            'non_standard_levels': plan.non_standard_levels,
+            'estimated_attempts': plan.estimated_attempts,
+            'findings': plan.findings,
+        }
+
+    def detect_timing_side_channel(self, ecu_id: Any) -> Dict[str, Any]:
+        """Detect timing side channels in key verification."""
+        from can_explorer.core.reverse.gateway_security import detect_timing_side_channel
+
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        eid = _parse_id(ecu_id)
+        messages = [frame.message for frame in self._recent(None, None, ANALYSIS_FRAMES)]
+        result = detect_timing_side_channel(messages, eid)
+        if result is None:
+            return {'ecu_id': f'0x{eid:03X}', 'found': False, 'note': 'Insufficient auth attempts for analysis'}
+        return {
+            'ecu_id': f'0x{result.ecu_id:03X}',
+            'found': True,
+            'constant_time': result.constant_time,
+            'max_timing_delta_ms': result.max_timing_delta_ms,
+            'byte_correlations': {str(k): v for k, v in result.byte_correlations.items()},
+            'sample_count': result.sample_count,
+            'findings': result.findings,
+        }
+
+    def infer_routing_table(
+        self, external_captures: List[Dict[str, Any]], internal_captures: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """Infer the gateway routing table from two-segment captures."""
+        from can_explorer.core.reverse.gateway_security import infer_routing_table
+
+        def _to_messages(entries: List[Dict[str, Any]]) -> List[can.Message]:
+            msgs = []
+            for entry in entries:
+                arb_id = _parse_id(entry.get('id', '0'))
+                data = bytes.fromhex(entry.get('data', ''))
+                ts = float(entry.get('timestamp', 0.0))
+                msgs.append(can.Message(arbitration_id=arb_id, data=data, timestamp=ts, is_extended_id=False))
+            return msgs
+
+        external = _to_messages(external_captures)
+        internal = _to_messages(internal_captures)
+        table = infer_routing_table(external, internal)
+        return {
+            'entries': [
+                {
+                    'request_id': f'0x{e.request_id:03X}',
+                    'forwarded': e.forwarded,
+                    'rewritten_id': f'0x{e.rewritten_id:03X}' if e.rewritten_id is not None else None,
+                    'latency_ms': e.latency_ms,
+                    'direction': e.direction,
+                }
+                for e in table.entries
+            ],
+            'forwarded_ids': [f'0x{i:03X}' for i in table.forwarded_ids],
+            'blocked_ids': [f'0x{i:03X}' for i in table.blocked_ids],
+            'rewritten_ids': [(f'0x{a:03X}', f'0x{b:03X}') for a, b in table.rewritten_ids],
+            'findings': table.findings,
+        }
+
+    def detect_rewriting(
+        self, external_captures: List[Dict[str, Any]], internal_captures: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """Detect gateway message rewriting from two-interface captures."""
+        from can_explorer.core.reverse.gateway_security import detect_rewriting
+
+        def _to_messages(entries: List[Dict[str, Any]]) -> List[can.Message]:
+            msgs = []
+            for entry in entries:
+                arb_id = _parse_id(entry.get('id', '0'))
+                data = bytes.fromhex(entry.get('data', ''))
+                ts = float(entry.get('timestamp', 0.0))
+                msgs.append(can.Message(arbitration_id=arb_id, data=data, timestamp=ts, is_extended_id=False))
+            return msgs
+
+        external = _to_messages(external_captures)
+        internal = _to_messages(internal_captures)
+        result = detect_rewriting(external, internal)
+        return {
+            'findings': [
+                {
+                    'external_id': f'0x{f.external_id:03X}',
+                    'internal_id': f'0x{f.internal_id:03X}',
+                    'rewriting_type': f.rewriting_type,
+                    'description': f.description,
+                    'evidence': f.evidence,
+                }
+                for f in result.findings
+            ],
+            'matched_pairs': result.matched_pairs,
+            'unmatched_external': [f'0x{i:03X}' for i in result.unmatched_external],
+            'findings_summary': result.findings_summary,
+        }
+
+    def discover_unlock_chains(self) -> Dict[str, Any]:
+        """Discover multi-session unlock chains."""
+        from can_explorer.core.reverse.gateway_security import discover_unlock_chains
+
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        messages = [frame.message for frame in self._recent(None, None, ANALYSIS_FRAMES)]
+        chains = discover_unlock_chains(messages)
+        return {
+            'chains': [
+                {
+                    'ecu_id': f'0x{c.ecu_id:03X}',
+                    'steps': [
+                        {
+                            'session': s.session,
+                            'security_level': s.security_level,
+                            'service': f'0x{s.service:02X}',
+                            'description': s.description,
+                        }
+                        for s in c.steps
+                    ],
+                    'target_service': f'0x{c.target_service:02X}',
+                    'target_description': c.target_description,
+                    'findings': c.findings,
+                }
+                for c in chains
+            ],
+            'count': len(chains),
+        }
+
+    def scan_plan_non_standard(self) -> Dict[str, Any]:
+        """Generate a plan to scan non-standard ID ranges."""
+        from can_explorer.core.reverse.gateway_security import scan_plan_non_standard
+
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        messages = [frame.message for frame in self._recent(None, None, ANALYSIS_FRAMES)]
+        plan = scan_plan_non_standard(messages)
+        return {
+            'ranges': [
+                {
+                    'start_id': f'0x{r.start_id:03X}',
+                    'end_id': f'0x{r.end_id:03X}',
+                    'extended': r.extended,
+                    'rationale': r.rationale,
+                }
+                for r in plan.ranges
+            ],
+            'known_responders': [f'0x{i:03X}' for i in plan.known_responders],
+            'estimated_probes': plan.estimated_probes,
+            'findings': plan.findings,
+        }
+
+    def analyse_doip_gateway(self) -> Dict[str, Any]:
+        """Analyse DoIP gateway properties."""
+        from can_explorer.core.reverse.gateway_security import analyse_doip_gateway
+
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        messages = [frame.message for frame in self._recent(None, None, ANALYSIS_FRAMES)]
+        result = analyse_doip_gateway(messages)
+        return {
+            'activation_lines': result.activation_lines,
+            'vehicle_id': result.vehicle_id,
+            'routing_activations': result.routing_activations,
+            'entity_addresses': result.entity_addresses,
+            'access_control_findings': result.access_control_findings,
+            'findings': result.findings,
+        }
+
+    def gateway_compliance_report(self) -> Dict[str, Any]:
+        """Produce a gateway compliance report."""
+        from can_explorer.core.reverse.gateway_security import gateway_compliance_report
+
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        messages = [frame.message for frame in self._recent(None, None, ANALYSIS_FRAMES)]
+        report = gateway_compliance_report(messages)
+        return {
+            'findings': [
+                {
+                    'category': f.category,
+                    'finding': f.finding,
+                    'severity': f.severity,
+                    'remediation': f.remediation,
+                    'reference': f.reference,
+                }
+                for f in report.findings
+            ],
+            'wp29_coverage': report.wp29_coverage,
+            'overall_compliance': report.overall_compliance,
+            'summary': report.summary,
+        }
+
+    def disclosure_report(
+        self, vehicle: str = '', researcher: str = '', contact: str = '', format: str = 'markdown'
+    ) -> Dict[str, Any]:
+        """A responsible-disclosure document (Markdown or JSON) for an OEM PSIRT, built from the captured gateway
+        findings. States only what the capture shows; names no exploit."""
+        from can_explorer.core.reverse.gateway_security import disclosure_report
+
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        if format not in ('markdown', 'json'):
+            return {'error': "format must be 'markdown' or 'json'"}
+        messages = [frame.message for frame in self._recent(None, None, ANALYSIS_FRAMES)]
+        return {
+            'report': disclosure_report(messages, vehicle=vehicle, researcher=researcher, contact=contact, fmt=format)
+        }
+
+    def gateway_findings_to_dbc(self, database_name: str = 'DiscoveredGateway') -> Dict[str, Any]:
+        """A minimal DBC naming each discovered ECU's request and response message, to label unknown traffic in the
+        signal views instead of re-deriving the topology."""
+        from can_explorer.core.reverse.findings_artifacts import gateway_map_to_dbc
+        from can_explorer.core.reverse.gateway_security import map_gateway
+
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        messages = [frame.message for frame in self._recent(None, None, ANALYSIS_FRAMES)]
+        gmap = map_gateway(messages)
+        return {'dbc': gateway_map_to_dbc(gmap, database_name), 'ecus': len(gmap.ecus)}
+
+    def preview_probe_plan(self, plan: str = 'enumerate') -> Dict[str, Any]:
+        """Preview how a probing plan's steps would be executed on a bench — a dry run that transmits nothing. The
+        live run (which sends frames) is driven from the GUI with per-step confirmation, not from MCP. `plan` is
+        'enumerate', 'brute' or 'scan'."""
+        from can_explorer.core.reverse import active_prober
+        from can_explorer.core.reverse.gateway_security import brute_plan, enumerate_plan, scan_plan_non_standard
+
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        messages = [frame.message for frame in self._recent(None, None, ANALYSIS_FRAMES)]
+        builders = {
+            'enumerate': lambda: active_prober.steps_from_enumeration(enumerate_plan(messages)),
+            'brute': lambda: active_prober.steps_from_brute(brute_plan(messages)),
+            'scan': lambda: active_prober.steps_from_scan(scan_plan_non_standard(messages)),
+        }
+        if plan not in builders:
+            return {'error': "plan must be 'enumerate', 'brute' or 'scan'"}
+        steps = builders[plan]()
+        return {
+            'plan': plan,
+            'steps_planned': len(steps),
+            'would_skip_dangerous': sum(1 for s in steps if s.service in active_prober.DANGEROUS_SERVICES),
+            'steps': [
+                {
+                    'request_id': f'0x{s.request_id:X}',
+                    'request': s.request.hex(),
+                    'service': f'0x{s.service:02X}',
+                    'description': s.description,
+                }
+                for s in steps[:50]
+            ],
+        }
+
+    @staticmethod
+    def assess_fd_security(payloads_hex: List[str], identifier: str = '0') -> Dict[str, Any]:
+        """Assess CAN FD payload security properties."""
+        from can_explorer.core.reverse.crypto import assess_fd_security
+
+        try:
+            payloads = [bytes.fromhex(p) for p in payloads_hex]
+        except ValueError as e:
+            return {'error': f'Invalid hex payload: {e}'}
+        can_id = int(identifier.strip().lower().removeprefix('0x'), 16) if identifier != '0' else 0
+        result = assess_fd_security(payloads, identifier=can_id)
+        return {
+            'identifier': f'0x{result.identifier:03X}',
+            'payload_length': result.payload_length,
+            'full_mac_possible': result.full_mac_possible,
+            'mac_byte_range': list(result.mac_byte_range) if result.mac_byte_range else None,
+            'freshness_byte_range': list(result.freshness_byte_range) if result.freshness_byte_range else None,
+            'findings': result.findings,
+        }
+
+    @staticmethod
+    def try_secoc_key_recovery(
+        payloads_hex: List[str],
+        mac_start: int,
+        mac_end: int,
+        freshness_start: int,
+        freshness_end: int,
+        data_id: Optional[int] = None,
+        ecu_serial_hex: Optional[str] = None,
+        identifier: str = '0',
+    ) -> Dict[str, Any]:
+        """Try to recover the SecOC MAC key."""
+        from can_explorer.core.reverse.crypto import try_secoc_key_recovery
+
+        try:
+            payloads = [bytes.fromhex(p) for p in payloads_hex]
+        except ValueError as e:
+            return {'error': f'Invalid hex payload: {e}'}
+        can_id = int(identifier.strip().lower().removeprefix('0x'), 16) if identifier != '0' else 0
+        ecu_serial = bytes.fromhex(ecu_serial_hex) if ecu_serial_hex else None
+        result = try_secoc_key_recovery(
+            payloads,
+            mac_start,
+            mac_end,
+            freshness_start,
+            freshness_end,
+            data_id=data_id,
+            ecu_serial=ecu_serial,
+            identifier=can_id,
+        )
+        return {
+            'identifier': f'0x{result.identifier:03X}',
+            'recovered_key': result.recovered_key.hex() if result.recovered_key else None,
+            'key_source': result.key_source,
+            'attempts': result.attempts,
+            'mac_algorithm': result.mac_algorithm,
+            'confidence': result.confidence,
+            'verified_frames': result.verified_frames,
+            'findings': result.findings,
+        }
+
+    @staticmethod
+    def detect_shared_secoc_keys(
+        per_id_payloads_hex: Dict[str, List[str]],
+        per_id_mac_range: Dict[str, List[int]],
+        per_id_freshness_range: Dict[str, List[int]],
+    ) -> Dict[str, Any]:
+        """Detect whether multiple SecOC-protected PDUs share the same MAC key."""
+        from can_explorer.core.reverse.crypto import detect_shared_secoc_keys
+
+        try:
+            payloads_map: Dict[int, List[bytes]] = {}
+            for id_str, hexes in per_id_payloads_hex.items():
+                can_id = int(id_str.strip().lower().removeprefix('0x'), 16)
+                payloads_map[can_id] = [bytes.fromhex(p) for p in hexes]
+        except ValueError as e:
+            return {'error': f'Invalid hex payload: {e}'}
+        mac_map = {int(k.strip().lower().removeprefix('0x'), 16): (v[0], v[1]) for k, v in per_id_mac_range.items()}
+        freshness_map = {
+            int(k.strip().lower().removeprefix('0x'), 16): (v[0], v[1]) for k, v in per_id_freshness_range.items()
+        }
+        result = detect_shared_secoc_keys(payloads_map, mac_map, freshness_map)
+        return {
+            'groups': [
+                {
+                    'identifiers': [f'0x{i:03X}' for i in g.identifiers],
+                    'shared_key': g.shared_key.hex() if g.shared_key else None,
+                    'key_source': g.key_source,
+                    'verified_frames': g.verified_frames,
+                    'findings': g.findings,
+                }
+                for g in result.groups
+            ],
+            'total_identifiers': result.total_identifiers,
+            'shared_count': result.shared_count,
+            'findings': result.findings,
+        }
+
+    @staticmethod
+    def predict_freshness(
+        payloads_hex: List[str],
+        timestamps: List[float],
+        freshness_start: int,
+        freshness_end: int,
+        prediction_time: float = 10.0,
+        identifier: str = '0',
+    ) -> Dict[str, Any]:
+        """Predict future freshness counter values."""
+        from can_explorer.core.reverse.crypto import predict_freshness
+
+        try:
+            payloads = [bytes.fromhex(p) for p in payloads_hex]
+        except ValueError as e:
+            return {'error': f'Invalid hex payload: {e}'}
+        can_id = int(identifier.strip().lower().removeprefix('0x'), 16) if identifier != '0' else 0
+        result = predict_freshness(
+            payloads,
+            timestamps,
+            freshness_start,
+            freshness_end,
+            prediction_time=prediction_time,
+            identifier=can_id,
+        )
+        return {
+            'identifier': f'0x{result.identifier:03X}',
+            'current_counter': result.current_counter,
+            'predicted_counter': result.predicted_counter,
+            'prediction_time': result.prediction_time,
+            'counter_rate': result.counter_rate,
+            'counter_width_bits': result.counter_width_bits,
+            'wrap_time_seconds': result.wrap_time_seconds,
+            'confidence': result.confidence,
+            'findings': result.findings,
+        }
+
+    @staticmethod
+    def replay_window(
+        payloads_hex: List[str],
+        timestamps: List[float],
+        freshness_start: int,
+        freshness_end: int,
+        identifier: str = '0',
+    ) -> Dict[str, Any]:
+        """Compute the replay window for a SecOC-protected identifier."""
+        from can_explorer.core.reverse.crypto import replay_window
+
+        try:
+            payloads = [bytes.fromhex(p) for p in payloads_hex]
+        except ValueError as e:
+            return {'error': f'Invalid hex payload: {e}'}
+        can_id = int(identifier.strip().lower().removeprefix('0x'), 16) if identifier != '0' else 0
+        result = replay_window(payloads, timestamps, freshness_start, freshness_end, identifier=can_id)
+        return {
+            'identifier': f'0x{result.identifier:03X}',
+            'window_seconds': result.window_seconds,
+            'window_frames': result.window_frames,
+            'counter_tolerance': result.counter_tolerance,
+            'effective_replay_rate': result.effective_replay_rate,
+            'findings': result.findings,
+        }
+
+    @staticmethod
+    def classify_secoc_profile(
+        mac_bits: int,
+        freshness_bits: int,
+        payload_length: int,
+        algorithm_hint: Optional[str] = None,
+        identifier: str = '0',
+    ) -> Dict[str, Any]:
+        """Classify the AUTOSAR SecOC profile."""
+        from can_explorer.core.reverse.crypto import classify_secoc_profile
+
+        can_id = int(identifier.strip().lower().removeprefix('0x'), 16) if identifier != '0' else 0
+        result = classify_secoc_profile(mac_bits, freshness_bits, payload_length, algorithm_hint, identifier=can_id)
+        return {
+            'identifier': f'0x{result.identifier:03X}',
+            'profile': result.profile,
+            'mac_bits': result.mac_bits,
+            'freshness_bits': result.freshness_bits,
+            'likely_algorithm': result.likely_algorithm,
+            'autosar_compliant': result.autosar_compliant,
+            'findings': result.findings,
+        }
+
+    @staticmethod
+    def analyse_e2e_secoc_interaction(
+        payloads_hex: List[str],
+        e2e_counter_start: int,
+        e2e_counter_end: int,
+        secoc_freshness_start: int,
+        secoc_freshness_end: int,
+        identifier: str = '0',
+    ) -> Dict[str, Any]:
+        """Analyse E2E + SecOC counter interaction."""
+        from can_explorer.core.reverse.crypto import analyse_e2e_secoc_interaction
+
+        try:
+            payloads = [bytes.fromhex(p) for p in payloads_hex]
+        except ValueError as e:
+            return {'error': f'Invalid hex payload: {e}'}
+        can_id = int(identifier.strip().lower().removeprefix('0x'), 16) if identifier != '0' else 0
+        result = analyse_e2e_secoc_interaction(
+            payloads, e2e_counter_start, e2e_counter_end, secoc_freshness_start, secoc_freshness_end, identifier=can_id
+        )
+        return {
+            'identifier': f'0x{result.identifier:03X}',
+            'has_e2e': result.has_e2e,
+            'has_secoc': result.has_secoc,
+            'e2e_counter_range': list(result.e2e_counter_range) if result.e2e_counter_range else None,
+            'secoc_freshness_range': list(result.secoc_freshness_range) if result.secoc_freshness_range else None,
+            'counters_independent': result.counters_independent,
+            'shared_counter_risk': result.shared_counter_risk,
+            'correlation': result.correlation,
+            'findings': result.findings,
+        }
+
+    # Active security tests (send tier)
+
+    async def replay_test(
+        self, identifier: str, data: str, count: int = 10, interval: float = 0.1, extended: bool = False
+    ) -> Dict[str, Any]:
+        """Replay a captured frame on the bus and report whether a response appeared (send tier)."""
+        from can_explorer.core.active_security_test import replay_test
+
+        self._require_send()
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        frame_id = _parse_id(identifier)
+        payload = parse_hex_bytes(data)
+
+        def _send(fid: int, pld: bytes) -> None:
+            msg = can.Message(arbitration_id=fid, is_extended_id=extended, data=pld, check=False)
+            self.session.send(msg)
+
+        result = await replay_test(_send, frame_id, payload, count=count, interval=interval)
+        return {
+            'id': _id_text(frame_id, extended),
+            'replayed': result.replayed,
+            'findings': result.findings,
+        }
+
+    async def forgery_test(
+        self,
+        identifier: str,
+        data: str,
+        mac_first: int,
+        mac_last: int,
+        attempts: int = 100,
+        interval: float = 0.01,
+        extended: bool = False,
+    ) -> Dict[str, Any]:
+        """Send frames with random MAC bytes and check if any are accepted (send tier)."""
+        from can_explorer.core.active_security_test import forgery_test
+
+        self._require_send()
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        frame_id = _parse_id(identifier)
+        payload = parse_hex_bytes(data)
+
+        def _send(fid: int, pld: bytes) -> None:
+            msg = can.Message(arbitration_id=fid, is_extended_id=extended, data=pld, check=False)
+            self.session.send(msg)
+
+        result = await forgery_test(
+            _send, frame_id, payload, mac_range=(mac_first, mac_last), attempts=attempts, interval=interval
+        )
+        return {
+            'id': _id_text(frame_id, extended),
+            'attempts': result.attempts,
+            'accepted': result.accepted,
+            'findings': result.findings,
+        }
+
+    async def functional_bypass_test(
+        self,
+        physical_id: str,
+        functional_id: str,
+        service_requests_hex: List[str],
+        extended: bool = False,
+        interval: float = 0.5,
+    ) -> Dict[str, Any]:
+        """Test for functional addressing bypass (send tier)."""
+        from can_explorer.core.active_security_test import functional_bypass_test
+
+        self._require_send()
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        phys_id = _parse_id(physical_id)
+        func_id = _parse_id(functional_id)
+        requests = [bytes.fromhex(r) for r in service_requests_hex]
+
+        def _send(fid: int, pld: bytes) -> None:
+            msg = can.Message(arbitration_id=fid, is_extended_id=extended, data=pld, check=False)
+            self.session.send(msg)
+
+        results = await functional_bypass_test(_send, phys_id, func_id, requests, interval=interval)
+        return {
+            'results': [
+                {
+                    'service': f'0x{r.service:02X}',
+                    'physical_response': r.physical_response,
+                    'functional_response': r.functional_response,
+                    'bypass_found': r.bypass_found,
+                    'findings': r.findings,
+                }
+                for r in results
+            ],
+            'bypass_count': sum(1 for r in results if r.bypass_found),
+        }
+
+    async def session_race_test(
+        self,
+        request_id: str,
+        target_service_hex: str,
+        extended: bool = False,
+        attempts: int = 10,
+        min_delay_ms: float = 0.0,
+        max_delay_ms: float = 50.0,
+    ) -> Dict[str, Any]:
+        """Test for session race conditions (send tier)."""
+        from can_explorer.core.active_security_test import session_race_test
+
+        self._require_send()
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        req_id = _parse_id(request_id)
+        target = bytes.fromhex(target_service_hex)
+
+        def _send(fid: int, pld: bytes) -> None:
+            msg = can.Message(arbitration_id=fid, is_extended_id=extended, data=pld, check=False)
+            self.session.send(msg)
+
+        result = await session_race_test(
+            _send, req_id, target, attempts=attempts, delay_ms_range=(min_delay_ms, max_delay_ms)
+        )
+        return {
+            'target_service': f'0x{result.target_service:02X}',
+            'race_window_ms': result.race_window_ms,
+            'service_accepted': result.service_accepted,
+            'findings': result.findings,
+        }
+
+    async def reset_bypass_test(
+        self,
+        request_id: str,
+        target_services_hex: List[str],
+        extended: bool = False,
+        reset_type: int = 1,
+        attempts: int = 5,
+        max_window_ms: float = 5000.0,
+        probe_interval_ms: float = 50.0,
+    ) -> Dict[str, Any]:
+        """Test for ECU reset bypass (send tier)."""
+        from can_explorer.core.active_security_test import reset_bypass_test
+
+        self._require_send()
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        req_id = _parse_id(request_id)
+        targets = [bytes.fromhex(s) for s in target_services_hex]
+
+        def _send(fid: int, pld: bytes) -> None:
+            msg = can.Message(arbitration_id=fid, is_extended_id=extended, data=pld, check=False)
+            self.session.send(msg)
+
+        result = await reset_bypass_test(
+            _send,
+            req_id,
+            targets,
+            reset_type=reset_type,
+            attempts=attempts,
+            max_window_ms=max_window_ms,
+            probe_interval_ms=probe_interval_ms,
+        )
+        return {
+            'target_service': f'0x{result.target_service:02X}',
+            'bypass_found': result.bypass_found,
+            'window_ms': result.window_ms,
+            'services_accessible': [f'0x{s:02X}' for s in result.services_accessible],
+            'findings': result.findings,
+        }
+
+    async def dos_resilience_test(
+        self,
+        request_id: str,
+        test_payload_hex: str,
+        extended: bool = False,
+        rates_hz: Optional[List[float]] = None,
+        duration_per_rate: float = 2.0,
+    ) -> Dict[str, Any]:
+        """Test gateway DoS resilience (send tier)."""
+        from can_explorer.core.active_security_test import dos_resilience_test
+
+        self._require_send()
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        req_id = _parse_id(request_id)
+        payload = bytes.fromhex(test_payload_hex)
+
+        def _send(fid: int, pld: bytes) -> None:
+            msg = can.Message(arbitration_id=fid, is_extended_id=extended, data=pld, check=False)
+            self.session.send(msg)
+
+        result = await dos_resilience_test(
+            _send,
+            req_id,
+            payload,
+            rates_hz=rates_hz,
+            duration_per_rate=duration_per_rate,
+        )
+        return {
+            'max_sustained_rate_hz': result.max_sustained_rate_hz,
+            'degradation_threshold_hz': result.degradation_threshold_hz,
+            'frames_sent': result.frames_sent,
+            'frames_dropped': result.frames_dropped,
+            'gateway_crashed': result.gateway_crashed,
+            'recovery_time_ms': result.recovery_time_ms,
+            'findings': result.findings,
+        }
 
     # Diagnostics (OBD-II and UDS, over ISO-TP)
 
@@ -1662,6 +3207,241 @@ class CanService:
 
         return await self._with_uds(request, response, operation, control=True)
 
+    # KWP2000 (VW TP 2.0 or ISO-TP)
+
+    async def _with_kwp(
+        self, transport, module, request_id, response_id, session, operation, control: bool = False
+    ) -> Dict[str, Any]:
+        """Run `operation(KwpClient)` over a TP 2.0 channel to `module` (opened and closed around it) or over ISO-TP,
+        after StartDiagnosticSession `session` (hex; '' skips it)."""
+        (self._require_control if control else self._require_diagnostics)()
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        kind = str(transport).strip().lower().replace('.', '').replace(' ', '')
+        if kind not in ('tp20', 'isotp'):
+            return {'error': f'Unknown KWP2000 transport {transport!r}; use "tp20" or "isotp"'}
+        try:
+            session_byte = _parse_id(session) if str(session).strip() else None
+            if kind == 'tp20':
+                channel = Tp20Client(self.session, _parse_id(module))
+                await channel.open()
+            else:
+                channel = self._isotp(request_id, response_id)
+        except (Tp20Error, ValueError) as e:
+            return {'error': str(e)}
+        try:
+            client = KwpClient(channel)
+            if session_byte is not None:
+                await client.start_diagnostic_session(session_byte)
+            return await operation(client)
+        except (KwpError, Tp20Error, MeasuringBlockError, UdsError, OSError, ValueError) as e:
+            return {'error': str(e)}
+        finally:
+            if kind == 'tp20':
+                await channel.disconnect()
+            else:
+                channel.close()
+
+    async def kwp_read_measuring_block(
+        self,
+        group: int,
+        module: Any = '01',
+        formulas: str = '',
+        transport: str = 'tp20',
+        request: Any = DEFAULT_UDS_REQUEST,
+        response: Any = ECU_RESPONSE,
+        session: Any = '89',
+    ) -> Dict[str, Any]:
+        """Read a measuring block (KWP2000 0x21 group): each value's formula byte and data bytes a, b — scaled and
+        named with a user-supplied JSON formula table or label file (`formulas`, the module's entry of a label file),
+        raw without one."""
+        try:
+            table = LabelFile.load(formulas).formula_table(_parse_id(module)) if str(formulas).strip() else None
+        except ValueError as e:  # LabelError, an invalid module
+            return {'error': str(e)}
+
+        async def operation(kwp):
+            return (await read_measuring_block(kwp, int(group), table)).as_dict()
+
+        return await self._with_kwp(transport, module, request, response, session, operation)
+
+    async def kwp_read_identification(
+        self,
+        option: Any,
+        module: Any = '01',
+        transport: str = 'tp20',
+        request: Any = DEFAULT_UDS_REQUEST,
+        response: Any = ECU_RESPONSE,
+        session: Any = '89',
+    ) -> Dict[str, Any]:
+        """ReadECUIdentification (KWP2000 0x1A) with an identification option (hex); the raw bytes and their
+        printable text."""
+        option_byte = _parse_id(option)
+
+        async def operation(kwp):
+            data = await kwp.read_ecu_identification(option_byte)
+            text = bytes(byte for byte in data if 0x20 <= byte < 0x7F).decode('ascii', 'replace')
+            return {'option': f'{option_byte:02X}', 'data': bytes(data).hex(' ').upper(), 'text': text}
+
+        return await self._with_kwp(transport, module, request, response, session, operation)
+
+    async def kwp_request(
+        self,
+        payload: str,
+        module: Any = '01',
+        transport: str = 'tp20',
+        request: Any = DEFAULT_UDS_REQUEST,
+        response: Any = ECU_RESPONSE,
+        session: Any = '',
+    ) -> Dict[str, Any]:
+        """Send a raw KWP2000 request (hex, e.g. "21 01") and return the response. Active: requires
+        --allow-control because a raw request can do anything (resets, routines, writes)."""
+        bytes_payload = parse_hex_bytes(payload)
+
+        async def operation(kwp):
+            result = await kwp.request(bytes_payload)
+            return {
+                'request': bytes_payload.hex(' ').upper(),
+                'response': result.response.hex(' ').upper() if result.response else None,
+                'description': result.description,
+                'error': result.error or None,
+            }
+
+        return await self._with_kwp(transport, module, request, response, session, operation, control=True)
+
+    async def kwp_scan_modules(
+        self,
+        addresses: str = '01-FF',
+        identification: Any = '',
+        session: Any = '89',
+        labels: str = '',
+        setup_timeout: float = SETUP_TIMEOUT,
+    ) -> Dict[str, Any]:
+        """Scan logical addresses for VW TP 2.0 modules: a channel setup to each, closed again. With
+        `identification` (an option, hex), each found module is asked for ReadECUIdentification after
+        StartDiagnosticSession `session`; `labels` names the modules."""
+        self._require_diagnostics()
+        if self.session is None:
+            return {'error': NOT_CONNECTED}
+        try:
+            targets = parse_addresses(addresses)
+            option = _parse_id(identification) if str(identification).strip() else None
+            session_byte = _parse_id(session) if option is not None and str(session).strip() else None
+            label_file = LabelFile.load(labels) if str(labels).strip() else None
+        except ValueError as e:
+            return {'error': str(e)}
+        found = [
+            result.as_dict()
+            async for result in scan_modules(
+                self.session, targets, float(setup_timeout), option, session_byte, label_file
+            )
+            if result.found
+        ]
+        return {'scanned': len(targets), 'modules': found}
+
+    # Coding records (KWP2000 local identifiers or UDS data identifiers)
+
+    @staticmethod
+    def _coding_record(labels: str, module: Any, record: str) -> CodingRecord:
+        """A record of a label file, or — without one — a raw location 'kwp:9A' or 'uds:0600' (no fields)."""
+        if str(labels).strip():
+            return LabelFile.load(labels).coding_record(_parse_id(module), str(record).strip())
+        protocol, colon, identifier = str(record).strip().partition(':')
+        if not colon:
+            raise CodingError('Give a label file, or the record as "kwp:<local identifier>" or "uds:<DID>" (hex)')
+        return CodingRecord(f'{protocol.lower()}:{identifier}', protocol.strip().lower(), _parse_id(identifier))
+
+    async def _with_coding(
+        self, record: CodingRecord, transport, module, request_id, response_id, session, key, level, operation,
+        control: bool = False,
+    ) -> Dict[str, Any]:  # fmt: skip
+        """Run `operation(client)` with the client of the record's protocol: KwpClient (TP 2.0 or ISO-TP) or UdsClient
+        (ISO-TP), after the session `session` and, with `key`, security access at `level`."""
+        try:
+            compute_key = load_key_source(key) if str(key).strip() else None
+        except UdsError as e:
+            return {'error': str(e)}
+
+        async def prepared(client):
+            if compute_key is not None:
+                await client.security_access(int(level), compute_key)
+            return await operation(client)
+
+        if record.protocol == 'kwp':
+            return await self._with_kwp(transport, module, request_id, response_id, session, prepared, control)
+
+        async def uds_operation(uds):
+            if str(session).strip():
+                await uds.diagnostic_session_control(_parse_id(session))
+            return await prepared(uds)
+
+        return await self._with_uds(request_id, response_id, uds_operation, control)
+
+    async def coding_read(
+        self,
+        module: Any = '01',
+        record: str = '',
+        labels: str = '',
+        transport: str = 'tp20',
+        request: Any = DEFAULT_UDS_REQUEST,
+        response: Any = ECU_RESPONSE,
+        session: Any = '',
+        key: str = '',
+        level: int = 1,
+    ) -> Dict[str, Any]:
+        """Read a module's coding record and decode its fields with the label file (raw bytes without fields)."""
+        try:
+            definition = self._coding_record(labels, module, record)
+        except ValueError as e:  # LabelError, CodingError, an invalid id
+            return {'error': str(e)}
+
+        async def operation(client):
+            data = await definition.read(client)
+            return {
+                'record': definition.name,
+                'location': definition.location(),
+                'data': bytes(data).hex(' ').upper(),
+                'fields': [value.as_dict() for value in definition.decode(data)],
+            }
+
+        return await self._with_coding(definition, transport, module, request, response, session, key, level, operation)
+
+    async def coding_write(
+        self,
+        module: Any = '01',
+        record: str = '',
+        labels: str = '',
+        changes: Optional[Dict[str, int]] = None,
+        data: str = '',
+        transport: str = 'tp20',
+        request: Any = DEFAULT_UDS_REQUEST,
+        response: Any = ECU_RESPONSE,
+        session: Any = '',
+        key: str = '',
+        level: int = 1,
+    ) -> Dict[str, Any]:
+        """Change a coding record: set fields by name (`changes`) or give the whole record (`data`, hex). Reads the
+        current record first (returned as `before`, the backup), writes, reads back and reports `verified`.
+        Active: requires --allow-control."""
+        self._require_control()
+        if bool(changes) == bool(str(data).strip()):
+            return {'error': 'Give either changes (field name -> value) or data (the whole record, hex)'}
+        try:
+            definition = self._coding_record(labels, module, record)
+            new_data = parse_hex_bytes(data) if str(data).strip() else None
+        except ValueError as e:
+            return {'error': str(e)}
+
+        async def operation(client):
+            current = await definition.read(client)
+            target = new_data if new_data is not None else definition.apply(current, dict(changes or {}))
+            result = await write_record(client, definition, target, expected_before=current)
+            return result.as_dict()
+
+        return await self._with_coding(
+            definition, transport, module, request, response, session, key, level, operation, control=True
+        )
+
     # XCP / CCP measurement and calibration
 
     async def _with_xcp(self, operation, control: bool = False, needs_bus: bool = True) -> Dict[str, Any]:
@@ -1762,3 +3542,76 @@ class CanService:
     async def xcp_write_memory(self, address: str, data: str, extension: int = 0) -> Dict[str, Any]:
         """Write raw bytes to the ECU's memory. Active: requires --allow-control."""
         return await self._with_xcp(lambda xcp: xcp.write_memory(address, data, int(extension)), control=True)
+
+    # ------------------------------------------------------------------
+    # E2E reverse engineering
+    # ------------------------------------------------------------------
+
+    def detect_e2e(self, payloads_hex: List[str], identifier: str = '0') -> Dict[str, Any]:
+        """Run the full E2E detection pipeline on one identifier's payloads. Read-only."""
+        from can_explorer.core.reverse.e2e_reverse import detect_e2e as _detect_e2e
+
+        payloads = [parse_hex_bytes(h) for h in payloads_hex]
+        result = _detect_e2e(payloads)
+        profiles = []
+        for p in result.profiles:
+            entry: Dict[str, Any] = {
+                'profile': p.profile,
+                'crc_position': p.crc_position,
+                'crc_width': p.crc_width,
+                'confidence': p.confidence,
+                'confidence_label': p.confidence_label,
+                'findings': p.findings,
+            }
+            if p.counter:
+                entry['counter'] = {
+                    'position': p.counter.position,
+                    'width': p.counter.width,
+                    'modulus': p.counter.modulus,
+                    'nibble_high': p.counter.nibble_high,
+                    'increment_rate': p.counter.increment_rate,
+                }
+            if p.data_ids:
+                entry['data_ids'] = p.data_ids.data_ids
+                entry['data_id_verification_rate'] = p.data_ids.verification_rate
+            profiles.append(entry)
+        bypasses = [
+            {'type': b.bypass_type, 'description': b.description, 'severity': b.severity} for b in result.bypasses
+        ]
+        counter_info = None
+        if result.counter:
+            counter_info = {
+                'position': result.counter.position,
+                'width': result.counter.width,
+                'modulus': result.counter.modulus,
+                'nibble_high': result.counter.nibble_high,
+                'increment_rate': result.counter.increment_rate,
+                'confidence': result.counter.confidence,
+            }
+        return {
+            'identifier': identifier,
+            'frames': len(payloads),
+            'profiles': profiles,
+            'counter': counter_info,
+            'bypasses': bypasses,
+            'findings': result.findings,
+        }
+
+    def compute_e2e(
+        self,
+        profile: int,
+        data_hex: str,
+        counter: int,
+        data_ids: object,
+        offset: int = 0,
+    ) -> Dict[str, Any]:
+        """Compute a valid E2E header for arbitrary payload data using recovered parameters. Read-only."""
+        from can_explorer.core.reverse.e2e_reverse import compute_e2e_header
+
+        data = parse_hex_bytes(data_hex)
+        protected = compute_e2e_header(profile, data, counter, data_ids, offset=offset)
+        return {
+            'profile': profile,
+            'counter': counter,
+            'protected': protected.hex(' ').upper(),
+        }
