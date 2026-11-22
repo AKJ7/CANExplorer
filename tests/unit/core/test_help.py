@@ -76,6 +76,20 @@ def test_tool_help_points_to_real_pages():
     assert help_module.resolve_tool('nonsense') == 'user-guide/index.md'
 
 
+def test_every_connection_page_has_its_own_help():
+    """F1 on a connection page opens that page's guide (the key is the page's key in ConnectionView.qml); only the
+    dashboard and the signals page, which have no single guide of their own, fall back to the user guide index."""
+    import re
+    from pathlib import Path
+
+    qml = Path(help_module.__file__).parents[1] / 'gui' / 'qt' / 'CanExplorer' / 'ConnectionView.qml'
+    keys = re.findall(r'"([a-z0-9-]+)"', re.search(r'pageKeys: \[([^\]]*)\]', qml.read_text(encoding='utf-8'))[1])
+    assert 'tp20' in keys
+    fallback = [key for key in keys if help_module.resolve_tool(key) == 'user-guide/index.md']
+    assert sorted(fallback) == ['dashboard', 'signals']
+    assert help_module.resolve_tool('tp20') == 'user-guide/kwp2000-tp20.md'
+
+
 def test_every_page_preprocesses_without_leftover_markup():
     for page in help_module.pages():
         rendered = help_module.load_page(page.path)

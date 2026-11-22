@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional
 
 from PyQt6.QtCore import QObject, QSettings, QUrl, pyqtProperty, pyqtSignal, pyqtSlot
 
-from can_explorer.core import audit, keychain, keystore, oauth, security_profiles, test_pki
+from can_explorer.core import audit, keychain, keystore, oauth, oem_tokens, security_profiles, test_pki
 from can_explorer.core.audit import AuditLog
 from can_explorer.core.decoding import FrameDecoder
 from can_explorer.core.keystore import KeyStore, KeyStoreError, parse_hex
@@ -50,6 +50,7 @@ PURPOSE_NAMES = {
     keystore.SECURED_DATA_KEY: 'UDS secured data key',
     keystore.PKCS11: 'PKCS#11 token key',
     keystore.KEY_SERVER: 'Key server',
+    keystore.OEM_TOKEN: 'OEM credentials',
 }
 
 
@@ -91,6 +92,9 @@ def _details(info: keystore.KeyInfo) -> str:
         return f'secured data transmission (0x84) · {params.get("mac", "")}'
     if info.purpose == keystore.SEED_KEY:
         return f'compute_key from {params.get("file") or "a script"}'
+    if info.purpose == keystore.OEM_TOKEN:
+        oem = params.get('oem')
+        return f'provider {params.get("provider", "")}' + (f' · {oem}' if oem else '')
     return ''
 
 
@@ -135,6 +139,9 @@ class SecurityController(QObject):
         self.keys_changed.connect(self._refresh_key_servers)
         for loaded in security_profiles.entry_point_profiles():
             self.profiles.add(loaded)
+        self._oem_tokens = oem_tokens.ProviderRegistry()
+        oem_tokens.set_registry(self._oem_tokens)  # OEM token providers are looked up here
+        self._oem_tokens.load_entry_points()
         for path in self._saved_profile_files():
             self._load_profile_file(path)
         self._refresh_key_servers()
@@ -478,6 +485,47 @@ class SecurityController(QObject):
 
         return self._run(add, 'add entry', entry=name)
 
+    @pyqtSlot(str, result=str)
+    def crack_seed_key(self, pairs_text: str) -> str:
+        """Parse hex pairs and run the crack analysis. Returns JSON results."""
+        import json as _json
+
+        from can_explorer.core.seedkey_crack import crack
+
+        lines = [line.strip() for line in pairs_text.strip().splitlines() if line.strip()]
+        pairs = []
+        for line in lines:
+            if ':' not in line:
+                return _json.dumps({'error': f'Invalid line (expected seed:key in hex): {line}'})
+            seed_hex, _, key_hex = line.partition(':')
+            try:
+                seed = bytes.fromhex(seed_hex.strip())
+                key = bytes.fromhex(key_hex.strip())
+            except ValueError as e:
+                return _json.dumps({'error': f'Invalid hex: {e}'})
+            pairs.append((seed, key))
+
+        if len(pairs) < 3:
+            return _json.dumps({'error': 'Need at least 3 seed:key pairs'})
+
+        report = crack(pairs)
+        return _json.dumps(
+            {
+                'level': report.level,
+                'pairs': len(report.pairs),
+                'matches': [
+                    {
+                        'algorithm': m.algorithm,
+                        'description': m.description,
+                        'parameters': {k: v for k, v in m.parameters.items() if not callable(v)},
+                        'pairs_confirmed': m.pairs_confirmed,
+                    }
+                    for m in report.matches
+                ],
+                'summary': report.describe(),
+            }
+        )
+
     @pyqtSlot(str, QUrl, result=str)
     def add_seed_key(self, name: str, script: QUrl) -> str:
         path = _local_path(script)
@@ -791,6 +839,46 @@ class SecurityController(QObject):
             )
 
         return self._run(add, 'add entry', entry=name)
+
+    @pyqtSlot(str, str, str, str, str, str, result=str)
+    def add_oem_credentials(
+        self, name: str, provider: str, oem: str, username: str, password: str, access_token: str
+    ) -> str:
+        """A shop's login for an OEM right-to-repair portal, used to obtain diagnostic access through a vehicle
+        security gateway. Either a username and password, or a bearer access token."""
+        return self._run(
+            lambda: self.store.add_oem_credentials(name, provider, oem, username, password, access_token),
+            'add entry',
+            entry=name,
+        )
+
+    @pyqtProperty('QStringList', notify=changed)
+    def oem_token_providers(self) -> List[str]:
+        """The names of the registered OEM right-to-repair token providers (from installed plug-ins)."""
+        return self._oem_tokens.names()
+
+    @pyqtSlot(str, str, str, str, result='QVariantMap')
+    def request_oem_token(self, provider: str, credentials: str, vin: str, make: str) -> Dict[str, Any]:
+        """Request a diagnostic access token for a vehicle from an OEM portal through a registered provider, using
+        the stored credentials. Returns the token's metadata (never its value), or an 'error'."""
+        if not self.store.unlocked:
+            return {'error': 'Unlock the key store first'}
+        try:
+            chosen = self._oem_tokens.get(provider)
+            secrets = self.store.secrets(credentials)
+            token = chosen.request_token(oem_tokens.TokenRequest(vin=vin, make=make), secrets)
+        except (oem_tokens.OemTokenError, KeyStoreError) as e:
+            return {'error': str(e)}
+        audit.record('oem token requested', provider=provider, vin=vin or '')
+        unlock = chosen.gateway_unlock(token)
+        return {
+            'oem': token.oem,
+            'kind': token.kind,
+            'scope': token.scope,
+            'expires_at': token.expires_at,
+            'expired': token.expired(),
+            'gateway_unlock': '' if unlock is None else (unlock.description or f'service 0x{unlock.service:02X}'),
+        }
 
     @pyqtSlot(str, str, str, str, str, result=str)
     def add_pkcs11_key(self, name: str, module: str, token: str, key: str, pin: str) -> str:

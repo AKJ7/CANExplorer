@@ -57,7 +57,23 @@ KEY_SERVER = (
 AUTH_KEY = 'uds-auth-key'  # A shared key for UDS Authentication by challenge-response: params mac; secrets {'key'}
 SECURED_DATA_KEY = 'uds-sdt-key'  # A shared key for UDS SecuredDataTransmission (0x84): params mac; secrets {'key'}
 PKCS11 = 'pkcs11'  # A key on a PKCS#11 token (smart card, HSM): params module, token, key; secrets {'pin'}
-PURPOSES = (SECOC, TLS_CLIENT, TLS_CA, CRL, IPSEC, MACSEC, SEED_KEY, AUTH_KEY, SECURED_DATA_KEY, PKCS11, KEY_SERVER)
+OEM_TOKEN = (
+    'oem-token'  # Right-to-repair portal credentials (core/oem_tokens.py): params provider, oem; secrets the login
+)
+PURPOSES = (
+    SECOC,
+    TLS_CLIENT,
+    TLS_CA,
+    CRL,
+    IPSEC,
+    MACSEC,
+    SEED_KEY,
+    AUTH_KEY,
+    SECURED_DATA_KEY,
+    PKCS11,
+    KEY_SERVER,
+    OEM_TOKEN,
+)
 KEY_SERVER_AUTH = ('token', 'client-credentials', 'device')  # Static bearer token, or OAuth 2.0 (core/oauth.py)
 EXPIRY_WARNING_DAYS = 30  # Certificates expiring within this many days are announced
 
@@ -534,6 +550,31 @@ class KeyStore:
             raise KeyStoreError('A PKCS#11 key needs the module, the token label and the key label')
         params = {'module': module, 'token': token, 'key': key}
         return self.add(name, PKCS11, params, {'pin': pin.encode('utf-8')}, replace)
+
+    def add_oem_credentials(
+        self,
+        name: str,
+        provider: str,
+        oem: str = '',
+        username: str = '',
+        password: str = '',
+        access_token: str = '',
+        replace: bool = False,
+    ) -> KeyInfo:
+        """A shop's login for an OEM right-to-repair portal (core/oem_tokens.py). `provider` names the token
+        provider that uses it; the username/password or bearer access token are kept encrypted and handed to the
+        provider only to obtain a diagnostic access token for a vehicle. At least one secret is required."""
+        provider = provider.strip()
+        if not provider:
+            raise KeyStoreError('OEM credentials need the name of the provider that uses them')
+        secrets = {
+            key: value.encode('utf-8')
+            for key, value in (('username', username), ('password', password), ('access_token', access_token))
+            if value
+        }
+        if not secrets:
+            raise KeyStoreError('OEM credentials need a username/password or an access token')
+        return self.add(name, OEM_TOKEN, {'provider': provider, 'oem': oem.strip()}, secrets, replace)
 
     def add_tls_client_pkcs12(self, name: str, data: bytes, password: str = '', replace: bool = False) -> KeyInfo:
         """A TLS client certificate with its private key (and chain) from a PKCS#12 file (.p12, .pfx), as browsers,

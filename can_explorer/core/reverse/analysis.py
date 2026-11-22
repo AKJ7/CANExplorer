@@ -28,6 +28,7 @@ import can
 import numpy as np
 
 from can_explorer.core.reverse.checksums import find_checksums
+from can_explorer.core.reverse.crypto import test_randomness
 from can_explorer.core.reverse.fields import BitField, _from_motorola_index, _motorola_index
 from can_explorer.core.secoc_check import SecOcConfig
 
@@ -487,33 +488,64 @@ def _secoc_fields(data: _Data, key: IdKey, config: SecOcConfig) -> List[FoundFie
 
 
 def _random_trailer(data: _Data, key: IdKey, excluded: Set[int]) -> List[FoundField]:
-    """Trailing bytes that look random (see the module), up to an `excluded` bit; a hint, not a finding."""
+    """Trailing bytes that look random (see the module), up to an `excluded` bit; a hint, not a finding.
+
+    Uses statistical randomness tests (monobit, runs, chi-square, serial correlation) when enough frames are
+    available, falling back to the simple half-set/half-flip threshold otherwise.
+    """
     if len(data) < RANDOM_MIN_FRAMES:
         return []
     rates = data.rates()
     ones = data.bits.mean(axis=0).tolist()
 
-    def random(byte: int) -> bool:
+    def random_simple(byte: int) -> bool:
+        """The original threshold check: each bit changes in, and is set in, about half the frames."""
         return not excluded & set(range(byte * 8, byte * 8 + 8)) and all(
             RANDOM_LOW <= rates[bit] <= RANDOM_HIGH and RANDOM_LOW <= ones[bit] <= RANDOM_HIGH
             for bit in range(byte * 8, byte * 8 + 8)
         )
 
     first = data.length
-    while first > 0 and random(first - 1):
+    while first > 0 and random_simple(first - 1):
         first -= 1
     count = data.length - first
     if count < RANDOM_MIN_BYTES:
         return []
+
+    # Refine with the statistical randomness tests
+    result = test_randomness(data.payloads, (first, data.length - 1))
+
+    if result.verdict == 'structured':
+        return []
+
+    # Build the details string with test results
+    test_parts = []
+    if result.monobit_p >= 0.01:
+        test_parts.append('monobit OK')
+    else:
+        test_parts.append(f'monobit p={result.monobit_p:.3f}')
+    if result.runs_p >= 0.01:
+        test_parts.append('runs OK')
+    else:
+        test_parts.append(f'runs p={result.runs_p:.3f}')
+    if result.chi_square_p >= 0.01:
+        test_parts.append('chi-square OK')
+    else:
+        test_parts.append(f'chi-square p={result.chi_square_p:.3f}')
+    test_parts.append(f'serial corr={result.serial_correlation:.2f}')
+    tests_summary = ', '.join(test_parts)
+
+    confidence = result.confidence if result.verdict == 'random' else 0.3
+
     found = []
     fields = _chunks(key, first * 8, count * 8)
     for field in fields:
         raw = data.raw(field)
         details = (
-            f'{count} trailing bytes change at random: possibly a truncated MAC (SecOC) or encrypted data — '
-            'load the ARXML to check'
+            f'{count} trailing bytes change at random ({tests_summary}): '
+            'possibly a truncated MAC (SecOC) or encrypted data — load the ARXML to check'
         )
-        found.append(FoundField(field, 'random', 0.5, details, min(raw), max(raw), len(set(raw))))
+        found.append(FoundField(field, 'random', confidence, details, min(raw), max(raw), len(set(raw))))
     return found
 
 

@@ -39,6 +39,11 @@
   counters, multiplexers and values; matching fields to database signals, CSV/GPS logs or polled OBD-II values;
   grouping fields that carry the same signal across messages; event markers; frame-interval (Δt) and per-byte
   timing graphs; and bit fields to plot without a database or add to one
+- Security analysis for authorised testing: passive cryptanalysis of payloads (randomness tests, MAC and
+  keystream-reuse detection), recovery of SecOC and AUTOSAR E2E layouts, seed/key algorithm recovery from captured
+  UDS SecurityAccess exchanges, gateway security analysis (topology, filtering, authentication and bypass patterns)
+  with compliance and responsible-disclosure reports and a DBC of the findings, a security dashboard, and active
+  bench tests with safety rails; OEM right-to-repair token providers for legitimate diagnostic access
 
 **Recording and replay**
 - ASC, BLF, CSV, candump LOG, PEAK TRC, SQLite, ASAM MF4 and gzip compressed text logs
@@ -102,6 +107,10 @@
   adapter; a simulated ECU works without hardware
 - K-Line (ISO 9141-2 / ISO 14230 KWP2000) for the non-CAN OBD-II vehicles of roughly 1996–2008: monitor the
   10.4 kbit/s diagnostic bus through an ELM327/OBDLink adapter, with the service payloads decoded in the trace
+- VW TP 2.0 and KWP2000 for Volkswagen-group vehicles (VW, Audi, Seat, Škoda) of roughly 2000–2011: open a
+  channel to a module, scan for the modules on the bus, read measuring blocks once or live, edit coding records
+  field by field (read back, with the previous coding kept as a backup), security access and raw requests — module
+  names, scaling and coding layouts come from label files you supply; KWP2000 also over ISO-TP and K-Line
 - J1708: a live capture of the 9600-baud serial bus of older heavy trucks through a USB RS-485/J1708 adapter,
   decoded as J1587 in the trace
 - J1939: nodes with their address claims, DM1/DM2 trouble codes and lamps, clearing codes, requests and sending
@@ -112,9 +121,9 @@
   PDO assignment and emergencies; real adapters need the `ethercat` extra, a simulated network works without
 - Physical I/O: switch the digital outputs of a USB I/O adapter (aio_usb) and watch its inputs and analogue values,
   from the tool or test scripts; needs the `io` extra, a simulated device works without
-- Decoding of ISO-TP, UDS, KWP2000, K-Line (ISO 9141-2 / ISO 14230), J1939, J1939-22 (J1939 on CAN FD),
-  NMEA 2000 (marine, with Fast Packet), CANopen, LIN, J1587, AUTOSAR Network Management, SecOC, XCP and CCP frames in
-  the trace
+- Decoding of ISO-TP, UDS, KWP2000, K-Line (ISO 9141-2 / ISO 14230), VW TP 2.0, J1939, J1939-22 (J1939 on
+  CAN FD), NMEA 2000 (marine, with Fast Packet), CANopen, LIN, J1587, AUTOSAR Network Management, SecOC, XCP and
+  CCP frames in the trace
 - LIN master schedule tables
 
 **Simulation and test automation**

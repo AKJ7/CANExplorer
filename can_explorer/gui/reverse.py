@@ -14,11 +14,15 @@ from can_explorer.gui.reverse_timeline import ReverseTimeline
 from can_explorer.gui.reverse_tools import (
     AnalysisController,
     ConsoleController,
+    CryptoController,
+    GatewaySecurityController,
     MarkerController,
     RasterController,
     ReactionController,
     ReferenceController,
     RelatedController,
+    SecOcReverseController,
+    SecurityDashboardController,
 )
 
 REFRESH_INTERVAL_MS = 250
@@ -146,12 +150,16 @@ class ReverseController(QObject):
         self._timer.timeout.connect(self._refresh)
         connection.database_changed.connect(self.changed)
         self._analysis = AnalysisController(self, parent=self)
+        self._crypto = CryptoController(self, parent=self)
+        self._gateway_security = GatewaySecurityController(self, parent=self)
         self._reference = ReferenceController(self, parent=self)
         self._markers = MarkerController(self, parent=self)
         self._related = RelatedController(self, parent=self)
         self._reaction = ReactionController(self, parent=self)
         self._console = ConsoleController(self, parent=self)
         self._raster = RasterController(self, parent=self)
+        self._secoc_reverse = SecOcReverseController(self, parent=self)
+        self._security_dashboard = SecurityDashboardController(self, parent=self)
         self._timeline = ReverseTimeline(self, parent=self)
         self._timeline.moved.connect(self._on_timeline_moved)
 
@@ -162,6 +170,16 @@ class ReverseController(QObject):
     @pyqtProperty(QObject, constant=True)
     def analysis(self):
         return self._analysis
+
+    @pyqtProperty(QObject, constant=True)
+    def crypto(self):
+        """Cryptanalysis: randomness, freshness, linear relations and keystream reuse."""
+        return self._crypto
+
+    @pyqtProperty(QObject, constant=True)
+    def gateway_security(self):
+        """Gateway security analysis: authentication patterns, bypass detection, cross-ECU correlation."""
+        return self._gateway_security
 
     @pyqtProperty(QObject, constant=True)
     def reference(self):
@@ -188,6 +206,16 @@ class ReverseController(QObject):
     def raster(self):
         """The bit-transition raster (activity map) of the selected identifier."""
         return self._raster
+
+    @pyqtProperty(QObject, constant=True)
+    def secoc_reverse(self):
+        """SecOC reverse engineering: layout, freshness, strength, key recovery, bypass."""
+        return self._secoc_reverse
+
+    @pyqtProperty(QObject, constant=True)
+    def security_dashboard(self):
+        """Combined security posture dashboard."""
+        return self._security_dashboard
 
     @pyqtProperty(QObject, constant=True)
     def timeline(self):
@@ -288,6 +316,8 @@ class ReverseController(QObject):
         """The trace was cleared: forget the statistics, results and markers, which refer to its frames."""
         self.reset()
         self._analysis.clear()
+        self._crypto.clear()
+        self._gateway_security.clear()
         self._reference.clear()
         self._markers.clear()
         self._related.clear()

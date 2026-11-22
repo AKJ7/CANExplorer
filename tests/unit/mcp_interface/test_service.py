@@ -854,3 +854,184 @@ async def test_xcp_tools(channel, data_dir, tmp_path):
         simulator.stop()
         ecu.stop()
         svc.stop()
+
+
+def _feed_uds(svc, exchanges, req_id=0x7E0, resp_id=0x7E8):
+    t = 0.0
+    for request, response in exchanges:
+        svc.session._dispatch(can.Message(arbitration_id=req_id, is_extended_id=False, data=request, timestamp=t))
+        t += 0.05
+        svc.session._dispatch(can.Message(arbitration_id=resp_id, is_extended_id=False, data=response, timestamp=t))
+        t += 0.05
+
+
+def test_disclosure_report_and_dbc_and_preview(channel):
+    svc = service_unstarted(channel)
+    _feed_uds(
+        svc,
+        [
+            (b'\x10\x03', b'\x50\x03\x00\x19\x01\xf4'),
+            (b'\x2e\xf1\x90\x01', b'\x6e\xf1\x90'),
+            (b'\x22\xf1\x90', b'\x62\xf1\x90\x41'),
+        ],
+    )
+
+    disclosure = svc.disclosure_report(vehicle='Mule', researcher='R')
+    assert 'report' in disclosure and disclosure['report'].startswith('# Security disclosure: Mule')
+    assert svc.disclosure_report(format='bogus')['error']
+
+    dbc = svc.gateway_findings_to_dbc()
+    assert dbc['ecus'] >= 1 and 'BO_ 2016 ECU_7E0_Request' in dbc['dbc']
+
+    preview = svc.preview_probe_plan('enumerate')
+    assert preview['plan'] == 'enumerate' and preview['steps_planned'] >= 1
+    assert isinstance(preview['would_skip_dangerous'], int)
+    assert svc.preview_probe_plan('nope')['error']
+
+
+def test_new_gateway_tools_need_connection(channel):
+    svc = service_unstarted(channel)
+    svc.session = None
+    assert svc.disclosure_report()['error'] == NOT_CONNECTED
+    assert svc.gateway_findings_to_dbc()['error'] == NOT_CONNECTED
+    assert svc.preview_probe_plan()['error'] == NOT_CONNECTED
+
+
+async def test_kwp_over_tp20_against_a_module(channel, tmp_path):
+    import json
+
+    from can_explorer.core.session import BusSession
+    from tests.unit.core.test_tp20 import GROUP_1, FakeModule
+
+    ecu = BusSession(LiveSource(BusConfig('virtual', channel)))
+    ecu.start()
+    answers = {b'\x10\x89': b'\x50\x89', b'\x21\x01': GROUP_1, b'\x1a\x9b': b'\x5a\x9b03L906018'}
+    module = FakeModule(ecu, handler=lambda request: answers.get(bytes(request), b'\x7f' + request[:1] + b'\x31'))
+    svc = service(channel, allow_control=True)
+    try:
+        block = await svc.kwp_read_measuring_block(1)
+        assert block['group'] == 1 and len(block['values']) == 8
+        assert block['values'][3] == {'formula': '0x1A', 'a': 0x32, 'b': 0x4B}
+        table = tmp_path / 'formulas.json'
+        table.write_text(json.dumps({'formulas': {'1A': {'expression': 'a + b', 'unit': 'u'}}}), encoding='utf-8')
+        scaled = await svc.kwp_read_measuring_block(1, formulas=str(table))
+        assert scaled['values'][3]['value'] == 0x32 + 0x4B and scaled['values'][3]['unit'] == 'u'
+        assert (await svc.kwp_read_identification('9B'))['text'] == '03L906018'
+        raw = await svc.kwp_request('21 02')
+        assert raw['response'] == '7F 21 31' and 'requestOutOfRange' in raw['description']
+        assert 'requestOutOfRange' in (await svc.kwp_read_measuring_block(2))['error']
+        assert 'did not answer' in (await svc.kwp_read_measuring_block(1, module='17'))['error']
+        assert 'Unknown KWP2000 transport' in (await svc.kwp_read_measuring_block(1, transport='can'))['error']
+        assert 'Cannot read' in (await svc.kwp_read_measuring_block(1, formulas=str(tmp_path / 'none.json')))['error']
+        # Every call closed its channel: the module saw a disconnect after each
+        await wait_until(lambda: module.channel is not None and not module.channel.open)
+    finally:
+        svc.stop()
+        module.close()
+        ecu.stop()
+
+
+async def test_kwp_tools_respect_the_tiers(channel):
+    svc = service(channel)
+    try:
+        with pytest.raises(SendNotAllowed):
+            await svc.kwp_read_measuring_block(1)
+    finally:
+        svc.stop()
+    diagnostics = service(channel, allow_diagnostics=True)
+    try:
+        with pytest.raises(SendNotAllowed):
+            await diagnostics.kwp_request('11 01')
+    finally:
+        diagnostics.stop()
+
+
+class CodingModuleHandler:
+    """A module keeping a three-byte coding record at local identifier 0x9A (illustrative)."""
+
+    def __init__(self, coding=b'\x01\x30\x07'):
+        self.coding = bytearray(coding)
+
+    def __call__(self, request):
+        request = bytes(request)
+        if request == b'\x10\x89':
+            return b'\x50\x89'
+        if request == b'\x21\x9a':
+            return b'\x61\x9a' + bytes(self.coding)
+        if request[:2] == b'\x3b\x9a':
+            self.coding[:] = request[2:]
+            return b'\x7b\x9a'
+        return b'\x7f' + request[:1] + b'\x11'
+
+
+LABELS = {
+    'modules': {
+        '01': {
+            'name': 'Engine',
+            'coding': {
+                'Coding': {
+                    'protocol': 'kwp',
+                    'identifier': '0x9A',
+                    'length': 3,
+                    'fields': [
+                        {'name': 'Option A', 'byte': 0, 'bit': 0, 'values': {'0': 'off', '1': 'on'}},
+                        {'name': 'Variant', 'byte': 1, 'bit': 4, 'width': 4},
+                    ],
+                }
+            },
+        }
+    }
+}
+
+
+async def test_kwp_scan_and_coding_over_tp20(channel, tmp_path):
+    import json
+
+    from can_explorer.core.session import BusSession
+    from tests.unit.core.test_tp20 import FakeModule
+
+    labels = tmp_path / 'labels.json'
+    labels.write_text(json.dumps(LABELS), encoding='utf-8')
+    ecu = BusSession(LiveSource(BusConfig('virtual', channel)))
+    ecu.start()
+    handler = CodingModuleHandler()
+    modules = [FakeModule(ecu, 0x01, handler=handler), FakeModule(ecu, 0x17)]
+    svc = service(channel, allow_control=True)
+    try:
+        scan = await svc.kwp_scan_modules('01-03, 17', labels=str(labels))
+        assert scan['scanned'] == 4
+        assert [(m['address'], m.get('name', '')) for m in scan['modules']] == [('01', 'Engine'), ('17', '')]
+        assert 'error' in await svc.kwp_scan_modules('zz')
+
+        read = await svc.coding_read('01', 'Coding', str(labels), session='89')
+        assert read['data'] == '01 30 07' and read['location'] == 'KWP2000 local identifier 0x9A'
+        assert read['fields'][0]['meaning'] == 'on' and read['fields'][1]['value'] == 3
+        raw = await svc.coding_read('01', 'kwp:9A')
+        assert raw['data'] == '01 30 07' and raw['fields'] == []
+
+        written = await svc.coding_write('01', 'Coding', str(labels), changes={'Option A': 0, 'Variant': 9})
+        assert written['before'] == '01 30 07' and written['written'] == '00 90 07' and written['verified']
+        assert bytes(handler.coding) == b'\x00\x90\x07'
+        whole = await svc.coding_write('01', 'kwp:9A', data='01 30 07')
+        assert whole['verified'] and bytes(handler.coding) == b'\x01\x30\x07'
+
+        assert 'is 3 bytes' in (await svc.coding_write('01', 'Coding', str(labels), data='01 02'))['error']
+        assert 'takes 0-1' in (await svc.coding_write('01', 'Coding', str(labels), changes={'Option A': 2}))['error']
+        assert 'either changes' in (await svc.coding_write('01', 'Coding', str(labels)))['error']
+        assert 'Give a label file' in (await svc.coding_read('01', 'Coding'))['error']
+        assert 'no coding record' in (await svc.coding_read('17', '', str(labels)))['error']
+        assert bytes(handler.coding) == b'\x01\x30\x07'  # The refused writes changed nothing
+    finally:
+        svc.stop()
+        for module in modules:
+            module.close()
+        ecu.stop()
+
+
+async def test_coding_write_needs_control(channel):
+    diagnostics = service(channel, allow_diagnostics=True)
+    try:
+        with pytest.raises(SendNotAllowed):
+            await diagnostics.coding_write('01', 'kwp:9A', data='00')
+    finally:
+        diagnostics.stop()

@@ -17,6 +17,8 @@ Its tabs:
 | **Bits** | The bits and bytes of an identifier, the notch, and the bit field form |
 | **Activity** | A raster of every bit of one identifier across the whole capture, to see its structure at a glance |
 | **Automatic analysis** | Checksums, counters, multiplexers, values, states and flags of every identifier, found automatically |
+| **Cryptanalysis** | Statistical randomness tests, linear dependency search and keystream reuse detection for every identifier |
+| **Gateway security** | Gateway authentication patterns, bypass detection and cross-ECU seed/key correlation |
 | **Reference signals** | The fields following a known value: a database signal, a CSV file (e.g. GPS) or OBD-II values |
 | **Markers** | The bits changing each time you mark that something happened |
 | **Related signals** | Fields carrying the same signal on several messages, grouped |
@@ -158,6 +160,8 @@ it finds, with their kind and how sure it is:
 | **Unknown** | Changes irregularly: noise, or several fields that could not be told apart |
 | **SecOC freshness** / **SecOC MAC** | The freshness value and the truncated MAC of a [secured PDU](security-manager.md#secoc-in-the-trace), at the bits the connection's ARXML gives (see below) |
 | **Random (MAC?)** | Trailing bytes whose every bit changes in about half the frames and is set in about half of them: possibly a truncated MAC or encrypted data (see below) |
+| **Linear relation** | Bytes that are an affine (linear over GF(2)) function of the other bytes, such as a CRC-16, CRC-32 or XOR mask — found by Gaussian elimination |
+| **Keystream reuse** | Encrypted bytes where the same counter value appeared more than once and the XOR of same-counter frames shows structure (low entropy, ASCII-range bytes), indicating keystream reuse |
 
 **Secured frames.** AUTOSAR SecOC appends a freshness value and a truncated MAC to the payload of a secured PDU.
 The MAC changes at random in every frame, so read as an ordinary field it would only be noise split into
@@ -165,9 +169,17 @@ meaningless values. When the connection's database is an ARXML describing the PD
 its **SecOC freshness** and **SecOC MAC** bits exactly and analyses only the rest. Without one, trailing bytes (at
 least two) that look random are labelled **Random (MAC?)** and left out of the other fields — a hint, not a finding:
 encrypted data and a field of pure noise look the same, and a checksum found at the end of the frame stays a
-checksum. It needs 100 frames or more of the identifier to tell. The freshness value usually shows up as a
+checksum. The randomness detection uses statistical tests (monobit, runs, chi-square and serial correlation) when
+enough frames are available, and falls back to the original half-set/half-flip threshold otherwise. It needs 100
+frames or more of the identifier to tell. The freshness value usually shows up as a
 **Counter** just before it. To check the MACs, load the ARXML and add the keys in the
 [Security Manager](security-manager.md).
+
+**Cryptanalysis tools.** The MCP tool `assess_frame_security` runs a passive security assessment on one identifier:
+statistical randomness tests on its trailing bytes, freshness and replay analysis of any counter+MAC pair, a linear
+dependency search (GF(2) Gaussian elimination) across the payload, and keystream reuse detection. It never sends
+anything on the bus. For active testing on an authorised bench, `core.active_security_test` provides replay and MAC
+forgery tests.
 
 Field boundaries come from how often each bit changes: within a field, the less significant a bit, the more often
 it changes, so a bit changing much less often than the one above it starts a new field. This is done in both Intel
@@ -299,6 +311,248 @@ same scriptable surface the [MCP interface](mcp.md) exposes to an AI agent, at t
 !!! note
     The console runs Python in the application's own process — it is not a sandbox. It is for exploring your own
     capture, so do not paste scripts you do not trust.
+
+## Cryptanalysis
+
+The **Cryptanalysis** tab runs a passive security assessment on the payloads of every identifier (or only the
+selected one). For each identifier it reports:
+
+| Test | What it checks |
+|---|---|
+| **Randomness** | Statistical tests on trailing bytes: monobit (proportion of 1-bits), runs (consecutive identical bits), chi-square (uniform distribution of byte values) and serial correlation (lag-1 correlation between frames). A *random* verdict means the bytes look like a random MAC or encrypted data; *structured* means they fail one or more tests |
+| **Linear relation** | GF(2) Gaussian elimination across the payload bytes, finding affine bit relations such as CRC-16, CRC-32 or XOR masks, and matching them against known CRC polynomials. The confidence percentage reflects the share of verification frames that matched |
+| **MAC classification** | Classifies a suspected MAC byte range by its length: 24/28/32-bit truncated CMAC-AES-128 (AUTOSAR SecOC), 128-bit full CMAC, 256-bit HMAC-SHA-256. When a freshness counter is present alongside a 24-32 bit field, it strongly suggests SecOC rather than a CRC |
+| **Keystream reuse** | Finds repeated counter values in suspected encrypted bytes and checks whether the XOR of same-counter frames shows structure (low entropy or ASCII-range bytes), indicating keystream reuse |
+| **E2E** | Detects AUTOSAR End-to-End protection from captured payloads without an ARXML: identifies the profile (2, 4, 5, 6, 7, 22), locates the CRC and alive counter, recovers the Data IDs, and reports the match rate. See [E2E reverse engineering](#e2e-reverse-engineering) below |
+| **E2E bypass** | Detects E2E protection weaknesses: static CRC (never changes despite payload changes), frozen alive counter, CRC always zero or 0xFF (configured but not computed) |
+
+The verdicts are colour-coded: green for *random*, amber for *structured*, red for *finding*, grey for
+*inconclusive* (too few frames). The confidence percentage reflects how many frames were available and how many
+tests agreed. Double-clicking a row navigates to that identifier in the Bits tab; the plot button shows the
+inter-frame interval.
+
+The same analyses are available as the MCP tool `assess_frame_security` (for one identifier) and in the
+interactive console.
+
+### E2E reverse engineering
+
+The E2E detection pipeline runs automatically as part of the Cryptanalysis analysis. For each identifier
+with enough frames (at least 30), it:
+
+1. **Detects the alive counter** — scans each nibble and byte for monotonic increment modulo N
+   (mod 16 for 4-bit Profile 2/22, mod 256 for 8-bit Profile 5).
+2. **Identifies the profile** — tries each AUTOSAR E2E profile's CRC computation at plausible offsets.
+   Profiles 4, 6 and 7 are detected by their Length field matching the payload length and their
+   characteristic header layout.
+3. **Recovers the Data IDs** — for Profile 2/22, each counter value's Data ID is solved
+   deterministically from observed CRCs. For Profile 5/6, the 16-bit Data ID is brute-forced
+   (65 536 candidates). For Profile 4/7, the Data ID is read from the header.
+4. **Checks for bypasses** — static CRC, frozen counter, zero/0xFF CRC bytes.
+
+The MCP tools `detect_e2e` (full pipeline) and `compute_e2e` (compute a valid E2E header with
+recovered parameters) provide the same capabilities for agent-driven workflows.
+
+## Gateway security analysis
+
+The **Gateway security** tab analyses captured UDS traffic for gateway behaviour. Press **Run analysis**
+to execute the full pipeline; press **Generate report** for a consolidated severity summary, or
+**Crack seed/key** to re-run algorithm recovery on extracted pairs.
+
+### Topology mapping
+
+The gateway map clusters responding ECUs by response timing into bus segments, lists the services each
+ECU supports and the authentication type (0x27, 0x29 or none). The map is also available as the MCP
+tool `map_gateway`.
+
+### Access matrix
+
+The access matrix records every (ECU, service, session) combination observed in the trace and classifies
+each as *granted*, *denied* or *conditional* (NRC 0x22 conditionsNotCorrect). Rows with write services
+denied only in higher sessions are flagged. MCP tool: `access_matrix`.
+
+### Authentication patterns
+
+Which ECUs require authentication (0x27 SecurityAccess or 0x29 Authentication), at which security level
+and in which diagnostic session, and which services are locked (NRC 0x33 securityAccessDenied or 0x34
+authenticationRequired).
+
+### Bypass detection
+
+- **Unfiltered IDs**: diagnostic request IDs that never got a securityAccessDenied — the gateway does not
+  filter them. Write services (0x2E WriteDID, 0x31 RoutineControl, 0x34 RequestDownload) on an unfiltered ID
+  are flagged as findings.
+- **Session fallback**: services that are locked in the extended diagnostic session but work in the default
+  session when switching back — the gateway may not re-apply filtering.
+- **Timing window**: services that succeed within two seconds of a session change, suggesting a window before
+  the gateway filters the new session.
+- **Functional addressing**: services that work via the functional broadcast address (0x7DF) but are locked
+  via physical addressing.
+
+### Cross-ECU seed/key correlation
+
+When the captured traffic contains 0x27 SecurityAccess exchanges for two or more ECUs, the tool
+automatically extracts seed/key pairs and checks whether they share the same algorithm or master key
+(a compromise of one ECU exposes the others). MCP tool: `correlate_ecu_seeds`.
+
+### NRC fingerprinting
+
+The set of NRC codes an ECU returns and its response timing form a fingerprint that can identify the
+software stack or vendor. The analysis matches observed NRC sets against known patterns (e.g. AUTOSAR
+Classic returns 0x13 incorrectMessageLengthOrInvalidFormat where Vector stacks return 0x31
+requestOutOfRange). MCP tool: `fingerprint_ecu` (via `gateway_report`).
+
+### Authentication timing
+
+Each step of the 0x27 SecurityAccess flow is timed: request-to-seed, seed-to-key-send, and key-send-to-
+response. Unusually fast key verification (< 1 ms) may indicate a trivial check; unusually slow
+verification (> 50 ms) may indicate a computationally expensive KDF. MCP tool: `analyse_auth_timing`
+(via `gateway_report`).
+
+### DID/routine security classification
+
+For each ECU, the tool probes which DIDs are readable and writable, and what authentication posture
+each requires. The result is a per-DID breakdown of access, auth requirement and observed NRC.
+MCP tool: `classify_did_security`.
+
+### Seed entropy assessment
+
+Extracted seeds are tested for Shannon entropy, unique ratio, sequential patterns and fixed bytes.
+Weak seeds (low entropy, predictable counters, repeated values) are flagged. MCP tool:
+`assess_seed_quality`.
+
+### Seed/key algorithm cracking
+
+When three or more (seed, key) pairs are available for an ECU, the tool tests hypotheses from identity
+through XOR, bit-reversal, GF(2) linear algebra, hash truncation (MD5/SHA-1/SHA-256), CRC (common
+CRC-16/32 parameter sets, with the final XOR solved from a pair), AES- and DES/3DES-based KDFs and
+LFSR scramblers. Recovered algorithms appear as findings with a severity of *finding*. The **Crack
+seed/key** button re-runs cracking independently of the full analysis. MCP tool: `crack_seed_key`.
+
+A recovered closed-form algorithm (identity, XOR, add/subtract, rotation, byte shuffle) can be turned
+into a `compute_key(level, seed)` script with `findings_artifacts.match_to_script`, ready to store as a
+seed/key entry in the [Security Manager](security-manager.md); key-dependent or table-based matches
+raise rather than emit a script that would silently drop part of the algorithm.
+
+### Consolidated report
+
+The **Generate report** button (or MCP tool `gateway_report`) combines all analyses into a single
+report with an overall severity rating (info / warning / finding / critical) and a prioritised
+summary of the most important findings.
+
+### Bus segmentation detection
+
+The tool clusters CAN IDs by timing characteristics (periodic vs event-driven, rate) and ID range to
+infer physical bus segments.  IDs with low-jitter intervals are classified as periodic; the rest as
+event-driven.  Contiguous ID ranges (gaps larger than 0x100 start a new segment) are grouped together.
+MCP tool: `detect_bus_segments`.
+
+### Response-after-reset analysis
+
+After an ECU reset (0x11), there may be a short boot-up window where security is not yet enforced.
+The tool detects services that succeed within two seconds of a reset positive response and flags them.
+Write services (WriteDID, RoutineControl, RequestDownload) in this window are flagged as findings.
+MCP tool: `analyse_reset_behaviour`.
+
+### OEM-specific NRC decoding
+
+Vendor-specific NRC codes in the 0x70-0x7E range are decoded from public sources (ISO 14229 Annex A,
+AUTOSAR SWS documents).  When an ECU returns a vendor-specific NRC, the authentication pattern details
+include the decoded name (e.g. 0x72 generalProgrammingFailure, 0x73 wrongBlockSequenceCounter).  Codes
+not found in public specifications are labelled "vendor-specific 0xNN" rather than guessed.
+
+### Export
+
+The **Export** button exports the current results as JSON or CSV.  The JSON format includes the full
+structured report (ECUs, authentication patterns, bypass findings, access matrix, correlations).  The
+CSV format has one row per finding with columns: category, id, finding, severity, details.  MCP tool:
+`export_gateway_report` with a `format` parameter.
+
+The same menu offers two more exports built from the last run's capture:
+
+- **Disclosure report (Markdown)** — a responsible-disclosure document for an OEM PSIRT: each weakness
+  with its evidence, remediation and WP.29 R155 / ISO 21434 reference, most-severe first. It states
+  only what the capture shows and names no exploit. MCP tool: `disclosure_report` (`format` markdown or
+  json; `vehicle`, `researcher` and `contact` label it).
+- **Discovered DBC scaffold** — a minimal DBC naming each discovered ECU's request and response
+  message, with the services seen as comments, to label unknown traffic in the signal views instead of
+  re-deriving the topology. MCP tool: `gateway_findings_to_dbc`.
+
+The analysis is passive: it reads the captured frames only and never sends anything on the bus.
+Double-clicking a gateway result navigates to that ECU's identifier in the Bits tab.
+
+The response-ID convention (request + 8) is configurable via the `response_offset` parameter in the
+MCP tools, for OEMs that use a different offset.
+
+### Active security tests (MCP only)
+
+For authorised lab benches, the MCP send-tier tools transmit frames on the bus to test an ECU's
+resilience:
+
+- **replay_test**: replays a captured frame and checks whether the ECU acts on it. A frame protected
+  by a freshness counter should be rejected after a short time.
+- **forgery_test**: sends frames with the authentic payload but random MAC bytes. A properly
+  implemented MAC should reject every forged frame.
+- **functional_bypass_test**: sends the same service request via physical and functional addressing
+  and compares responses. Reports services that are filtered via physical but pass via functional.
+- **session_race_test**: switches to extended session and immediately sends a locked service with
+  varying delays. Reports the timing window (if any) during which the service succeeds.
+- **reset_bypass_test**: sends ECUReset (0x11) and attempts locked services during the boot-up
+  window. Measures the window duration and which services are accessible.
+- **dos_resilience_test**: sends diagnostic request bursts at increasing rates and measures response
+  degradation, dropped frames and crash/recovery.
+
+All require `--allow-send` and should only be used on a bench you are authorised to test.
+
+### Executing a probing plan
+
+The passive planners above (enumeration, brute-force and non-standard scan) emit the steps worth
+trying; `active_prober.execute` runs those steps on a bench. It is the one reverse-engineering
+primitive that transmits, and several safety rails bound it: a **dry run** that sends nothing (the
+default from the GUI and the `preview_probe_plan` MCP tool), an **allowlist** of request IDs,
+**state-changing services skipped by default** (ECU reset, writes, routines, transfers — pass an empty
+`blocked_services` to allow them for an engagement), a **rate limit**, a **request cap** and an
+optional **per-step confirmation**. Every send is recorded in the [audit log](security-manager.md).
+The caller supplies the `send` callable; the module never opens a bus itself, and the live run is
+driven from the gateway panel, not from MCP.
+
+## SecOC reverse engineering
+
+The **SecOC** tab detects AUTOSAR SecOC-protected frames from statistical properties of the payload,
+without an ARXML. For each identifier with enough frames it reports:
+
+| Category | What it checks |
+|---|---|
+| **Layout** | The MAC and freshness counter byte boundaries, inferred from byte-level randomness and counter heuristics |
+| **Freshness** | Reconstructed counter width, type (monotonic or truncated), rate and wrap count. A counter that wraps is flagged |
+| **Strength** | Practical security margin: forgery probability, expected time to forgery, freshness window, and whether the truncation length meets AUTOSAR recommendations |
+| **Key recovery** | Tries common/weak keys (all-zero, all-one, Data-ID-derived, ECU-serial-derived) against observed truncated MACs. A recovered key is a critical finding |
+| **Bypass** | Detects missing security trailers, static MACs, counter wrap acceptance and post-reset windows |
+
+Press **Analyse all identifiers** to scan every identifier, or **Analyse *selected*** to check only the
+currently selected one. Double-clicking a row navigates to that identifier in the Bits tab; the plot
+button shows the inter-frame interval.
+
+The same analyses are available as MCP tools: `detect_secoc_layout`, `assess_secoc_strength`,
+`try_secoc_key_recovery`, `detect_secoc_bypass`, `detect_shared_secoc_keys`, `predict_freshness`,
+`replay_window`, `classify_secoc_profile` and `analyse_e2e_secoc_interaction`.
+
+## Security dashboard
+
+The **Security dashboard** tab combines the results of gateway analysis, SecOC analysis, seed quality
+and NRC fingerprints into a single security posture view. Press **Refresh dashboard** to run all
+analyses.
+
+The summary cards show:
+
+- **ECUs** — the number of responding ECUs discovered in the trace.
+- **Findings** — the total number of security findings across all analyses.
+- **Overall score** — a 0–10 severity score (0 = no findings, 10 = critical).
+- **Grade** — a letter grade derived from the score (A ≤ 2, B ≤ 4, C ≤ 6, D ≤ 8, F > 8).
+
+Below the cards, a bullet list summarises the top findings and a table lists every finding with its
+ECU, category, severity and details. Double-clicking a row navigates to that ECU's identifier.
+
+The same analysis is available as the MCP tool `attack_surface_report`.
 
 ## Multiplexed fields
 

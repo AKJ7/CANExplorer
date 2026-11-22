@@ -17,6 +17,11 @@ logger = get_logger(__name__)
 
 # Receive timeout of the notifier thread; bounds how long closing a bus blocks the caller
 NOTIFIER_TIMEOUT = 0.1
+# How long send() waits for the bus to accept a frame before failing. A real CAN interface accepts it at once, but
+# a serial adapter (ELM327, GVRET, …) runs a short dialogue per frame — stop monitoring, set the header, write the
+# data — of several round-trips, so a tight bound makes a working-but-slow adapter fail spuriously on a loaded
+# machine. This caps how long a stuck bus can block the caller; the adapters keep their own, longer internal limit.
+SEND_TIMEOUT = 1.0
 # Upper bound of messages handed to the event loop at once, so a burst cannot stall the GUI
 MAX_BATCH = 5_000
 # Messages read from a log file per chunk, and chunks buffered ahead of the consumer
@@ -323,7 +328,7 @@ class LiveSource:
         if self._bus is None:
             raise SourceError('Bus is not open')
         try:
-            self._bus.send(msg, timeout=0.1)
+            self._bus.send(msg, timeout=SEND_TIMEOUT)
         except can.CanError as e:
             raise SourceError(f'Could not send: {e}') from e
 

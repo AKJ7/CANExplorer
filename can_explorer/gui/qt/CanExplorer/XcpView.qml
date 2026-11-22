@@ -1135,7 +1135,9 @@ ColumnLayout {
                         Layout.fillHeight: true
                         spacing: 12
 
-                        Item { Layout.fillHeight: true }
+                        // Fills the width too: without a child that does, the column's maximum width is its widest
+                        // child's and it sits on the left of the card instead of across it
+                        Item { Layout.fillHeight: true; Layout.fillWidth: true }
                         Label {
                             Layout.alignment: Qt.AlignHCenter
                             text: qsTr("No A2L file loaded")

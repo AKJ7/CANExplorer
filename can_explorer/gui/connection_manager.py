@@ -74,6 +74,7 @@ from can_explorer.gui.reverse import ReverseController
 from can_explorer.gui.uds_scan import UdsScanController
 from can_explorer.gui.gmlan import GmlanController
 from can_explorer.gui.j1850 import J1850Controller
+from can_explorer.gui.tp20 import Tp20Controller
 from can_explorer.gui.xcp import XcpController
 from can_explorer.gui.testing import TestController
 from can_explorer.gui.trace_tools import TraceTools
@@ -170,6 +171,7 @@ class CanConnection(QObject):
         self._uds_scan = UdsScanController(self, parent=self)
         self._xcp = XcpController(self, parent=self)
         self._gmlan = GmlanController(self, parent=self)
+        self._tp20 = Tp20Controller(self, parent=self)
         self._j1850 = J1850Controller(self, parent=self)
         self._bus_health = BusHealthController(self, parent=self)
         self._reverse = ReverseController(self, parent=self)
@@ -402,6 +404,7 @@ class CanConnection(QObject):
         self._uds_scan.shutdown()
         self._xcp.shutdown()
         self._gmlan.shutdown()
+        self._tp20.shutdown()
         self._j1850.shutdown()
         self._flashing.shutdown()
         self._obd.shutdown()
@@ -858,6 +861,11 @@ class CanConnection(QObject):
     def gmlan(self) -> GmlanController:
         """GMLAN (GMW3110) diagnostics."""
         return self._gmlan
+
+    @pyqtProperty(QObject, constant=True)
+    def tp20(self) -> Tp20Controller:
+        """VW TP 2.0 / KWP2000 diagnostics: module scan, measuring blocks, coding."""
+        return self._tp20
 
     @pyqtProperty(QObject, constant=True)
     def j1850(self) -> J1850Controller:

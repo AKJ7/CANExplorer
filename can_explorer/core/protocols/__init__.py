@@ -9,6 +9,7 @@ from can_explorer.core.protocols.kline import KLineDecoder
 from can_explorer.core.protocols.kwp2000 import Kwp2000Decoder, Kwp2000ExtendedDecoder
 from can_explorer.core.protocols.nm import NmDecoder
 from can_explorer.core.protocols.nmea2000 import NmeaDecoder
+from can_explorer.core.protocols.tp20 import Tp20Decoder
 from can_explorer.core.protocols.xcp import CcpDecoder, XcpDecoder
 from can_explorer.core.lin import LinDecoder
 from can_explorer.core.secoc import SecOcDecoder
@@ -23,6 +24,7 @@ PROTOCOL_DECODERS: Dict[str, Optional[Callable[[], ProtocolDecoder]]] = {
     UdsExtendedDecoder.name: UdsExtendedDecoder,
     Kwp2000ExtendedDecoder.name: Kwp2000ExtendedDecoder,
     KLineDecoder.name: KLineDecoder,
+    Tp20Decoder.name: Tp20Decoder,
     J1939Decoder.name: J1939Decoder,
     J1939_22Decoder.name: J1939_22Decoder,
     NmeaDecoder.name: NmeaDecoder,

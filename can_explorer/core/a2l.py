@@ -294,10 +294,21 @@ def _formula_to_python(formula: str) -> str:
 def evaluate_formula(formula: str, x: float) -> float:
     """Evaluate an A2L FORMULA with X1 (or X) = x: arithmetic, comparisons, bit operators and the usual math
     functions, nothing else."""
+    return evaluate_expression(formula, {'X': x, 'X1': x}, ignore_case=True)
+
+
+def evaluate_expression(formula: str, variables: Dict[str, float], ignore_case: bool = False) -> float:
+    """Evaluate an arithmetic expression over named variables, safely: arithmetic, comparisons, bit operators,
+    conditional expressions and the usual math functions (`pi` is defined), nothing else — no attribute access, no
+    calls beyond the math functions. Raises A2lError for a syntax error, an unknown name or a failed evaluation.
+
+    Shared by the A2L FORMULA conversion (variable X) and other user-supplied scalings, e.g. the measuring-block
+    formulas of `core/measuring_blocks.py` (variables a and b)."""
     try:
         tree = ast.parse(_formula_to_python(formula).strip(), mode='eval')
     except SyntaxError as e:
         raise A2lError(f'Formula {formula!r}: {e.msg}') from None
+    lookup = {name.upper(): value for name, value in variables.items()} if ignore_case else variables
 
     def run(node) -> float:
         if isinstance(node, ast.Expression):
@@ -305,8 +316,9 @@ def evaluate_formula(formula: str, x: float) -> float:
         if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
             return node.value
         if isinstance(node, ast.Name):
-            if node.id.upper() in ('X', 'X1'):
-                return x
+            key = node.id.upper() if ignore_case else node.id
+            if key in lookup:
+                return lookup[key]
             if node.id == 'pi':
                 return math.pi
             raise A2lError(f'Formula {formula!r}: unknown name {node.id}')
@@ -328,7 +340,8 @@ def evaluate_formula(formula: str, x: float) -> float:
     try:
         return float(run(tree))
     except (ArithmeticError, ValueError, TypeError) as e:
-        raise A2lError(f'Formula {formula!r} at X={x:g}: {e}') from None
+        at = ', '.join(f'{name}={value:g}' for name, value in variables.items() if name != 'X1')
+        raise A2lError(f'Formula {formula!r} at {at}: {e}') from None
 
 
 @dataclass(frozen=True)

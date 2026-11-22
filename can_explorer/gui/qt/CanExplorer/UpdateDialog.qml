@@ -70,10 +70,15 @@ Dialog {
                 Layout.minimumHeight: 120
                 padding: 0
                 ScrollView {
+                    id: notesView
                     anchors.fill: parent
                     clip: true
+                    // Wrapped to the view's width: the notes' widest line (nested lists, long code) would otherwise
+                    // make them scroll sideways, past the frame
+                    contentWidth: availableWidth
+                    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
                     Label {
-                        width: dialog.availableWidth - 24
+                        width: notesView.availableWidth
                         padding: 12
                         text: dialog.updates.notes || qsTr("No release notes.")
                         textFormat: Text.MarkdownText

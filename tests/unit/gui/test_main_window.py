@@ -80,6 +80,7 @@ def test_dashboard_pages_and_themes_render_without_warnings(window, qtbot):
         'uds-scan',
         'xcp',
         'gmlan',
+        'tp20',
         'simulation',
         'restbus',
         'tests',

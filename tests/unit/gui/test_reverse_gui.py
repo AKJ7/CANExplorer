@@ -735,3 +735,38 @@ async def test_reaction_windows_split_by_frame_count_not_timestamp(manager, chan
     assert ('100', '100[8|1@1+]') in rows
     assert rows[('100', '100[8|1@1+]')]['kind'] == 'changed'
     assert rows[('100', '100[8|1@1+]')]['change'] == '0x0 → 0x1'
+
+
+def test_gateway_security_disclosure_dbc_and_preview(qapp):
+    from can_explorer.gui.reverse_tools import GatewaySecurityController
+
+    controller = GatewaySecurityController(None)
+    # No run yet: the export slots report nothing rather than crash
+    assert controller.disclosureReport('markdown') == ''
+    assert controller.exportDiscoveredDbc() == ''
+    assert controller.previewProbePlan('enumerate') == {'error': 'Run the analysis first'}
+
+    req_id, resp_id, t = 0x7E0, 0x7E8, 0.0
+    messages = []
+    for request, response in [
+        (b'\x10\x03', b'\x50\x03\x00\x19\x01\xf4'),
+        (b'\x2e\xf1\x90\x01', b'\x6e\xf1\x90'),
+        (b'\x22\xf1\x90', b'\x62\xf1\x90\x41'),
+    ]:
+        messages.append(can.Message(arbitration_id=req_id, is_extended_id=False, data=request, timestamp=t))
+        t += 0.05
+        messages.append(can.Message(arbitration_id=resp_id, is_extended_id=False, data=response, timestamp=t))
+        t += 0.05
+    controller._messages = messages
+
+    report = controller.disclosureReport('markdown')
+    assert report.startswith('# Security disclosure')
+    assert '## Findings' in report
+    dbc = controller.exportDiscoveredDbc()
+    assert 'BO_ 2016 ECU_7E0_Request' in dbc
+    preview = controller.previewProbePlan('enumerate')
+    assert preview['plan'] == 'enumerate' and preview['steps_planned'] >= 1
+    assert controller.previewProbePlan('nope') == {'error': "plan must be 'enumerate', 'brute' or 'scan'"}
+
+    controller.clear()
+    assert controller._messages == [] and controller.exportDiscoveredDbc() == ''

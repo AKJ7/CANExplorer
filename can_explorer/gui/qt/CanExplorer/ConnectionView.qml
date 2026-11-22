@@ -25,6 +25,7 @@ ColumnLayout {
      .concat(connection.can_transmit ? [{ key: "uds-scan", title: qsTr("UDS discovery"), icon: "⊚" }] : [])
      .concat(connection.can_transmit ? [{ key: "xcp", title: qsTr("XCP/CCP"), icon: "⟐" }] : [])
      .concat(connection.can_transmit ? [{ key: "gmlan", title: qsTr("GMLAN"), icon: "◈" }] : [])
+     .concat(connection.can_transmit && !connection.is_lin && !connection.is_j1850 ? [{ key: "tp20", title: qsTr("VW TP 2.0"), icon: "⊡" }] : [])
      .concat(connection.is_j1850 ? [{ key: "j1850", title: qsTr("J1850 / Class 2"), icon: "◇" }] : [])
      .concat(connection.protocol === "J1939" ? [{ key: "j1939", title: qsTr("J1939"), icon: "⛟" }] : [])
      .concat(connection.protocol === "CANopen" ? [{ key: "canopen", title: qsTr("CANopen"), icon: "⚙" }] : [])
@@ -78,7 +79,7 @@ ColumnLayout {
             mark("tests", "error", qsTr("Last run failed"))
         return activity
     }
-    readonly property var pageKeys: ["dashboard", "trace", "overview", "signals", "health", "reverse", "diagnostics", "obd", "flash", "uds-scan", "xcp", "gmlan", "j1850", "j1939", "canopen", "lin", "simulation", "restbus", "tests", "media", "security"]
+    readonly property var pageKeys: ["dashboard", "trace", "overview", "signals", "health", "reverse", "diagnostics", "obd", "flash", "uds-scan", "xcp", "gmlan", "tp20", "j1850", "j1939", "canopen", "lin", "simulation", "restbus", "tests", "media", "security"]
     property string page: "dashboard"
     readonly property string pageTitle: (pages.find(item => item.key === page) || pages[0]).title
     readonly property bool tablePage: page === "trace" || page === "overview"
@@ -396,6 +397,15 @@ ColumnLayout {
                 anchors.fill: parent
                 active: root.connection.can_transmit
                 sourceComponent: GmlanView {
+                    connection: root.connection
+                }
+            }
+        }
+        Card {
+            Loader {
+                anchors.fill: parent
+                active: root.connection.can_transmit && !root.connection.is_lin && !root.connection.is_j1850
+                sourceComponent: Tp20View {
                     connection: root.connection
                 }
             }

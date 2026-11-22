@@ -42,6 +42,8 @@ KIND_NAMES = {
     'freshness': 'SecOC freshness',
     'mac': 'SecOC MAC',
     'random': 'Random (MAC?)',
+    'keystream_reuse': 'Keystream reuse',
+    'linear': 'Linear relation',
 }
 
 
@@ -862,6 +864,722 @@ class ConsoleController(_Tool):
         self.changed.emit()
 
 
+class CryptoController(_Tool):
+    """Cryptanalysis: randomness tests, freshness analysis, linear relations and keystream reuse for the frames of
+    each identifier (or the selected one). Runs the same assessments as the MCP ``assess_frame_security`` tool."""
+
+    changed = pyqtSignal()
+    running = pyqtProperty(bool, fget=_Tool._get_running, notify=changed)
+    status = pyqtProperty(str, fget=_Tool._get_status, notify=changed)
+
+    def __init__(self, reverse, parent: Optional[QObject] = None):
+        super().__init__(reverse, parent)
+        self._rows: List[Dict[str, Any]] = []
+
+    @pyqtSlot(bool)
+    def run(self, selected_only: bool):
+        if not self._running:
+            self._start(self._run(selected_only))
+
+    async def _run(self, selected_only: bool) -> None:
+        from can_explorer.core.reverse.analysis import analyse as analyse_id
+        from can_explorer.core.reverse.crypto import detect_keystream_reuse, test_randomness
+        from can_explorer.core.reverse.e2e_reverse import detect_e2e
+        from can_explorer.core.reverse.linear import find_linear_relations
+
+        self._status = 'Reading the trace…'
+        self._rows = []
+        self.changed.emit()
+        messages = await self.reverse.snapshot()
+        selected = self.reverse.selected
+        if selected_only and selected:
+            key = (int(selected, 16), len(selected) > 3)
+            messages = [msg for msg in messages if (msg.arbitration_id, msg.is_extended_id) == key]
+
+        frames = await asyncio.to_thread(collect, messages)
+        frames = {k: item for k, item in frames.items() if not is_obd_identifier(k)}
+        rows: List[Dict[str, Any]] = []
+
+        total = len(frames)
+        done = 0
+
+        for frame_key, id_frames in sorted(frames.items()):
+            done += 1
+            if done % 10 == 0:
+                self._status = f'Analysing… {done} of {total} identifiers'
+                self.changed.emit()
+                await asyncio.sleep(0)
+
+            frame_id, extended = frame_key
+            id_text = _id_text(frame_id, extended)
+            payloads = id_frames.payloads
+
+            if len(payloads) < 20:
+                rows.append(
+                    {
+                        'id': id_text,
+                        'test': 'Overall',
+                        'verdict': 'inconclusive',
+                        'confidence': 0,
+                        'details': f'Too few frames ({len(payloads)}); need at least 20',
+                    }
+                )
+                continue
+
+            length = len(payloads[0]) if payloads else 0
+            if length < 2:
+                continue
+
+            # Randomness tests on trailing bytes
+            trailing_start = max(0, length - max(2, length // 3))
+            randomness = test_randomness(payloads, (trailing_start, length - 1))
+            rows.append(
+                {
+                    'id': id_text,
+                    'test': 'Randomness',
+                    'verdict': randomness.verdict,
+                    'confidence': round(randomness.confidence * 100),
+                    'details': (
+                        f'bytes {trailing_start}-{length - 1}: monobit p={randomness.monobit_p:.3f}, '
+                        f'runs p={randomness.runs_p:.3f}, chi2 p={randomness.chi_square_p:.3f}, '
+                        f'serial r={randomness.serial_correlation:.3f}'
+                    ),
+                }
+            )
+
+            # Linear relations
+            try:
+                relations = find_linear_relations(payloads)
+                if relations:
+                    for rel in relations[:3]:
+                        rows.append(
+                            {
+                                'id': id_text,
+                                'test': 'Linear relation',
+                                'verdict': 'finding',
+                                'confidence': round(rel.confidence * 100),
+                                'details': rel.description,
+                            }
+                        )
+            except Exception:
+                pass
+
+            # Keystream reuse: run the automatic analysis to find a counter field, then check for reuse
+            try:
+                analysis = analyse_id(id_frames, multiplexers=False)
+                counter_field = None
+                for found in analysis.fields:
+                    if found.kind == 'counter':
+                        counter_field = found.field
+                        break
+                if counter_field is not None and length >= 3:
+                    counter_bytes = {b // 8 for b in counter_field.bits}
+                    non_counter = [b for b in range(length) if b not in counter_bytes]
+                    if non_counter:
+                        enc_first = min(non_counter)
+                        enc_last = max(non_counter)
+                        reuse = detect_keystream_reuse(payloads, counter_field, (enc_first, enc_last))
+                        if reuse.structured_xor_pairs > 0:
+                            rows.append(
+                                {
+                                    'id': id_text,
+                                    'test': 'Keystream reuse',
+                                    'verdict': 'finding',
+                                    'confidence': 80,
+                                    'details': '; '.join(reuse.findings),
+                                }
+                            )
+                        elif reuse.reused_counter_values:
+                            rows.append(
+                                {
+                                    'id': id_text,
+                                    'test': 'Keystream reuse',
+                                    'verdict': 'inconclusive',
+                                    'confidence': 40,
+                                    'details': '; '.join(reuse.findings),
+                                }
+                            )
+            except Exception:
+                pass
+
+            # E2E profile detection
+            try:
+                e2e_result = await asyncio.to_thread(detect_e2e, list(payloads))
+                if e2e_result.profiles:
+                    best = e2e_result.profiles[0]
+                    data_id_desc = ''
+                    if best.data_ids is not None:
+                        if isinstance(best.data_ids, list) and len(best.data_ids) > 1:
+                            data_id_desc = f', {len(best.data_ids)} Data IDs recovered'
+                        elif isinstance(best.data_ids, list) and best.data_ids:
+                            data_id_desc = f', Data ID 0x{best.data_ids[0]:04X}'
+                        elif isinstance(best.data_ids, int):
+                            data_id_desc = f', Data ID 0x{best.data_ids:04X}'
+                    rows.append(
+                        {
+                            'id': id_text,
+                            'test': 'E2E',
+                            'verdict': 'finding',
+                            'confidence': round(best.confidence * 100),
+                            'details': (
+                                f'Profile {best.profile}'
+                                f'{data_id_desc}'
+                                f', counter at byte {best.counter_position}'
+                                f', CRC at byte {best.crc_position}'
+                                f' ({best.match_rate * 100:.0f}% match)'
+                            ),
+                        }
+                    )
+                if e2e_result.bypasses:
+                    for bp in e2e_result.bypasses:
+                        rows.append(
+                            {
+                                'id': id_text,
+                                'test': 'E2E bypass',
+                                'verdict': 'warning' if bp.severity == 'warning' else 'finding',
+                                'confidence': 90,
+                                'details': bp.description,
+                            }
+                        )
+            except Exception:
+                pass
+
+        self._rows = rows
+        verdicts = [r['verdict'] for r in rows]
+        findings = verdicts.count('finding')
+        random_count = verdicts.count('random')
+        structured = verdicts.count('structured')
+        self._status = (
+            f'{len(rows)} results for {total} identifiers: '
+            f'{findings} findings, {random_count} random, {structured} structured'
+        )
+
+    @pyqtProperty('QVariantList', notify=changed)
+    def results(self) -> List[Dict[str, Any]]:
+        return self._rows
+
+    @pyqtSlot(int)
+    def use(self, index: int):
+        """Navigate to the identifier of the selected crypto result in the Bits tab."""
+        if 0 <= index < len(self._rows):
+            id_text = self._rows[index].get('id', '')
+            if id_text:
+                self.reverse.select(id_text)
+
+    @pyqtSlot(int, result=str)
+    def plot(self, index: int) -> str:
+        """Plot the identifier's inter-frame interval for the selected crypto result."""
+        if 0 <= index < len(self._rows):
+            id_text = self._rows[index].get('id', '')
+            if id_text:
+                frame_id = int(id_text, 16)
+                extended = len(id_text) > 3
+                self.reverse.connection.track_interval(frame_id, extended)
+                return ''
+        return 'Nothing to plot'
+
+    def clear(self) -> None:
+        self._rows = []
+        self._status = ''
+        self.changed.emit()
+
+
+class GatewaySecurityController(_Tool):
+    """Gateway security analysis: authentication patterns, bypass detection and cross-ECU seed/key correlation
+    from the captured UDS traffic."""
+
+    changed = pyqtSignal()
+    running = pyqtProperty(bool, fget=_Tool._get_running, notify=changed)
+    status = pyqtProperty(str, fget=_Tool._get_status, notify=changed)
+
+    def __init__(self, reverse, parent: Optional[QObject] = None):
+        super().__init__(reverse, parent)
+        self._rows: List[Dict[str, Any]] = []
+        self._messages: List[Any] = []  # The capture snapshot of the last run, for the disclosure/DBC exports
+
+    @pyqtSlot()
+    def run(self):
+        if not self._running:
+            self._start(self._run())
+
+    async def _run(self) -> None:
+        from can_explorer.core.reverse.gateway_security import (
+            analyse_auth_timing,
+            analyse_gateway_auth,
+            analyse_gateway_filtering,
+            analyse_reset_behaviour,
+            build_access_matrix,
+            correlate_ecu_seeds,
+            detect_bus_segments,
+            map_gateway,
+        )
+        from can_explorer.core.seedkey_crack import assess_seed_quality, crack
+
+        self._status = 'Reading the trace…'
+        self._rows = []
+        self.changed.emit()
+        messages = await self.reverse.snapshot()
+        self._messages = messages
+
+        self._status = 'Analysing gateway authentication patterns…'
+        self.changed.emit()
+        auth_patterns = await asyncio.to_thread(analyse_gateway_auth, messages)
+
+        self._status = 'Analysing gateway filtering…'
+        self.changed.emit()
+        bypass_findings = await asyncio.to_thread(analyse_gateway_filtering, messages)
+
+        # Gateway mapping (item 1)
+        self._status = 'Mapping gateway topology…'
+        self.changed.emit()
+        gw_map = await asyncio.to_thread(map_gateway, messages)
+
+        # Access matrix (item 2)
+        self._status = 'Building access matrix…'
+        self.changed.emit()
+        access = await asyncio.to_thread(build_access_matrix, messages)
+
+        # Auth timing (item 8)
+        self._status = 'Analysing authentication timing…'
+        self.changed.emit()
+        auth_timing = await asyncio.to_thread(analyse_auth_timing, messages)
+
+        # Bus segmentation (item 11)
+        self._status = 'Detecting bus segments…'
+        self.changed.emit()
+        bus_segments = await asyncio.to_thread(detect_bus_segments, messages)
+
+        # Reset behaviour (item 12)
+        self._status = 'Analysing reset behaviour…'
+        self.changed.emit()
+        reset_findings = await asyncio.to_thread(analyse_reset_behaviour, messages)
+
+        # Extract observed seed/key pairs from UDS 0x27 exchanges for cross-ECU correlation
+        self._status = 'Checking cross-ECU seed/key correlations…'
+        self.changed.emit()
+        seed_key_pairs = self._extract_seed_key_pairs(messages)
+        correlations = []
+        if len(seed_key_pairs) >= 2:
+            try:
+                correlations = await asyncio.to_thread(correlate_ecu_seeds, seed_key_pairs)
+            except Exception:
+                pass
+
+        # Item 10: run crack() on each ECU's seed/key pairs + seed quality
+        self._status = 'Cracking seed/key algorithms…'
+        self.changed.emit()
+        crack_results: Dict[int, Any] = {}
+        seed_quality: Dict[int, Any] = {}
+        for ecu_id, pairs in seed_key_pairs.items():
+            if len(pairs) >= 3:
+                try:
+                    crack_results[ecu_id] = await asyncio.to_thread(crack, pairs)
+                except Exception:
+                    pass
+            seeds = [s for s, _k in pairs]
+            if seeds:
+                try:
+                    seed_quality[ecu_id] = await asyncio.to_thread(assess_seed_quality, seeds)
+                except Exception:
+                    pass
+
+        rows: List[Dict[str, Any]] = []
+
+        # Gateway map rows (item 1)
+        for ecu in gw_map.ecus:
+            sessions = ', '.join(str(s) for s in ecu.supported_sessions) if ecu.supported_sessions else 'default'
+            rows.append(
+                {
+                    'category': 'Topology',
+                    'id': f'0x{ecu.request_id:03X}',
+                    'finding': f'{ecu.auth_type.replace("_", " ")} ({len(ecu.services_seen)} services)',
+                    'severity': 'info',
+                    'details': f'Sessions: {sessions}, response: {ecu.mean_response_ms:.1f} ms',
+                }
+            )
+
+        for pattern in auth_patterns:
+            rows.append(
+                {
+                    'category': 'Authentication',
+                    'id': f'0x{pattern.request_id:03X}',
+                    'finding': pattern.auth_type.replace('_', ' '),
+                    'severity': 'info',
+                    'details': pattern.details,
+                }
+            )
+
+        for finding in bypass_findings:
+            rows.append(
+                {
+                    'category': 'Filtering',
+                    'id': '',
+                    'finding': finding.finding_type.replace('_', ' '),
+                    'severity': finding.severity,
+                    'details': finding.description,
+                }
+            )
+
+        # Access matrix summary rows (item 2)
+        denied_count = sum(1 for r in access.rows if r.status == 'denied')
+        conditional_count = sum(1 for r in access.rows if r.status == 'conditional')
+        if denied_count or conditional_count:
+            rows.append(
+                {
+                    'category': 'Access matrix',
+                    'id': '',
+                    'finding': f'{denied_count} denied, {conditional_count} conditional',
+                    'severity': 'warning' if denied_count else 'info',
+                    'details': (
+                        f'{len(access.rows)} service/session combinations across {len(access.ecus)} ECU(s), '
+                        f'{len(access.sessions)} session(s)'
+                    ),
+                }
+            )
+
+        # Auth timing rows (item 8)
+        for timing in auth_timing:
+            severity = 'warning' if timing.findings else 'info'
+            detail_parts = []
+            if timing.request_to_seed_ms is not None:
+                detail_parts.append(f'seed: {timing.request_to_seed_ms:.1f} ms')
+            if timing.key_to_response_ms is not None:
+                detail_parts.append(f'key verify: {timing.key_to_response_ms:.1f} ms')
+            detail_parts.append(f'total: {timing.total_ms:.1f} ms')
+            if timing.findings:
+                detail_parts.append(timing.findings[0])
+            rows.append(
+                {
+                    'category': 'Auth timing',
+                    'id': f'0x{timing.ecu_id:03X}',
+                    'finding': timing.auth_type.replace('_', ' '),
+                    'severity': severity,
+                    'details': '; '.join(detail_parts),
+                }
+            )
+
+        for corr in correlations:
+            severity = (
+                'finding' if corr.finding == 'shared_key' else 'warning' if corr.finding == 'same_algorithm' else 'info'
+            )
+            pairs_text = ', '.join(f'0x{a:03X}-0x{b:03X}' for a, b in corr.ecu_pairs[:5])
+            rows.append(
+                {
+                    'category': 'Cross-ECU',
+                    'id': pairs_text,
+                    'finding': corr.finding.replace('_', ' '),
+                    'severity': severity,
+                    'details': corr.details,
+                }
+            )
+
+        # Item 10: crack results
+        for ecu_id, report in crack_results.items():
+            if report.matches:
+                for m in report.matches:
+                    rows.append(
+                        {
+                            'category': 'Seed/key crack',
+                            'id': f'0x{ecu_id:03X}',
+                            'finding': m.algorithm,
+                            'severity': 'finding',
+                            'details': m.description,
+                        }
+                    )
+            else:
+                rows.append(
+                    {
+                        'category': 'Seed/key crack',
+                        'id': f'0x{ecu_id:03X}',
+                        'finding': 'no match',
+                        'severity': 'info',
+                        'details': f'{len(seed_key_pairs[ecu_id])} pairs tested, no algorithm recovered',
+                    }
+                )
+
+        # NRC fingerprinting (roadmap 1.2 / 4.1)
+        from can_explorer.core.reverse.gateway_security import fingerprint_ecu, plan_probing
+
+        self._status = 'Fingerprinting ECUs…'
+        self.changed.emit()
+        for ecu in gw_map.ecus:
+            fp = await asyncio.to_thread(fingerprint_ecu, messages, ecu.request_id)
+            nrc_text = ', '.join(f'0x{n:02X}' for n in fp.nrc_set[:8])
+            timing_text = f'mean {fp.timing_profile["mean_ms"]:.1f} ms, std {fp.timing_profile["std_ms"]:.1f} ms'
+            rows.append(
+                {
+                    'category': 'NRC fingerprint',
+                    'id': f'0x{fp.request_id:03X}',
+                    'finding': ', '.join(fp.vendor_hints[:2]) if fp.vendor_hints else 'no vendor match',
+                    'severity': 'info',
+                    'details': f'NRCs: [{nrc_text}]; timing: {timing_text}',
+                }
+            )
+
+        # Probing planner (roadmap 1.2 / 4.1)
+        self._status = 'Planning next probing steps…'
+        self.changed.emit()
+        probe_steps = await asyncio.to_thread(plan_probing, access)
+        if probe_steps:
+            high_steps = [s for s in probe_steps if s.priority == 'high']
+            medium_steps = [s for s in probe_steps if s.priority == 'medium']
+            rows.append(
+                {
+                    'category': 'Probe plan',
+                    'id': '',
+                    'finding': f'{len(probe_steps)} steps ({len(high_steps)} high, {len(medium_steps)} medium)',
+                    'severity': 'info' if not high_steps else 'warning',
+                    'details': probe_steps[0].rationale if probe_steps else '',
+                }
+            )
+
+        # Item 11: bus segments
+        for seg in bus_segments:
+            rows.append(
+                {
+                    'category': 'Bus segment',
+                    'id': f'0x{seg.id_range[0]:03X}-0x{seg.id_range[1]:03X}',
+                    'finding': f'{len(seg.ids)} IDs, {seg.periodic_ratio:.0%} periodic',
+                    'severity': 'info',
+                    'details': f'{seg.mean_rate_hz:.1f} Hz avg, {len(seg.event_driven_ids)} event-driven',
+                }
+            )
+
+        # Item 12: reset behaviour
+        for rf in reset_findings:
+            rows.append(
+                {
+                    'category': 'Reset bypass',
+                    'id': f'0x{rf.ecu_id:03X}',
+                    'finding': rf.service_name,
+                    'severity': rf.severity,
+                    'details': rf.finding,
+                }
+            )
+
+        # Item 9: seed quality
+        for ecu_id, quality in seed_quality.items():
+            if quality.predictable:
+                rows.append(
+                    {
+                        'category': 'Seed quality',
+                        'id': f'0x{ecu_id:03X}',
+                        'finding': 'weak seeds',
+                        'severity': 'finding',
+                        'details': quality.findings[0] if quality.findings else 'Predictable seeds',
+                    }
+                )
+
+        self._rows = rows
+        auth_count = len(auth_patterns)
+        finding_count = sum(1 for f in bypass_findings if f.severity in ('warning', 'finding'))
+        corr_count = len(correlations)
+        crack_count = sum(1 for r in crack_results.values() if r.matches)
+        self._status = (
+            f'{auth_count} ECU(s) analysed, {finding_count} filtering finding(s), '
+            f'{corr_count} cross-ECU correlation(s), {crack_count} algorithm(s) cracked, '
+            f'{len(bypass_findings)} total observations'
+        )
+
+    @staticmethod
+    def _extract_seed_key_pairs(messages) -> Dict[int, list]:
+        """Extract observed (seed, key) pairs from UDS 0x27 SecurityAccess exchanges in the captured traffic."""
+        by_time = sorted(messages, key=lambda m: m.timestamp)
+        seed_key_pairs: Dict[int, list] = {}
+        pending_seeds: Dict[int, bytes] = {}  # request_id -> last seed received
+
+        for i, msg in enumerate(by_time):
+            data = bytes(msg.data)
+            if len(data) < 2:
+                continue
+            resp_id = msg.arbitration_id
+            # Look for positive seed response: 0x67 sub seed_bytes
+            if data[0] == 0x67 and data[1] % 2 == 1 and len(data) > 2:
+                req_id = resp_id - 8
+                pending_seeds[req_id] = data[2:]
+            # Look for positive key response: 0x67 sub (even sub = sendKey accepted)
+            elif data[0] == 0x67 and data[1] % 2 == 0:
+                req_id = resp_id - 8
+                # Find the sendKey request that preceded this response
+                for j in range(i - 1, max(i - 50, -1), -1):
+                    prev = by_time[j]
+                    if prev.arbitration_id == req_id and msg.timestamp - prev.timestamp < 5.0:
+                        prev_data = bytes(prev.data)
+                        if len(prev_data) >= 2 and prev_data[0] == 0x27 and prev_data[1] == data[1]:
+                            key_bytes = prev_data[2:]
+                            seed = pending_seeds.get(req_id)
+                            if seed is not None and len(seed) == len(key_bytes) and len(seed) > 0:
+                                seed_key_pairs.setdefault(req_id, []).append((seed, key_bytes))
+                            break
+
+        return seed_key_pairs
+
+    @pyqtProperty('QVariantList', notify=changed)
+    def results(self) -> List[Dict[str, Any]]:
+        return self._rows
+
+    @pyqtSlot()
+    def generateReport(self):
+        """Generate a consolidated gateway report and add its summary to the results."""
+        if not self._running:
+            self._start(self._generate_report())
+
+    async def _generate_report(self) -> None:
+        from can_explorer.core.reverse.gateway_security import gateway_report
+
+        self._status = 'Generating consolidated gateway report…'
+        self.changed.emit()
+        messages = await self.reverse.snapshot()
+        report = await asyncio.to_thread(gateway_report, messages)
+        self._rows.append(
+            {
+                'category': 'Report',
+                'id': '',
+                'finding': f'severity: {report.overall_severity}',
+                'severity': 'finding' if report.overall_severity == 'critical' else 'warning',
+                'details': '; '.join(report.summary[:3]) if report.summary else 'No findings',
+            }
+        )
+        self._status = f'Report generated — overall severity: {report.overall_severity}'
+        self.changed.emit()
+
+    @pyqtSlot()
+    def crackAll(self):
+        """Re-run seed/key cracking on all extracted ECU pairs."""
+        if not self._running:
+            self._start(self._crack_all())
+
+    async def _crack_all(self) -> None:
+        from can_explorer.core.seedkey_crack import crack
+
+        self._status = 'Cracking seed/key algorithms…'
+        self.changed.emit()
+        messages = await self.reverse.snapshot()
+        seed_key_pairs = self._extract_seed_key_pairs(messages)
+        new_rows: List[Dict[str, Any]] = []
+        for ecu_id, pairs in seed_key_pairs.items():
+            if len(pairs) >= 3:
+                try:
+                    result = await asyncio.to_thread(crack, pairs)
+                    for m in result.matches:
+                        new_rows.append(
+                            {
+                                'category': 'Seed/key crack',
+                                'id': f'0x{ecu_id:03X}',
+                                'finding': m.algorithm,
+                                'severity': 'finding',
+                                'details': m.description,
+                            }
+                        )
+                    if not result.matches:
+                        new_rows.append(
+                            {
+                                'category': 'Seed/key crack',
+                                'id': f'0x{ecu_id:03X}',
+                                'finding': 'no match',
+                                'severity': 'info',
+                                'details': f'{len(pairs)} pairs tested, no algorithm recovered',
+                            }
+                        )
+                except Exception:
+                    pass
+        self._rows.extend(new_rows)
+        cracked = sum(1 for r in new_rows if r['severity'] == 'finding')
+        self._status = f'Cracking complete — {cracked} algorithm(s) recovered from {len(seed_key_pairs)} ECU(s)'
+        self.changed.emit()
+
+    @pyqtSlot(str, result=str)
+    def exportReport(self, fmt: str) -> str:
+        """Export the current results as JSON or CSV and return the content."""
+        import csv as csv_mod
+        import io
+        import json as json_mod
+
+        if not self._rows:
+            return ''
+        if fmt == 'json':
+            return json_mod.dumps(self._rows, indent=2)
+        if fmt == 'csv':
+            buf = io.StringIO()
+            writer = csv_mod.DictWriter(buf, fieldnames=['category', 'id', 'finding', 'severity', 'details'])
+            writer.writeheader()
+            writer.writerows(self._rows)
+            return buf.getvalue()
+        return ''
+
+    @pyqtSlot(str, result=str)
+    def disclosureReport(self, fmt: str) -> str:
+        """A responsible-disclosure document (Markdown or JSON) from the last run's capture. Run the analysis
+        first; returns '' when there is no capture yet."""
+        from can_explorer.core.reverse.gateway_security import disclosure_report
+
+        if not self._messages:
+            return ''
+        pairs = self._extract_seed_key_pairs(self._messages)
+        return disclosure_report(
+            self._messages, seed_key_pairs=pairs or None, fmt=fmt if fmt in ('markdown', 'json') else 'markdown'
+        )
+
+    @pyqtSlot(result=str)
+    def exportDiscoveredDbc(self) -> str:
+        """A minimal DBC naming each discovered ECU's request/response message, from the last run's capture."""
+        from can_explorer.core.reverse.findings_artifacts import gateway_map_to_dbc
+        from can_explorer.core.reverse.gateway_security import map_gateway
+
+        if not self._messages:
+            return ''
+        return gateway_map_to_dbc(map_gateway(self._messages))
+
+    @pyqtSlot(str, result='QVariantMap')
+    def previewProbePlan(self, plan: str) -> Dict[str, Any]:
+        """Preview a probing plan as a dry run (transmits nothing): how many steps, and how many state-changing
+        services would be skipped. plan is 'enumerate', 'brute' or 'scan'."""
+        from can_explorer.core.reverse import active_prober
+        from can_explorer.core.reverse.gateway_security import brute_plan, enumerate_plan, scan_plan_non_standard
+
+        if not self._messages:
+            return {'error': 'Run the analysis first'}
+        builders = {
+            'enumerate': lambda: active_prober.steps_from_enumeration(enumerate_plan(self._messages)),
+            'brute': lambda: active_prober.steps_from_brute(brute_plan(self._messages)),
+            'scan': lambda: active_prober.steps_from_scan(scan_plan_non_standard(self._messages)),
+        }
+        if plan not in builders:
+            return {'error': "plan must be 'enumerate', 'brute' or 'scan'"}
+        steps = builders[plan]()
+        skip = sum(1 for s in steps if s.service in active_prober.DANGEROUS_SERVICES)
+        return {'plan': plan, 'steps_planned': len(steps), 'would_skip_dangerous': skip}
+
+    @pyqtSlot(int)
+    def use(self, index: int):
+        """Navigate to the ECU identifier of the selected gateway result in the Bits tab."""
+        if 0 <= index < len(self._rows):
+            id_text = self._rows[index].get('id', '')
+            # Strip '0x' prefix for identifiers like '0x7E0'
+            clean = id_text.replace('0x', '').strip()
+            if clean and all(c in '0123456789ABCDEFabcdef' for c in clean):
+                self.reverse.select(clean)
+
+    @pyqtSlot(int, result=str)
+    def plot(self, index: int) -> str:
+        """Plot the inter-frame interval of the ECU identifier from the selected gateway result."""
+        if 0 <= index < len(self._rows):
+            id_text = self._rows[index].get('id', '')
+            clean = id_text.replace('0x', '').strip()
+            if clean and all(c in '0123456789ABCDEFabcdef' for c in clean):
+                frame_id = int(clean, 16)
+                extended = len(clean) > 3
+                self.reverse.connection.track_interval(frame_id, extended)
+                return ''
+        return 'Nothing to plot'
+
+    def clear(self) -> None:
+        self._rows = []
+        self._messages = []
+        self._status = ''
+        self.changed.emit()
+
+
 class RasterController(_Tool):
     """Builds the bit-transition raster of the selected identifier — the value of every bit across the whole
     capture — for the activity map. Built in a worker thread; the painter (BitRaster) reads the result."""
@@ -918,4 +1636,340 @@ class RasterController(_Tool):
         payloads = [bytes(msg.data) for msg in frames]
         self._raster = await asyncio.to_thread(build_raster, times, payloads)
         self._status = f'{self._raster.frames:,} frames, {self._raster.length} bytes' if self._raster.frames else ''
+        self.changed.emit()
+
+
+class SecOcReverseController(_Tool):
+    """SecOC reverse engineering: layout detection, freshness reconstruction, strength assessment, key recovery
+    and bypass detection from the captured frames of each identifier."""
+
+    changed = pyqtSignal()
+    running = pyqtProperty(bool, fget=_Tool._get_running, notify=changed)
+    status = pyqtProperty(str, fget=_Tool._get_status, notify=changed)
+
+    def __init__(self, reverse, parent: Optional[QObject] = None):
+        super().__init__(reverse, parent)
+        self._rows: List[Dict[str, Any]] = []
+
+    @pyqtSlot(bool)
+    def run(self, selected_only: bool):
+        if not self._running:
+            self._start(self._run(selected_only))
+
+    async def _run(self, selected_only: bool) -> None:
+        from can_explorer.core.reverse.crypto import (
+            detect_secoc_bypass,
+            detect_secoc_layout,
+            reconstruct_freshness,
+            secoc_strength_assessment,
+            try_secoc_key_recovery,
+        )
+
+        self._status = 'Reading the trace…'
+        self._rows = []
+        self.changed.emit()
+        messages = await self.reverse.snapshot()
+        selected = self.reverse.selected
+        if selected_only and selected:
+            key = (int(selected, 16), len(selected) > 3)
+            messages = [msg for msg in messages if (msg.arbitration_id, msg.is_extended_id) == key]
+
+        frames = await asyncio.to_thread(collect, messages)
+        frames = {k: item for k, item in frames.items() if not is_obd_identifier(k)}
+        rows: List[Dict[str, Any]] = []
+        total = len(frames)
+        done = 0
+
+        for frame_key, id_frames in sorted(frames.items()):
+            done += 1
+            if done % 5 == 0:
+                self._status = f'Analysing SecOC… {done} of {total} identifiers'
+                self.changed.emit()
+                await asyncio.sleep(0)
+
+            frame_id, extended = frame_key
+            id_text = _id_text(frame_id, extended)
+            payloads = id_frames.payloads
+            timestamps = id_frames.times
+
+            if len(payloads) < 30:
+                continue
+
+            length = len(payloads[0]) if payloads else 0
+            if length < 4:
+                continue
+
+            layout = await asyncio.to_thread(detect_secoc_layout, list(payloads), identifier=frame_id)
+            if layout is None:
+                continue
+
+            rows.append(
+                {
+                    'id': id_text,
+                    'category': 'Layout',
+                    'finding': (
+                        f'MAC bytes {layout.mac_start}-{layout.mac_end - 1}, '
+                        f'freshness bytes {layout.freshness_start}-{layout.freshness_end - 1}'
+                    ),
+                    'severity': 'info',
+                    'confidence': round(layout.confidence * 100),
+                    'details': '; '.join(layout.findings[:3]),
+                }
+            )
+
+            # Freshness reconstruction
+            try:
+                fresh = await asyncio.to_thread(
+                    reconstruct_freshness,
+                    list(payloads),
+                    list(timestamps),
+                    layout.freshness_start,
+                    layout.freshness_end,
+                    identifier=frame_id,
+                )
+                rows.append(
+                    {
+                        'id': id_text,
+                        'category': 'Freshness',
+                        'finding': (
+                            f'{fresh.counter_width_bits}-bit {fresh.freshness_type}, rate {fresh.counter_rate:.1f}/s'
+                        ),
+                        'severity': 'warning' if fresh.wrap_count > 0 else 'info',
+                        'confidence': round(fresh.confidence * 100),
+                        'details': '; '.join(fresh.findings[:3]),
+                    }
+                )
+            except Exception:
+                pass
+
+            # Strength assessment
+            try:
+                strength = await asyncio.to_thread(
+                    secoc_strength_assessment,
+                    list(payloads),
+                    list(timestamps),
+                    layout.mac_start,
+                    layout.mac_end,
+                    layout.freshness_start,
+                    layout.freshness_end,
+                    identifier=frame_id,
+                )
+                sev = 'finding' if strength.severity == 'critical' else strength.severity
+                rows.append(
+                    {
+                        'id': id_text,
+                        'category': 'Strength',
+                        'finding': f'{strength.mac_bits}-bit MAC, {strength.freshness_bits}-bit freshness',
+                        'severity': sev,
+                        'confidence': 100,
+                        'details': '; '.join(strength.findings[:3]),
+                    }
+                )
+            except Exception:
+                pass
+
+            # Key recovery
+            try:
+                recovery = await asyncio.to_thread(
+                    try_secoc_key_recovery,
+                    list(payloads),
+                    layout.mac_start,
+                    layout.mac_end,
+                    layout.freshness_start,
+                    layout.freshness_end,
+                    identifier=frame_id,
+                )
+                if recovery.recovered_key is not None:
+                    rows.append(
+                        {
+                            'id': id_text,
+                            'category': 'Key recovery',
+                            'finding': f'Key recovered ({recovery.key_source})',
+                            'severity': 'finding',
+                            'confidence': round(recovery.confidence * 100),
+                            'details': f'{recovery.verified_frames} frames verified; '
+                            + '; '.join(recovery.findings[:2]),
+                        }
+                    )
+            except Exception:
+                pass
+
+            # Bypass detection
+            try:
+                bypasses = await asyncio.to_thread(
+                    detect_secoc_bypass,
+                    list(payloads),
+                    list(timestamps),
+                    mac_start=layout.mac_start,
+                    mac_end=layout.mac_end,
+                    freshness_start=layout.freshness_start,
+                    freshness_end=layout.freshness_end,
+                    identifier=frame_id,
+                )
+                for bp in bypasses:
+                    rows.append(
+                        {
+                            'id': id_text,
+                            'category': 'Bypass',
+                            'finding': bp.bypass_type.replace('_', ' '),
+                            'severity': bp.severity,
+                            'confidence': 100,
+                            'details': bp.description,
+                        }
+                    )
+            except Exception:
+                pass
+
+        self._rows = rows
+        secoc_ids = len({r['id'] for r in rows if r['category'] == 'Layout'})
+        finding_count = sum(1 for r in rows if r['severity'] in ('warning', 'finding'))
+        self._status = f'{secoc_ids} SecOC-protected identifier(s), {finding_count} finding(s)'
+
+    @pyqtProperty('QVariantList', notify=changed)
+    def results(self) -> List[Dict[str, Any]]:
+        return self._rows
+
+    @pyqtSlot(int)
+    def use(self, index: int):
+        if 0 <= index < len(self._rows):
+            id_text = self._rows[index].get('id', '')
+            clean = id_text.replace('0x', '').strip()
+            if clean and all(c in '0123456789ABCDEFabcdef' for c in clean):
+                self.reverse.select(clean)
+
+    @pyqtSlot(int, result=str)
+    def plot(self, index: int) -> str:
+        if 0 <= index < len(self._rows):
+            id_text = self._rows[index].get('id', '')
+            clean = id_text.replace('0x', '').strip()
+            if clean and all(c in '0123456789ABCDEFabcdef' for c in clean):
+                frame_id = int(clean, 16)
+                extended = len(clean) > 3
+                self.reverse.connection.track_interval(frame_id, extended)
+                return ''
+        return 'Nothing to plot'
+
+    def clear(self) -> None:
+        self._rows = []
+        self._status = ''
+        self.changed.emit()
+
+
+class SecurityDashboardController(_Tool):
+    """Attack surface dashboard: combined security posture from gateway analysis, SecOC analysis, seed quality
+    and NRC fingerprints. Runs all analyses and produces a summary with per-ECU scores."""
+
+    changed = pyqtSignal()
+    running = pyqtProperty(bool, fget=_Tool._get_running, notify=changed)
+    status = pyqtProperty(str, fget=_Tool._get_status, notify=changed)
+
+    def __init__(self, reverse, parent: Optional[QObject] = None):
+        super().__init__(reverse, parent)
+        self._rows: List[Dict[str, Any]] = []
+        self._stats: Dict[str, Any] = {}
+
+    @pyqtSlot()
+    def run(self):
+        if not self._running:
+            self._start(self._run())
+
+    async def _run(self) -> None:
+        from can_explorer.core.reverse.gateway_security import (
+            attack_surface_report,
+            map_gateway,
+        )
+
+        self._status = 'Collecting data for the security dashboard…'
+        self._rows = []
+        self._stats = {}
+        self.changed.emit()
+        messages = await self.reverse.snapshot()
+
+        self._status = 'Mapping ECU topology…'
+        self.changed.emit()
+        gw_map = await asyncio.to_thread(map_gateway, messages)
+
+        self._status = 'Building attack surface report…'
+        self.changed.emit()
+        report = await asyncio.to_thread(attack_surface_report, messages)
+
+        rows: List[Dict[str, Any]] = []
+
+        bypass_by_severity = {'critical': 0, 'high': 0, 'medium': 0, 'low': 0, 'info': 0}
+        for entry in report.entries:
+            sev = entry.severity if entry.severity in bypass_by_severity else 'info'
+            bypass_by_severity[sev] += 1
+            rows.append(
+                {
+                    'ecu_id': f'0x{entry.ecu_id:03X}',
+                    'category': entry.category,
+                    'finding': entry.finding,
+                    'severity': entry.severity,
+                    'details': entry.details,
+                }
+            )
+
+        ecu_scores: List[Dict[str, Any]] = []
+        for ecu_id, score in sorted(report.ecu_scores.items()):
+            ecu_scores.append(
+                {
+                    'ecu_id': f'0x{ecu_id:03X}',
+                    'score': round(score, 1),
+                    'grade': 'A'
+                    if score <= 2
+                    else 'B'
+                    if score <= 4
+                    else 'C'
+                    if score <= 6
+                    else 'D'
+                    if score <= 8
+                    else 'F',
+                }
+            )
+
+        self._stats = {
+            'ecu_count': len(gw_map.ecus),
+            'overall_score': round(report.overall_score, 1),
+            'overall_grade': (
+                'A'
+                if report.overall_score <= 2
+                else 'B'
+                if report.overall_score <= 4
+                else 'C'
+                if report.overall_score <= 6
+                else 'D'
+                if report.overall_score <= 8
+                else 'F'
+            ),
+            'bypass_by_severity': bypass_by_severity,
+            'ecu_scores': ecu_scores,
+            'summary': report.summary[:5],
+            'total_findings': len(report.entries),
+        }
+
+        self._rows = rows
+        self._status = (
+            f'{len(gw_map.ecus)} ECU(s), score {report.overall_score:.1f}/10, {len(report.entries)} finding(s)'
+        )
+
+    @pyqtProperty('QVariantList', notify=changed)
+    def results(self) -> List[Dict[str, Any]]:
+        return self._rows
+
+    @pyqtProperty('QVariant', notify=changed)
+    def stats(self) -> Dict[str, Any]:
+        return self._stats
+
+    @pyqtSlot(int)
+    def use(self, index: int):
+        if 0 <= index < len(self._rows):
+            id_text = self._rows[index].get('ecu_id', '')
+            clean = id_text.replace('0x', '').strip()
+            if clean and all(c in '0123456789ABCDEFabcdef' for c in clean):
+                self.reverse.select(clean)
+
+    def clear(self) -> None:
+        self._rows = []
+        self._stats = {}
+        self._status = ''
         self.changed.emit()
