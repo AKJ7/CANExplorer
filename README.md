@@ -33,6 +33,8 @@
 - MCP: `can-mcp` exposes a bus to an AI agent over the Model Context Protocol — inspect identifiers, decode frames
   and protocols, run the reverse-engineering analysis, correlate fields, promote results to a DBC, read trouble
   codes over OBD-II/UDS, and optionally transmit; as tools, resources and prompts, behind permission tiers
+- Agent skill: a Claude Code plugin teaches an agent the reverse-engineering workflow over `can-mcp`
+  (`/plugin marketplace add AKJ7/CANExplorer`, then `/plugin install canexplorer@canexplorer`)
 - Signal plots with zoom and pan over the whole buffer, two cursors with values and statistics, several signals per
   chart and CSV export
 - Reverse engineering: bit and byte statistics per identifier and a notch; automatic detection of checksums,

@@ -1,0 +1,14 @@
+{
+  "name": "canexplorer",
+  "description": "CANExplorer skills for agents that use its MCP server (can-mcp).",
+  "owner": {
+    "name": "AKJ7"
+  },
+  "plugins": [
+    {
+      "name": "canexplorer",
+      "source": "./plugins/canexplorer",
+      "description": "Skills for reverse-engineering CAN buses with the CANExplorer MCP server (can-mcp)."
+    }
+  ]
+}

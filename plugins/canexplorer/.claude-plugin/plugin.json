@@ -1,0 +1,10 @@
+{
+  "name": "canexplorer",
+  "description": "Skills for reverse-engineering CAN buses with the CANExplorer MCP server (can-mcp).",
+  "version": "1.11.0",
+  "homepage": "https://github.com/AKJ7/CANExplorer",
+  "license": "MIT",
+  "author": {
+    "name": "AKJ7"
+  }
+}

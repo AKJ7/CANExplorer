@@ -8,6 +8,14 @@ development stages are listed by date and commit, newest first.
 
 ## [Unreleased]
 
+### Added
+
+- **Reverse-engineering agent skill**: a Claude Code plugin (`plugins/canexplorer`, installable with
+  `/plugin marketplace add AKJ7/CANExplorer`) with the `can-reverse-engineering` skill. The skill walks an agent
+  through the read-only MCP tools: survey the bus, find the fields, work out what they mean from marked actions or
+  a reference, confirm the layout, and save a DBC that records the evidence for each signal. A test checks that the
+  skill only names tools the server has.
+
 ## [1.11.0] – 2026-11-22
 
 ### Added

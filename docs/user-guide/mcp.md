@@ -173,6 +173,27 @@ Most clients read a JSON file with an `mcpServers` section (for Claude Desktop, 
 If the client reports that it cannot find `can-mcp`, give the full path to the command (`which can-mcp` on Linux and
 macOS, `where can-mcp` on Windows). This is common when CANExplorer is installed in a virtual environment.
 
+## Reverse-engineering skill
+
+The repository ships an agent skill, `can-reverse-engineering`, that teaches an agent the workflow these tools are
+built for. It covers surveying the bus, finding the fields of an identifier, working out their meaning from a marked
+action or a reference, confirming the layout with `extract_field`, and saving a DBC whose signal comments record the
+evidence. It only uses the [read-only](#permission-tiers) tools.
+
+In Claude Code, add the repository as a plugin marketplace and install the plugin:
+
+```text
+/plugin marketplace add AKJ7/CANExplorer
+/plugin install canexplorer@canexplorer
+```
+
+The skill does not register the MCP server, so [connect a client](#connecting-a-client) as well. Then ask, for
+example, *"Find the brake pedal signal and add it to found.dbc"*.
+
+Other agents that read `SKILL.md` files can use the skill too. Copy the folder
+`plugins/canexplorer/skills/can-reverse-engineering` into the agent's skills folder, for example
+`~/.claude/skills/` for Claude Code without the plugin.
+
 ## Example sessions
 
 What an agent typically does for a request: the tools it calls, with their arguments, and the answers it gets back.
