@@ -164,24 +164,26 @@ def _patch_socketcand_fd() -> None:
         sock = self._SocketCanDaemonBus__socket
         try:
             ready, _, _ = select.select([sock], [], [], timeout)
-        except OSError as error:
+            if not ready:
+                return None, False
+            chunk = sock.recv(4096)
+            if self._SocketCanDaemonBus__tcp_tune and hasattr(socket, 'TCP_QUICKACK'):
+                try:
+                    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_QUICKACK, 1)
+                except OSError:
+                    pass
+            text = chunk.decode('ascii')
+        except (OSError, UnicodeDecodeError) as error:
             raise can.CanOperationError(f'socketcand: receiving failed: {error}') from error
-        if not ready:
-            return None, False
-        chunk = sock.recv(4096)
         if not chunk:
             raise can.CanOperationError('socketcand: connection closed by the server')
-        if self._SocketCanDaemonBus__tcp_tune and hasattr(socket, 'TCP_QUICKACK'):
-            try:
-                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_QUICKACK, 1)
-            except OSError:
-                pass
-        text = self._SocketCanDaemonBus__receive_buffer + chunk.decode('ascii')
-        self._SocketCanDaemonBus__receive_buffer = queue_frames(self, text)
+        self._SocketCanDaemonBus__receive_buffer = queue_frames(
+            self, self._SocketCanDaemonBus__receive_buffer + text
+        )
         if queue:
             return queue.popleft(), False
         return None, False
-
+        
     original_send = bus_class.send
 
     def send(self, msg, timeout=None):
