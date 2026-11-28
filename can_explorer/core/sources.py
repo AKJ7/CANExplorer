@@ -62,6 +62,152 @@ def _queue_socketcand_frames(bus, text: str, convert) -> str:
         text = text[end + 1 :]
 
 
+# --------------------------------------------------------------------------------------------------
+# CAN FD support for the socketcand interface (SocketCanDaemonBus)
+#
+# Where:  can_explorer/core/sources.py
+# How:    1. Paste this block directly above the existing function `_patch_socketcand()`.
+#         2. Add the call `_patch_socketcand_fd()` on the line BEFORE the existing module-level
+#            call `_patch_socketcand()`. The order matters: `_patch_socketcand()` captures
+#            `convert_ascii_message_to_can_message` when it runs, so the extended converter must
+#            already be in place.
+#
+# Requires a socketcand built with "rawmode: support CAN FD frames"
+# (branch rawmode-canfd, commit 7f894ba). With an unpatched socketcand nothing changes:
+# classic frames keep working, CAN FD frames simply never arrive.
+# --------------------------------------------------------------------------------------------------
+
+# Valid CAN FD payload lengths (DLC 0..15)
+_SOCKETCAND_FD_LENGTHS = (0, 1, 2, 3, 4, 5, 6, 7, 8, 12, 16, 20, 24, 32, 48, 64)
+
+
+def _socketcand_fd_length(length: int) -> int:
+    """Return the smallest valid CAN FD payload length that holds `length` bytes."""
+    for valid in _SOCKETCAND_FD_LENGTHS:
+        if valid >= length:
+            return valid
+    raise ValueError(f'A CAN FD frame carries at most 64 bytes, got {length}')
+
+
+def _patch_socketcand_fd() -> None:
+    """Teach python-can's SocketCanDaemonBus the CAN FD extension of socketcand's raw mode.
+
+    socketcand with CAN FD support reports CAN FD frames as '< fdframe ID SECS.USECS DATA >' and
+    accepts '< sendfd ID LEN B0 B1 ... >' (LEN decimal, bytes hex). python-can only knows
+    '< frame ... >' and '< send ... >': it drops received CAN FD frames and cannot send any.
+
+    The patch
+      * wraps convert_ascii_message_to_can_message so that '< fdframe ... >' becomes a
+        can.Message with is_fd=True (all other messages go to the original converter),
+      * replaces _recv_internal with a parser that splits the TCP stream at '< ... >' and runs
+        every complete message through the converter,
+      * routes messages with is_fd=True to '< sendfd ... >'; classic frames still use the
+        original send().
+
+    Must run before _patch_socketcand(), which captures the converter.
+    """
+    import select
+    import socket
+
+    try:
+        from can.interfaces.socketcand import socketcand as module
+
+        bus_class = module.SocketCanDaemonBus
+        original_convert = module.convert_ascii_message_to_can_message
+    except (ImportError, AttributeError):
+        return
+    if getattr(bus_class, '_canexplorer_fd_patched', False):
+        return
+
+    def convert(text: str):
+        if not text.startswith('< fdframe '):
+            return original_convert(text)
+        if not text.endswith('>'):
+            logger.warning(f'socketcand: incomplete CAN FD frame {text!r}')
+            return None
+        parts = text[len('< fdframe ') : -1].split()
+        try:
+            identifier, timestamp = parts[0], float(parts[1])
+            data = bytes.fromhex(parts[2]) if len(parts) > 2 else b''
+            return can.Message(
+                timestamp=timestamp,
+                arbitration_id=int(identifier, 16),
+                is_extended_id=len(identifier) == 8,
+                is_fd=True,
+                data=data,
+                is_rx=True,
+            )
+        except (IndexError, ValueError) as error:
+            logger.warning(f'socketcand: cannot parse CAN FD frame {text!r}: {error}')
+            return None
+
+    def queue_frames(bus, text: str) -> str:
+        """Move the complete '< ... >' messages of `text` into the receive queue; return the rest."""
+        queue = bus._SocketCanDaemonBus__message_buffer
+        while True:
+            start = text.find('<')
+            if start == -1:
+                return ''
+            end = text.find('>', start)
+            if end == -1:
+                return text[start:]
+            message = convert(text[start : end + 1])
+            if message is not None:
+                message.channel = bus.channel
+                queue.append(message)
+            text = text[end + 1 :]
+
+    def recv_internal(self, timeout):
+        queue = self._SocketCanDaemonBus__message_buffer
+        if queue:
+            return queue.popleft(), False
+        sock = self._SocketCanDaemonBus__socket
+        try:
+            ready, _, _ = select.select([sock], [], [], timeout)
+            if not ready:
+                return None, False
+            chunk = sock.recv(4096)
+            if self._SocketCanDaemonBus__tcp_tune and hasattr(socket, 'TCP_QUICKACK'):
+                try:
+                    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_QUICKACK, 1)
+                except OSError:
+                    pass
+            text = chunk.decode('ascii')
+        except (OSError, UnicodeDecodeError) as error:
+            raise can.CanOperationError(f'socketcand: receiving failed: {error}') from error
+        if not chunk:
+            raise can.CanOperationError('socketcand: connection closed by the server')
+        self._SocketCanDaemonBus__receive_buffer = queue_frames(
+            self, self._SocketCanDaemonBus__receive_buffer + text
+        )
+        if queue:
+            return queue.popleft(), False
+        return None, False
+        
+    original_send = bus_class.send
+
+    def send(self, msg, timeout=None):
+        if not msg.is_fd:
+            return original_send(self, msg, timeout)
+        length = _socketcand_fd_length(len(msg.data))
+        data = bytes(msg.data).ljust(length, b'\x00')  # pad to a valid CAN FD length
+        if msg.is_extended_id:
+            identifier = f'{msg.arbitration_id & 0x1FFFFFFF:08X}'
+        else:
+            identifier = f'{msg.arbitration_id & 0x7FF:03X}'
+        payload = ' '.join(f'{byte:02X}' for byte in data)
+        command = f'< sendfd {identifier} {length} {payload} >' if payload else f'< sendfd {identifier} 0 >'
+        try:
+            self._SocketCanDaemonBus__socket.sendall(command.encode('ascii'))
+        except OSError as error:
+            raise can.CanOperationError(f'socketcand: sending failed: {error}') from error
+
+    module.convert_ascii_message_to_can_message = convert
+    bus_class._recv_internal = recv_internal
+    bus_class.send = send
+    bus_class._canexplorer_fd_patched = True
+
+
 def _patch_socketcand() -> None:
     """Work around python-can's SocketCanDaemonBus._expect_msg, which requires one TCP read to be exactly '< ok >'.
 
@@ -98,7 +244,7 @@ def _patch_socketcand() -> None:
     bus_class._expect_msg = _expect_msg
     bus_class._canexplorer_patched = True
 
-
+_patch_socketcand_fd()
 _patch_socketcand()
 
 
